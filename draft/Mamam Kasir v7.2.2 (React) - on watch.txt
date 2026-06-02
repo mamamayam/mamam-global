@@ -1,18 +1,40 @@
-import { loadData, saveData } from './storage/localStorage';
-import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS  } from './data/initialData';
-import { formatRupiah } from './utils/formatters';
 import React, { useState, useMemo, useEffect, createContext, useContext } from 'react';
 import { 
   Search, Menu as MenuIcon, ShoppingCart, X, Plus, Minus, ChevronRight, 
   Settings, PieChart, Coffee, List, Trash2, CheckCircle2, ChevronLeft,
   Receipt, Wallet, CreditCard, QrCode, UtensilsCrossed, Package, Truck, 
-  MoreHorizontal, Save, History, CircleMinus, AlertCircle, Edit3,
+  MoreHorizontal, Save, History, TrendingUp, AlertCircle, Edit3,
   Calculator, Users, Ticket, Calendar, Award, Info, RefreshCw, Copy, BookOpen,
-  Printer, BarChart3, Store, Clock, SquarePlus, SplitSquareHorizontal, FileText,
+  Printer, BarChart3, Store, Clock, ArrowDownCircle, SplitSquareHorizontal, FileText,
   UserCog
 } from 'lucide-react';
 
+// =========================================================================
+// KONFIGURASI DATABASE
+// =========================================================================
 
+const INITIAL_VARIANT_GROUPS = [
+  {
+    id: 'vg1', name: 'Pilihan Suhu', isRequired: true, maxSelection: 1,
+    options: [{ id: 'opt1', name: 'Dingin (Es)', extraPrice: 2000 }, { id: 'opt2', name: 'Panas', extraPrice: 0 }]
+  },
+  {
+    id: 'vg2', name: 'Level Pedas', isRequired: false, maxSelection: 1,
+    options: [{ id: 'opt3', name: 'Sedang', extraPrice: 0 }, { id: 'opt4', name: 'Mampus', extraPrice: 3000 }]
+  },
+  {
+    id: 'vg3', name: 'Topping Tambahan', isRequired: false, maxSelection: 2,
+    options: [{ id: 'opt5', name: 'Keju Mozarella', extraPrice: 5000 }, { id: 'opt6', name: 'Sosis', extraPrice: 4000 }, { id: 'opt7', name: 'Telur', extraPrice: 3000 }]
+  }
+];
+
+const INITIAL_MENUS = [
+  { id: 'm1', name: 'Ayam Geprek Mamam', price: 20000, hpp: 14000, category: 'Makanan', variantGroupIds: ['vg2', 'vg3'] },
+  { id: 'm2', name: 'Kopi Susu Gula Aren', price: 18000, hpp: 8000, category: 'Minuman', variantGroupIds: ['vg1'] },
+  { id: 'm3', name: 'Nasi Goreng Spesial', price: 25000, hpp: 16000, category: 'Makanan', variantGroupIds: ['vg2', 'vg3'] },
+  { id: 'm4', name: 'Kentang Goreng', price: 15000, hpp: 7000, category: 'Cemilan', variantGroupIds: ['vg3'] },
+  { id: 'm5', name: 'Es Teh Manis', price: 5000, hpp: 2000, category: 'Minuman', variantGroupIds: [] },
+];
 
 // =========================================================================
 // CONTEXT API
@@ -1153,7 +1175,7 @@ const HppCalculatorView = () => {
                  <p className="text-[10px] text-slate-500 flex items-start gap-1 leading-relaxed"><span className="text-yellow-500 font-bold">💡</span> Cara hitung: Gaji per hari ÷ jumlah produk per hari.</p>
               </div>
               <div>
-                 <label className="text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1.5"><CircleMinus className="w-4 h-4 text-orange-500"/> Biaya Overhead per Unit (Rp)</label>
+                 <label className="text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1.5"><TrendingUp className="w-4 h-4 text-orange-500"/> Biaya Overhead per Unit (Rp)</label>
                  <div className="relative mb-2">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">Rp</span>
                     <input type="number" className="w-full py-2.5 pl-9 pr-3 bg-white border border-slate-300 rounded-xl outline-none focus:border-orange-600 transition-colors text-sm" value={overheadCost} onChange={e => setOverheadCost(e.target.value)} placeholder="0" />
@@ -1303,7 +1325,7 @@ const ExpenseView = () => {
   return (
     <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <CircleMinus className="w-6 h-6 text-red-500" /> Catat Pengeluaran
+        <TrendingUp className="w-6 h-6 text-red-500" /> Catat Pengeluaran
       </h2>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4 h-fit transition-shadow duration-300 hover:shadow-md">
@@ -1354,7 +1376,7 @@ const ExpenseView = () => {
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
             {filteredExpenses.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full opacity-50 animate-in fade-in duration-300">
-                <CircleMinus className="w-12 h-12 mb-2 text-slate-400"/>
+                <TrendingUp className="w-12 h-12 mb-2 text-slate-400"/>
                 <p className="text-center text-slate-500 font-medium">Belum ada pengeluaran pada periode ini.</p>
               </div>
             ) : (
@@ -1411,7 +1433,7 @@ const IncomeView = () => {
   return (
     <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <SquarePlus className="w-6 h-6 text-green-500" /> Pemasukan Non-Penjualan
+        <ArrowDownCircle className="w-6 h-6 text-green-500" /> Pemasukan Non-Penjualan
       </h2>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4 h-fit transition-shadow duration-300 hover:shadow-md">
@@ -1462,7 +1484,7 @@ const IncomeView = () => {
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
             {filteredIncomes.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full opacity-50 animate-in fade-in duration-300">
-                <SquarePlus className="w-12 h-12 mb-2 text-slate-400"/>
+                <ArrowDownCircle className="w-12 h-12 mb-2 text-slate-400"/>
                 <p className="text-center text-slate-500 font-medium">Belum ada pemasukan pada periode ini.</p>
               </div>
             ) : (
@@ -1635,6 +1657,7 @@ const CustomerView = () => {
 
 const ReportsView = () => {
   const { salesHistory, incomes, reportDateRange, setReportDateRange, activePreset, applyDatePreset } = useAppContext();
+  const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
 
   // Filter Penjualan
   const filteredSales = useMemo(() => {
@@ -1816,7 +1839,7 @@ const ReportsView = () => {
         {/* Grafik 1: Tren Penjualan Harian */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex flex-col">
           <h3 className="font-heading font-bold text-slate-800 text-sm mb-4 flex items-center gap-2">
-            <CircleMinus className="w-4 h-4 text-orange-600" /> Tren Penjualan Harian
+            <TrendingUp className="w-4 h-4 text-orange-600" /> Tren Penjualan Harian
           </h3>
           <div className="flex-1 flex items-center justify-center min-h-[180px]">
             {lineChartData ? (
@@ -2620,8 +2643,8 @@ export default function App() {
               { id: 'menu-mgt', icon: List, label: 'Manajemen Menu' },
               { id: 'variant-mgt', icon: Layers, label: 'Library Varian' },
               { id: 'hpp-calc', icon: Calculator, label: 'Kalkulator HPP' },
-              { id: 'incomes', icon: SquarePlus, label: 'Pemasukan Lain' },
-              { id: 'expenses', icon: CircleMinus, label: 'Pengeluaran' },
+              { id: 'incomes', icon: ArrowDownCircle, label: 'Pemasukan Lain' },
+              { id: 'expenses', icon: TrendingUp, label: 'Pengeluaran' },
               { id: 'customers', icon: Users, label: 'Pelanggan & Voucher' },
               { id: 'reports', icon: PieChart, label: 'Laporan & Profit' },
               { id: 'settings', icon: Settings, label: 'Pengaturan Sistem' },
