@@ -1,4 +1,5 @@
 export const loadData = (key, defaultData) => {
+  
   try {
     const item = localStorage.getItem(`mamam_kasir_${key}`);
     if (item) {
@@ -11,6 +12,21 @@ export const loadData = (key, defaultData) => {
       }
       if (key === 'shiftHistory') {
          return parsed.map(s => ({ ...s, startTime: new Date(s.startTime), endTime: new Date(s.endTime) }));
+      }
+      return parsed;
+    }
+  } catch (error) {
+    console.error(`Error membaca ${key}:`, error);
+  }
+  return defaultData;
+  
+  // Pengeluaran karyawan masuk ke Menu Pengeluaran
+  try {
+    const item = localStorage.getItem(`mamam_hr_${key}`);
+    if (item) {
+      const parsed = JSON.parse(item);
+      if (['expenses', 'employeeDailyRecords'].includes(key)) {
+        return parsed.map(p => ({ ...p, date: new Date(p.date) }));
       }
       return parsed;
     }

@@ -1,3 +1,4 @@
+import React, { useState, useMemo, useEffect, createContext, useContext, useRef } from 'react';
 import { loadData, saveData } from './storage/localStorage';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from './data/initialData';
 import { AppContext, useAppContext } from './context/AppContext';
@@ -11,7 +12,6 @@ import PosView from './features/PosView';
 import ReportsView from './features/ReportsView';
 import SettingsView from './features/SettingsView';
 import ShiftView from './features/ShiftView';
-import React, { useState, useMemo, useEffect, createContext, useContext } from 'react';
 import {
   AlertCircle,
   ArrowDownCircle,
@@ -65,10 +65,6 @@ import {
   Wallet,
   X
 } from 'lucide-react';
-
-// =========================================================================
-// KOMPONEN-KOMPONEN APLIKASI
-// =========================================================================
 
 const CartDrawer = () => {
   const { isCartOpen, setIsCartOpen, cart, setCart, savedBills, triggerConfirm, formatRupiah, activeCustomer, customerName, setCustomerName, isCustomerDropdownMode, setIsCustomerDropdownMode, customers, orderType, setOrderType, deliveryFee, setDeliveryFee, customDeliveryFee, setCustomDeliveryFee, updateCartQty, updateCartItemNote, voucherInputCode, setVoucherInputCode, vouchers, appliedVoucher, setAppliedVoucher, getSubtotal, triggerAlert, pointsToRedeem, setPointsToRedeem, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, storeSettings, getDiscount, getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill } = useAppContext();
@@ -1012,9 +1008,6 @@ const MenuManagement = () => {
   );
 };
 
-// =========================================================================
-// MAIN APP ROOT (Provider Context)
-// =========================================================================
 export default function App() {
   const [currentView, setCurrentView] = useState('shift');
   const [activeTab, setActiveTab] = useState('materials');
