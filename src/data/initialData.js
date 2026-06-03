@@ -20,3 +20,13 @@ export const INITIAL_MENUS = [
     { id: 'm4', name: 'Kentang Goreng', price: 15000, hpp: 7000, category: 'Cemilan', variantGroupIds: ['vg3'] },
     { id: 'm5', name: 'Es Teh Manis', price: 5000, hpp: 2000, category: 'Minuman', variantGroupIds: [] },
 ];
+
+export const INITIAL_RAW_MATERIALS = [
+  { id: 'rm1', name: 'Ayam Potong', unit: 'Ekor', price: 35000, lastUpdated: new Date() },
+  { id: 'rm2', name: 'Beras Premium', unit: 'Kg', price: 16000, lastUpdated: new Date() },
+  { id: 'rm3', name: 'Minyak Goreng', unit: 'Liter', price: 18000, lastUpdated: new Date() },
+  { id: 'rm4', name: 'Gula Aren', unit: 'Kg', price: 22000, lastUpdated: new Date() },
+  { id: 'rm5', name: 'Kopi Susu Blend', unit: 'Gram', price: 150, lastUpdated: new Date() },
+];
+
+export const INITIAL_CATEGORIES = ['Makanan', 'Minuman', 'Cemilan', 'Lainnya'];

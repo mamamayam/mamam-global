@@ -1,5 +1,5 @@
 import { loadData, saveData } from './storage/localStorage';
-import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS  } from './data/initialData';
+import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from './data/initialData';
 import { AppContext, useAppContext } from './context/AppContext';
 import { formatRupiah } from './utils/formatters';
 import CustomerView from './features/CustomerView';
@@ -12,10 +12,10 @@ import ReportView from './features/ReportsView';
 import SettingsView from './features/SettingsView';
 import ShiftView from './features/ShiftView';
 import React, { useState, useMemo, useEffect, createContext, useContext } from 'react';
-import { 
-  Search, Menu as MenuIcon, ShoppingCart, X, Plus, Minus, ChevronRight, 
+import {
+  Search, Menu as MenuIcon, ShoppingCart, X, Plus, Minus, ChevronRight,
   Settings, PieChart, Coffee, List, Trash2, CheckCircle2, ChevronLeft,
-  Receipt, Wallet, CreditCard, QrCode, UtensilsCrossed, Package, Truck, 
+  Receipt, Wallet, CreditCard, QrCode, UtensilsCrossed, Package, Truck,
   MoreHorizontal, Save, History, CircleMinus, AlertCircle, Edit3,
   Calculator, Users, Ticket, Calendar, Award, Info, RefreshCw, Copy, BookOpen,
   Printer, BarChart3, Store, Clock, SquarePlus, SplitSquareHorizontal, FileText,
@@ -35,16 +35,16 @@ const CartDrawer = () => {
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300" onClick={() => setIsCartOpen(false)} />
       <div className="w-full md:w-[420px] bg-white h-full flex flex-col shadow-2xl relative animate-in slide-in-from-right duration-300 ease-out">
-        
+
         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white">
           <h2 className="font-heading text-lg font-bold text-slate-800 flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-slate-800" /> Keranjang Pesanan
           </h2>
           <div className="flex gap-2">
             {cart.length > 0 && (
-               <button onClick={() => triggerConfirm('Hapus semua isi keranjang?', () => setCart([]))} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Kosongkan Keranjang">
-                 <Trash2 className="w-5 h-5" />
-               </button>
+              <button onClick={() => triggerConfirm('Hapus semua isi keranjang?', () => setCart([]))} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Kosongkan Keranjang">
+                <Trash2 className="w-5 h-5" />
+              </button>
             )}
             <button onClick={() => setIsCartOpen(false)} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
               <X className="w-5 h-5" />
@@ -92,10 +92,10 @@ const CartDrawer = () => {
                     ) : customerName.trim() !== '' && !isCustomerDropdownMode ? (
                       <span className="text-[10px] font-semibold text-slate-400 italic hidden md:block">Guest</span>
                     ) : null}
-                    
+
                     <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
                       <span className="text-[9px] font-bold text-slate-500 uppercase">Daftar</span>
-                      <button 
+                      <button
                         onClick={() => {
                           setIsCustomerDropdownMode(!isCustomerDropdownMode);
                           if (!activeCustomer) setCustomerName('');
@@ -107,9 +107,9 @@ const CartDrawer = () => {
                     </div>
                   </div>
                 </div>
-                
+
                 {isCustomerDropdownMode ? (
-                  <select 
+                  <select
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     className="w-full border-b-2 border-slate-100 focus:border-orange-600 pb-2 focus:outline-none bg-transparent transition-colors font-semibold text-slate-800 text-sm cursor-pointer"
@@ -126,7 +126,7 @@ const CartDrawer = () => {
                 {/* Fix Suggestion logic: Includes Phone numbers as well */}
                 {!isCustomerDropdownMode && customerName.trim() !== '' && !activeCustomer && customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).length > 0 && (
                   <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-300 bg-orange-50/50 border border-orange-100 p-2 rounded-xl">
-                    <p className="text-[10px] font-bold text-orange-600 mb-1.5 flex items-center gap-1"><Info className="w-3 h-3"/> Maksud Anda pelanggan ini?</p>
+                    <p className="text-[10px] font-bold text-orange-600 mb-1.5 flex items-center gap-1"><Info className="w-3 h-3" /> Maksud Anda pelanggan ini?</p>
                     <div className="space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar pr-1 relative z-10">
                       {customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).map(sc => (
                         <div key={sc.id} onClick={() => setCustomerName(sc.name)} className="flex justify-between items-center bg-white border border-orange-100 p-2 rounded-lg cursor-pointer hover:border-orange-300 hover:shadow-sm transition-all">
@@ -147,7 +147,7 @@ const CartDrawer = () => {
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Tipe Pesanan</label>
                 <div className="grid grid-cols-2 gap-2">
                   {['Dine-in', 'Takeaway', 'Delivery', 'Lainnya'].map(type => (
-                    <button key={type} onClick={() => { setOrderType(type); if(type !== 'Delivery') setDeliveryFee(0); }} className={`py-2 px-3 text-sm rounded-xl font-bold transition-all duration-200 ${orderType === type ? 'bg-orange-50 text-orange-600 border border-orange-200 shadow-sm' : 'bg-slate-50 text-slate-500 border border-transparent hover:bg-slate-100'}`}>
+                    <button key={type} onClick={() => { setOrderType(type); if (type !== 'Delivery') setDeliveryFee(0); }} className={`py-2 px-3 text-sm rounded-xl font-bold transition-all duration-200 ${orderType === type ? 'bg-orange-50 text-orange-600 border border-orange-200 shadow-sm' : 'bg-slate-50 text-slate-500 border border-transparent hover:bg-slate-100'}`}>
                       {type}
                     </button>
                   ))}
@@ -182,11 +182,11 @@ const CartDrawer = () => {
                       <p className="text-sm font-bold text-orange-600 mt-1">{formatRupiah(item.price)}</p>
                       <div className="w-full mt-2 flex items-center gap-1.5">
                         <Edit3 className="w-3 h-3 text-slate-400" />
-                        <input 
-                          type="text" 
-                          value={item.note || ''} 
+                        <input
+                          type="text"
+                          value={item.note || ''}
                           onChange={(e) => updateCartItemNote(item.cartItemId, e.target.value)}
-                          placeholder="Catatan pesanan (opsional)..." 
+                          placeholder="Catatan pesanan (opsional)..."
                           className="flex-1 text-[11px] bg-transparent border-b border-slate-200 focus:border-orange-500 outline-none pb-0.5 text-slate-600 transition-colors"
                         />
                       </div>
@@ -208,13 +208,13 @@ const CartDrawer = () => {
                     <div className="flex items-center gap-1.5">
                       <input type="text" placeholder="VOUCHER" value={voucherInputCode} onChange={(e) => setVoucherInputCode(e.target.value.toUpperCase())} className="w-full text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none uppercase" />
                       <button onClick={() => {
-                          if (!voucherInputCode) return;
-                          const validVoucher = vouchers.find(v => v.code === voucherInputCode);
-                          if (validVoucher) {
-                            if (getSubtotal() >= validVoucher.minPurchase) { setAppliedVoucher(validVoucher); triggerAlert(`Voucher ${validVoucher.code} berhasil dipasang!`); }
-                            else { triggerAlert(`Minimal belanja untuk voucher ini: ${formatRupiah(validVoucher.minPurchase)}`); }
-                          } else { triggerAlert('Voucher tidak ditemukan.'); }
-                        }}
+                        if (!voucherInputCode) return;
+                        const validVoucher = vouchers.find(v => v.code === voucherInputCode);
+                        if (validVoucher) {
+                          if (getSubtotal() >= validVoucher.minPurchase) { setAppliedVoucher(validVoucher); triggerAlert(`Voucher ${validVoucher.code} berhasil dipasang!`); }
+                          else { triggerAlert(`Minimal belanja untuk voucher ini: ${formatRupiah(validVoucher.minPurchase)}`); }
+                        } else { triggerAlert('Voucher tidak ditemukan.'); }
+                      }}
                         className="px-2.5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold rounded-lg transition-colors shrink-0"
                       >Pasang</button>
                     </div>
@@ -241,11 +241,11 @@ const CartDrawer = () => {
                 <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col space-y-2">
                   <span className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1"><Minus className="w-3.5 h-3.5 text-blue-500" /> Diskon Tambahan Manual</span>
                   <div className="flex items-center gap-1.5">
-                    <select className="w-20 text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition-colors" value={manualDiscount.type} onChange={e => setManualDiscount({...manualDiscount, type: e.target.value})}>
+                    <select className="w-20 text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition-colors" value={manualDiscount.type} onChange={e => setManualDiscount({ ...manualDiscount, type: e.target.value })}>
                       <option value="fixed">Rp</option>
                       <option value="percent">%</option>
                     </select>
-                    <input type="number" min="0" placeholder="Nominal Diskon Tambahan..." value={manualDiscount.value || ''} onChange={(e) => setManualDiscount({...manualDiscount, value: Number(e.target.value) || 0})} className="w-full text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition-colors" />
+                    <input type="number" min="0" placeholder="Nominal Diskon Tambahan..." value={manualDiscount.value || ''} onChange={(e) => setManualDiscount({ ...manualDiscount, value: Number(e.target.value) || 0 })} className="w-full text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition-colors" />
                   </div>
                   {getManualDiscountAmount() > 0 && <span className="text-[10px] text-blue-600 font-bold block animate-in fade-in">Potongan: -{formatRupiah(getManualDiscountAmount())}</span>}
                 </div>
@@ -259,10 +259,10 @@ const CartDrawer = () => {
           <div className="p-4 bg-white border-t border-slate-100 shadow-[0_-4px_10px_rgba(0,0,0,0.03)] animate-in slide-in-from-bottom-2 duration-300">
             <div className="space-y-1.5 mb-4 text-sm">
               <div className="flex justify-between text-slate-500"><span>Subtotal</span><span className="font-semibold">{formatRupiah(getSubtotal())}</span></div>
-              
-              {appliedVoucher && <div className="flex justify-between text-green-500"><span className="flex items-center gap-1"><Ticket className="w-3 h-3"/> Diskon ({appliedVoucher.code})</span><span className="font-semibold">-{formatRupiah(getDiscount())}</span></div>}
-              {pointsToRedeem > 0 && <div className="flex justify-between text-yellow-500"><span className="flex items-center gap-1"><Award className="w-3 h-3"/> Diskon Poin ({pointsToRedeem} Pts)</span><span className="font-semibold">-{formatRupiah(getPointDiscount())}</span></div>}
-              {getManualDiscountAmount() > 0 && <div className="flex justify-between text-blue-500"><span className="flex items-center gap-1"><Minus className="w-3 h-3"/> Diskon Tambahan</span><span className="font-semibold">-{formatRupiah(getManualDiscountAmount())}</span></div>}
+
+              {appliedVoucher && <div className="flex justify-between text-green-500"><span className="flex items-center gap-1"><Ticket className="w-3 h-3" /> Diskon ({appliedVoucher.code})</span><span className="font-semibold">-{formatRupiah(getDiscount())}</span></div>}
+              {pointsToRedeem > 0 && <div className="flex justify-between text-yellow-500"><span className="flex items-center gap-1"><Award className="w-3 h-3" /> Diskon Poin ({pointsToRedeem} Pts)</span><span className="font-semibold">-{formatRupiah(getPointDiscount())}</span></div>}
+              {getManualDiscountAmount() > 0 && <div className="flex justify-between text-blue-500"><span className="flex items-center gap-1"><Minus className="w-3 h-3" /> Diskon Tambahan</span><span className="font-semibold">-{formatRupiah(getManualDiscountAmount())}</span></div>}
 
               {storeSettings.taxRate > 0 && (
                 <div className="flex justify-between text-slate-500"><span>Pajak ({storeSettings.taxRate}%)</span><span className="font-semibold">{formatRupiah(getTaxAmount())}</span></div>
@@ -270,7 +270,7 @@ const CartDrawer = () => {
               {storeSettings.serviceCharge > 0 && (
                 <div className="flex justify-between text-slate-500"><span>Service Chg ({storeSettings.serviceCharge}%)</span><span className="font-semibold">{formatRupiah(getServiceChargeAmount())}</span></div>
               )}
-              
+
               {orderType === 'Delivery' && <div className="flex justify-between text-orange-600"><span>Ongkir</span><span className="font-semibold">{formatRupiah(deliveryFee)}</span></div>}
               <div className="flex justify-between text-lg font-black text-slate-800 border-t border-slate-100 pt-2 mt-2"><span>Total Tagihan</span><span className="text-orange-600">{formatRupiah(getTotal())}</span></div>
             </div>
@@ -287,7 +287,7 @@ const CartDrawer = () => {
 
 const VariantSelectionModal = () => {
   const { selectedMenuForVariant, setSelectedMenuForVariant, variantGroups, formatRupiah, addToCart, variantSelectedOptions, setVariantSelectedOptions } = useAppContext();
-  
+
   if (!selectedMenuForVariant) return null;
   const menuVariants = variantGroups.filter(vg => selectedMenuForVariant.variantGroupIds.includes(vg.id));
 
@@ -311,7 +311,7 @@ const VariantSelectionModal = () => {
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
       <div className="bg-white w-full md:w-[450px] rounded-t-3xl md:rounded-3xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-full md:zoom-in-95 duration-300 ease-out max-h-[90vh] flex flex-col">
-        
+
         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
           <div>
             <h3 className="font-heading font-bold text-slate-800 text-lg leading-tight">{selectedMenuForVariant.name}</h3>
@@ -319,10 +319,10 @@ const VariantSelectionModal = () => {
           </div>
           <button onClick={() => setSelectedMenuForVariant(null)} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"><X className="w-5 h-5" /></button>
         </div>
-        
+
         <div className="p-5 overflow-y-auto flex-1 space-y-6 bg-slate-50/50">
           {menuVariants.length === 0 && <p className="text-sm text-slate-500 italic text-center py-4">Tidak ada variasi untuk menu ini.</p>}
-          
+
           {menuVariants.map(vg => {
             const currentSelections = variantSelectedOptions[vg.id] || [];
             const isMaxReached = currentSelections.length >= vg.maxSelection;
@@ -360,9 +360,9 @@ const VariantSelectionModal = () => {
         </div>
 
         <div className="p-5 border-t border-slate-100 bg-white shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
-           <button onClick={() => isSelectionValid && addToCart(selectedMenuForVariant, variantSelectedOptions)} disabled={!isSelectionValid} className="w-full py-3.5 rounded-xl bg-orange-600 text-white font-bold disabled:bg-slate-300 disabled:cursor-not-allowed hover:bg-orange-700 hover:shadow-lg transition-all duration-300">
-              {isSelectionValid ? 'Tambah ke Keranjang' : 'Lengkapi Pilihan Wajib'}
-            </button>
+          <button onClick={() => isSelectionValid && addToCart(selectedMenuForVariant, variantSelectedOptions)} disabled={!isSelectionValid} className="w-full py-3.5 rounded-xl bg-orange-600 text-white font-bold disabled:bg-slate-300 disabled:cursor-not-allowed hover:bg-orange-700 hover:shadow-lg transition-all duration-300">
+            {isSelectionValid ? 'Tambah ke Keranjang' : 'Lengkapi Pilihan Wajib'}
+          </button>
         </div>
       </div>
     </div>
@@ -371,12 +371,12 @@ const VariantSelectionModal = () => {
 
 const PaymentModal = () => {
   const { paymentModal, setPaymentModal, getTotal, formatRupiah, activeCustomer, pointsToRedeem, customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, customerName, orderType, cart, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount, deliveryFee, salesHistory, setSalesHistory, setIsCartOpen, setCart, setCustomerName, setAppliedVoucher, setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings, triggerAlert } = useAppContext();
-  
+
   if (!paymentModal.isOpen) return null;
-  
+
   const total = getTotal();
   const { isSplitMode, splitPayments, method, amountPaid, status } = paymentModal;
-  
+
   // Hitungan untuk Single Payment
   const kembalian = method === 'Tunai' && !isSplitMode ? (Number(amountPaid) - total) : 0;
   const isReadyToPay = method === 'Tunai' && !isSplitMode ? (Number(amountPaid) >= total) : true;
@@ -390,7 +390,7 @@ const PaymentModal = () => {
   const handleProcessPayment = () => {
     if (!isSplitMode) {
       if (!isReadyToPay && method === 'Tunai') return;
-      if (method !== 'Tunai' && status === 'pending') { setPaymentModal({...paymentModal, status: 'completed'}); return; }
+      if (method !== 'Tunai' && status === 'pending') { setPaymentModal({ ...paymentModal, status: 'completed' }); return; }
     } else {
       if (!isSplitReadyToPay) return triggerAlert('Pembayaran belum lunas!');
     }
@@ -402,10 +402,10 @@ const PaymentModal = () => {
 
     const newOrder = {
       id: `ORD-${Date.now().toString().slice(-6)}`, date: new Date(), customerName: customerName || 'Tanpa Nama', orderType, items: [...cart],
-      subtotal: getSubtotal(), discount: getDiscount(), pointDiscount: getPointDiscount(), 
+      subtotal: getSubtotal(), discount: getDiscount(), pointDiscount: getPointDiscount(),
       manualDiscountAmount: getManualDiscountAmount(),
       taxAmount: getTaxAmount(), serviceAmount: getServiceChargeAmount(),
-      deliveryFee, total, 
+      deliveryFee, total,
       paymentMethod: isSplitMode ? 'Split Payment' : method,
       splitDetails: isSplitMode ? splitPayments : [],
       hppTotal: cart.reduce((sum, item) => sum + (item.hpp * item.qty), 0)
@@ -419,11 +419,11 @@ const PaymentModal = () => {
     }
 
     setSalesHistory([newOrder, ...salesHistory]);
-    setPaymentModal({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending' }); 
+    setPaymentModal({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending' });
     setIsCartOpen(false); setCart([]); setCustomerName(''); setAppliedVoucher(null); setVoucherInputCode(''); setPointsToRedeem(0); setManualDiscount({ type: 'fixed', value: 0 });
-    
+
     setReceiptModal({ isOpen: true, data: newOrder, kembalian: isSplitMode ? splitKembalian : (method === 'Tunai' ? kembalian : 0) });
-    
+
     if (storeSettings.autoPrint) { setTimeout(() => window.print(), 500); }
   };
 
@@ -443,7 +443,7 @@ const PaymentModal = () => {
   const removeSplitPayment = (index) => {
     const newSplits = [...splitPayments];
     newSplits.splice(index, 1);
-    setPaymentModal({...paymentModal, splitPayments: newSplits});
+    setPaymentModal({ ...paymentModal, splitPayments: newSplits });
   }
 
   return (
@@ -456,9 +456,9 @@ const PaymentModal = () => {
           </div>
           <div className="flex items-center gap-2">
             {!isSplitMode ? (
-              <button onClick={() => setPaymentModal({...paymentModal, isSplitMode: true})} className="p-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors text-xs font-bold flex items-center gap-1"><SplitSquareHorizontal className="w-4 h-4"/> Split</button>
+              <button onClick={() => setPaymentModal({ ...paymentModal, isSplitMode: true })} className="p-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors text-xs font-bold flex items-center gap-1"><SplitSquareHorizontal className="w-4 h-4" /> Split</button>
             ) : (
-              <button onClick={() => setPaymentModal({...paymentModal, isSplitMode: false, splitPayments: [], amountPaid: ''})} className="p-2 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-colors text-xs font-bold">Batal Split</button>
+              <button onClick={() => setPaymentModal({ ...paymentModal, isSplitMode: false, splitPayments: [], amountPaid: '' })} className="p-2 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-colors text-xs font-bold">Batal Split</button>
             )}
             <button onClick={() => setPaymentModal({ ...paymentModal, isOpen: false })} className="p-2 bg-white rounded-full shadow-sm text-slate-500 hover:bg-slate-100 transition-colors"><X className="w-5 h-5" /></button>
           </div>
@@ -488,13 +488,13 @@ const PaymentModal = () => {
                     <label className="block text-xs font-bold text-slate-500 mb-2">Uang Diterima</label>
                     <div className="relative">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rp</span>
-                      <input type="number" className="w-full pl-12 pr-4 py-3 text-lg font-bold rounded-xl border border-slate-200 focus:outline-none focus:border-slate-800 bg-white transition-colors" value={amountPaid} onChange={(e) => setPaymentModal({...paymentModal, amountPaid: e.target.value})} placeholder="0" />
+                      <input type="number" className="w-full pl-12 pr-4 py-3 text-lg font-bold rounded-xl border border-slate-200 focus:outline-none focus:border-slate-800 bg-white transition-colors" value={amountPaid} onChange={(e) => setPaymentModal({ ...paymentModal, amountPaid: e.target.value })} placeholder="0" />
                     </div>
                   </div>
-                  
+
                   <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
                     {quickCashOptions.map((amt, idx) => (
-                      <button key={idx} onClick={() => setPaymentModal({...paymentModal, amountPaid: amt.toString()})} className="whitespace-nowrap px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-600 transition-all">
+                      <button key={idx} onClick={() => setPaymentModal({ ...paymentModal, amountPaid: amt.toString() })} className="whitespace-nowrap px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-600 transition-all">
                         {amt === total ? 'Uang Pas' : formatRupiah(amt)}
                       </button>
                     ))}
@@ -508,22 +508,22 @@ const PaymentModal = () => {
               )}
 
               {method !== 'Tunai' && (
-                 <div className="text-center bg-slate-50 p-6 rounded-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-300">
-                    {status === 'pending' ? (
-                      <>
-                        <AlertCircle className="w-12 h-12 text-yellow-400 mx-auto mb-3 animate-pulse" />
-                        <h3 className="font-heading font-bold text-slate-800 mb-2">Menunggu Pembayaran {method}</h3>
-                        <p className="text-sm text-slate-500 mb-5">Pastikan pelanggan sudah transfer/scan sebelum menyelesaikan pesanan.</p>
-                        <button onClick={handleProcessPayment} className="w-full py-3.5 bg-white border-2 border-orange-600 text-orange-600 font-bold rounded-xl hover:bg-orange-50 transition-colors shadow-sm">Konfirmasi Pembayaran Diterima</button>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                        <h3 className="font-heading font-bold text-slate-800 mb-2">Pembayaran Terverifikasi</h3>
-                        <p className="text-sm text-slate-500">Anda dapat mencetak struk sekarang.</p>
-                      </>
-                    )}
-                 </div>
+                <div className="text-center bg-slate-50 p-6 rounded-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-300">
+                  {status === 'pending' ? (
+                    <>
+                      <AlertCircle className="w-12 h-12 text-yellow-400 mx-auto mb-3 animate-pulse" />
+                      <h3 className="font-heading font-bold text-slate-800 mb-2">Menunggu Pembayaran {method}</h3>
+                      <p className="text-sm text-slate-500 mb-5">Pastikan pelanggan sudah transfer/scan sebelum menyelesaikan pesanan.</p>
+                      <button onClick={handleProcessPayment} className="w-full py-3.5 bg-white border-2 border-orange-600 text-orange-600 font-bold rounded-xl hover:bg-orange-50 transition-colors shadow-sm">Konfirmasi Pembayaran Diterima</button>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                      <h3 className="font-heading font-bold text-slate-800 mb-2">Pembayaran Terverifikasi</h3>
+                      <p className="text-sm text-slate-500">Anda dapat mencetak struk sekarang.</p>
+                    </>
+                  )}
+                </div>
               )}
             </>
           ) : (
@@ -547,11 +547,11 @@ const PaymentModal = () => {
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Pembayaran Masuk</h4>
                   {splitPayments.map((p, idx) => (
                     <div key={idx} className="flex justify-between items-center bg-slate-50 border border-slate-100 p-3 rounded-xl animate-in slide-in-from-left-2 duration-300">
-                       <div className="flex items-center gap-2">
-                         <span className="bg-white border border-slate-200 text-slate-600 text-xs font-bold px-2 py-1 rounded">{p.method}</span>
-                         <span className="font-bold text-sm text-slate-800">{formatRupiah(p.amount)}</span>
-                       </div>
-                       <button onClick={() => removeSplitPayment(idx)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-white border border-slate-200 text-slate-600 text-xs font-bold px-2 py-1 rounded">{p.method}</span>
+                        <span className="font-bold text-sm text-slate-800">{formatRupiah(p.amount)}</span>
+                      </div>
+                      <button onClick={() => removeSplitPayment(idx)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   ))}
                 </div>
@@ -562,18 +562,18 @@ const PaymentModal = () => {
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tambah Pembayaran</h4>
                   <div className="flex gap-2">
                     {['Tunai', 'QRIS', 'Transfer'].map(m => (
-                      <button key={m} onClick={() => setPaymentModal({...paymentModal, method: m})} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${method === m ? 'bg-orange-50 border-orange-600 text-orange-600' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{m}</button>
+                      <button key={m} onClick={() => setPaymentModal({ ...paymentModal, method: m })} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${method === m ? 'bg-orange-50 border-orange-600 text-orange-600' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{m}</button>
                     ))}
                   </div>
                   <div className="flex gap-2">
-                     <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">Rp</span>
-                        <input type="number" className="w-full pl-9 pr-3 py-2.5 text-sm font-bold rounded-xl border border-slate-200 focus:outline-none focus:border-slate-800 bg-white transition-colors" value={amountPaid} onChange={(e) => setPaymentModal({...paymentModal, amountPaid: e.target.value})} placeholder={splitRemaining.toString()} />
-                     </div>
-                     <button onClick={handleAddSplitPayment} className="px-4 bg-slate-800 text-white rounded-xl text-sm font-bold hover:bg-slate-900 transition-colors">Tambah</button>
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">Rp</span>
+                      <input type="number" className="w-full pl-9 pr-3 py-2.5 text-sm font-bold rounded-xl border border-slate-200 focus:outline-none focus:border-slate-800 bg-white transition-colors" value={amountPaid} onChange={(e) => setPaymentModal({ ...paymentModal, amountPaid: e.target.value })} placeholder={splitRemaining.toString()} />
+                    </div>
+                    <button onClick={handleAddSplitPayment} className="px-4 bg-slate-800 text-white rounded-xl text-sm font-bold hover:bg-slate-900 transition-colors">Tambah</button>
                   </div>
                   <div className="flex gap-2">
-                     <button onClick={() => setPaymentModal({...paymentModal, amountPaid: splitRemaining.toString()})} className="flex-1 py-1.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-lg hover:bg-slate-200">Uang Pas Sisa</button>
+                    <button onClick={() => setPaymentModal({ ...paymentModal, amountPaid: splitRemaining.toString() })} className="flex-1 py-1.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-lg hover:bg-slate-200">Uang Pas Sisa</button>
                   </div>
                 </div>
               )}
@@ -607,8 +607,9 @@ const ReceiptModal = () => {
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity duration-300 print:bg-white print:p-0">
-      
-      <style dangerouslySetInnerHTML={{__html: `
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @media print {
           body * { visibility: hidden; }
           #receipt-content, #receipt-content * { visibility: visible; }
@@ -618,83 +619,83 @@ const ReceiptModal = () => {
       `}} />
 
       <div className="bg-white rounded-md w-full max-w-[320px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out print:shadow-none print:w-[58mm]" id="receipt-content">
-         <div className="p-6 print:p-2">
-            <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
-              {storeSettings.printLogo && <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 mb-1 print:text-lg">MAMAM KASIR</h2>}
-              <p className="text-[10px] text-slate-500 print:text-black">Jl. Teknologi No. 1</p>
-              <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">{data.date.toLocaleString('id-ID')}</p>
-              <p className="text-[10px] text-slate-500 print:text-black">ID: {data.id} | Kasir: Admin</p>
-            </div>
+        <div className="p-6 print:p-2">
+          <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
+            {storeSettings.printLogo && <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 mb-1 print:text-lg">MAMAM KASIR</h2>}
+            <p className="text-[10px] text-slate-500 print:text-black">Jl. Teknologi No. 1</p>
+            <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">{data.date.toLocaleString('id-ID')}</p>
+            <p className="text-[10px] text-slate-500 print:text-black">ID: {data.id} | Kasir: Admin</p>
+          </div>
 
-            <div className="mb-4 text-[11px] space-y-1 print:mb-2 print:text-black">
-              <div className="flex justify-between"><span>Pelanggan:</span> <span className="font-bold">{data.customerName}</span></div>
-              <div className="flex justify-between"><span>Tipe Pesanan:</span> <span className="font-bold">{data.orderType}</span></div>
-            </div>
+          <div className="mb-4 text-[11px] space-y-1 print:mb-2 print:text-black">
+            <div className="flex justify-between"><span>Pelanggan:</span> <span className="font-bold">{data.customerName}</span></div>
+            <div className="flex justify-between"><span>Tipe Pesanan:</span> <span className="font-bold">{data.orderType}</span></div>
+          </div>
 
-            <div className="border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2 print:text-black">
-              <table className="w-full text-[11px]">
-                <tbody>
-                  {data.items.map((item, idx) => (
-                    <React.Fragment key={idx}>
-                      <tr><td colSpan="3" className="font-bold pt-2">{item.name}</td></tr>
-                      {item.variantName && <tr><td colSpan="3" className="pl-2 pb-1 text-slate-500 print:text-black">- {item.variantName}</td></tr>}
-                      {item.note && <tr><td colSpan="3" className="pl-2 pb-1 italic text-slate-500 print:text-black">* {item.note}</td></tr>}
-                      <tr>
-                        <td className="w-8">{item.qty}x</td>
-                        <td className="text-right pr-2">{formatRupiah(item.price)}</td>
-                        <td className="text-right font-bold">{formatRupiah(item.price * item.qty)}</td>
-                      </tr>
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2 print:text-black">
+            <table className="w-full text-[11px]">
+              <tbody>
+                {data.items.map((item, idx) => (
+                  <React.Fragment key={idx}>
+                    <tr><td colSpan="3" className="font-bold pt-2">{item.name}</td></tr>
+                    {item.variantName && <tr><td colSpan="3" className="pl-2 pb-1 text-slate-500 print:text-black">- {item.variantName}</td></tr>}
+                    {item.note && <tr><td colSpan="3" className="pl-2 pb-1 italic text-slate-500 print:text-black">* {item.note}</td></tr>}
+                    <tr>
+                      <td className="w-8">{item.qty}x</td>
+                      <td className="text-right pr-2">{formatRupiah(item.price)}</td>
+                      <td className="text-right font-bold">{formatRupiah(item.price * item.qty)}</td>
+                    </tr>
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-            <div className="space-y-1 text-[11px] print:text-black border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
-              <div className="flex justify-between"><span>Subtotal</span> <span>{formatRupiah(data.subtotal)}</span></div>
-              {data.discount > 0 && <div className="flex justify-between"><span>Diskon Voucher</span> <span>-{formatRupiah(data.discount)}</span></div>}
-              {data.pointDiscount > 0 && <div className="flex justify-between"><span>Potongan Poin</span> <span>-{formatRupiah(data.pointDiscount)}</span></div>}
-              {data.manualDiscountAmount > 0 && <div className="flex justify-between"><span>Diskon Manual</span> <span>-{formatRupiah(data.manualDiscountAmount)}</span></div>}
-              
-              {data.taxAmount > 0 && <div className="flex justify-between"><span>Pajak</span> <span>{formatRupiah(data.taxAmount)}</span></div>}
-              {data.serviceAmount > 0 && <div className="flex justify-between"><span>Service Chg</span> <span>{formatRupiah(data.serviceAmount)}</span></div>}
-              {data.deliveryFee > 0 && <div className="flex justify-between"><span>Ongkir</span> <span>{formatRupiah(data.deliveryFee)}</span></div>}
-              
-              <div className="flex justify-between text-sm font-bold mt-2 pt-2 border-t border-slate-200 print:border-black">
-                <span>TOTAL</span> <span>{formatRupiah(data.total)}</span>
-              </div>
-            </div>
-            
-            <div className="space-y-1 text-[11px] print:text-black">
-              <div className="flex justify-between font-bold mb-1"><span>Pembayaran</span></div>
-              {data.paymentMethod === 'Split Payment' ? (
-                <>
-                  {data.splitDetails.map((p, i) => (
-                    <div key={i} className="flex justify-between"><span>- {p.method}</span> <span>{formatRupiah(p.amount)}</span></div>
-                  ))}
-                </>
-              ) : (
-                <div className="flex justify-between"><span>- {data.paymentMethod}</span> <span>{formatRupiah(data.total)}</span></div>
-              )}
-              
-              {kembalian > 0 && (
-                <div className="flex justify-between mt-2 font-bold"><span>Kembalian</span> <span>{formatRupiah(kembalian)}</span></div>
-              )}
-            </div>
-            
-            <div className="text-center mt-8 text-[10px] text-slate-500 print:mt-4 print:text-black">
-              <p>Terima kasih atas kunjungan Anda!</p>
-            </div>
-         </div>
+          <div className="space-y-1 text-[11px] print:text-black border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
+            <div className="flex justify-between"><span>Subtotal</span> <span>{formatRupiah(data.subtotal)}</span></div>
+            {data.discount > 0 && <div className="flex justify-between"><span>Diskon Voucher</span> <span>-{formatRupiah(data.discount)}</span></div>}
+            {data.pointDiscount > 0 && <div className="flex justify-between"><span>Potongan Poin</span> <span>-{formatRupiah(data.pointDiscount)}</span></div>}
+            {data.manualDiscountAmount > 0 && <div className="flex justify-between"><span>Diskon Manual</span> <span>-{formatRupiah(data.manualDiscountAmount)}</span></div>}
 
-         <div className="absolute -bottom-16 left-0 right-0 flex gap-2 print:hidden">
-            <button onClick={printReceipt} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
-              <Printer className="w-4 h-4"/> Cetak
-            </button>
-            <button onClick={() => setReceiptModal({ isOpen: false, data: null })} className="flex-1 py-3 rounded-xl bg-white text-slate-800 font-bold shadow-lg hover:bg-slate-100 text-sm transition-colors">
-              Tutup Selesai
-            </button>
-         </div>
+            {data.taxAmount > 0 && <div className="flex justify-between"><span>Pajak</span> <span>{formatRupiah(data.taxAmount)}</span></div>}
+            {data.serviceAmount > 0 && <div className="flex justify-between"><span>Service Chg</span> <span>{formatRupiah(data.serviceAmount)}</span></div>}
+            {data.deliveryFee > 0 && <div className="flex justify-between"><span>Ongkir</span> <span>{formatRupiah(data.deliveryFee)}</span></div>}
+
+            <div className="flex justify-between text-sm font-bold mt-2 pt-2 border-t border-slate-200 print:border-black">
+              <span>TOTAL</span> <span>{formatRupiah(data.total)}</span>
+            </div>
+          </div>
+
+          <div className="space-y-1 text-[11px] print:text-black">
+            <div className="flex justify-between font-bold mb-1"><span>Pembayaran</span></div>
+            {data.paymentMethod === 'Split Payment' ? (
+              <>
+                {data.splitDetails.map((p, i) => (
+                  <div key={i} className="flex justify-between"><span>- {p.method}</span> <span>{formatRupiah(p.amount)}</span></div>
+                ))}
+              </>
+            ) : (
+              <div className="flex justify-between"><span>- {data.paymentMethod}</span> <span>{formatRupiah(data.total)}</span></div>
+            )}
+
+            {kembalian > 0 && (
+              <div className="flex justify-between mt-2 font-bold"><span>Kembalian</span> <span>{formatRupiah(kembalian)}</span></div>
+            )}
+          </div>
+
+          <div className="text-center mt-8 text-[10px] text-slate-500 print:mt-4 print:text-black">
+            <p>Terima kasih atas kunjungan Anda!</p>
+          </div>
+        </div>
+
+        <div className="absolute -bottom-16 left-0 right-0 flex gap-2 print:hidden">
+          <button onClick={printReceipt} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
+            <Printer className="w-4 h-4" /> Cetak
+          </button>
+          <button onClick={() => setReceiptModal({ isOpen: false, data: null })} className="flex-1 py-3 rounded-xl bg-white text-slate-800 font-bold shadow-lg hover:bg-slate-100 text-sm transition-colors">
+            Tutup Selesai
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -730,24 +731,24 @@ const VariantManagement = () => {
     return (
       <div className="p-4 md:p-6 bg-white flex-1 animate-in fade-in slide-in-from-right-4 duration-300 h-full overflow-y-auto ease-out">
         <button onClick={() => setIsEditing(false)} className="mb-4 text-slate-500 flex items-center gap-2 hover:text-slate-800 font-medium transition-colors">
-          <ChevronLeft className="w-5 h-5"/> Kembali
+          <ChevronLeft className="w-5 h-5" /> Kembali
         </button>
         <h2 className="font-heading text-2xl font-bold mb-6 text-slate-800">{formData.id ? 'Edit Kategori Varian' : 'Tambah Kategori Varian'}</h2>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl pb-20">
           <div className="space-y-4">
             <h3 className="font-heading font-bold text-slate-800 border-b pb-2">Pengaturan Kategori</h3>
             <div>
               <label className="block text-sm font-bold text-slate-600 mb-1">Nama Kategori Varian</label>
-              <input type="text" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Misal: Topping, Level Pedas" />
+              <input type="text" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Misal: Topping, Level Pedas" />
             </div>
             <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <input type="checkbox" id="isRequired" className="w-5 h-5 accent-orange-600 cursor-pointer" checked={formData.isRequired} onChange={e => setFormData({...formData, isRequired: e.target.checked})} />
+              <input type="checkbox" id="isRequired" className="w-5 h-5 accent-orange-600 cursor-pointer" checked={formData.isRequired} onChange={e => setFormData({ ...formData, isRequired: e.target.checked })} />
               <label htmlFor="isRequired" className="font-bold text-sm text-slate-700 cursor-pointer flex-1">Wajib Dipilih (Required)</label>
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-600 mb-1">Maksimal Pilihan Diizinkan</label>
-              <input type="number" min="1" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.maxSelection} onChange={e => setFormData({...formData, maxSelection: Math.max(1, Number(e.target.value))})} />
+              <input type="number" min="1" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.maxSelection} onChange={e => setFormData({ ...formData, maxSelection: Math.max(1, Number(e.target.value)) })} />
               <p className="text-xs text-slate-400 mt-1">Isi 1 jika hanya boleh pilih salah satu (Radio Button).</p>
             </div>
           </div>
@@ -756,8 +757,8 @@ const VariantManagement = () => {
             <h3 className="font-heading font-bold text-slate-800 border-b pb-2">Daftar Pilihan (Opsi)</h3>
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
               <div className="grid grid-cols-2 gap-2">
-                <input type="text" placeholder="Nama Opsi" className="p-2 border rounded-lg text-sm outline-none focus:border-orange-600 transition-colors" value={newOption.name} onChange={e => setNewOption({...newOption, name: e.target.value})} />
-                <input type="number" placeholder="Harga (+)" className="p-2 border rounded-lg text-sm outline-none focus:border-orange-600 transition-colors" value={newOption.extraPrice} onChange={e => setNewOption({...newOption, extraPrice: e.target.value})} />
+                <input type="text" placeholder="Nama Opsi" className="p-2 border rounded-lg text-sm outline-none focus:border-orange-600 transition-colors" value={newOption.name} onChange={e => setNewOption({ ...newOption, name: e.target.value })} />
+                <input type="number" placeholder="Harga (+)" className="p-2 border rounded-lg text-sm outline-none focus:border-orange-600 transition-colors" value={newOption.extraPrice} onChange={e => setNewOption({ ...newOption, extraPrice: e.target.value })} />
               </div>
               <button onClick={handleAddOption} className="w-full py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm hover:bg-slate-300 transition-colors">Tambah Opsi</button>
             </div>
@@ -770,15 +771,15 @@ const VariantManagement = () => {
                     <p className="font-bold text-sm text-slate-800">{opt.name}</p>
                     <p className="text-xs font-semibold text-slate-500">+{formatRupiah(opt.extraPrice)}</p>
                   </div>
-                  <button onClick={() => handleRemoveOption(opt.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 className="w-4 h-4"/></button>
+                  <button onClick={() => handleRemoveOption(opt.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
             </div>
           </div>
         </div>
-        
+
         <div className="fixed bottom-0 right-0 left-0 md:left-64 p-4 bg-white border-t border-slate-100 z-10 flex justify-end">
-           <button onClick={handleSave} className="w-full md:w-auto px-8 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">Simpan Kategori Varian</button>
+          <button onClick={handleSave} className="w-full md:w-auto px-8 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">Simpan Kategori Varian</button>
         </div>
       </div>
     );
@@ -789,10 +790,10 @@ const VariantManagement = () => {
       <div className="flex justify-between items-center mb-6">
         <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800">Library Varian</h2>
         <button onClick={() => { setFormData({ id: '', name: '', isRequired: false, maxSelection: 1, options: [] }); setIsEditing(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-orange-700 hover:shadow-md transition-all duration-300">
-          <Plus className="w-4 h-4"/> Tambah Kategori
+          <Plus className="w-4 h-4" /> Tambah Kategori
         </button>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {variantGroups.map((vg) => (
           <div key={vg.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 relative hover:shadow-md transition-shadow duration-300 group">
@@ -805,11 +806,11 @@ const VariantManagement = () => {
                 </div>
               </div>
               <div className="flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <button onClick={() => { setFormData(vg); setIsEditing(true); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4"/></button>
-                <button onClick={() => handleDelete(vg.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                <button onClick={() => { setFormData(vg); setIsEditing(true); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4" /></button>
+                <button onClick={() => handleDelete(vg.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
-            
+
             <div className="pt-3 border-t border-slate-100 mt-2">
               <p className="text-xs font-bold text-slate-400 mb-2 uppercase">Daftar Opsi ({vg.options.length})</p>
               <div className="flex flex-wrap gap-2">
@@ -859,31 +860,31 @@ const MenuManagement = () => {
     return (
       <div className="p-4 md:p-6 bg-white flex-1 animate-in fade-in slide-in-from-right-4 duration-300 h-full overflow-y-auto ease-out">
         <button onClick={() => setIsEditing(false)} className="mb-4 text-slate-500 flex items-center gap-2 hover:text-slate-800 font-medium transition-colors">
-          <ChevronLeft className="w-5 h-5"/> Kembali
+          <ChevronLeft className="w-5 h-5" /> Kembali
         </button>
         <h2 className="font-heading text-2xl font-bold mb-6 text-slate-800">{formData.id ? 'Edit Menu' : 'Tambah Menu Baru'}</h2>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl pb-20">
           <div className="space-y-4">
             <h3 className="font-heading font-bold text-slate-800 border-b pb-2">Informasi Dasar</h3>
             <div>
               <label className="block text-sm font-bold text-slate-600 mb-1">Nama Menu</label>
-              <input type="text" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Misal: Ayam Geprek" />
+              <input type="text" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Misal: Ayam Geprek" />
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-600 mb-1">Kategori</label>
-              <select className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none bg-white transition-colors" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+              <select className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none bg-white transition-colors" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
                 <option value="Makanan">Makanan</option><option value="Minuman">Minuman</option><option value="Cemilan">Cemilan</option><option value="Lainnya">Lainnya</option>
               </select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-bold text-slate-600 mb-1">Harga Jual (Rp)</label>
-                <input type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} />
+                <input type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.price} onChange={e => setFormData({ ...formData, price: Number(e.target.value) })} />
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-600 mb-1">HPP / Modal (Rp)</label>
-                <input type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.hpp} onChange={e => setFormData({...formData, hpp: Number(e.target.value)})} />
+                <input type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.hpp} onChange={e => setFormData({ ...formData, hpp: Number(e.target.value) })} />
               </div>
             </div>
           </div>
@@ -908,9 +909,9 @@ const MenuManagement = () => {
             </div>
           </div>
         </div>
-        
+
         <div className="fixed bottom-0 right-0 left-0 md:left-64 p-4 bg-white border-t border-slate-100 z-10 flex justify-end">
-           <button onClick={handleSave} className="w-full md:w-auto px-8 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">Simpan Menu</button>
+          <button onClick={handleSave} className="w-full md:w-auto px-8 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">Simpan Menu</button>
         </div>
       </div>
     );
@@ -921,10 +922,10 @@ const MenuManagement = () => {
       <div className="flex justify-between items-center mb-6">
         <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800">Manajemen Menu</h2>
         <button onClick={() => { setFormData({ id: '', name: '', price: 0, hpp: 0, category: 'Makanan', variantGroupIds: [] }); setIsEditing(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-orange-700 hover:-translate-y-0.5 transition-all duration-300">
-          <Plus className="w-4 h-4"/> Tambah Menu
+          <Plus className="w-4 h-4" /> Tambah Menu
         </button>
       </div>
-      
+
       <div className="space-y-8 pb-10">
         {Object.keys(groupedMenus).map(category => (
           <div key={category} className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -938,13 +939,13 @@ const MenuManagement = () => {
                   <div className="flex justify-between items-start mb-2">
                     <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-600 uppercase">{menu.category}</span>
                     <div className="flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <button onClick={() => { setFormData(menu); setIsEditing(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4"/></button>
-                      <button onClick={() => handleDelete(menu.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                      <button onClick={() => { setFormData(menu); setIsEditing(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4" /></button>
+                      <button onClick={() => handleDelete(menu.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
                   <h3 className="font-heading font-bold text-slate-800 text-base leading-tight mb-1 group-hover:text-orange-600 transition-colors">{menu.name}</h3>
                   <p className="text-orange-600 font-bold mb-3">{formatRupiah(menu.price)}</p>
-                  
+
                   <div className="mt-auto pt-3 border-t border-slate-50">
                     <p className="text-[10px] font-bold text-slate-400 mb-1">VARIAN TERKAIT:</p>
                     <div className="flex flex-wrap gap-1">
@@ -967,249 +968,38 @@ const MenuManagement = () => {
   );
 };
 
-const HppCalculatorView = () => {
-  const { hppLibrary, setHppLibrary, triggerAlert, triggerConfirm, formatRupiah } = useAppContext();
-  const [productName, setProductName] = useState('');
-  const [ingredients, setIngredients] = useState([{ id: Date.now(), name: '', unit: '', price: '' }]);
-  const [laborCost, setLaborCost] = useState('');
-  const [overheadCost, setOverheadCost] = useState('');
-  const [yieldQty, setYieldQty] = useState('');
-  const [marginPercent, setMarginPercent] = useState(35);
-  const [showResult, setShowResult] = useState(false);
-  const [selectedProductCategory, setSelectedProductCategory] = useState('Makanan');
-
-  const handleAddIngredient = () => setIngredients([...ingredients, { id: Date.now(), name: '', unit: '', price: '' }]);
-  const handleRemoveIngredient = (id) => setIngredients(ingredients.length > 1 ? ingredients.filter(ing => ing.id !== id) : [{ id: Date.now(), name: '', unit: '', price: '' }]);
-  const handleIngredientChange = (id, field, value) => setIngredients(ingredients.map(ing => ing.id === id ? { ...ing, [field]: value } : ing));
-  const handleReset = () => { setProductName(''); setIngredients([{ id: Date.now(), name: '', unit: '', price: '' }]); setLaborCost(''); setOverheadCost(''); setYieldQty(''); setMarginPercent(35); setShowResult(false); setSelectedProductCategory('Makanan'); };
-
-  const handleExample = () => {
-    setProductName('Es Teh Manis');
-    setIngredients([{ id: Date.now(), name: 'Teh Celup', unit: '1 Box', price: '15000' }, { id: Date.now() + 1, name: 'Gula Pasir', unit: '1 Kg', price: '18000' }]);
-    setLaborCost('200'); setOverheadCost('150'); setYieldQty('100'); setShowResult(true); setSelectedProductCategory('Minuman');
-  };
-
-  const handleCalculate = () => { if (!yieldQty || yieldQty <= 0) return triggerAlert('Jumlah produk yang dihasilkan harus lebih dari 0 unit!'); setShowResult(true); };
-
-  const totalIngredientCost = ingredients.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
-  const yld = Number(yieldQty) || 1; 
-  const materialCostPerUnit = yieldQty ? (totalIngredientCost / yld) : 0;
-  const totalCostPerUnit = materialCostPerUnit + (Number(laborCost) || 0) + (Number(overheadCost) || 0);
-  const recommendedPrice = totalCostPerUnit > 0 ? totalCostPerUnit / (1 - (marginPercent / 100)) : 0;
-  const projectedProfit = recommendedPrice - totalCostPerUnit;
-
-  const handleSaveToLibrary = () => {
-    if (!productName.trim()) return triggerAlert('Masukkan Nama Produk sebelum menyimpannya ke Library!');
-    const sellingPrice = Math.ceil(recommendedPrice / 100) * 100;
-    setHppLibrary([...hppLibrary, { id: `hpp-${Date.now()}`, name: productName, price: sellingPrice || 0, hpp: Math.round(totalCostPerUnit) || 0, category: selectedProductCategory, date: new Date() }]);
-    triggerAlert(`Berhasil menyimpan "${productName}" ke Library HPP Kategori "${selectedProductCategory}"!`);
-    handleReset();
-  };
-
-  const groupedHppLibrary = useMemo(() => {
-    const groups = {}; hppLibrary.forEach(item => { if (!groups[item.category]) groups[item.category] = []; groups[item.category].push(item); }); return groups;
-  }, [hppLibrary]);
-
-  return (
-    <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
-      <div className="max-w-3xl mx-auto w-full space-y-6 pb-20">
-        <div className="text-center mb-6">
-          <h2 className="font-heading text-2xl font-bold text-slate-800">Input Data Produk</h2>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-          <h3 className="font-heading font-bold text-slate-800 mb-4 text-base">Informasi Produk</h3>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Nama Produk</label>
-            <input type="text" className="w-full p-3 bg-white border border-slate-300 rounded-xl outline-none focus:border-orange-600 focus:ring-1 focus:ring-orange-600 text-sm transition-all" value={productName} onChange={e => setProductName(e.target.value)} placeholder="Contoh: Es Teh, Nasi Goreng, Bakso" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-          <h3 className="font-heading font-bold text-slate-800 mb-4 text-base flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-slate-400" /> Bahan yang Dibeli</h3>
-          <div className="space-y-3">
-            {ingredients.map((ing, index) => (
-              <div key={ing.id} className="grid grid-cols-12 gap-3 items-start animate-in slide-in-from-left-2 duration-300">
-                <div className="col-span-12 md:col-span-5">
-                  {index === 0 && <label className="block text-xs font-semibold text-slate-500 mb-1">Nama Bahan</label>}
-                  <input type="text" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl outline-none focus:border-orange-600 transition-colors text-sm" value={ing.name} onChange={e => handleIngredientChange(ing.id, 'name', e.target.value)} placeholder="Contoh: Gula pasir, Teh celup" />
-                </div>
-                <div className="col-span-5 md:col-span-3">
-                  {index === 0 && <label className="block text-xs font-semibold text-slate-500 mb-1">Satuan</label>}
-                  <input type="text" className="w-full p-2.5 bg-white border border-slate-300 rounded-xl outline-none focus:border-orange-600 transition-colors text-sm" value={ing.unit} onChange={e => handleIngredientChange(ing.id, 'unit', e.target.value)} placeholder="1kg, 1 box, 1 liter" />
-                </div>
-                <div className="col-span-5 md:col-span-3">
-                  {index === 0 && <label className="block text-xs font-semibold text-slate-500 mb-1">Harga Beli di Toko</label>}
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">Rp</span>
-                    <input type="number" className="w-full py-2.5 pl-9 pr-3 bg-white border border-slate-300 rounded-xl outline-none focus:border-orange-600 transition-colors text-sm" value={ing.price} onChange={e => handleIngredientChange(ing.id, 'price', e.target.value)} placeholder="15000" />
-                  </div>
-                </div>
-                <div className={`col-span-2 md:col-span-1 flex justify-center ${index === 0 ? 'pt-6' : 'pt-1'}`}>
-                   <button onClick={() => handleRemoveIngredient(ing.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-5 h-5" /></button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 flex justify-center">
-            <button onClick={handleAddIngredient} className="flex items-center gap-2 px-6 py-2 bg-orange-600 text-white text-sm font-bold rounded-xl hover:bg-orange-700 transition-colors shadow-sm"><Plus className="w-4 h-4" /> Tambah Bahan</button>
-          </div>
-          <div className="mt-6 bg-slate-50 p-4 rounded-xl border border-slate-100 flex justify-between items-center transition-all duration-300">
-            <span className="text-orange-600 font-bold text-sm">Total Pembelian Bahan:</span><span className="text-slate-900 font-black text-lg">{formatRupiah(totalIngredientCost)}</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-           <h3 className="font-heading font-bold text-slate-800 mb-4 text-base">Biaya Operasional</h3>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                 <label className="text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1.5"><Users className="w-4 h-4 text-orange-500"/> Biaya Tenaga Kerja per Unit (Rp)</label>
-                 <div className="relative mb-2">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">Rp</span>
-                    <input type="number" className="w-full py-2.5 pl-9 pr-3 bg-white border border-slate-300 rounded-xl outline-none focus:border-orange-600 transition-colors text-sm" value={laborCost} onChange={e => setLaborCost(e.target.value)} placeholder="0" />
-                 </div>
-                 <p className="text-[10px] text-slate-500 flex items-start gap-1 leading-relaxed"><span className="text-yellow-500 font-bold">💡</span> Cara hitung: Gaji per hari ÷ jumlah produk per hari.</p>
-              </div>
-              <div>
-                 <label className="text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1.5"><CircleMinus className="w-4 h-4 text-orange-500"/> Biaya Overhead per Unit (Rp)</label>
-                 <div className="relative mb-2">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">Rp</span>
-                    <input type="number" className="w-full py-2.5 pl-9 pr-3 bg-white border border-slate-300 rounded-xl outline-none focus:border-orange-600 transition-colors text-sm" value={overheadCost} onChange={e => setOverheadCost(e.target.value)} placeholder="0" />
-                 </div>
-                 <p className="text-[10px] text-slate-500 flex items-start gap-1 leading-relaxed"><span className="text-yellow-500 font-bold">💡</span> Cara hitung: Total biaya bulanan ÷ jumlah produksi.</p>
-              </div>
-           </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-          <h3 className="font-heading font-bold text-slate-800 mb-4 text-base flex items-center gap-2"><Package className="w-5 h-5 text-orange-700" /> Jumlah Produk yang Dihasilkan</h3>
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Jumlah Produk (Unit)</label>
-            <input type="number" className="w-full p-3 bg-white border border-slate-300 rounded-xl outline-none focus:border-orange-600 transition-colors text-sm mb-2" value={yieldQty} onChange={e => setYieldQty(e.target.value)} placeholder="Contoh: 100, 500, 1000" />
-            <p className="text-[10px] text-slate-500 flex items-center gap-1"><span className="text-yellow-500 font-bold">💡</span> Contoh: Dari bahan yang dibeli bisa menghasilkan 100 gelas es teh</p>
-          </div>
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-3">
-           <button onClick={handleCalculate} className="flex-[2] py-3.5 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md hover:-translate-y-0.5"><Calculator className="w-5 h-5" /> Hitung HPP</button>
-           <button onClick={handleExample} className="flex-1 py-3.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm"><Copy className="w-4 h-4" /> Contoh</button>
-           <button onClick={handleReset} className="flex-1 py-3.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm"><RefreshCw className="w-4 h-4" /> Reset</button>
-        </div>
-
-        {showResult && (
-          <div className="mt-8 pt-8 border-t-2 border-dashed border-slate-200 animate-in fade-in slide-in-from-bottom-8 duration-500 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
-                <h3 className="font-heading font-bold text-slate-800 border-b pb-2">Rincian HPP per Unit {productName ? `(${productName})` : ''}</h3>
-                <div className="space-y-3 text-sm font-medium text-slate-600">
-                   <div className="flex justify-between items-center"><span>Bahan Baku per Unit</span><span className="font-bold text-slate-800">{formatRupiah(materialCostPerUnit)}</span></div>
-                   <div className="flex justify-between items-center"><span>Tenaga Kerja per Unit</span><span className="font-bold text-slate-800">{formatRupiah(Number(laborCost) || 0)}</span></div>
-                   <div className="flex justify-between items-center"><span>Overhead per Unit</span><span className="font-bold text-slate-800">{formatRupiah(Number(overheadCost) || 0)}</span></div>
-                </div>
-                <div className="pt-3 border-t"><div className="flex justify-between items-center text-sm font-bold"><span className="text-slate-600">Total HPP per Unit:</span><span className="text-slate-900 text-xl">{formatRupiah(totalCostPerUnit)}</span></div></div>
-              </div>
-
-              <div className="bg-slate-800 p-6 rounded-2xl shadow-sm text-white space-y-4 flex flex-col justify-between">
-                <div>
-                  <h3 className="font-heading font-bold border-b border-slate-700 pb-2 mb-4">Rekomendasi Harga Jual</h3>
-                  <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Pilih Target Margin (%)</label>
-                  <div className="flex gap-2 mb-4">
-                    {[20, 35, 50].map(m => (
-                      <button key={m} onClick={() => setMarginPercent(m)} className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all duration-300 ${marginPercent === m ? 'bg-orange-600 text-white shadow-md' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>{m}%</button>
-                    ))}
-                    <div className="flex items-center bg-slate-700 rounded-xl px-2 flex-1 border border-slate-600 transition-colors focus-within:border-orange-500">
-                      <input type="number" className="w-full bg-transparent py-2 text-white outline-none text-sm text-center font-bold" value={marginPercent} onChange={e => setMarginPercent(Number(e.target.value))} />
-                      <span className="text-slate-400 pr-2 font-bold">%</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex-1 flex flex-col justify-center items-center py-6 text-center bg-slate-700/50 rounded-2xl border border-slate-600/50 transition-all duration-300 hover:bg-slate-700">
-                  <p className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-2">Harga Jual Disarankan</p>
-                  <h1 className="font-heading text-4xl md:text-5xl font-black text-orange-600 mb-3 drop-shadow-md">{formatRupiah(Math.ceil(recommendedPrice / 100) * 100)}</h1>
-                  <p className="text-sm text-slate-400 font-medium">Estimasi Laba per Porsi: <span className="text-green-500 font-bold ml-1">{formatRupiah(projectedProfit)}</span></p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 animate-in fade-in zoom-in-95 duration-500">
-              <h3 className="font-heading font-bold text-slate-800 mb-3 text-base flex items-center gap-2"><Package className="w-5 h-5 text-orange-600" /> Simpan Hasil ke Library Produk (Menu)</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Pilih Kategori Menu</label>
-                  <select className="w-full p-3 border border-slate-300 rounded-xl outline-none bg-white text-sm font-semibold text-slate-700 focus:border-orange-600 transition-colors" value={selectedProductCategory} onChange={e => setSelectedProductCategory(e.target.value)}>
-                    <option value="Makanan">Makanan</option><option value="Minuman">Minuman</option><option value="Cemilan">Cemilan</option><option value="Lainnya">Lainnya</option>
-                  </select>
-                </div>
-                <div>
-                  <button onClick={handleSaveToLibrary} className="w-full py-3.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-all duration-300 text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow-md hover:-translate-y-0.5"><Save className="w-4 h-4" /> Simpan ke Library HPP</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-12 pt-8 border-t-2 border-slate-200">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-heading text-xl font-bold text-slate-800 flex items-center gap-2"><BookOpen className="w-6 h-6 text-orange-600" /> Library HPP Tersimpan</h2>
-          </div>
-          {hppLibrary.length === 0 ? (
-            <div className="text-center py-10 bg-white rounded-2xl border border-slate-200 shadow-sm animate-in fade-in duration-300">
-              <p className="text-sm font-semibold text-slate-500">Belum ada data HPP yang disimpan.</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {Object.keys(groupedHppLibrary).map(category => (
-                <div key={category} className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <h3 className="font-heading text-lg font-bold text-slate-700 border-b border-slate-200 pb-2">Kategori: {category}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {groupedHppLibrary[category].map(item => (
-                      <div key={item.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 relative group hover:shadow-md hover:border-orange-200 transition-all duration-300 hover:-translate-y-1">
-                        <button onClick={() => { triggerConfirm(`Hapus "${item.name}" dari Library HPP?`, () => { setHppLibrary(hppLibrary.filter(h => h.id !== item.id)); }); }} className="absolute top-3 right-3 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 md:opacity-0 group-hover:opacity-100 transition-opacity" title="Hapus dari Library"><Trash2 className="w-4 h-4" /></button>
-                        <p className="text-[10px] text-slate-400 mb-1">{item.date.toLocaleDateString('id-ID')}</p>
-                        <h4 className="font-heading font-bold text-slate-800 text-base mb-2 pr-6 leading-tight group-hover:text-orange-600 transition-colors">{item.name}</h4>
-                        <div className="space-y-1.5 mt-3 pt-3 border-t border-slate-100 text-sm">
-                          <div className="flex justify-between"><span className="text-slate-500 font-medium">HPP/Unit:</span><span className="font-bold text-slate-700">{formatRupiah(item.hpp)}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-500 font-medium">Harga Jual:</span><span className="font-bold text-orange-600">{formatRupiah(item.price)}</span></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-
-
-
 // =========================================================================
 // MAIN APP ROOT (Provider Context)
 // =========================================================================
 export default function App() {
   const [currentView, setCurrentView] = useState('shift');
+  const [activeTab, setActiveTab] = useState('materials');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  
+
   // --- DATABASE STATES ---
   const [variantGroups, setVariantGroups] = useState(() => loadData('variantGroups', INITIAL_VARIANT_GROUPS));
   const [menus, setMenus] = useState(() => loadData('menus', INITIAL_MENUS));
   const [salesHistory, setSalesHistory] = useState(() => loadData('salesHistory', []));
   const [hppLibrary, setHppLibrary] = useState(() => loadData('hppLibrary', []));
   const [savedBills, setSavedBills] = useState(() => loadData('savedBills', []));
-  
+
+  // --- HPP & BAHAN BAKU ---
+  const [rawMaterials, setRawMaterials] = useState(() => loadData('rawMaterials', INITIAL_RAW_MATERIALS));
+  const [semiFinished, setSemiFinished] = useState(() => loadData('semiFinished', []));
+  const [categories, setCategories] = useState(() => loadData('categories', INITIAL_CATEGORIES));
+  const [editingRecipe, setEditingRecipe] = useState(null);
+
+  // --- KEUANGAN ---
   const [expenseCategories, setExpenseCategories] = useState(() => loadData('expenseCategories', ['Belanja', 'Biaya', 'Kasbon Karyawan', 'Lain-lain']));
   const [expenses, setExpenses] = useState(() => loadData('expenses', []));
   const [incomeCategories, setIncomeCategories] = useState(() => loadData('incomeCategories', ['Modal Tambahan', 'Pendapatan Lain', 'Titipan Uang']));
-  const [incomes, setIncomes] = useState(() => loadData('incomes', [])); 
-  
-  const [currentShift, setCurrentShift] = useState(() => loadData('currentShift', null)); 
-  const [shiftHistory, setShiftHistory] = useState(() => loadData('shiftHistory', [])); 
+  const [incomes, setIncomes] = useState(() => loadData('incomes', []));
 
+  // --- SHIFT ---
+  const [currentShift, setCurrentShift] = useState(() => loadData('currentShift', null));
+  const [shiftHistory, setShiftHistory] = useState(() => loadData('shiftHistory', []));
+
+  // --- MEMBER ----
   const [customers, setCustomers] = useState(() => loadData('customers', [
     { id: 'c1', name: 'Budi Santoso', phone: '08123456789', points: 120 },
     { id: 'c2', name: 'Siti Rahma', phone: '08571234567', points: 250 },
@@ -1219,11 +1009,13 @@ export default function App() {
     { id: 'v1', code: 'MAMAMKENYANG', discountType: 'fixed', discountValue: 5000, minPurchase: 30000 }
   ]));
   const [claimsHistory, setClaimsHistory] = useState(() => loadData('claimsHistory', []));
-  
-  const [storeSettings, setStoreSettings] = useState(() => loadData('storeSettings', { 
-    autoPrint: false, paperSize: '58mm', printLogo: true, taxRate: 0, serviceCharge: 0 
+
+  // --- SETTINGS ---
+  const [storeSettings, setStoreSettings] = useState(() => loadData('storeSettings', {
+    autoPrint: false, paperSize: '58mm', printLogo: true, taxRate: 0, serviceCharge: 0
   }));
 
+  // --- SIMPAN PERUBAHAN KE "DATABASE" (localStorage) ---
   useEffect(() => { saveData('variantGroups', variantGroups); }, [variantGroups]);
   useEffect(() => { saveData('menus', menus); }, [menus]);
   useEffect(() => { saveData('salesHistory', salesHistory); }, [salesHistory]);
@@ -1239,6 +1031,9 @@ export default function App() {
   useEffect(() => { saveData('vouchers', vouchers); }, [vouchers]);
   useEffect(() => { saveData('claimsHistory', claimsHistory); }, [claimsHistory]);
   useEffect(() => { saveData('storeSettings', storeSettings); }, [storeSettings]);
+  useEffect(() => { saveData('rawMaterials', rawMaterials); }, [rawMaterials]);
+  useEffect(() => { saveData('semiFinished', semiFinished); }, [semiFinished]);
+  useEffect(() => { saveData('categories', categories); }, [categories]);
 
   // --- STATES APLIKASI ---
   const [appliedVoucher, setAppliedVoucher] = useState(null);
@@ -1253,25 +1048,27 @@ export default function App() {
   };
   const [reportDateRange, setReportDateRange] = useState({ start: getBulanIniStart(), end: new Date().toISOString().split('T')[0] });
   const [activePreset, setActivePreset] = useState('bulan_ini');
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  
+
   const [selectedMenuForVariant, setSelectedMenuForVariant] = useState(null);
   const [variantSelectedOptions, setVariantSelectedOptions] = useState({});
-  
+
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+
   const [paymentModal, setPaymentModal] = useState({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending' });
   const [receiptModal, setReceiptModal] = useState({ isOpen: false, data: null });
   const [customAlert, setCustomAlert] = useState({ isOpen: false, message: '' });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null });
-  
+
   const [customerName, setCustomerName] = useState('');
   const [orderType, setOrderType] = useState('Dine-in');
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [customDeliveryFee, setCustomDeliveryFee] = useState('');
-  
+
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
 
@@ -1285,7 +1082,7 @@ export default function App() {
   }, [activeCustomer, cart.length]);
 
   const getSubtotal = () => cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-  
+
   const getDiscount = () => {
     if (!appliedVoucher) return 0;
     const subtotal = getSubtotal();
@@ -1297,17 +1094,17 @@ export default function App() {
   const getPointDiscount = () => pointsToRedeem * 100;
 
   const getManualDiscountAmount = () => {
-     if (!manualDiscount || !manualDiscount.value) return 0;
-     if (manualDiscount.type === 'percent') return (getSubtotal() * manualDiscount.value) / 100;
-     return manualDiscount.value;
+    if (!manualDiscount || !manualDiscount.value) return 0;
+    if (manualDiscount.type === 'percent') return (getSubtotal() * manualDiscount.value) / 100;
+    return manualDiscount.value;
   };
-  
+
   const getTaxableAmount = () => Math.max(0, getSubtotal() - getDiscount() - getPointDiscount() - getManualDiscountAmount());
   const getTaxAmount = () => getTaxableAmount() * (storeSettings.taxRate / 100);
   const getServiceChargeAmount = () => getTaxableAmount() * (storeSettings.serviceCharge / 100);
-  
+
   const getTotal = () => Math.max(0, getTaxableAmount() + getTaxAmount() + getServiceChargeAmount() + (orderType === 'Delivery' ? deliveryFee : 0));
-  
+
   const triggerAlert = (message) => setCustomAlert({ isOpen: true, message });
   const triggerConfirm = (message, onConfirm) => setConfirmModal({ isOpen: true, message, onConfirm });
 
@@ -1361,7 +1158,7 @@ export default function App() {
   };
 
   const handleOpenBill = () => {
-    if(cart.length === 0) return;
+    if (cart.length === 0) return;
     const bill = { id: `BILL-${Date.now().toString().slice(-4)}`, customerName: customerName || 'Tanpa Nama', cart, orderType, date: new Date() };
     setSavedBills([...savedBills, bill]);
     triggerAlert('Bill disimpan sebagai Open Bill!');
@@ -1376,25 +1173,106 @@ export default function App() {
 
   const printReceipt = () => window.print();
 
+   // LIVE MATERIALS POOL (RAW + PREP)
+  const availableMaterials = useMemo(() => {
+    const prepsAsMaterials = semiFinished.map(prep => {
+      // 1. Hitung total biaya bahan mentah yang masuk ke Prep berdasarkan harga pasar live
+      const totalIngCost = prep.ingredients.reduce((sum, ing) => {
+        const rm = rawMaterials.find(r => r.id === ing.rawMaterialId);
+        const currentPrice = rm ? rm.price : (ing.snapshotPrice || 0);
+        return sum + (currentPrice * ing.qtyUsedFraction);
+      }, 0);
+
+      // 2. Tambahkan cost labor & overhead dari Prep
+      const totalBatchCost = totalIngCost + (Number(prep.laborCost) || 0) + (Number(prep.overheadCost) || 0);
+
+      // 3. Bagi dengan yield untuk dapat Harga per Satuan
+      const costPerUnit = totalBatchCost / Math.max(1, Number(prep.yieldQty) || 1);
+
+      return {
+        id: prep.id,
+        name: `${prep.name} [Prep]`, // Kasih penanda
+        unit: prep.resultUnit,
+        price: costPerUnit,
+        isPrep: true,
+        lastUpdated: prep.lastUpdated || new Date()
+      };
+    });
+
+    return [...rawMaterials, ...prepsAsMaterials];
+  }, [rawMaterials, semiFinished]);
+
   // Membungkus semua props di Context Value
   const contextValue = {
-    variantGroups, setVariantGroups, menus, setMenus, salesHistory, setSalesHistory, hppLibrary, setHppLibrary,
-    savedBills, setSavedBills, expenseCategories, setExpenseCategories, expenses, setExpenses, incomeCategories, setIncomeCategories, incomes, setIncomes, customers, setCustomers,
-    vouchers, setVouchers, claimsHistory, setClaimsHistory, storeSettings, setStoreSettings, appliedVoucher, setAppliedVoucher,
-    currentShift, setCurrentShift, shiftHistory, setShiftHistory, manualDiscount, setManualDiscount, getManualDiscountAmount,
-    voucherInputCode, setVoucherInputCode, pointsToRedeem, setPointsToRedeem, isCustomerDropdownMode, setIsCustomerDropdownMode,
-    reportDateRange, setReportDateRange, activePreset, setActivePreset, searchQuery, setSearchQuery, selectedCategory, setSelectedCategory,
-    cart, setCart, isCartOpen, setIsCartOpen, selectedMenuForVariant, setSelectedMenuForVariant, variantSelectedOptions, setVariantSelectedOptions,
-    paymentModal, setPaymentModal, receiptModal, setReceiptModal, customAlert, setCustomAlert, confirmModal, setConfirmModal,
-    customerName, setCustomerName, orderType, setOrderType, deliveryFee, setDeliveryFee, customDeliveryFee, setCustomDeliveryFee,
-    activeCustomer, getSubtotal, getDiscount, getPointDiscount, getTaxableAmount, getTaxAmount, getServiceChargeAmount, getTotal,
-    triggerAlert, triggerConfirm, applyDatePreset, addToCart, updateCartQty, updateCartItemNote, handleOpenBill, loadSavedBill, printReceipt, formatRupiah
+    variantGroups, setVariantGroups,
+    menus, setMenus,
+    salesHistory, setSalesHistory,
+    hppLibrary, setHppLibrary,
+    savedBills, setSavedBills,
+    expenseCategories, setExpenseCategories,
+    expenses, setExpenses,
+    incomeCategories, setIncomeCategories,
+    incomes, setIncomes,
+    customers, setCustomers,
+    vouchers, setVouchers,
+    claimsHistory, setClaimsHistory,
+    storeSettings, setStoreSettings,
+    appliedVoucher, setAppliedVoucher,
+    currentShift, setCurrentShift,
+    shiftHistory, setShiftHistory,
+    manualDiscount, setManualDiscount,
+    getManualDiscountAmount,
+    voucherInputCode, setVoucherInputCode,
+    pointsToRedeem, setPointsToRedeem,
+    isCustomerDropdownMode, setIsCustomerDropdownMode,
+    reportDateRange, setReportDateRange,
+    activePreset, setActivePreset,
+    searchQuery, setSearchQuery,
+    selectedCategory, setSelectedCategory,
+    cart, setCart,
+    isCartOpen, setIsCartOpen,
+    selectedMenuForVariant, setSelectedMenuForVariant,
+    variantSelectedOptions, setVariantSelectedOptions,
+    paymentModal, setPaymentModal,
+    receiptModal, setReceiptModal,
+    customAlert, setCustomAlert,
+    confirmModal, setConfirmModal,
+    customerName, setCustomerName,
+    orderType, setOrderType,
+    deliveryFee, setDeliveryFee,
+    customDeliveryFee, setCustomDeliveryFee,
+    activeCustomer,
+    getSubtotal,
+    getDiscount,
+    getPointDiscount,
+    getTaxableAmount,
+    getTaxAmount,
+    getServiceChargeAmount,
+    getTotal,
+    triggerAlert,
+    triggerConfirm,
+    applyDatePreset,
+    addToCart,
+    updateCartQty,
+    updateCartItemNote,
+    handleOpenBill,
+    loadSavedBill,
+    printReceipt,
+    formatRupiah,
+    rawMaterials, setRawMaterials,
+    semiFinished, setSemiFinished,
+    availableMaterials,
+    categories, setCategories,
+    isCategoryModalOpen, setIsCategoryModalOpen,
+    editingRecipe, setEditingRecipe,
+    activeTab, setActiveTab
   };
 
   return (
     <AppContext.Provider value={contextValue}>
       <div className="flex h-screen bg-slate-50 font-body text-slate-800 overflow-hidden w-full relative">
-        <style dangerouslySetInnerHTML={{__html: `
+        <style dangerouslySetInnerHTML={{
+          __html: `
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
           .font-heading { font-family: 'Plus Jakarta Sans', sans-serif; }
           .font-body { font-family: 'Inter', sans-serif; }
@@ -1423,7 +1301,7 @@ export default function App() {
               { id: 'pos', icon: ShoppingCart, label: 'Kasir Utama' },
               { id: 'menu-mgt', icon: List, label: 'Manajemen Menu' },
               { id: 'variant-mgt', icon: Layers, label: 'Library Varian' },
-              { id: 'hpp-calc', icon: Calculator, label: 'Kalkulator HPP' },
+              { id: 'hpp-calc', icon: Calculator, label: 'HPP' },
               { id: 'incomes', icon: SquarePlus, label: 'Pemasukan Lain' },
               { id: 'expenses', icon: CircleMinus, label: 'Pengeluaran' },
               { id: 'customers', icon: Users, label: 'Pelanggan & Voucher' },
@@ -1446,8 +1324,8 @@ export default function App() {
               <div><h2 className="font-heading font-black text-slate-900 text-xl tracking-tight capitalize">{currentView.replace('-', ' ')}</h2></div>
             </div>
             <div className="flex items-center gap-3">
-               {currentShift && <span className="hidden md:inline-block bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold border border-blue-100"><Clock className="w-3 h-3 inline-block mr-1 mb-0.5"/> Shift Aktif</span>}
-               <div className="flex items-center bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-[10px] md:text-xs font-bold border border-slate-200 whitespace-nowrap">{today}</div>
+              {currentShift && <span className="hidden md:inline-block bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold border border-blue-100"><Clock className="w-3 h-3 inline-block mr-1 mb-0.5" /> Shift Aktif</span>}
+              <div className="flex items-center bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-[10px] md:text-xs font-bold border border-slate-200 whitespace-nowrap">{today}</div>
             </div>
           </header>
 
@@ -1456,13 +1334,13 @@ export default function App() {
             {currentView === 'pos' && <PosView />}
             {currentView === 'menu-mgt' && <MenuManagement />}
             {currentView === 'variant-mgt' && <VariantManagement />}
-            {currentView === 'hpp-calc' && <HppCalculatorView />}
+            {currentView === 'hpp-calc' && <HppView />}
             {currentView === 'incomes' && <IncomeView />}
             {currentView === 'expenses' && <ExpenseView />}
             {currentView === 'customers' && <CustomerView />}
             {currentView === 'reports' && <ReportsView />}
-            {currentView === 'settings' && <SettingsView />} 
-            {currentView === 'account' && <AccountView />} 
+            {currentView === 'settings' && <SettingsView />}
+            {currentView === 'account' && <AccountView />}
           </div>
         </main>
 
@@ -1495,7 +1373,7 @@ export default function App() {
         <VariantSelectionModal />
         <PaymentModal />
         <ReceiptModal />
-        
+
       </div>
     </AppContext.Provider>
   );
