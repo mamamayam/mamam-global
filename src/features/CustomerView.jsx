@@ -15,7 +15,7 @@ const CustomerView = () => {
   const [newVoucherType, setNewVoucherType] = useState('fixed');
   const [newVoucherMinPurchase, setNewVoucherMinPurchase] = useState('');
   const [newVoucherQuota, setNewVoucherQuota] = useState('');
-};
+
 
 const handleAddCustomer = () => {
   if (!newCustName) return triggerAlert('Nama pelanggan wajib diisi!');
@@ -59,9 +59,12 @@ return (
     </div>
 
     <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar pb-10">
-
       {customerSubTab === 'manage' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in slide-in-from-right-4 duration-300 ease-out h-full">
+
+          {/* ========================================= */}
+          {/* KOLOM 1: KELOLA PELANGGAN                 */}
+          {/* ========================================= */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full min-h-[400px]">
             <div className="p-4 border-b bg-slate-50 rounded-t-2xl font-bold text-slate-800 shrink-0">Data Pelanggan</div>
             <div className="p-4 space-y-3 border-b border-slate-100 bg-white shrink-0">
@@ -84,6 +87,88 @@ return (
               {customers.length === 0 && <p className="text-center text-xs text-slate-400 mt-10">Belum ada pelanggan</p>}
             </div>
           </div>
+
+          {/* ========================================= */}
+          {/* KOLOM 2: VOUCHER DISKON AKTIF (Pindahan)  */}
+          {/* ========================================= */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full min-h-[400px]">
+            <div className="p-4 border-b bg-slate-50 rounded-t-2xl font-bold text-slate-800 shrink-0">Voucher Diskon Aktif</div>
+
+            <div className="p-4 space-y-3 border-b border-slate-100 bg-white shrink-0">
+              {/* 1. INPUT KODE VOUCHER */}
+              <input
+                type="text"
+                placeholder="KODE VOUCHER (Maks 10 huruf)"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm font-bold uppercase tracking-wider outline-none focus:ring-2 focus:ring-orange-100 transition-colors"
+                value={newVoucherCode}
+                maxLength={10}
+                onChange={e => setNewVoucherCode(e.target.value)}
+              />
+
+              {/* 2. INPUT TIPE & NILAI POTONGAN */}
+              <div className="flex gap-2">
+                <select
+                  className="w-1/3 p-2.5 bg-slate-50 border rounded-xl text-sm font-semibold outline-none transition-colors focus:ring-2 focus:ring-orange-100"
+                  value={newVoucherType}
+                  onChange={e => setNewVoucherType(e.target.value)}
+                >
+                  <option value="fixed">Nominal (Rp)</option>
+                  <option value="percent">Persen (%)</option>
+                </select>
+                <input
+                  type="number"
+                  placeholder="Nilai Potongan"
+                  className="flex-1 p-2.5 bg-slate-50 border rounded-xl text-sm outline-none font-bold text-orange-600 focus:ring-2 focus:ring-orange-100 transition-colors"
+                  value={newVoucherDiscount}
+                  onChange={e => setNewVoucherDiscount(e.target.value)}
+                />
+              </div>
+
+              {/* 3. INPUT MINIMAL BELANJA & KUOTA (SEJAJAR) */}
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  placeholder="Syarat Minimal Belanja (Opsional)"
+                  className="flex-1 p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-100 transition-colors"
+                  value={newVoucherMinPurchase}
+                  onChange={e => setNewVoucherMinPurchase(e.target.value)}
+                />
+                <input
+                  type="number"
+                  placeholder="Kuota"
+                  className="w-1/3 p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-100 transition-colors"
+                  value={newVoucherQuota}
+                  onChange={e => setNewVoucherQuota(e.target.value)}
+                  min="1"
+                />
+              </div>
+
+              {/* 4. TOMBOL SIMPAN */}
+              <button onClick={handleAddVoucher} className="w-full py-3 mt-1 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-sm font-bold shadow-md transition-all duration-300 hover:-translate-y-0.5 flex items-center justify-center gap-2">
+                <Ticket className="w-4 h-4" /> Simpan Voucher
+              </button>
+            </div>
+
+            {/* 5. DAFTAR VOUCHER AKTIF */}
+            <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50/30 custom-scrollbar">
+              {vouchers.map(v => (
+                <div key={v.id} className="flex justify-between items-center p-3 bg-white border border-orange-100 rounded-xl shadow-sm relative overflow-hidden transition-shadow duration-300">
+                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-orange-600"></div>
+                  <div className="pl-3">
+                    <p className="font-black text-orange-600 tracking-wider text-sm">{v.code}</p>
+                    <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                      Min. Order: {formatRupiah(v.minPurchase)} &bull; Sisa Kuota: <span className="font-bold text-orange-600">{v.quota || 0}x</span>
+                    </p>
+                  </div>
+                  <span className="font-bold text-sm text-slate-800 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                    Diskon {v.discountType === 'percent' ? `${v.discountValue}%` : formatRupiah(v.discountValue)}
+                  </span>
+                </div>
+              ))}
+              {vouchers.length === 0 && <p className="text-center text-xs text-slate-400 mt-10">Belum ada voucher</p>}
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -136,86 +221,9 @@ return (
         </div>
       )}
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full min-h-[400px]">
-        <div className="p-4 border-b bg-slate-50 rounded-t-2xl font-bold text-slate-800 shrink-0">Voucher Diskon Aktif</div>
-
-        <div className="p-4 space-y-3 border-b border-slate-100 bg-white shrink-0">
-          {/* 1. INPUT KODE VOUCHER */}
-          <input
-            type="text"
-            placeholder="KODE VOUCHER (Maks 10 huruf)"
-            className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm font-bold uppercase tracking-wider outline-none focus:ring-2 focus:ring-orange-100 transition-colors"
-            value={newVoucherCode}
-            maxLength={10}
-            onChange={e => setNewVoucherCode(e.target.value)}
-          />
-
-          {/* 2. INPUT TIPE & NILAI POTONGAN */}
-          <div className="flex gap-2">
-            <select
-              className="w-1/3 p-2.5 bg-slate-50 border rounded-xl text-sm font-semibold outline-none transition-colors focus:ring-2 focus:ring-orange-100"
-              value={newVoucherType}
-              onChange={e => setNewVoucherType(e.target.value)}
-            >
-              <option value="fixed">Nominal (Rp)</option>
-              <option value="percent">Persen (%)</option>
-            </select>
-            <input
-              type="number"
-              placeholder="Nilai Potongan"
-              className="flex-1 p-2.5 bg-slate-50 border rounded-xl text-sm outline-none font-bold text-orange-600 focus:ring-2 focus:ring-orange-100 transition-colors"
-              value={newVoucherDiscount}
-              onChange={e => setNewVoucherDiscount(e.target.value)}
-            />
-          </div>
-
-          {/* 3. INPUT MINIMAL BELANJA & KUOTA (SEJAJAR) */}
-          <div className="flex gap-2">
-            <input
-              type="number"
-              placeholder="Syarat Minimal Belanja (Opsional)"
-              className="flex-1 p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-100 transition-colors"
-              value={newVoucherMinPurchase}
-              onChange={e => setNewVoucherMinPurchase(e.target.value)}
-            />
-            <input
-              type="number"
-              placeholder="Kuota"
-              className="w-1/3 p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-100 transition-colors"
-              value={newVoucherQuota}
-              onChange={e => setNewVoucherQuota(e.target.value)}
-              min="1"
-            />
-          </div>
-
-          {/* 4. TOMBOL SIMPAN */}
-          <button onClick={handleAddVoucher} className="w-full py-3 mt-1 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-sm font-bold shadow-md transition-all duration-300 hover:-translate-y-0.5 flex items-center justify-center gap-2">
-            <Ticket className="w-4 h-4" /> Simpan Voucher
-          </button>
-        </div>
-
-        {/* 5. DAFTAR VOUCHER AKTIF */}
-        <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50/30 custom-scrollbar">
-          {vouchers.map(v => (
-            <div key={v.id} className="flex justify-between items-center p-3 bg-white border border-orange-100 rounded-xl shadow-sm relative overflow-hidden transition-shadow duration-300">
-              <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-orange-600"></div>
-              <div className="pl-3">
-                <p className="font-black text-orange-600 tracking-wider text-sm">{v.code}</p>
-                <p className="text-[10px] text-slate-500 font-medium mt-0.5">
-                  Min. Order: {formatRupiah(v.minPurchase)} &bull; Sisa Kuota: <span className="font-bold text-orange-600">{v.quota || 0}x</span>
-                </p>
-              </div>
-              <span className="font-bold text-sm text-slate-800 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
-                Diskon {v.discountType === 'percent' ? `${v.discountValue}%` : formatRupiah(v.discountValue)}
-              </span>
-            </div>
-          ))}
-          {vouchers.length === 0 && <p className="text-center text-xs text-slate-400 mt-10">Belum ada voucher</p>}
-        </div>
-      </div>
-
 
     </div>
   </div>
 );
-    export default CustomerView;
+};
+export default CustomerView;
