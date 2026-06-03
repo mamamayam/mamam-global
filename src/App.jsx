@@ -8,18 +8,62 @@ import ExpenseView from './features/ExpenseView';
 import HppView from './features/HppView';
 import IncomeView from './features/IncomeView';
 import PosView from './features/PosView';
-import ReportView from './features/ReportsView';
+import ReportsView from './features/ReportsView';
 import SettingsView from './features/SettingsView';
 import ShiftView from './features/ShiftView';
 import React, { useState, useMemo, useEffect, createContext, useContext } from 'react';
 import {
-  Search, Menu as MenuIcon, ShoppingCart, X, Plus, Minus, ChevronRight,
-  Settings, PieChart, Coffee, List, Trash2, CheckCircle2, ChevronLeft,
-  Receipt, Wallet, CreditCard, QrCode, UtensilsCrossed, Package, Truck,
-  MoreHorizontal, Save, History, CircleMinus, AlertCircle, Edit3,
-  Calculator, Users, Ticket, Calendar, Award, Info, RefreshCw, Copy, BookOpen,
-  Printer, BarChart3, Store, Clock, SquarePlus, SplitSquareHorizontal, FileText,
-  UserCog
+  AlertCircle,
+  ArrowDownCircle,
+  Award,
+  Banknote,
+  BarChart3,
+  BookOpen,
+  Briefcase,
+  Calculator,
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleMinus,
+  Clock,
+  Coffee,
+  Copy,
+  CreditCard,
+  DollarSign,
+  Edit3,
+  FileText,
+  History,
+  Info,
+  List,
+  Menu as MenuIcon,
+  Minus,
+  MoreHorizontal,
+  Package,
+  Pencil,
+  PieChart,
+  Plus,
+  Printer,
+  QrCode,
+  Receipt,
+  RefreshCw,
+  Save,
+  Search,
+  Settings,
+  ShoppingCart,
+  SplitSquareHorizontal,
+  SquarePlus,
+  Store,
+  Ticket,
+  Trash2,
+  TrendingUp,
+  Truck,
+  UserCog,
+  Users,
+  UtensilsCrossed,
+  Wallet,
+  X
 } from 'lucide-react';
 
 // =========================================================================
