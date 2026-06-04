@@ -1512,14 +1512,14 @@ export default function App() {
                   setIsSidebarOpen(false);
                 }}
                 className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 font-bold text-sm ${currentView === item.id
-                    ? 'bg-slate-100 text-slate-900 shadow-sm translate-x-1'
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 hover:translate-x-1'
+                  ? 'bg-slate-100 text-slate-900 shadow-sm translate-x-1'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 hover:translate-x-1'
                   }`}
               >
                 <item.icon
                   className={`w-5 h-5 transition-colors duration-300 ${currentView === item.id
-                      ? 'text-slate-900'
-                      : 'text-slate-400'
+                    ? 'text-slate-900'
+                    : 'text-slate-400'
                     }`}
                 />
                 {item.label}
@@ -1536,7 +1536,12 @@ export default function App() {
                 </button>
               ) : (
                 <button
-                  onClick={() => setIsAdminMode(false)}
+                  onClick={() =>
+                    triggerConfirm(
+                      'Yakin ingin keluar dari mode admin?',
+                      () => setIsAdminMode(false)
+                    )
+                  }
                   className="w-full bg-red-500 text-white py-3 rounded-xl font-bold"
                 >
                   Keluar Admin
