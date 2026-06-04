@@ -4,15 +4,9 @@ import { Clock, FileText, History, Printer, Edit, X, Trash2 } from 'lucide-react
 import { useState, useMemo } from 'react';
 
 const ShiftView = () => {
-  const { currentShift, setCurrentShift, shiftHistory, setShiftHistory, salesHistory, expenses, incomes, formatRupiah, triggerAlert, triggerConfirm, storeSettings } = useAppContext();
-
-  // =========================================================================
-  // SLOT AUTENTIKASI (Siap disambungkan)
-  // =========================================================================
-  // TODO: Hubungkan ini dengan state user dari sistem Auth Anda nantinya.
-  // Contoh jika pakai context: const { user } = useAuth(); const currentUserRole = user?.role;
-  const currentUserRole = 'admin'; // Ubah sementara ke 'kasir' untuk melihat tombol edit hilang
-  // =========================================================================
+  const { currentShift, setCurrentShift, shiftHistory, setShiftHistory, 
+    salesHistory, expenses, incomes, formatRupiah, triggerAlert, triggerConfirm, 
+    storeSettings, isAdminMode, setIsAdminMode } = useAppContext();
 
   const [initialCashInput, setInitialCashInput] = useState('');
   const [actualCashInput, setActualCashInput] = useState('');
@@ -185,7 +179,7 @@ const ShiftView = () => {
 
         <div id="xreading-content" className="bg-white p-6 w-full max-w-sm rounded-2xl shadow-xl border border-slate-100 print:shadow-none print:border-none">
           <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
-            <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 mb-1 print:text-lg">X-READING</h2>
+            <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 mb-1 print:text-lg">SHIFT KASIR</h2>
             <p className="text-[10px] text-slate-500 print:text-black">LAPORAN TUTUP SHIFT</p>
             <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">ID: {closedShiftData.id}</p>
           </div>
@@ -206,13 +200,13 @@ const ShiftView = () => {
             <div className="flex justify-between font-bold"><span>Total Seharusnya di Laci</span> <span>{formatRupiah(closedShiftData.stats.expectedCash)}</span></div>
             <div className="flex justify-between font-bold"><span>Uang Fisik Aktual</span> <span>{formatRupiah(closedShiftData.actualCash)}</span></div>
             <div className={`flex justify-between font-bold pt-2 mt-2 border-t border-slate-200 print:border-black ${closedShiftData.difference < 0 ? 'text-red-500' : closedShiftData.difference > 0 ? 'text-green-500' : 'text-slate-800'}`}>
-              <span>{closedShiftData.difference < 0 ? 'SELISIH KURANG (SHORT)' : closedShiftData.difference > 0 ? 'SELISIH LEBIH (OVER)' : 'BALANCE (PAS)'}</span>
+              <span>{closedShiftData.difference < 0 ? 'SELISIH MINUS' : closedShiftData.difference > 0 ? 'SELISIH LEBIH' : 'BALANCE (PAS)'}</span>
               <span>{formatRupiah(closedShiftData.difference)}</span>
             </div>
           </div>
 
           <div className="text-center mt-8 text-[10px] text-slate-500 print:mt-4 print:text-black">
-            <p>-- Akhir Laporan X-Reading --</p>
+            <p>-- Akhir Laporan --</p>
           </div>
         </div>
 
@@ -276,7 +270,7 @@ const ShiftView = () => {
           </div>
 
           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col justify-center animate-in slide-in-from-right-4 duration-500">
-            <h3 className="font-heading text-xl font-bold text-slate-800 mb-2 text-center">Tutup Shift Kasir (X-Reading)</h3>
+            <h3 className="font-heading text-xl font-bold text-slate-800 mb-2 text-center">Tutup Shift Kasir </h3>
             <p className="text-slate-500 text-sm mb-8 text-center">Hitung dan masukkan total uang tunai yang ada di dalam laci kasir sekarang untuk dicocokkan dengan sistem.</p>
 
             <div className="mb-6">
@@ -359,9 +353,9 @@ const ShiftView = () => {
                     : 'bg-slate-100 text-slate-600 border border-slate-200';
 
                 const statusLabel = shift.difference < 0
-                  ? 'Minus (Short)'
+                  ? 'Minus'
                   : shift.difference > 0
-                    ? 'Lebih (Over)'
+                    ? 'Lebih'
                     : 'Pas (Balance)';
 
                 return (
@@ -394,7 +388,7 @@ const ShiftView = () => {
                       <div className="flex gap-1 border-l border-slate-200 pl-4">
                         {/* Tombol Edit (Hanya tampil jika user adalah admin) */}
                         {/* Tombol Edit & Hapus (Hanya tampil jika user adalah admin) */}
-                        {currentUserRole === 'admin' && (
+                        {isAdminMode && (
                           <>
                             <button
                               onClick={() => handleOpenEditModal(shift)}
@@ -419,7 +413,7 @@ const ShiftView = () => {
                             setShowXReading(true);
                           }}
                           className="p-2 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 text-slate-600 hover:text-slate-800 bg-white"
-                          title="Cetak/Lihat Detail X-Reading"
+                          title="Cetak/Lihat Detail"
                         >
                           <Printer className="w-4 h-4" />
                         </button>
@@ -479,7 +473,7 @@ const ShiftView = () => {
                 <div className="pt-2">
                   <p className="text-xs text-slate-500 mb-1">Preview Selisih Baru:</p>
                   <p className={`font-black text-lg ${(Number(editActualCashInput) - editingShift.stats.expectedCash) < 0 ? 'text-red-500' :
-                      (Number(editActualCashInput) - editingShift.stats.expectedCash) > 0 ? 'text-green-500' : 'text-slate-800'
+                    (Number(editActualCashInput) - editingShift.stats.expectedCash) > 0 ? 'text-green-500' : 'text-slate-800'
                     }`}>
                     {formatRupiah(Number(editActualCashInput) - editingShift.stats.expectedCash)}
                   </p>

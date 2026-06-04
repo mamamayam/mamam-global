@@ -1359,6 +1359,8 @@ export default function App() {
   // Membungkus semua props di Context Value
   const contextValue = {
     // POS / Cart
+
+    isAdminMode,
     cart, setCart,
     addToCart,
     updateCartQty,
@@ -1454,7 +1456,7 @@ export default function App() {
 
   const menuItems = [
 
-    { id: 'shift', icon: Clock, label: 'Shift Kasir (X-Reading)' },
+    { id: 'shift', icon: Clock, label: 'Shift Kasir' },
     { id: 'pos', icon: ShoppingCart, label: 'Kasir Utama' },
     { id: 'incomes', icon: TrendingUp, label: 'Pemasukan' },
     { id: 'expenses', icon: TrendingDown, label: 'Pengeluaran' },
