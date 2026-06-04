@@ -9,6 +9,7 @@ import ExpenseView from './features/ExpenseView';
 import EmployeesView from './features/EmployeesView';
 import HppView from './features/HppView';
 import IncomeView from './features/IncomeView';
+import PinModal from './features/PinModal';
 import PosView from './features/PosView';
 import ReportsView from './features/ReportsView';
 import SettingsView from './features/SettingsView';
@@ -329,10 +330,10 @@ const PayslipModal = () => {
   const { payslipModal, setPayslipModal, formatRupiah } = useAppContext();
   if (!payslipModal.isOpen || !payslipModal.data) return null;
   const { data, month } = payslipModal;
-  
+
   const aggAdditions = {};
   const aggDeductions = {};
-  
+
   data.records.forEach(rec => {
     rec.additions.forEach(a => { aggAdditions[a.category] = (aggAdditions[a.category] || 0) + a.amount; });
     rec.deductions.forEach(d => { aggDeductions[d.category] = (aggDeductions[d.category] || 0) + d.amount; });
@@ -345,7 +346,8 @@ const PayslipModal = () => {
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity duration-300 print:bg-white print:p-0">
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @media print {
           body * { visibility: hidden; }
           #payslip-content, #payslip-content * { visibility: visible; }
@@ -355,63 +357,63 @@ const PayslipModal = () => {
       `}} />
 
       <div className="bg-white rounded-md w-full max-w-[350px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out print:shadow-none print:w-[80mm]" id="payslip-content">
-         <div className="p-6 print:p-4">
-            <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
-              <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 mb-1 print:text-lg">SLIP GAJI</h2>
-              <p className="text-[10px] text-slate-500 font-bold print:text-black">MAMAM OUTLET</p>
-              <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">Periode: {monthLabel}</p>
-            </div>
+        <div className="p-6 print:p-4">
+          <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
+            <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 mb-1 print:text-lg">SLIP GAJI</h2>
+            <p className="text-[10px] text-slate-500 font-bold print:text-black">MAMAM OUTLET</p>
+            <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">Periode: {monthLabel}</p>
+          </div>
 
-            <div className="mb-4 text-xs space-y-1.5 print:mb-3 print:text-black">
-              <div className="flex justify-between"><span>Nama:</span> <span className="font-bold">{data.employee.name}</span></div>
-              <div className="flex justify-between"><span>Posisi/Rate:</span> <span className="font-bold">{formatRupiah(data.employee.hourlyRate)}/Jam</span></div>
-            </div>
+          <div className="mb-4 text-xs space-y-1.5 print:mb-3 print:text-black">
+            <div className="flex justify-between"><span>Nama:</span> <span className="font-bold">{data.employee.name}</span></div>
+            <div className="flex justify-between"><span>Posisi/Rate:</span> <span className="font-bold">{formatRupiah(data.employee.hourlyRate)}/Jam</span></div>
+          </div>
 
+          <div className="border-t-2 border-dashed border-slate-300 pt-3 pb-3 print:text-black text-xs">
+            <h3 className="font-bold mb-2 uppercase text-[10px]">PENGHASILAN</h3>
+            <div className="flex justify-between mb-1">
+              <span>Gaji Pokok ({data.totalHours} Jam)</span>
+              <span>{formatRupiah(basicPay)}</span>
+            </div>
+            {Object.entries(aggAdditions).map(([cat, amt]) => (
+              <div key={cat} className="flex justify-between mb-1">
+                <span>+ {cat}</span> <span>{formatRupiah(amt)}</span>
+              </div>
+            ))}
+          </div>
+
+          {Object.keys(aggDeductions).length > 0 && (
             <div className="border-t-2 border-dashed border-slate-300 pt-3 pb-3 print:text-black text-xs">
-               <h3 className="font-bold mb-2 uppercase text-[10px]">PENGHASILAN</h3>
-               <div className="flex justify-between mb-1">
-                 <span>Gaji Pokok ({data.totalHours} Jam)</span> 
-                 <span>{formatRupiah(basicPay)}</span>
-               </div>
-               {Object.entries(aggAdditions).map(([cat, amt]) => (
-                 <div key={cat} className="flex justify-between mb-1">
-                   <span>+ {cat}</span> <span>{formatRupiah(amt)}</span>
-                 </div>
-               ))}
+              <h3 className="font-bold mb-2 uppercase text-[10px]">POTONGAN</h3>
+              {Object.entries(aggDeductions).map(([cat, amt]) => (
+                <div key={cat} className="flex justify-between mb-1 text-red-500 print:text-black">
+                  <span>- {cat}</span> <span>{formatRupiah(amt)}</span>
+                </div>
+              ))}
             </div>
+          )}
 
-            {Object.keys(aggDeductions).length > 0 && (
-              <div className="border-t-2 border-dashed border-slate-300 pt-3 pb-3 print:text-black text-xs">
-                <h3 className="font-bold mb-2 uppercase text-[10px]">POTONGAN</h3>
-                {Object.entries(aggDeductions).map(([cat, amt]) => (
-                  <div key={cat} className="flex justify-between mb-1 text-red-500 print:text-black">
-                    <span>- {cat}</span> <span>{formatRupiah(amt)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="border-t-2 border-solid border-slate-800 pt-3 mt-1 print:border-black text-sm">
-              <div className="flex justify-between font-black uppercase">
-                <span>TOTAL DITERIMA</span> <span>{formatRupiah(data.netPay)}</span>
-              </div>
+          <div className="border-t-2 border-solid border-slate-800 pt-3 mt-1 print:border-black text-sm">
+            <div className="flex justify-between font-black uppercase">
+              <span>TOTAL DITERIMA</span> <span>{formatRupiah(data.netPay)}</span>
             </div>
-            
-            <div className="text-center mt-10 text-[10px] text-slate-500 print:mt-8 print:text-black">
-              <p>Penerima,</p>
-              <br/><br/><br/>
-              <p className="font-bold underline">({data.employee.name})</p>
-            </div>
-         </div>
+          </div>
 
-         <div className="absolute -bottom-16 left-0 right-0 flex gap-2 print:hidden">
-            <button onClick={printPayslip} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
-              <Printer className="w-4 h-4"/> Cetak/Kirim
-            </button>
-            <button onClick={() => setPayslipModal({ isOpen: false, data: null })} className="flex-1 py-3 rounded-xl bg-white text-slate-800 font-bold shadow-lg hover:bg-slate-100 text-sm transition-colors">
-              Tutup
-            </button>
-         </div>
+          <div className="text-center mt-10 text-[10px] text-slate-500 print:mt-8 print:text-black">
+            <p>Penerima,</p>
+            <br /><br /><br />
+            <p className="font-bold underline">({data.employee.name})</p>
+          </div>
+        </div>
+
+        <div className="absolute -bottom-16 left-0 right-0 flex gap-2 print:hidden">
+          <button onClick={printPayslip} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
+            <Printer className="w-4 h-4" /> Cetak/Kirim
+          </button>
+          <button onClick={() => setPayslipModal({ isOpen: false, data: null })} className="flex-1 py-3 rounded-xl bg-white text-slate-800 font-bold shadow-lg hover:bg-slate-100 text-sm transition-colors">
+            Tutup
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1101,6 +1103,14 @@ const MenuManagement = () => {
 };
 
 export default function App() {
+
+  const { isAdminMode, setIsAdminMode } = useAppContext();
+  const [showPinModal, setShowPinModal] = useState(false);
+
+  const handleAdminLogin = () => {
+    setIsAdminMode(true);
+  };
+
   const [currentView, setCurrentView] = useState('shift');
   const [activeTab, setActiveTab] = useState('materials');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -1355,9 +1365,13 @@ export default function App() {
     updateCartItemNote,
     isCartOpen, setIsCartOpen,
     menus, setMenus,
-    selectedMenuForVariant,
+    selectedMenuForVariant, setSelectedMenuForVariant,
     variantGroups, setVariantGroups,
     variantSelectedOptions, setVariantSelectedOptions,
+
+    vouchers, setVouchers,
+    savedBills, setSavedBills,
+    storeSettings, setStoreSettings,
 
     // Payment / Discount
     appliedVoucher, setAppliedVoucher,
@@ -1438,6 +1452,30 @@ export default function App() {
     triggerConfirm,
   };
 
+  const menuItems = [
+
+    { id: 'shift', icon: Clock, label: 'Shift Kasir (X-Reading)' },
+    { id: 'pos', icon: ShoppingCart, label: 'Kasir Utama' },
+    { id: 'incomes', icon: TrendingUp, label: 'Pemasukan' },
+    { id: 'expenses', icon: TrendingDown, label: 'Pengeluaran' },
+    { id: 'reports', icon: PieChart, label: 'Laporan & Profit' },
+    { id: 'employees', icon: Briefcase, label: 'Manajemen Pegawai' },
+    { id: 'menu-mgt', icon: List, label: 'Manajemen Menu' },
+    { id: 'variant-mgt', icon: Layers, label: 'Manajemen Varian' },
+    { id: 'hpp-calc', icon: Calculator, label: 'Manajemen HPP' },
+    { id: 'customers', icon: Users, label: 'Pelanggan & Voucher' },
+    { id: 'settings', icon: Settings, label: 'Pengaturan Sistem' },
+    { id: 'account', icon: UserCog, label: 'Manajemen Akun' }
+  ];
+
+  const visibleMenus = isAdminMode
+    ? menuItems
+    : menuItems.filter(item =>
+      ['shift', 'pos', 'expenses', 'incomes'].includes(item.id)
+    );
+
+
+
   return (
     <AppContext.Provider value={contextValue}>
       <div className="flex h-screen bg-slate-50 font-body text-slate-800 overflow-hidden w-full relative">
@@ -1466,25 +1504,45 @@ export default function App() {
           </div>
 
           <nav className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
-            {[
-              { id: 'shift', icon: Clock, label: 'Shift Kasir (X-Reading)' },
-              { id: 'pos', icon: ShoppingCart, label: 'Kasir Utama' },
-              { id: 'incomes', icon: TrendingUp, label: 'Pemasukan' },
-              { id: 'expenses', icon: TrendingDown, label: 'Pengeluaran' },
-              { id: 'reports', icon: PieChart, label: 'Laporan & Profit' },
-              { id: 'employees', icon: Briefcase, label: 'Manajemen Pegawai' },
-              { id: 'menu-mgt', icon: List, label: 'Manajemen Menu' },
-              { id: 'variant-mgt', icon: Layers, label: 'Manajemen Varian' },
-              { id: 'hpp-calc', icon: Calculator, label: 'Manajemen HPP' },
-              { id: 'customers', icon: Users, label: 'Pelanggan & Voucher' },
-              { id: 'settings', icon: Settings, label: 'Pengaturan Sistem' },
-              { id: 'account', icon: UserCog, label: 'Manajemen Akun' }
-            ].map(item => (
-              <button key={item.id} onClick={() => { setCurrentView(item.id); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 font-bold text-sm ${currentView === item.id ? 'bg-slate-100 text-slate-900 shadow-sm translate-x-1' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 hover:translate-x-1'}`}>
-                <item.icon className={`w-5 h-5 transition-colors duration-300 ${currentView === item.id ? 'text-slate-900' : 'text-slate-400'}`} />
+            {visibleMenus.map(item => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setCurrentView(item.id);
+                  setIsSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 font-bold text-sm ${currentView === item.id
+                    ? 'bg-slate-100 text-slate-900 shadow-sm translate-x-1'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 hover:translate-x-1'
+                  }`}
+              >
+                <item.icon
+                  className={`w-5 h-5 transition-colors duration-300 ${currentView === item.id
+                      ? 'text-slate-900'
+                      : 'text-slate-400'
+                    }`}
+                />
                 {item.label}
               </button>
             ))}
+
+            <div className="p-3 border-t">
+              {!isAdminMode ? (
+                <button
+                  onClick={() => setShowPinModal(true)}
+                  className="w-full bg-orange-600 text-white py-3 rounded-xl font-bold"
+                >
+                  Login Admin
+                </button>
+              ) : (
+                <button
+                  onClick={() => setIsAdminMode(false)}
+                  className="w-full bg-red-500 text-white py-3 rounded-xl font-bold"
+                >
+                  Keluar Admin
+                </button>
+              )}
+            </div>
           </nav>
         </aside>
 
@@ -1548,8 +1606,18 @@ export default function App() {
         <ReceiptModal />
         <PayslipModal />
 
+        <PinModal
+          isOpen={showPinModal}
+          onClose={() => setShowPinModal(false)}
+          onSuccess={() => {
+            setIsAdminMode(true);
+            setShowPinModal(false);
+          }}
+          triggerAlert={triggerAlert}
+        />
+
       </div>
-    </AppContext.Provider>
+    </AppContext.Provider >
   );
 }
 

@@ -1,11 +1,11 @@
 import React from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Clock, FileText, History, Printer, Edit, X } from 'lucide-react'; // Tambah Edit & X
+import { Clock, FileText, History, Printer, Edit, X, Trash2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 const ShiftView = () => {
   const { currentShift, setCurrentShift, shiftHistory, setShiftHistory, salesHistory, expenses, incomes, formatRupiah, triggerAlert, triggerConfirm, storeSettings } = useAppContext();
-  
+
   // =========================================================================
   // SLOT AUTENTIKASI (Siap disambungkan)
   // =========================================================================
@@ -30,21 +30,21 @@ const ShiftView = () => {
   const shiftStats = useMemo(() => {
     if (!currentShift) return null;
     const start = currentShift.startTime;
-    
+
     // Penjualan Tunai
     const shiftSales = salesHistory.filter(s => new Date(s.date) >= start);
     let cashSalesTotal = 0;
     shiftSales.forEach(sale => {
       if (sale.paymentMethod === 'Tunai') cashSalesTotal += sale.total;
       else if (sale.paymentMethod === 'Split Payment') {
-        sale.splitDetails.forEach(p => { if(p.method === 'Tunai') cashSalesTotal += p.amount; });
+        sale.splitDetails.forEach(p => { if (p.method === 'Tunai') cashSalesTotal += p.amount; });
       }
     });
 
     // Pemasukan & Pengeluaran
     const shiftIncomes = incomes.filter(i => new Date(i.date) >= start);
     const shiftExpenses = expenses.filter(e => new Date(e.date) >= start);
-    
+
     const cashIncomeTotal = shiftIncomes.reduce((s, i) => s + i.amount, 0);
     const cashExpenseTotal = shiftExpenses.reduce((s, e) => s + e.amount, 0);
 
@@ -72,10 +72,10 @@ const ShiftView = () => {
 
   const handleCloseShift = () => {
     if (!actualCashInput || Number(actualCashInput) < 0) return triggerAlert('Masukkan uang fisik (aktual) yang ada di laci kasir.');
-    
+
     const actualCash = Number(actualCashInput);
     const difference = actualCash - shiftStats.expectedCash;
-    
+
     const shiftData = {
       ...currentShift,
       endTime: new Date(),
@@ -104,22 +104,31 @@ const ShiftView = () => {
       return triggerAlert('Masukkan nominal uang aktual yang valid.');
     }
 
-    const newActualCash = Number(editActualCashInput);
-    const newDifference = newActualCash - editingShift.stats.expectedCash;
+    // Bungkus dengan triggerConfirm
+    triggerConfirm(`Apakah Anda yakin ingin menyimpan perubahan pada laporan ${editingShift.id}?`, () => {
+      const newActualCash = Number(editActualCashInput);
+      const newDifference = newActualCash - editingShift.stats.expectedCash;
 
-    const updatedShift = {
-      ...editingShift,
-      actualCash: newActualCash,
-      difference: newDifference
-    };
+      const updatedShift = {
+        ...editingShift,
+        actualCash: newActualCash,
+        difference: newDifference
+      };
 
-    const updatedHistory = shiftHistory.map(s => s.id === updatedShift.id ? updatedShift : s);
-    
-    setShiftHistory(updatedHistory);
-    triggerAlert(`Data laporan ${updatedShift.id} berhasil diperbarui.`);
-    setEditingShift(null);
+      const updatedHistory = shiftHistory.map(s => s.id === updatedShift.id ? updatedShift : s);
+
+      setShiftHistory(updatedHistory);
+      triggerAlert(`Data laporan ${updatedShift.id} berhasil diperbarui.`);
+      setEditingShift(null);
+    });
   };
-  // ---------------------------------------------
+
+  const handleDeleteShift = (id) => {
+    triggerConfirm('Apakah Anda yakin ingin menghapus data shift ini secara permanen?', () => {
+      setShiftHistory(shiftHistory.filter(shift => shift.id !== id));
+      triggerAlert('Data laporan shift berhasil dihapus.');
+    });
+  };
 
   // Filter riwayat shift berdasarkan bulan yang dipilih
   const filteredShiftHistory = useMemo(() => {
@@ -164,7 +173,8 @@ const ShiftView = () => {
   if (showXReading && closedShiftData) {
     return (
       <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto items-center animate-in fade-in duration-300">
-        <style dangerouslySetInnerHTML={{__html: `
+        <style dangerouslySetInnerHTML={{
+          __html: `
           @media print {
             body * { visibility: hidden; }
             #xreading-content, #xreading-content * { visibility: visible; }
@@ -179,7 +189,7 @@ const ShiftView = () => {
             <p className="text-[10px] text-slate-500 print:text-black">LAPORAN TUTUP SHIFT</p>
             <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">ID: {closedShiftData.id}</p>
           </div>
-          
+
           <div className="space-y-1 text-xs mb-4 print:mb-2 print:text-black">
             <div className="flex justify-between"><span>Buka:</span> <span>{closedShiftData.startTime.toLocaleString('id-ID')}</span></div>
             <div className="flex justify-between"><span>Tutup:</span> <span>{closedShiftData.endTime.toLocaleString('id-ID')}</span></div>
@@ -202,12 +212,12 @@ const ShiftView = () => {
           </div>
 
           <div className="text-center mt-8 text-[10px] text-slate-500 print:mt-4 print:text-black">
-             <p>-- Akhir Laporan X-Reading --</p>
+            <p>-- Akhir Laporan X-Reading --</p>
           </div>
         </div>
 
         <div className="flex gap-2 mt-6 print:hidden w-full max-w-sm">
-          <button onClick={() => window.print()} className="flex-1 py-3 bg-slate-800 text-white font-bold rounded-xl shadow-lg hover:bg-slate-900 transition-colors flex items-center justify-center gap-2"><Printer className="w-4 h-4"/> Cetak</button>
+          <button onClick={() => window.print()} className="flex-1 py-3 bg-slate-800 text-white font-bold rounded-xl shadow-lg hover:bg-slate-900 transition-colors flex items-center justify-center gap-2"><Printer className="w-4 h-4" /> Cetak</button>
           <button onClick={() => setShowXReading(false)} className="flex-1 py-3 bg-white text-slate-800 border border-slate-200 font-bold rounded-xl shadow-sm hover:bg-slate-50 transition-colors">Tutup</button>
         </div>
       </div>
@@ -222,65 +232,65 @@ const ShiftView = () => {
 
       {!currentShift ? (
         <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-lg border border-slate-100 text-center animate-in zoom-in-95 duration-500 mt-10 mb-8 shrink-0">
-           <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4"><Clock className="w-8 h-8" /></div>
-           <h3 className="font-heading text-2xl font-black text-slate-800 mb-2">Buka Shift Kasir</h3>
-           <p className="text-slate-500 text-sm mb-6">Masukkan jumlah uang tunai fisik yang ada di dalam laci kasir saat ini sebagai modal kembalian.</p>
-           
-           <div className="text-left mb-6">
-              <label className="block text-xs font-bold text-slate-500 mb-2">Saldo Awal (Modal Tunai)</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rp</span>
-                <input type="number" className="w-full pl-12 pr-4 py-3 text-lg font-bold rounded-xl border border-slate-200 focus:outline-none focus:border-slate-800 bg-slate-50 transition-colors" value={initialCashInput} onChange={e => setInitialCashInput(e.target.value)} placeholder="0" />
-              </div>
-           </div>
-           
-           <button onClick={handleOpenShift} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl text-lg shadow-lg hover:bg-slate-900 hover:-translate-y-0.5 transition-all">Mulai Shift</button>
+          <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4"><Clock className="w-8 h-8" /></div>
+          <h3 className="font-heading text-2xl font-black text-slate-800 mb-2">Buka Shift Kasir</h3>
+          <p className="text-slate-500 text-sm mb-6">Masukkan jumlah uang tunai fisik yang ada di dalam laci kasir saat ini sebagai modal kembalian.</p>
+
+          <div className="text-left mb-6">
+            <label className="block text-xs font-bold text-slate-500 mb-2">Saldo Awal (Modal Tunai)</label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rp</span>
+              <input type="number" className="w-full pl-12 pr-4 py-3 text-lg font-bold rounded-xl border border-slate-200 focus:outline-none focus:border-slate-800 bg-slate-50 transition-colors" value={initialCashInput} onChange={e => setInitialCashInput(e.target.value)} placeholder="0" />
+            </div>
+          </div>
+
+          <button onClick={handleOpenShift} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl text-lg shadow-lg hover:bg-slate-900 hover:-translate-y-0.5 transition-all">Mulai Shift</button>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl mb-8 shrink-0">
-           <div className="bg-slate-800 rounded-3xl shadow-lg p-6 text-white flex flex-col justify-between relative overflow-hidden animate-in slide-in-from-left-4 duration-500">
-              <div className="absolute top-0 right-0 p-8 opacity-10"><FileText className="w-32 h-32"/></div>
-              <div>
-                <span className="bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Shift Aktif</span>
-                <h3 className="font-heading text-2xl font-black mt-4 mb-1">{currentShift.id}</h3>
-                <p className="text-sm text-slate-300">Waktu Buka: {currentShift.startTime.toLocaleString('id-ID')}</p>
-              </div>
+          <div className="bg-slate-800 rounded-3xl shadow-lg p-6 text-white flex flex-col justify-between relative overflow-hidden animate-in slide-in-from-left-4 duration-500">
+            <div className="absolute top-0 right-0 p-8 opacity-10"><FileText className="w-32 h-32" /></div>
+            <div>
+              <span className="bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Shift Aktif</span>
+              <h3 className="font-heading text-2xl font-black mt-4 mb-1">{currentShift.id}</h3>
+              <p className="text-sm text-slate-300">Waktu Buka: {currentShift.startTime.toLocaleString('id-ID')}</p>
+            </div>
 
-              <div className="mt-8 space-y-4 relative z-10">
-                 <div className="flex justify-between items-center border-b border-slate-700 pb-2">
-                   <span className="text-sm text-slate-300">Saldo Awal (Modal)</span><span className="font-bold">{formatRupiah(shiftStats?.initialCash)}</span>
-                 </div>
-                 <div className="flex justify-between items-center border-b border-slate-700 pb-2">
-                   <span className="text-sm text-slate-300">Penjualan (Khusus Tunai)</span><span className="font-bold text-green-400">+{formatRupiah(shiftStats?.cashSales)}</span>
-                 </div>
-                 <div className="flex justify-between items-center border-b border-slate-700 pb-2">
-                   <span className="text-sm text-slate-300">Pemasukan Lain (Tunai)</span><span className="font-bold text-green-400">+{formatRupiah(shiftStats?.cashIncomes)}</span>
-                 </div>
-                 <div className="flex justify-between items-center border-b border-slate-700 pb-2">
-                   <span className="text-sm text-slate-300">Pengeluaran Kasir</span><span className="font-bold text-red-400">-{formatRupiah(shiftStats?.cashExpenses)}</span>
-                 </div>
-                 <div className="flex justify-between items-center pt-2">
-                   <span className="text-sm font-bold text-slate-300">Target Uang Fisik</span><span className="font-black text-2xl">{formatRupiah(shiftStats?.expectedCash)}</span>
-                 </div>
+            <div className="mt-8 space-y-4 relative z-10">
+              <div className="flex justify-between items-center border-b border-slate-700 pb-2">
+                <span className="text-sm text-slate-300">Saldo Awal (Modal)</span><span className="font-bold">{formatRupiah(shiftStats?.initialCash)}</span>
               </div>
-           </div>
-
-           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col justify-center animate-in slide-in-from-right-4 duration-500">
-              <h3 className="font-heading text-xl font-bold text-slate-800 mb-2 text-center">Tutup Shift Kasir (X-Reading)</h3>
-              <p className="text-slate-500 text-sm mb-8 text-center">Hitung dan masukkan total uang tunai yang ada di dalam laci kasir sekarang untuk dicocokkan dengan sistem.</p>
-              
-              <div className="mb-6">
-                 <label className="block text-xs font-bold text-slate-500 mb-2">Uang Fisik Aktual (Di Laci)</label>
-                 <div className="relative">
-                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rp</span>
-                   <input type="number" className="w-full pl-12 pr-4 py-4 text-xl font-black rounded-xl border-2 border-slate-200 focus:outline-none focus:border-orange-600 bg-slate-50 transition-colors" value={actualCashInput} onChange={e => setActualCashInput(e.target.value)} placeholder="0" />
-                 </div>
+              <div className="flex justify-between items-center border-b border-slate-700 pb-2">
+                <span className="text-sm text-slate-300">Penjualan (Khusus Tunai)</span><span className="font-bold text-green-400">+{formatRupiah(shiftStats?.cashSales)}</span>
               </div>
+              <div className="flex justify-between items-center border-b border-slate-700 pb-2">
+                <span className="text-sm text-slate-300">Pemasukan Lain (Tunai)</span><span className="font-bold text-green-400">+{formatRupiah(shiftStats?.cashIncomes)}</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-slate-700 pb-2">
+                <span className="text-sm text-slate-300">Pengeluaran Kasir</span><span className="font-bold text-red-400">-{formatRupiah(shiftStats?.cashExpenses)}</span>
+              </div>
+              <div className="flex justify-between items-center pt-2">
+                <span className="text-sm font-bold text-slate-300">Target Uang Fisik</span><span className="font-black text-2xl">{formatRupiah(shiftStats?.expectedCash)}</span>
+              </div>
+            </div>
+          </div>
 
-              <button onClick={handleCloseShift} className="w-full py-4 bg-orange-600 text-white font-bold rounded-xl text-lg shadow-lg hover:bg-orange-700 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
-                Tutup Shift & Cetak Laporan <Printer className="w-5 h-5"/>
-              </button>
-           </div>
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col justify-center animate-in slide-in-from-right-4 duration-500">
+            <h3 className="font-heading text-xl font-bold text-slate-800 mb-2 text-center">Tutup Shift Kasir (X-Reading)</h3>
+            <p className="text-slate-500 text-sm mb-8 text-center">Hitung dan masukkan total uang tunai yang ada di dalam laci kasir sekarang untuk dicocokkan dengan sistem.</p>
+
+            <div className="mb-6">
+              <label className="block text-xs font-bold text-slate-500 mb-2">Uang Fisik Aktual (Di Laci)</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rp</span>
+                <input type="number" className="w-full pl-12 pr-4 py-4 text-xl font-black rounded-xl border-2 border-slate-200 focus:outline-none focus:border-orange-600 bg-slate-50 transition-colors" value={actualCashInput} onChange={e => setActualCashInput(e.target.value)} placeholder="0" />
+              </div>
+            </div>
+
+            <button onClick={handleCloseShift} className="w-full py-4 bg-orange-600 text-white font-bold rounded-xl text-lg shadow-lg hover:bg-orange-700 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
+              Tutup Shift & Cetak Laporan <Printer className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -296,10 +306,10 @@ const ShiftView = () => {
             <p className="text-xs text-slate-400">Laporan performa kasir dan akurasi kas di laci kasir.</p>
           </div>
           <div className="flex items-center gap-2">
-            <input 
-              type="month" 
-              value={filterMonth} 
-              onChange={e => setFilterMonth(e.target.value)} 
+            <input
+              type="month"
+              value={filterMonth}
+              onChange={e => setFilterMonth(e.target.value)}
               className="p-2 text-xs font-bold border border-slate-200 rounded-xl outline-none text-slate-600 bg-white focus:border-orange-500 transition-colors"
             />
             {filterMonth && (
@@ -342,17 +352,17 @@ const ShiftView = () => {
               </div>
             ) : (
               filteredShiftHistory.map((shift, idx) => {
-                const statusColor = shift.difference < 0 
-                  ? 'bg-red-50 text-red-600 border border-red-100' 
-                  : shift.difference > 0 
-                  ? 'bg-green-50 text-green-600 border border-green-100' 
-                  : 'bg-slate-100 text-slate-600 border border-slate-200';
-                
-                const statusLabel = shift.difference < 0 
-                  ? 'Minus (Short)' 
-                  : shift.difference > 0 
-                  ? 'Lebih (Over)' 
-                  : 'Pas (Balance)';
+                const statusColor = shift.difference < 0
+                  ? 'bg-red-50 text-red-600 border border-red-100'
+                  : shift.difference > 0
+                    ? 'bg-green-50 text-green-600 border border-green-100'
+                    : 'bg-slate-100 text-slate-600 border border-slate-200';
+
+                const statusLabel = shift.difference < 0
+                  ? 'Minus (Short)'
+                  : shift.difference > 0
+                    ? 'Lebih (Over)'
+                    : 'Pas (Balance)';
 
                 return (
                   <div key={shift.id} className="p-4 hover:bg-slate-50/50 transition-colors animate-in fade-in slide-in-from-left-2 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -380,25 +390,35 @@ const ShiftView = () => {
                           {shift.difference > 0 ? '+' : ''}{formatRupiah(shift.difference)}
                         </p>
                       </div>
-                      
+
                       <div className="flex gap-1 border-l border-slate-200 pl-4">
                         {/* Tombol Edit (Hanya tampil jika user adalah admin) */}
+                        {/* Tombol Edit & Hapus (Hanya tampil jika user adalah admin) */}
                         {currentUserRole === 'admin' && (
-                          <button 
-                            onClick={() => handleOpenEditModal(shift)} 
-                            className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors border border-blue-100" 
-                            title="Edit Laporan Shift (Admin)"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleOpenEditModal(shift)}
+                              className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors border border-blue-100"
+                              title="Edit Laporan Shift (Admin)"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteShift(shift.id)}
+                              className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition-colors border border-red-100"
+                              title="Hapus Laporan Shift (Admin)"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
                         )}
 
-                        <button 
+                        <button
                           onClick={() => {
                             setClosedShiftData(shift);
                             setShowXReading(true);
-                          }} 
-                          className="p-2 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 text-slate-600 hover:text-slate-800 bg-white" 
+                          }}
+                          className="p-2 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 text-slate-600 hover:text-slate-800 bg-white"
                           title="Cetak/Lihat Detail X-Reading"
                         >
                           <Printer className="w-4 h-4" />
@@ -444,24 +464,23 @@ const ShiftView = () => {
                 <label className="block text-xs font-bold text-slate-500 mb-2">Koreksi Uang Fisik Aktual (Di Laci)</label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rp</span>
-                  <input 
-                    type="number" 
-                    className="w-full pl-12 pr-4 py-3 text-lg font-bold rounded-xl border border-slate-200 focus:outline-none focus:border-blue-600 bg-white transition-colors" 
-                    value={editActualCashInput} 
-                    onChange={e => setEditActualCashInput(e.target.value)} 
-                    placeholder="0" 
+                  <input
+                    type="number"
+                    className="w-full pl-12 pr-4 py-3 text-lg font-bold rounded-xl border border-slate-200 focus:outline-none focus:border-blue-600 bg-white transition-colors"
+                    value={editActualCashInput}
+                    onChange={e => setEditActualCashInput(e.target.value)}
+                    placeholder="0"
                   />
                 </div>
               </div>
-              
+
               {/* Preview Perubahan Selisih */}
               {editActualCashInput && (
                 <div className="pt-2">
                   <p className="text-xs text-slate-500 mb-1">Preview Selisih Baru:</p>
-                  <p className={`font-black text-lg ${
-                    (Number(editActualCashInput) - editingShift.stats.expectedCash) < 0 ? 'text-red-500' : 
-                    (Number(editActualCashInput) - editingShift.stats.expectedCash) > 0 ? 'text-green-500' : 'text-slate-800'
-                  }`}>
+                  <p className={`font-black text-lg ${(Number(editActualCashInput) - editingShift.stats.expectedCash) < 0 ? 'text-red-500' :
+                      (Number(editActualCashInput) - editingShift.stats.expectedCash) > 0 ? 'text-green-500' : 'text-slate-800'
+                    }`}>
                     {formatRupiah(Number(editActualCashInput) - editingShift.stats.expectedCash)}
                   </p>
                 </div>
@@ -469,14 +488,14 @@ const ShiftView = () => {
             </div>
 
             <div className="p-4 md:p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
-              <button 
-                onClick={() => setEditingShift(null)} 
+              <button
+                onClick={() => setEditingShift(null)}
                 className="flex-1 py-3 bg-white text-slate-700 font-bold rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors"
               >
                 Batal
               </button>
-              <button 
-                onClick={handleSaveEdit} 
+              <button
+                onClick={handleSaveEdit}
                 className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 hover:-translate-y-0.5 transition-all"
               >
                 Simpan Koreksi

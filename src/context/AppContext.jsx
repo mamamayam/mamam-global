@@ -1,5 +1,56 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useState } from 'react';
 
-export const AppContext = createContext()
+// 1. Inisialisasi Context
+export const AppContext = createContext();
 
-export const useAppContext = () => useContext(AppContext)
+// 2. Buat Provider Component untuk membungkus aplikasi
+export const AppProvider = ({ children }) => {
+
+    const [isAdminMode, setIsAdminMode] = useState(false);
+    
+    // State Pengaturan Toko
+    const [storeSettings, setStoreSettings] = useState({
+        taxRate: 10,
+        serviceCharge: 0,
+        autoPrint: false,
+        paperSize: '58mm',
+    });
+
+    // State untuk data pelanggan dan voucher (agar CustomerView.jsx tidak error)
+    const [customers, setCustomers] = useState([]);
+    const [vouchers, setVouchers] = useState([]);
+    const [claimsHistory, setClaimsHistory] = useState([]);
+
+    // Fungsi Alert global
+    const triggerAlert = (message) => {
+        alert(message);
+    };
+
+    return (
+        <AppContext.Provider
+            value={{
+                isAdminMode,
+                setIsAdminMode,
+                storeSettings,
+                setStoreSettings,
+                customers,
+                setCustomers,
+                vouchers,
+                setVouchers,
+                claimsHistory,
+                setClaimsHistory,
+                triggerAlert
+            }}>
+            {children}
+        </AppContext.Provider>
+    );
+};
+
+// 3. Custom Hook untuk mempermudah pemanggilan context
+export const useAppContext = () => {
+    const context = useContext(AppContext);
+    if (!context) {
+        throw new Error('useAppContext harus digunakan di dalam AppProvider');
+    }
+    return context;
+};
