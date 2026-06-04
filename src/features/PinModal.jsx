@@ -2,24 +2,28 @@ import React, { useState } from 'react';
 import { X, Lock } from 'lucide-react';
 
 const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
-  // 🔒 SILAKAN GANTI PIN DEFAULT DI SINI
+  // SILAKAN GANTI PIN DEFAULT DI SINI
   const MASTER_PIN = '123456'; 
 
   const [pinInput, setPinInput] = useState('');
+  const [errorMessage, setErrorMessage] = useState(''); // 💡 State baru untuk pesan error
 
   if (!isOpen) return null;
 
   const handleNumberClick = (num) => {
+    if (errorMessage) setErrorMessage(''); // Hilangkan error saat user mulai ngetik lagi
     if (pinInput.length < 6) {
       setPinInput(pinInput + num);
     }
   };
 
   const handleBackspace = () => {
+    if (errorMessage) setErrorMessage(''); // Hilangkan error
     setPinInput(pinInput.slice(0, -1));
   };
 
   const handleClear = () => {
+    setErrorMessage(''); // Hilangkan error
     setPinInput('');
   };
 
@@ -27,10 +31,13 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
     if (pinInput === MASTER_PIN) {
       onSuccess();
       setPinInput('');
+      setErrorMessage('');
       onClose();
     } else {
-      triggerAlert('PIN Salah! Akses ditolak.');
+      // 💡 Alih-alih triggerAlert global, kita tampilkan error di dalam modal
+      setErrorMessage('PIN Salah! Silakan coba lagi.'); 
       setPinInput('');
+      // onClose() dihapus agar modal tetap terbuka
     }
   };
 
@@ -39,30 +46,39 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
       <div className="bg-white w-full max-w-xs rounded-3xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-250 flex flex-col items-center">
         
         {/* Header Modal */}
-        <div className="w-full flex justify-between items-center mb-4">
+        <div className="w-full flex justify-between items-center mb-2">
           <div className="flex items-center gap-2 text-slate-800">
             <Lock className="w-4 h-4 text-orange-500" />
-            <span className="text-xs font-bold uppercase tracking-wider">Otorisasi Admin</span>
+            <span className="font-bold text-sm">Masukkan PIN</span>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-full">
+          <button onClick={() => { onClose(); setErrorMessage(''); setPinInput(''); }} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-full">
             <X className="w-4 h-4" />
           </button>
         </div>
 
+        {/* 💡 PESAN ERROR MUNCUL DI SINI (Di atas bulatan PIN) */}
+        {errorMessage && (
+          <div className="w-full bg-red-50 text-red-500 text-xs font-bold p-2.5 rounded-xl text-center mt-2 border border-red-100 animate-in zoom-in duration-200">
+            {errorMessage}
+          </div>
+        )}
+
         {/* Display PIN (Bulatan Rahasia) */}
-        <div className="flex gap-3 my-4 justify-center">
+        <div className={`flex gap-3 my-4 justify-center ${errorMessage ? 'mt-2' : 'mt-4'}`}>
           {[...Array(6)].map((_, i) => (
             <div 
               key={i} 
-              className={`w-4 h-4 rounded-full border-2 border-slate-300 transition-all ${
-                i < pinInput.length ? 'bg-slate-800 scale-110 border-slate-800' : 'bg-slate-50'
+              className={`w-4 h-4 rounded-full border-2 transition-all ${
+                errorMessage 
+                  ? 'border-red-300 bg-red-50' // Warna jadi merah kalau salah
+                  : i < pinInput.length ? 'bg-slate-800 scale-110 border-slate-800' : 'bg-slate-50 border-slate-300'
               }`}
             />
           ))}
         </div>
 
-        {/* Numpad / Tombol Angka (Sangat disukai di Android) */}
-        <div className="grid grid-cols-3 gap-3 w-full mt-4">
+        {/* Numpad / Tombol Angka */}
+        <div className="grid grid-cols-3 gap-3 w-full mt-2">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
             <button
               key={num}
