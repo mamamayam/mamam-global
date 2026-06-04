@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SquarePlus, History, Save, Trash2 } from 'lucide-react';
+import { TrendingUp, History, Save, Trash2 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { formatRupiah } from '../utils/formatters';
 
@@ -37,7 +37,7 @@ const IncomeView = () => {
   return (
     <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <SquarePlus className="w-6 h-6 text-green-500" /> Pemasukan Non-Penjualan
+        <TrendingUp className="w-6 h-6 text-green-500" /> Pemasukan Non-Penjualan
       </h2>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4 h-fit transition-shadow duration-300 hover:shadow-md">
@@ -88,7 +88,7 @@ const IncomeView = () => {
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
             {filteredIncomes.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full opacity-50 animate-in fade-in duration-300">
-                <SquarePlus className="w-12 h-12 mb-2 text-slate-400"/>
+                <TrendingUp className="w-12 h-12 mb-2 text-slate-400"/>
                 <p className="text-center text-slate-500 font-medium">Belum ada pemasukan pada periode ini.</p>
               </div>
             ) : (

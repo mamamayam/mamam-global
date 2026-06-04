@@ -1,71 +1,63 @@
 import React, { useState, useMemo, useEffect, createContext, useContext, useRef } from 'react';
-import { loadData, saveData } from './storage/localStorage';
-import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from './data/initialData';
-import { AppContext, useAppContext } from './context/AppContext';
-import { formatRupiah } from './utils/formatters';
-import CustomerView from './features/CustomerView';
-import AccountView from './features/AccountView';
-import ExpenseView from './features/ExpenseView';
-import EmployeesView from './features/EmployeesView';
-import HppView from './features/HppView';
-import IncomeView from './features/IncomeView';
-import PosView from './features/PosView';
-import ReportsView from './features/ReportsView';
-import SettingsView from './features/SettingsView';
-import ShiftView from './features/ShiftView';
+
 import {
-  AlertCircle,
-  ArrowDownCircle,
-  Award,
-  Banknote,
-  BarChart3,
-  BookOpen,
-  Briefcase,
-  Calculator,
-  Calendar,
-  CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  TrendingDown,
-  Clock,
-  Coffee,
-  Copy,
-  CreditCard,
-  DollarSign,
-  Edit3,
-  FileText,
-  History,
-  Info,
-  List,
-  Menu as MenuIcon,
-  Minus,
-  MoreHorizontal,
-  Package,
-  Pencil,
-  PieChart,
-  Plus,
-  Printer,
-  QrCode,
-  Receipt,
-  RefreshCw,
-  Save,
-  Search,
-  Settings,
-  ShoppingCart,
-  SplitSquareHorizontal,
-  Store,
-  Ticket,
-  Trash2,
-  TrendingUp,
-  Truck,
-  UserCog,
-  Users,
-  UtensilsCrossed,
-  Wallet,
-  X
+  AlertCircle, ArrowDownCircle, Award, Banknote, BarChart3, BookOpen, Briefcase, Calculator,
+  Calendar, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, TrendingDown, Clock, Coffee,
+  Copy, CreditCard, DollarSign, Edit3, FileText, History, Info, List, Menu as MenuIcon, Minus,
+  MoreHorizontal, Package, Pencil, PieChart, Plus, Printer, QrCode, Receipt, RefreshCw, Save,
+  Search, Settings, ShoppingCart, SplitSquareHorizontal, Store, Ticket, Trash2, TrendingUp,
+  Truck, UserCog, Users, UtensilsCrossed, Wallet, X, Layers
 } from 'lucide-react';
 
+// =========================================================================
+// FALLBACK DATA & STORAGE (Agar bisa berjalan di Canvas / File Tunggal)
+// =========================================================================
+const loadData = (key, defaultData) => {
+  try {
+    const item = localStorage.getItem(`mamam_hr_${key}`);
+    if (item) {
+      const parsed = JSON.parse(item);
+      if (['expenses', 'employeeDailyRecords', 'salesHistory', 'savedBills'].includes(key)) {
+        return parsed.map(p => ({ ...p, date: new Date(p.date) }));
+      }
+      return parsed;
+    }
+  } catch (error) {
+    console.error(`Error membaca ${key}:`, error);
+  }
+  return defaultData;
+};
+
+const saveData = (key, data) => {
+  localStorage.setItem(`mamam_hr_${key}`, JSON.stringify(data));
+};
+
+const INITIAL_MENUS = [];
+const INITIAL_VARIANT_GROUPS = [];
+const INITIAL_CATEGORIES = ['Makanan', 'Minuman', 'Cemilan', 'Lainnya'];
+const INITIAL_RAW_MATERIALS = [];
+
+// =========================================================================
+// DUMMY COMPONENTS (Pengganti file eksternal yang tidak disertakan)
+// =========================================================================
+const ShiftView = () => <div className="p-6 text-slate-500 font-medium">Fitur Shift Kasir (X-Reading) akan ditampilkan di sini.</div>;
+const PosView = () => <div className="p-6 text-slate-500 font-medium">Fitur Kasir Utama (POS) akan ditampilkan di sini.</div>;
+const HppView = () => <div className="p-6 text-slate-500 font-medium">Fitur Kalkulator HPP & Resep akan ditampilkan di sini.</div>;
+const IncomeView = () => <div className="p-6 text-slate-500 font-medium">Fitur Pemasukan akan ditampilkan di sini.</div>;
+const CustomerView = () => <div className="p-6 text-slate-500 font-medium">Fitur Manajemen Pelanggan akan ditampilkan di sini.</div>;
+const ReportsView = () => <div className="p-6 text-slate-500 font-medium">Fitur Laporan & Analitik akan ditampilkan di sini.</div>;
+const SettingsView = () => <div className="p-6 text-slate-500 font-medium">Pengaturan Sistem akan ditampilkan di sini.</div>;
+const AccountView = () => <div className="p-6 text-slate-500 font-medium">Pengaturan Akun akan ditampilkan di sini.</div>;
+
+// =========================================================================
+// CONTEXT API
+// =========================================================================
+export const AppContext = createContext();
+export const useAppContext = () => useContext(AppContext);
+
+// =========================================================================
+// KOMPONEN: CART DRAWER
+// =========================================================================
 const CartDrawer = () => {
   const { isCartOpen, setIsCartOpen, cart, setCart, savedBills, triggerConfirm, formatRupiah, activeCustomer, customerName, setCustomerName, isCustomerDropdownMode, setIsCustomerDropdownMode, customers, orderType, setOrderType, deliveryFee, setDeliveryFee, customDeliveryFee, setCustomDeliveryFee, updateCartQty, updateCartItemNote, voucherInputCode, setVoucherInputCode, vouchers, appliedVoucher, setAppliedVoucher, getSubtotal, triggerAlert, pointsToRedeem, setPointsToRedeem, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, storeSettings, getDiscount, getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill } = useAppContext();
 
@@ -107,7 +99,7 @@ const CartDrawer = () => {
                       <div key={bill.id} className="flex justify-between items-center p-3 border border-orange-100 rounded-xl bg-orange-50/30">
                         <div>
                           <p className="font-bold text-sm text-slate-800">{bill.customerName}</p>
-                          <p className="text-[10px] text-slate-500">{bill.cart.length} Item • {bill.date.toLocaleTimeString('id-ID')}</p>
+                          <p className="text-[10px] text-slate-500">{bill.cart.length} Item • {new Date(bill.date).toLocaleTimeString('id-ID')}</p>
                         </div>
                         <button onClick={() => loadSavedBill(bill)} className="px-3 py-1.5 bg-orange-100 text-orange-600 rounded-lg text-xs font-bold hover:bg-orange-200 transition-colors">
                           Lanjut
@@ -325,98 +317,9 @@ const CartDrawer = () => {
   );
 };
 
-const PayslipModal = () => {
-  const { payslipModal, setPayslipModal, formatRupiah } = useAppContext();
-  if (!payslipModal.isOpen || !payslipModal.data) return null;
-  const { data, month } = payslipModal;
-  
-  const aggAdditions = {};
-  const aggDeductions = {};
-  
-  data.records.forEach(rec => {
-    rec.additions.forEach(a => { aggAdditions[a.category] = (aggAdditions[a.category] || 0) + a.amount; });
-    rec.deductions.forEach(d => { aggDeductions[d.category] = (aggDeductions[d.category] || 0) + d.amount; });
-  });
-
-  const basicPay = data.totalHours * data.employee.hourlyRate;
-  const printPayslip = () => window.print();
-
-  const monthLabel = new Date(`${month}-01`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity duration-300 print:bg-white print:p-0">
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-          body * { visibility: hidden; }
-          #payslip-content, #payslip-content * { visibility: visible; }
-          #payslip-content { position: absolute; left: 0; top: 0; width: 80mm; margin: 0; padding: 0; box-shadow: none; font-family: monospace; }
-          @page { margin: 0; }
-        }
-      `}} />
-
-      <div className="bg-white rounded-md w-full max-w-[350px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out print:shadow-none print:w-[80mm]" id="payslip-content">
-         <div className="p-6 print:p-4">
-            <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
-              <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 mb-1 print:text-lg">SLIP GAJI</h2>
-              <p className="text-[10px] text-slate-500 font-bold print:text-black">MAMAM OUTLET</p>
-              <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">Periode: {monthLabel}</p>
-            </div>
-
-            <div className="mb-4 text-xs space-y-1.5 print:mb-3 print:text-black">
-              <div className="flex justify-between"><span>Nama:</span> <span className="font-bold">{data.employee.name}</span></div>
-              <div className="flex justify-between"><span>Posisi/Rate:</span> <span className="font-bold">{formatRupiah(data.employee.hourlyRate)}/Jam</span></div>
-            </div>
-
-            <div className="border-t-2 border-dashed border-slate-300 pt-3 pb-3 print:text-black text-xs">
-               <h3 className="font-bold mb-2 uppercase text-[10px]">PENGHASILAN</h3>
-               <div className="flex justify-between mb-1">
-                 <span>Gaji Pokok ({data.totalHours} Jam)</span> 
-                 <span>{formatRupiah(basicPay)}</span>
-               </div>
-               {Object.entries(aggAdditions).map(([cat, amt]) => (
-                 <div key={cat} className="flex justify-between mb-1">
-                   <span>+ {cat}</span> <span>{formatRupiah(amt)}</span>
-                 </div>
-               ))}
-            </div>
-
-            {Object.keys(aggDeductions).length > 0 && (
-              <div className="border-t-2 border-dashed border-slate-300 pt-3 pb-3 print:text-black text-xs">
-                <h3 className="font-bold mb-2 uppercase text-[10px]">POTONGAN</h3>
-                {Object.entries(aggDeductions).map(([cat, amt]) => (
-                  <div key={cat} className="flex justify-between mb-1 text-red-500 print:text-black">
-                    <span>- {cat}</span> <span>{formatRupiah(amt)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="border-t-2 border-solid border-slate-800 pt-3 mt-1 print:border-black text-sm">
-              <div className="flex justify-between font-black uppercase">
-                <span>TOTAL DITERIMA</span> <span>{formatRupiah(data.netPay)}</span>
-              </div>
-            </div>
-            
-            <div className="text-center mt-10 text-[10px] text-slate-500 print:mt-8 print:text-black">
-              <p>Penerima,</p>
-              <br/><br/><br/>
-              <p className="font-bold underline">({data.employee.name})</p>
-            </div>
-         </div>
-
-         <div className="absolute -bottom-16 left-0 right-0 flex gap-2 print:hidden">
-            <button onClick={printPayslip} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
-              <Printer className="w-4 h-4"/> Cetak/Kirim
-            </button>
-            <button onClick={() => setPayslipModal({ isOpen: false, data: null })} className="flex-1 py-3 rounded-xl bg-white text-slate-800 font-bold shadow-lg hover:bg-slate-100 text-sm transition-colors">
-              Tutup
-            </button>
-         </div>
-      </div>
-    </div>
-  );
-};
-
+// =========================================================================
+// KOMPONEN: VARIANT SELECTION MODAL
+// =========================================================================
 const VariantSelectionModal = () => {
   const { selectedMenuForVariant, setSelectedMenuForVariant, variantGroups, formatRupiah, addToCart, variantSelectedOptions, setVariantSelectedOptions } = useAppContext();
 
@@ -501,6 +404,9 @@ const VariantSelectionModal = () => {
   );
 };
 
+// =========================================================================
+// KOMPONEN: PAYMENT MODAL
+// =========================================================================
 const PaymentModal = () => {
   const { paymentModal, setPaymentModal, getTotal, formatRupiah, activeCustomer, pointsToRedeem, customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, customerName, orderType, cart, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount, deliveryFee, salesHistory, setSalesHistory, setIsCartOpen, setCart, setCustomerName, setAppliedVoucher, setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings, triggerAlert } = useAppContext();
 
@@ -509,11 +415,9 @@ const PaymentModal = () => {
   const total = getTotal();
   const { isSplitMode, splitPayments, method, amountPaid, status } = paymentModal;
 
-  // Hitungan untuk Single Payment
   const kembalian = method === 'Tunai' && !isSplitMode ? (Number(amountPaid) - total) : 0;
   const isReadyToPay = method === 'Tunai' && !isSplitMode ? (Number(amountPaid) >= total) : true;
 
-  // Hitungan untuk Split Payment
   const totalSplitPaid = splitPayments.reduce((sum, p) => sum + p.amount, 0);
   const splitRemaining = total - totalSplitPaid;
   const splitKembalian = totalSplitPaid > total ? totalSplitPaid - total : 0;
@@ -561,14 +465,13 @@ const PaymentModal = () => {
 
   const quickCashOptions = [total, Math.ceil(total / 10000) * 10000, Math.ceil(total / 50000) * 50000, 100000].filter((v, i, a) => a.indexOf(v) === i && v >= total);
 
-  // Split Payment Handlers
   const handleAddSplitPayment = () => {
     if (!amountPaid || Number(amountPaid) <= 0) return triggerAlert('Masukkan nominal pembayaran.');
     setPaymentModal({
       ...paymentModal,
       splitPayments: [...splitPayments, { method, amount: Number(amountPaid) }],
       amountPaid: '',
-      method: 'Tunai' // reset default after add
+      method: 'Tunai'
     });
   };
 
@@ -599,7 +502,6 @@ const PaymentModal = () => {
         <div className="p-5 overflow-y-auto custom-scrollbar">
           {!isSplitMode ? (
             <>
-              {/* --- SINGLE PAYMENT MODE --- */}
               <div className="text-center mb-6">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Tagihan</p>
                 <h1 className="font-heading text-4xl font-black text-slate-900">{formatRupiah(total)}</h1>
@@ -660,7 +562,6 @@ const PaymentModal = () => {
             </>
           ) : (
             <>
-              {/* --- SPLIT PAYMENT MODE --- */}
               <div className="bg-slate-800 p-4 rounded-2xl shadow-sm text-white mb-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Total Tagihan</span>
@@ -732,6 +633,9 @@ const PaymentModal = () => {
   );
 };
 
+// =========================================================================
+// KOMPONEN: RECEIPT MODAL
+// =========================================================================
 const ReceiptModal = () => {
   const { receiptModal, setReceiptModal, storeSettings, formatRupiah, printReceipt } = useAppContext();
   if (!receiptModal.isOpen || !receiptModal.data) return null;
@@ -755,7 +659,7 @@ const ReceiptModal = () => {
           <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
             {storeSettings.printLogo && <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 mb-1 print:text-lg">MAMAM KASIR</h2>}
             <p className="text-[10px] text-slate-500 print:text-black">Jl. Teknologi No. 1</p>
-            <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">{data.date.toLocaleString('id-ID')}</p>
+            <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">{new Date(data.date).toLocaleString('id-ID')}</p>
             <p className="text-[10px] text-slate-500 print:text-black">ID: {data.id} | Kasir: Admin</p>
           </div>
 
@@ -833,6 +737,9 @@ const ReceiptModal = () => {
   );
 };
 
+// =========================================================================
+// KOMPONEN: VARIANT MANAGEMENT
+// =========================================================================
 const VariantManagement = () => {
   const { variantGroups, setVariantGroups, menus, setMenus, triggerAlert, formatRupiah } = useAppContext();
   const [isEditing, setIsEditing] = useState(false);
@@ -961,6 +868,9 @@ const VariantManagement = () => {
   );
 };
 
+// =========================================================================
+// KOMPONEN: MENU MANAGEMENT
+// =========================================================================
 const MenuManagement = () => {
   const { menus, setMenus, variantGroups, formatRupiah, triggerAlert } = useAppContext();
   const [isEditing, setIsEditing] = useState(false);
@@ -1100,19 +1010,967 @@ const MenuManagement = () => {
   );
 };
 
+
+// =========================================================================
+// KOMPONEN: EXPENSE VIEW (DIUPDATE DENGAN KASBON)
+// =========================================================================
+const ExpenseView = () => {
+  const { 
+    expenseCategories, setExpenseCategories, 
+    expenses, setExpenses, 
+    triggerAlert, triggerConfirm, formatRupiah, currentShift,
+    employees, employeeDailyRecords, setEmployeeDailyRecords
+  } = useAppContext();
+  
+  const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState(expenseCategories[0] || 'Belanja');
+  const [note, setNote] = useState('');
+  const [dateInput, setDateInput] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentMethod, setPaymentMethod] = useState('Tunai');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7)); 
+
+  const handleAddExpense = () => {
+    // Disable check currentShift sementara bila tidak dipakai
+    // if (!currentShift) return triggerAlert('Shift Kasir belum dibuka! Harap buka shift terlebih dahulu.');
+    if (!amount || amount <= 0) return triggerAlert('Masukkan nominal pengeluaran yang valid!');
+    if (!dateInput) return triggerAlert('Pilih tanggal pengeluaran!');
+    if (category === 'Kasbon Karyawan' && !selectedEmployeeId) return triggerAlert('Pilih karyawan yang melakukan kasbon!');
+
+    const expenseDate = new Date(dateInput);
+    const newExp = { 
+      id: `EXP-${Date.now()}`, 
+      amount: Number(amount), 
+      category, 
+      note, 
+      date: expenseDate,
+      paymentMethod,
+      employeeId: category === 'Kasbon Karyawan' ? selectedEmployeeId : null
+    };
+
+    // === INTEGRASI HR: OTOMATIS INPUT KASBON KE RIWAYAT HARIAN KARYAWAN ===
+    if (category === 'Kasbon Karyawan' && selectedEmployeeId) {
+      const dateStr = dateInput;
+      const existingRecordIndex = employeeDailyRecords.findIndex(r => r.employeeId === selectedEmployeeId && r.dateStr === dateStr);
+      
+      const newDeduction = { id: Date.now().toString(), category: 'Kasbon', amount: Number(amount) };
+
+      if (existingRecordIndex >= 0) {
+        // Update record yang ada
+        const updatedRecords = [...employeeDailyRecords];
+        updatedRecords[existingRecordIndex].deductions.push(newDeduction);
+        setEmployeeDailyRecords(updatedRecords);
+      } else {
+        // Buat record baru untuk hari itu
+        const newRecord = {
+          id: `REC-${Date.now()}`,
+          employeeId: selectedEmployeeId,
+          date: expenseDate,
+          dateStr: dateStr,
+          hoursWorked: 0,
+          additions: [],
+          deductions: [newDeduction]
+        };
+        setEmployeeDailyRecords([...employeeDailyRecords, newRecord]);
+      }
+    }
+
+    setExpenses([newExp, ...expenses]);
+    setAmount(''); setNote(''); setSelectedEmployeeId('');
+    triggerAlert('Pengeluaran berhasil dicatat!');
+  };
+
+  const handleDeleteCategory = (cat) => {
+    const mandatoryCategories = ['Belanja', 'Biaya', 'Kasbon Karyawan'];
+    if (mandatoryCategories.includes(cat)) {
+       return triggerAlert(`Kategori "${cat}" adalah wajib dan tidak bisa dihapus!`);
+    }
+    if(expenseCategories.length <= 1) return triggerAlert('Harus ada minimal 1 kategori!');
+    
+    triggerConfirm(`Apakah Anda yakin ingin menghapus kategori "${cat}"?`, () => {
+      setExpenseCategories(expenseCategories.filter(c => c !== cat));
+      if(category === cat) setCategory(expenseCategories[0]);
+      triggerAlert('Kategori pengeluaran berhasil dihapus.');
+    });
+  };
+
+  const filteredExpenses = expenses.filter(e => filterMonth === '' || new Date(e.date).toISOString().slice(0, 7) === filterMonth);
+
+  return (
+    <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
+      <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+        <TrendingDown className="w-6 h-6 text-red-500" /> Catat Pengeluaran
+      </h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1 bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4 h-fit transition-shadow duration-300 hover:shadow-md">
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1">Tanggal Pengeluaran</label>
+            <input type="date" className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-slate-800 transition-colors" value={dateInput} onChange={e => setDateInput(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1 flex justify-between">
+              Kategori
+              <span className="text-[10px] text-orange-600 font-bold cursor-pointer hover:underline transition-all" onClick={() => { const c = prompt('Masukkan Nama Kategori Baru:'); if(c && c.trim()) { setExpenseCategories([...expenseCategories, c.trim()]); setCategory(c.trim()); }}}>+ Kategori Baru</span>
+            </label>
+            <div className="flex gap-2 items-center">
+              <select className="flex-1 p-3 bg-slate-50 border rounded-xl outline-none font-semibold text-sm transition-colors focus:border-slate-800" value={category} onChange={e => {setCategory(e.target.value); setSelectedEmployeeId('');}}>
+                {expenseCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <button onClick={() => handleDeleteCategory(category)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors" title="Hapus Kategori Aktif"><Trash2 className="w-5 h-5" /></button>
+            </div>
+          </div>
+          
+          {category === 'Kasbon Karyawan' && (
+             <div className="animate-in slide-in-from-top-2 duration-300">
+                <label className="block text-xs font-bold text-slate-500 mb-1">Pilih Karyawan (Kasbon)</label>
+                <select className="w-full p-3 bg-slate-50 border rounded-xl outline-none font-semibold text-sm transition-colors focus:border-orange-500 border-orange-200" value={selectedEmployeeId} onChange={e => setSelectedEmployeeId(e.target.value)}>
+                  <option value="">-- Pilih Karyawan --</option>
+                  {employees && employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                </select>
+                <p className="text-[10px] text-orange-600 mt-1 italic">*Kasbon ini akan otomatis memotong gaji karyawan terpilih.</p>
+             </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1">Nominal (Rp)</label>
+            <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-slate-800 transition-colors" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" />
+          </div>
+          
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-2">Sumber Dana (Metode Bayar)</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setPaymentMethod('Tunai')} className={`py-2 rounded-xl text-xs font-bold transition-all border ${paymentMethod === 'Tunai' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>Tunai (Laci)</button>
+              <button onClick={() => setPaymentMethod('Non-Tunai')} className={`py-2 rounded-xl text-xs font-bold transition-all border ${paymentMethod === 'Non-Tunai' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>Non-Tunai (Bank)</button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1">Catatan Tambahan</label>
+            <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl outline-none text-sm transition-colors focus:border-slate-800" value={note} onChange={e => setNote(e.target.value)} placeholder="Contoh: Beli beras 5kg / Kasbon Budi" />
+          </div>
+          <button onClick={handleAddExpense} className="w-full py-3.5 mt-2 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2">
+            <Save className="w-4 h-4"/> Simpan Data
+          </button>
+        </div>
+
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[600px]">
+          <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
+            <h3 className="font-heading font-bold text-slate-800 flex items-center gap-2"><History className="w-4 h-4"/> Riwayat Pengeluaran</h3>
+            <div className="flex items-center gap-2">
+              <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="p-1.5 text-xs font-bold border border-slate-200 rounded-lg outline-none text-slate-600" />
+              {filterMonth && <button onClick={() => setFilterMonth('')} className="text-[10px] text-slate-400 hover:text-slate-600 underline">Semua</button>}
+            </div>
+          </div>
+          <div className="p-3 bg-red-50 border-b border-red-100 flex justify-between items-center">
+             <span className="text-xs font-bold text-red-700">Total Periode Ini:</span>
+             <span className="text-sm font-black text-red-700">{formatRupiah(filteredExpenses.reduce((s, e) => s + e.amount, 0))}</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+            {filteredExpenses.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full opacity-50 animate-in fade-in duration-300">
+                <TrendingDown className="w-12 h-12 mb-2 text-slate-400"/>
+                <p className="text-center text-slate-500 font-medium">Belum ada pengeluaran pada periode ini.</p>
+              </div>
+            ) : (
+              filteredExpenses.map(exp => {
+                const isKasbon = exp.category === 'Kasbon Karyawan';
+                const empName = isKasbon && exp.employeeId && employees ? employees.find(e => e.id === exp.employeeId)?.name : null;
+
+                return (
+                <div key={exp.id} className="flex justify-between items-center p-3.5 border border-slate-100 rounded-xl hover:bg-slate-50 hover:border-slate-200 transition-all duration-200 animate-in slide-in-from-left-2 duration-300">
+                  <div>
+                    <p className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                      {exp.category} 
+                      <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-normal text-[10px]">{new Date(exp.date).toLocaleDateString('id-ID')}</span>
+                      {exp.paymentMethod === 'Non-Tunai' && <span className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold">Bank</span>}
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {isKasbon && empName ? `[${empName}] ` : ''}{exp.note || 'Tanpa catatan'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg text-sm border border-red-100">-{formatRupiah(exp.amount)}</p>
+                  </div>
+                </div>
+              )})
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// =========================================================================
+// KOMPONEN: MANAJEMEN KARYAWAN (HR / PAYROLL)
+// =========================================================================
+const EmployeeManagementView = () => {
+  const { 
+    employees, setEmployees, formatRupiah, triggerAlert, triggerConfirm,
+    employeeDailyRecords, setEmployeeDailyRecords,
+    additionCategories, setAdditionCategories, deductionCategories, setDeductionCategories,
+    payslipModal, setPayslipModal,
+    expenses, setExpenses
+  } = useAppContext();
+  
+  const [activeTab, setActiveTab] = useState('input'); // 'input', 'reports', 'manage'
+
+  // --- STATE UNTUK TAB: KELOLA KARYAWAN ---
+  const [isEditingEmp, setIsEditingEmp] = useState(false);
+  const [empFormData, setEmpFormData] = useState({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: new Date().toISOString().split('T')[0] });
+
+  // --- STATE UNTUK TAB: INPUT HARIAN ---
+  const [dailyDate, setDailyDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dailyEmpId, setDailyEmpId] = useState('');
+  const [hoursWorked, setHoursWorked] = useState('');
+  const [additions, setAdditions] = useState([]);
+  const [deductions, setDeductions] = useState([]);
+  const [isEditRecordMode, setIsEditRecordMode] = useState(false);
+  const [currentRecordId, setCurrentRecordId] = useState(null);
+  const [showEmpDropdown, setShowEmpDropdown] = useState(false);
+  
+  const [adjType, setAdjType] = useState('addition');
+  const [adjCategory, setAdjCategory] = useState('');
+  const [adjAmount, setAdjAmount] = useState('');
+  const [adjNote, setAdjNote] = useState('');
+  const [adjPaymentMethod, setAdjPaymentMethod] = useState('Tunai'); 
+  
+  const empDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (empDropdownRef.current && !empDropdownRef.current.contains(event.target)) {
+        setShowEmpDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // --- STATE UNTUK TAB: REKAP LAPORAN ---
+  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7)); 
+
+  // --- LOGIC: KELOLA KARYAWAN ---
+  const handleSaveEmployee = () => {
+    if (!empFormData.name || empFormData.hourlyRate <= 0) return triggerAlert('Nama dan Upah per jam harus diisi dengan benar!');
+    
+    if (empFormData.id) {
+      setEmployees(employees.map(e => e.id === empFormData.id ? empFormData : e));
+      triggerAlert('Data Karyawan berhasil diupdate.');
+    } else {
+      setEmployees([...employees, { ...empFormData, id: `EMP-${Date.now()}` }]);
+      triggerAlert('Karyawan baru berhasil ditambahkan.');
+    }
+    setIsEditingEmp(false);
+    setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: new Date().toISOString().split('T')[0] });
+  };
+
+  const handleDeleteEmployee = (id) => {
+    triggerConfirm('Yakin ingin menghapus data karyawan ini? Data riwayat mungkin akan kehilangan referensi.', () => {
+      setEmployees(employees.filter(e => e.id !== id));
+      triggerAlert('Karyawan dihapus.');
+    });
+  };
+
+  // --- LOGIC: INPUT HARIAN ---
+  useEffect(() => {
+    if (activeTab === 'input' && dailyEmpId && dailyDate) {
+      const existingRecord = employeeDailyRecords.find(r => r.employeeId === dailyEmpId && r.dateStr === dailyDate);
+      if (existingRecord) {
+        setIsEditRecordMode(true);
+        setCurrentRecordId(existingRecord.id);
+        setHoursWorked(existingRecord.hoursWorked || '');
+        setAdditions(existingRecord.additions || []);
+        setDeductions(existingRecord.deductions || []);
+      } else {
+        setIsEditRecordMode(false);
+        setCurrentRecordId(null);
+        setHoursWorked('');
+        setAdditions([]);
+        setDeductions([]);
+      }
+    }
+  }, [dailyEmpId, dailyDate, employeeDailyRecords, activeTab]);
+
+  const handleAddAdjustment = () => {
+    if (!adjCategory) return triggerAlert('Pilih kategori terlebih dahulu!');
+    if (!adjAmount || Number(adjAmount) <= 0) return triggerAlert('Masukkan nominal yang valid!');
+
+    const newItem = {
+      id: Date.now(),
+      category: adjCategory,
+      amount: Number(adjAmount),
+      note: adjNote,
+      paymentMethod: adjType === 'deduction' ? adjPaymentMethod : null,
+      expenseRecorded: false 
+    };
+
+    if (adjType === 'addition') {
+      setAdditions([...additions, newItem]);
+    } else {
+      setDeductions([...deductions, newItem]);
+    }
+
+    setAdjAmount('');
+    setAdjNote('');
+  };
+
+  const handleSaveDailyRecord = () => {
+    if (!dailyEmpId) return triggerAlert('Pilih karyawan terlebih dahulu!');
+    if (!dailyDate) return triggerAlert('Pilih tanggal input!');
+    
+    const validAdditions = additions.filter(a => a.category && a.amount > 0);
+    const validDeductions = deductions.filter(d => d.category && d.amount > 0);
+    const empName = employees.find(e => e.id === dailyEmpId)?.name || 'Karyawan';
+
+    // Integrasi Pengeluaran (Kasbon manual via form daily di-log sbg pengeluaran)
+    const generatedExpenses = [];
+    const updatedDeductions = validDeductions.map(d => {
+      if (d.paymentMethod === 'Tunai' && !d.expenseRecorded) {
+        let expCategory = 'Lain-lain';
+        if (d.category.toLowerCase().includes('kasbon')) expCategory = 'Kasbon Karyawan';
+        
+        generatedExpenses.push({
+          id: `EXP-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          amount: d.amount,
+          category: expCategory,
+          note: `Potongan ${empName} (${d.category})${d.note ? ' - ' + d.note : ''}`,
+          date: new Date(dailyDate),
+          paymentMethod: 'Tunai',
+          employeeId: dailyEmpId
+        });
+        
+        return { ...d, expenseRecorded: true };
+      }
+      return d;
+    });
+
+    if (generatedExpenses.length > 0) {
+      setExpenses([...generatedExpenses, ...expenses]);
+    }
+
+    const recordData = {
+      id: isEditRecordMode ? currentRecordId : `REC-${Date.now()}`,
+      employeeId: dailyEmpId,
+      date: new Date(dailyDate),
+      dateStr: dailyDate,
+      hoursWorked: Number(hoursWorked) || 0,
+      additions: validAdditions,
+      deductions: updatedDeductions
+    };
+
+    if (isEditRecordMode) {
+      setEmployeeDailyRecords(employeeDailyRecords.map(r => r.id === currentRecordId ? recordData : r));
+      triggerAlert('Data harian berhasil diubah!');
+    } else {
+      setEmployeeDailyRecords([recordData, ...employeeDailyRecords]);
+      triggerAlert('Data harian berhasil disimpan!');
+    }
+  };
+
+  const handleDeleteDailyRecord = (id) => {
+    triggerConfirm('Hapus catatan harian ini?', () => {
+      setEmployeeDailyRecords(employeeDailyRecords.filter(r => r.id !== id));
+      triggerAlert('Catatan dihapus.');
+      setDailyEmpId('');
+    });
+  };
+
+  const filteredRecordsForReport = useMemo(() => {
+    return employeeDailyRecords.filter(r => new Date(r.date).toISOString().slice(0, 7) === reportMonth);
+  }, [employeeDailyRecords, reportMonth]);
+
+  const employeePerformance = useMemo(() => {
+    const perf = {};
+    filteredRecordsForReport.forEach(rec => {
+      if (!perf[rec.employeeId]) {
+        const emp = employees.find(e => e.id === rec.employeeId);
+        perf[rec.employeeId] = {
+          employee: emp || { name: 'Karyawan Dihapus', hourlyRate: 0 },
+          totalHours: 0, totalAdditions: 0, totalDeductions: 0, netPay: 0, records: []
+        };
+      }
+      const data = perf[rec.employeeId];
+      data.records.push(rec);
+      data.totalHours += rec.hoursWorked;
+      
+      const addSum = rec.additions.reduce((sum, a) => sum + a.amount, 0);
+      const dedSum = rec.deductions.reduce((sum, d) => sum + d.amount, 0);
+      
+      data.totalAdditions += addSum;
+      data.totalDeductions += dedSum;
+    });
+
+    Object.values(perf).forEach(p => {
+      const basicPay = p.totalHours * p.employee.hourlyRate;
+      p.netPay = basicPay + p.totalAdditions - p.totalDeductions;
+    });
+
+    return Object.values(perf);
+  }, [filteredRecordsForReport, employees]);
+
+  const totalPayrollExpense = employeePerformance.reduce((sum, p) => sum + p.netPay, 0);
+
+  const renderInputTab = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full animate-in fade-in slide-in-from-right-4 duration-300">
+      <div className="lg:col-span-1 bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-fit">
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+          <Calendar className="w-5 h-5 text-slate-800"/>
+          <h3 className="font-heading font-bold text-slate-800">Form Input Harian</h3>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <div className="flex-1 relative" ref={empDropdownRef}>
+              <label className="block text-xs font-bold text-slate-500 mb-1">Karyawan</label>
+              <div 
+                className="w-full p-3 bg-slate-50 border rounded-xl font-semibold text-sm cursor-pointer flex justify-between items-center hover:bg-slate-100 transition-colors"
+                onClick={() => setShowEmpDropdown(!showEmpDropdown)}
+              >
+                <span>{dailyEmpId ? employees.find(e => e.id === dailyEmpId)?.name : '-- Pilih Karyawan --'}</span>
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              </div>
+              
+              {showEmpDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 shadow-xl rounded-xl z-10 overflow-hidden flex flex-col animate-in slide-in-from-top-1 duration-200 max-h-60">
+                  <div className="overflow-y-auto custom-scrollbar flex-1">
+                    {employees.map(emp => (
+                      <div 
+                        key={emp.id} 
+                        className={`p-3 text-sm font-semibold cursor-pointer transition-colors ${dailyEmpId === emp.id ? 'bg-orange-50 text-orange-600' : 'hover:bg-slate-50 text-slate-700'}`}
+                        onClick={() => {setDailyEmpId(emp.id); setShowEmpDropdown(false);}}
+                      >
+                        {emp.name}
+                      </div>
+                    ))}
+                    {employees.length === 0 && <div className="p-3 text-xs text-slate-400 text-center">Belum ada karyawan</div>}
+                  </div>
+                  <div 
+                    className="p-3 bg-slate-800 text-white text-xs font-bold text-center cursor-pointer hover:bg-slate-900 flex items-center justify-center gap-2 transition-colors border-t border-slate-700"
+                    onClick={() => {setShowEmpDropdown(false); setActiveTab('manage');}}
+                  >
+                    <UserCog className="w-4 h-4" /> Kelola Karyawan
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="w-1/3">
+              <label className="block text-xs font-bold text-slate-500 mb-1">Tanggal</label>
+              <input type="date" className="w-full p-3 bg-slate-50 border rounded-xl font-bold text-sm outline-none focus:border-slate-800 transition-colors" value={dailyDate} onChange={e => setDailyDate(e.target.value)} />
+            </div>
+          </div>
+          
+          {isEditRecordMode && (
+             <div className="bg-blue-50 text-blue-600 p-2 rounded-lg text-xs font-bold flex items-center gap-2 border border-blue-100 animate-in fade-in">
+               <Info className="w-4 h-4"/> Data sudah ada, mengubah data yang ada.
+             </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1">Jumlah Jam Kerja (Per Jam)</label>
+            <input type="number" min="0" step="0.5" className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-orange-600 transition-colors" value={hoursWorked} onChange={e => setHoursWorked(e.target.value)} placeholder="Contoh: 8" />
+          </div>
+
+          <div className="border border-slate-200 rounded-xl p-4 bg-white mt-4 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Wallet className="w-5 h-5 text-green-600" />
+              <h4 className="font-heading font-bold text-slate-800 text-sm">Tambahan & Potongan</h4>
+            </div>
+
+            <div className="flex gap-4 p-3 bg-slate-50 border border-slate-200 rounded-xl mb-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="adjType" 
+                  checked={adjType === 'addition'} 
+                  onChange={() => { setAdjType('addition'); setAdjCategory(''); }}
+                  className="w-4 h-4 text-orange-600 focus:ring-orange-500"
+                />
+                <span className="text-sm font-bold text-slate-700">Penghasilan (+)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="adjType" 
+                  checked={adjType === 'deduction'} 
+                  onChange={() => { setAdjType('deduction'); setAdjCategory(''); }}
+                  className="w-4 h-4 text-orange-600 focus:ring-orange-500"
+                />
+                <span className="text-sm font-bold text-slate-700">Potongan (-)</span>
+              </label>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Kategori</label>
+                <select 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:border-orange-500 transition-colors"
+                  value={adjCategory}
+                  onChange={(e) => setAdjCategory(e.target.value)}
+                >
+                  <option value="">-- Pilih Kategori --</option>
+                  {adjType === 'addition' 
+                    ? additionCategories.map(c => <option key={c} value={c}>{c}</option>)
+                    : deductionCategories.map(c => <option key={c} value={c}>{c}</option>)
+                  }
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Nominal (Rp)</label>
+                <input 
+                  type="number" 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-orange-500 transition-colors" 
+                  placeholder="0" 
+                  value={adjAmount}
+                  onChange={(e) => setAdjAmount(e.target.value)}
+                />
+              </div>
+
+              {adjType === 'deduction' && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Metode (Sumber Potongan)</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => setAdjPaymentMethod('Tunai')} 
+                      className={`py-2 rounded-xl text-xs font-bold transition-all border ${adjPaymentMethod === 'Tunai' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                    >
+                      Tunai
+                    </button>
+                    <button 
+                      onClick={() => setAdjPaymentMethod('Non-Tunai')} 
+                      className={`py-2 rounded-xl text-xs font-bold transition-all border ${adjPaymentMethod === 'Non-Tunai' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                    >
+                      Non-Tunai (Bank)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Catatan</label>
+                <input 
+                  type="text" 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-orange-500 transition-colors" 
+                  placeholder="Opsional" 
+                  value={adjNote}
+                  onChange={(e) => setAdjNote(e.target.value)}
+                />
+              </div>
+
+              <button 
+                onClick={handleAddAdjustment} 
+                className={`w-full py-3 mt-2 text-white font-bold rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center gap-2 ${adjType === 'addition' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'}`}
+              >
+                <Plus className="w-4 h-4"/> 
+                {adjType === 'addition' ? 'Tambah Penghasilan' : 'Tambah Potongan'}
+              </button>
+            </div>
+          </div>
+
+          {(additions.length > 0 || deductions.length > 0) && (
+            <div className="border border-slate-100 p-3 rounded-xl bg-slate-50 space-y-3">
+               <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Daftar Penyesuaian</h5>
+               
+               {additions.length > 0 && (
+                 <div>
+                    <span className="text-[10px] font-bold text-green-600 flex items-center gap-1 mb-1"><Plus className="w-3 h-3"/> PENGHASILAN</span>
+                    <div className="space-y-1.5">
+                      {additions.map((add) => (
+                        <div key={add.id} className="flex justify-between items-center bg-white p-2 border border-slate-100 rounded-lg shadow-sm text-xs">
+                          <div>
+                            <span className="font-bold text-slate-700">{add.category}</span>
+                            {add.note && <span className="text-slate-400 ml-1 text-[10px]">({add.note})</span>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-green-600">+{formatRupiah(add.amount)}</span>
+                            <button onClick={() => setAdditions(additions.filter(a => a.id !== add.id))} className="text-red-400 hover:text-red-600"><Trash2 className="w-3 h-3"/></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                 </div>
+               )}
+
+               {deductions.length > 0 && (
+                 <div>
+                    <span className="text-[10px] font-bold text-red-500 flex items-center gap-1 mb-1 mt-2"><Minus className="w-3 h-3"/> POTONGAN</span>
+                    <div className="space-y-1.5">
+                      {deductions.map((ded) => (
+                        <div key={ded.id} className="flex justify-between items-center bg-white p-2 border border-slate-100 rounded-lg shadow-sm text-xs">
+                          <div>
+                            <span className="font-bold text-slate-700">{ded.category}</span>
+                            {ded.paymentMethod && <span className="bg-slate-100 text-slate-500 px-1 py-0.5 rounded text-[9px] ml-1">{ded.paymentMethod}</span>}
+                            {ded.note && <span className="text-slate-400 ml-1 text-[10px]">({ded.note})</span>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-red-500">-{formatRupiah(ded.amount)}</span>
+                            <button onClick={() => setDeductions(deductions.filter(d => d.id !== ded.id))} className="text-red-400 hover:text-red-600"><Trash2 className="w-3 h-3"/></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                 </div>
+               )}
+            </div>
+          )}
+
+          <button onClick={handleSaveDailyRecord} className="w-full py-3.5 mt-4 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2">
+            <Save className="w-4 h-4"/> {isEditRecordMode ? 'Simpan Perubahan' : 'Simpan Data Harian'}
+          </button>
+        </div>
+      </div>
+
+      <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[650px]">
+        <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
+          <h3 className="font-heading font-bold text-slate-800 flex items-center gap-2"><History className="w-4 h-4"/> Riwayat Input Harian</h3>
+          <div className="text-xs text-slate-500 font-semibold">{employeeDailyRecords.length} Catatan</div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+          {employeeDailyRecords.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full opacity-50">
+              <Calendar className="w-12 h-12 mb-2 text-slate-400"/>
+              <p className="text-center text-slate-500 font-medium">Belum ada riwayat input karyawan.</p>
+            </div>
+          ) : (
+            employeeDailyRecords.slice(0, 50).map(rec => {
+              const emp = employees.find(e => e.id === rec.employeeId);
+              const addSum = rec.additions.reduce((s,a)=>s+a.amount, 0);
+              const dedSum = rec.deductions.reduce((s,d)=>s+d.amount, 0);
+              return (
+                <div key={rec.id} className="flex flex-col p-4 border border-slate-100 rounded-xl hover:bg-slate-50 hover:border-orange-200 transition-all duration-200 animate-in slide-in-from-left-2">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-bold text-sm text-slate-800">{emp ? emp.name : 'Karyawan (Dihapus)'}</p>
+                      <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {new Date(rec.date).toLocaleDateString('id-ID')} • {rec.hoursWorked} Jam</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => {
+                        setDailyEmpId(rec.employeeId); setDailyDate(rec.dateStr); 
+                      }} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4"/></button>
+                      <button onClick={() => handleDeleteDailyRecord(rec.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100 text-xs">
+                    <div>
+                      <span className="text-green-600 font-bold block mb-1">Tambahan: +{formatRupiah(addSum)}</span>
+                      {rec.additions.map((a,i)=><div key={i} className="text-[10px] text-slate-500">- {a.category} ({formatRupiah(a.amount)})</div>)}
+                    </div>
+                    <div>
+                      <span className="text-red-500 font-bold block mb-1">Potongan: -{formatRupiah(dedSum)}</span>
+                      {rec.deductions.map((d,i)=><div key={i} className="text-[10px] text-slate-500">- {d.category} ({formatRupiah(d.amount)})</div>)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderReportsTab = () => (
+    <div className="space-y-6 h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+        <h3 className="font-heading font-bold text-slate-800 flex items-center gap-2"><PieChart className="w-5 h-5 text-orange-600"/> Rekap Penggajian</h3>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-bold text-slate-500">Bulan Laporan:</label>
+          <input type="month" value={reportMonth} onChange={e => setReportMonth(e.target.value)} className="p-2 text-sm font-bold border border-slate-200 rounded-xl outline-none text-slate-700 focus:border-orange-500" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-slate-800 text-white p-5 rounded-2xl shadow-sm border border-slate-700 flex flex-col justify-center">
+          <p className="text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400">Total Expenses Payroll</p>
+          <h3 className="font-heading text-2xl font-black text-white">{formatRupiah(totalPayrollExpense)}</h3>
+        </div>
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center">
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Karyawan Aktif (Bulan Ini)</p>
+          <h3 className="font-heading text-2xl font-black text-slate-800">{employeePerformance.length} Orang</h3>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+          <h3 className="font-heading font-bold text-slate-800 text-sm">Performa & Rincian Gaji Karyawan</h3>
+        </div>
+        <div className="divide-y divide-slate-100 overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[700px]">
+            <thead>
+              <tr className="bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <th className="p-4">Nama Karyawan</th>
+                <th className="p-4 text-center">Total Jam</th>
+                <th className="p-4 text-right">Tambahan</th>
+                <th className="p-4 text-right">Potongan</th>
+                <th className="p-4 text-right">Gaji Bersih (Net)</th>
+                <th className="p-4 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employeePerformance.length === 0 ? (
+                <tr><td colSpan="6" className="p-8 text-center text-slate-400 italic text-sm">Tidak ada data penggajian pada bulan ini.</td></tr>
+              ) : (
+                employeePerformance.map(p => (
+                  <tr key={p.employee.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-4">
+                      <p className="font-bold text-sm text-slate-800">{p.employee.name}</p>
+                      <p className="text-[10px] text-slate-500">Upah/Jam: {formatRupiah(p.employee.hourlyRate)}</p>
+                    </td>
+                    <td className="p-4 text-center font-semibold text-slate-700 text-sm">{p.totalHours}</td>
+                    <td className="p-4 text-right font-bold text-green-600 text-sm">+{formatRupiah(p.totalAdditions)}</td>
+                    <td className="p-4 text-right font-bold text-red-500 text-sm">-{formatRupiah(p.totalDeductions)}</td>
+                    <td className="p-4 text-right font-black text-slate-900 text-sm">{formatRupiah(p.netPay)}</td>
+                    <td className="p-4 text-center">
+                      <button onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })} className="px-3 py-1.5 bg-orange-100 text-orange-600 hover:bg-orange-200 font-bold text-xs rounded-lg transition-colors inline-flex items-center gap-1">
+                        <Printer className="w-3 h-3"/> Cetak Slip
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mt-6 mb-10">
+         <h4 className="font-heading font-bold text-slate-800 text-sm mb-4">Riwayat Bulan Sebelumnya</h4>
+         <div className="space-y-2">
+            {[1, 2, 3].map(i => {
+              const d = new Date();
+              d.setMonth(d.getMonth() - i);
+              const pastMonth = d.toISOString().slice(0,7);
+              return (
+                <div key={i} className="flex justify-between items-center p-3 border border-slate-100 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => setReportMonth(pastMonth)}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center"><Calendar className="w-4 h-4 text-slate-500"/></div>
+                    <span className="font-bold text-sm text-slate-700">{d.toLocaleDateString('id-ID', {month: 'long', year: 'numeric'})}</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400"/>
+                </div>
+              )
+            })}
+         </div>
+      </div>
+    </div>
+  );
+
+  const renderManageTab = () => (
+    <div className="h-full animate-in fade-in slide-in-from-left-4 duration-300">
+      {isEditingEmp ? (
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 max-w-3xl">
+          <button onClick={() => setIsEditingEmp(false)} className="mb-4 text-slate-500 flex items-center gap-2 hover:text-slate-800 font-medium transition-colors">
+            <ChevronLeft className="w-5 h-5"/> Kembali
+          </button>
+          <h2 className="font-heading text-xl font-bold mb-6 text-slate-800 border-b pb-2">{empFormData.id ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">Nama Lengkap</label>
+              <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl font-semibold outline-none focus:border-orange-600 transition-colors" value={empFormData.name} onChange={e => setEmpFormData({...empFormData, name: e.target.value})} placeholder="Misal: Budi Santoso" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">No. Handphone (WA)</label>
+              <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl font-semibold outline-none focus:border-orange-600 transition-colors" value={empFormData.phone} onChange={e => setEmpFormData({...empFormData, phone: e.target.value})} placeholder="Misal: 0812345678" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-slate-500 mb-1">Alamat</label>
+              <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl font-semibold outline-none focus:border-orange-600 transition-colors" value={empFormData.address} onChange={e => setEmpFormData({...empFormData, address: e.target.value})} placeholder="Alamat lengkap..." />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">Upah per Jam (Rp)</label>
+              <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-orange-600 transition-colors" value={empFormData.hourlyRate} onChange={e => setEmpFormData({...empFormData, hourlyRate: Number(e.target.value)})} placeholder="0" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">Mulai Kerja</label>
+              <input type="date" className="w-full p-3 bg-slate-50 border rounded-xl font-semibold outline-none focus:border-orange-600 transition-colors" value={empFormData.startDate} onChange={e => setEmpFormData({...empFormData, startDate: e.target.value})} />
+            </div>
+          </div>
+          
+          <button onClick={handleSaveEmployee} className="px-8 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+            Simpan Data Karyawan
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+            <h3 className="font-heading font-bold text-slate-800 flex items-center gap-2"><Briefcase className="w-5 h-5 text-slate-700"/> Daftar Karyawan</h3>
+            <button onClick={() => {
+              setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: new Date().toISOString().split('T')[0] });
+              setIsEditingEmp(true);
+            }} className="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-slate-900 transition-all duration-300">
+              <Plus className="w-4 h-4"/> Tambah Karyawan
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-10">
+            {employees.map(emp => (
+              <div key={emp.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 relative group hover:shadow-md transition-shadow duration-300">
+                <div className="absolute top-4 right-4 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => { setEmpFormData(emp); setIsEditingEmp(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4"/></button>
+                  <button onClick={() => handleDeleteEmployee(emp.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                </div>
+                
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center font-heading font-black text-xl">
+                    {emp.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h4 className="font-heading font-bold text-slate-800 text-base leading-tight pr-10">{emp.name}</h4>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Gabung: {new Date(emp.startDate).toLocaleDateString('id-ID')}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-1.5 border-t border-slate-100 pt-3 text-sm">
+                  <div className="flex justify-between"><span className="text-slate-500 font-medium">No. HP:</span><span className="font-semibold text-slate-700">{emp.phone || '-'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 font-medium">Upah/Jam:</span><span className="font-bold text-orange-600">{formatRupiah(emp.hourlyRate)}</span></div>
+                  <div className="flex flex-col mt-2 pt-2 border-t border-dashed border-slate-100">
+                    <span className="text-[10px] text-slate-400 mb-0.5">Alamat:</span>
+                    <span className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{emp.address || '-'}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {employees.length === 0 && <div className="col-span-full p-8 text-center text-slate-400 italic">Belum ada data karyawan.</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
+      <div className="shrink-0 mb-6">
+        <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 mb-4 flex items-center gap-2"><UserCog className="w-6 h-6 text-slate-800" /> Manajemen Pegawai (HR)</h2>
+        
+        <div className="flex gap-2 border-b border-slate-200 pb-3 overflow-x-auto hide-scrollbar">
+          <button onClick={() => setActiveTab('input')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'input' ? 'bg-orange-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}`}>Input Harian</button>
+          <button onClick={() => setActiveTab('reports')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'reports' ? 'bg-orange-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}`}>Rekap Laporan</button>
+          <button onClick={() => setActiveTab('manage')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'manage' ? 'bg-orange-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}`}>Kelola Karyawan</button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0 relative">
+         {activeTab === 'input' && renderInputTab()}
+         {activeTab === 'reports' && renderReportsTab()}
+         {activeTab === 'manage' && renderManageTab()}
+      </div>
+    </div>
+  );
+};
+
+// =========================================================================
+// KOMPONEN: PAYSLIP MODAL
+// =========================================================================
+const PayslipModal = () => {
+  const { payslipModal, setPayslipModal, formatRupiah } = useAppContext();
+  if (!payslipModal.isOpen || !payslipModal.data) return null;
+  const { data, month } = payslipModal;
+  
+  const aggAdditions = {};
+  const aggDeductions = {};
+  
+  data.records.forEach(rec => {
+    rec.additions.forEach(a => { aggAdditions[a.category] = (aggAdditions[a.category] || 0) + a.amount; });
+    rec.deductions.forEach(d => { aggDeductions[d.category] = (aggDeductions[d.category] || 0) + d.amount; });
+  });
+
+  const basicPay = data.totalHours * data.employee.hourlyRate;
+  const printPayslip = () => window.print();
+
+  const monthLabel = new Date(`${month}-01`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity duration-300 print:bg-white print:p-0">
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          body * { visibility: hidden; }
+          #payslip-content, #payslip-content * { visibility: visible; }
+          #payslip-content { position: absolute; left: 0; top: 0; width: 80mm; margin: 0; padding: 0; box-shadow: none; font-family: monospace; }
+          @page { margin: 0; }
+        }
+      `}} />
+
+      <div className="bg-white rounded-md w-full max-w-[350px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out print:shadow-none print:w-[80mm]" id="payslip-content">
+         <div className="p-6 print:p-4">
+            <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
+              <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 mb-1 print:text-lg">SLIP GAJI</h2>
+              <p className="text-[10px] text-slate-500 font-bold print:text-black">MAMAM OUTLET</p>
+              <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">Periode: {monthLabel}</p>
+            </div>
+
+            <div className="mb-4 text-xs space-y-1.5 print:mb-3 print:text-black">
+              <div className="flex justify-between"><span>Nama:</span> <span className="font-bold">{data.employee.name}</span></div>
+              <div className="flex justify-between"><span>Posisi/Rate:</span> <span className="font-bold">{formatRupiah(data.employee.hourlyRate)}/Jam</span></div>
+            </div>
+
+            <div className="border-t-2 border-dashed border-slate-300 pt-3 pb-3 print:text-black text-xs">
+               <h3 className="font-bold mb-2 uppercase text-[10px]">PENGHASILAN</h3>
+               <div className="flex justify-between mb-1">
+                 <span>Gaji Pokok ({data.totalHours} Jam)</span> 
+                 <span>{formatRupiah(basicPay)}</span>
+               </div>
+               {Object.entries(aggAdditions).map(([cat, amt]) => (
+                 <div key={cat} className="flex justify-between mb-1">
+                   <span>+ {cat}</span> <span>{formatRupiah(amt)}</span>
+                 </div>
+               ))}
+            </div>
+
+            {Object.keys(aggDeductions).length > 0 && (
+              <div className="border-t-2 border-dashed border-slate-300 pt-3 pb-3 print:text-black text-xs">
+                <h3 className="font-bold mb-2 uppercase text-[10px]">POTONGAN</h3>
+                {Object.entries(aggDeductions).map(([cat, amt]) => (
+                  <div key={cat} className="flex justify-between mb-1 text-red-500 print:text-black">
+                    <span>- {cat}</span> <span>{formatRupiah(amt)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="border-t-2 border-solid border-slate-800 pt-3 mt-1 print:border-black text-sm">
+              <div className="flex justify-between font-black uppercase">
+                <span>TOTAL DITERIMA</span> <span>{formatRupiah(data.netPay)}</span>
+              </div>
+            </div>
+            
+            <div className="text-center mt-10 text-[10px] text-slate-500 print:mt-8 print:text-black">
+              <p>Penerima,</p>
+              <br/><br/><br/>
+              <p className="font-bold underline">({data.employee.name})</p>
+            </div>
+         </div>
+
+         <div className="absolute -bottom-16 left-0 right-0 flex gap-2 print:hidden">
+            <button onClick={printPayslip} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
+              <Printer className="w-4 h-4"/> Cetak/Kirim
+            </button>
+            <button onClick={() => setPayslipModal({ isOpen: false, data: null })} className="flex-1 py-3 rounded-xl bg-white text-slate-800 font-bold shadow-lg hover:bg-slate-100 text-sm transition-colors">
+              Tutup
+            </button>
+         </div>
+      </div>
+    </div>
+  );
+};
+
+
+// =========================================================================
+// MAIN APP COMPONENT
+// =========================================================================
 export default function App() {
-  const [currentView, setCurrentView] = useState('shift');
+  const [currentView, setCurrentView] = useState('employees'); // Default langsung test HR view
   const [activeTab, setActiveTab] = useState('materials');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // --- DATABASE STATES ---
+  // --- DATABASE STATES (EXISTING) ---
   const [variantGroups, setVariantGroups] = useState(() => loadData('variantGroups', INITIAL_VARIANT_GROUPS));
   const [menus, setMenus] = useState(() => loadData('menus', INITIAL_MENUS));
   const [salesHistory, setSalesHistory] = useState(() => loadData('salesHistory', []));
   const [hppLibrary, setHppLibrary] = useState(() => loadData('hppLibrary', []));
   const [savedBills, setSavedBills] = useState(() => loadData('savedBills', []));
-
-  // --- HPP & BAHAN BAKU ---
   const [rawMaterials, setRawMaterials] = useState(() => loadData('rawMaterials', INITIAL_RAW_MATERIALS));
   const [semiFinished, setSemiFinished] = useState(() => loadData('semiFinished', []));
   const [categories, setCategories] = useState(() => loadData('categories', INITIAL_CATEGORIES));
@@ -1128,7 +1986,7 @@ export default function App() {
   const [currentShift, setCurrentShift] = useState(() => loadData('currentShift', null));
   const [shiftHistory, setShiftHistory] = useState(() => loadData('shiftHistory', []));
 
-  // --- PELANGGAN ----
+  // --- MEMBER & VOUCHER ---
   const [customers, setCustomers] = useState(() => loadData('customers', [
     { id: 'c1', name: 'Budi Santoso', phone: '08123456789', points: 120 },
     { id: 'c2', name: 'Siti Rahma', phone: '08571234567', points: 250 },
@@ -1138,8 +1996,11 @@ export default function App() {
     { id: 'v1', code: 'MAMAMKENYANG', discountType: 'fixed', discountValue: 5000, minPurchase: 30000 }
   ]));
   const [claimsHistory, setClaimsHistory] = useState(() => loadData('claimsHistory', []));
+  const [storeSettings, setStoreSettings] = useState(() => loadData('storeSettings', {
+    autoPrint: false, paperSize: '58mm', printLogo: true, taxRate: 0, serviceCharge: 0
+  }));
 
-  // --- PAYROLL STATES ---
+  // --- HR / PAYROLL STATES (BARU) ---
   const [employees, setEmployees] = useState(() => loadData('employees', [
     { id: 'EMP-001', name: 'Budi Pekerja', phone: '0812345678', address: 'Jl. Melati', hourlyRate: 15000, startDate: '2023-01-10' }
   ]));
@@ -1148,12 +2009,7 @@ export default function App() {
   const [deductionCategories, setDeductionCategories] = useState(() => loadData('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi']));
 
 
-  // --- SETTINGS ---
-  const [storeSettings, setStoreSettings] = useState(() => loadData('storeSettings', {
-    autoPrint: false, paperSize: '58mm', printLogo: true, taxRate: 0, serviceCharge: 0
-  }));
-
-  // --- SIMPAN PERUBAHAN KE "DATABASE" (localStorage) ---
+  // --- EFEK PENYIMPANAN LOCALSTORAGE ---
   useEffect(() => { saveData('variantGroups', variantGroups); }, [variantGroups]);
   useEffect(() => { saveData('menus', menus); }, [menus]);
   useEffect(() => { saveData('salesHistory', salesHistory); }, [salesHistory]);
@@ -1172,12 +2028,13 @@ export default function App() {
   useEffect(() => { saveData('rawMaterials', rawMaterials); }, [rawMaterials]);
   useEffect(() => { saveData('semiFinished', semiFinished); }, [semiFinished]);
   useEffect(() => { saveData('categories', categories); }, [categories]);
+  // Simpan state baru:
   useEffect(() => { saveData('employees', employees); }, [employees]);
   useEffect(() => { saveData('employeeDailyRecords', employeeDailyRecords); }, [employeeDailyRecords]);
   useEffect(() => { saveData('additionCategories', additionCategories); }, [additionCategories]);
   useEffect(() => { saveData('deductionCategories', deductionCategories); }, [deductionCategories]);
 
-  // --- STATES APLIKASI ---
+  // --- STATES APLIKASI UTAMA ---
   const [appliedVoucher, setAppliedVoucher] = useState(null);
   const [voucherInputCode, setVoucherInputCode] = useState('');
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
@@ -1205,7 +2062,8 @@ export default function App() {
   const [receiptModal, setReceiptModal] = useState({ isOpen: false, data: null });
   const [customAlert, setCustomAlert] = useState({ isOpen: false, message: '' });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null });
-
+  
+  // Modal Slip Gaji
   const [payslipModal, setPayslipModal] = useState({ isOpen: false, data: null, month: '' });
 
   const [customerName, setCustomerName] = useState('');
@@ -1226,7 +2084,6 @@ export default function App() {
   }, [activeCustomer, cart.length]);
 
   const getSubtotal = () => cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-
   const getDiscount = () => {
     if (!appliedVoucher) return 0;
     const subtotal = getSubtotal();
@@ -1234,9 +2091,7 @@ export default function App() {
     if (appliedVoucher.discountType === 'percent') return subtotal * (appliedVoucher.discountValue / 100);
     return appliedVoucher.discountValue;
   };
-
   const getPointDiscount = () => pointsToRedeem * 100;
-
   const getManualDiscountAmount = () => {
     if (!manualDiscount || !manualDiscount.value) return 0;
     if (manualDiscount.type === 'percent') return (getSubtotal() * manualDiscount.value) / 100;
@@ -1246,7 +2101,6 @@ export default function App() {
   const getTaxableAmount = () => Math.max(0, getSubtotal() - getDiscount() - getPointDiscount() - getManualDiscountAmount());
   const getTaxAmount = () => getTaxableAmount() * (storeSettings.taxRate / 100);
   const getServiceChargeAmount = () => getTaxableAmount() * (storeSettings.serviceCharge / 100);
-
   const getTotal = () => Math.max(0, getTaxableAmount() + getTaxAmount() + getServiceChargeAmount() + (orderType === 'Delivery' ? deliveryFee : 0));
 
   const triggerAlert = (message) => setCustomAlert({ isOpen: true, message });
@@ -1256,7 +2110,6 @@ export default function App() {
     const todayStr = new Date().toISOString().split('T')[0];
     const d = new Date();
     setActivePreset(preset);
-
     if (preset === 'hari_ini') setReportDateRange({ start: todayStr, end: todayStr });
     else if (preset === 'minggu_ini') setReportDateRange({ start: new Date(d.getFullYear(), d.getMonth(), d.getDate() - 6).toISOString().split('T')[0], end: todayStr });
     else if (preset === 'bulan_ini') setReportDateRange({ start: new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29).toISOString().split('T')[0], end: todayStr });
@@ -1265,7 +2118,6 @@ export default function App() {
 
   const addToCart = (menu, selectedOptions = {}) => {
     let extraPriceTotal = 0, variantNames = [], selectedVariantDetails = [];
-
     Object.entries(selectedOptions).forEach(([groupId, optionIds]) => {
       const group = variantGroups.find(g => g.id === groupId);
       if (group) {
@@ -1287,19 +2139,8 @@ export default function App() {
     setSelectedMenuForVariant(null);
   };
 
-  const updateCartQty = (cartItemId, delta) => {
-    setCart(cart.map(item => {
-      if (item.cartItemId === cartItemId) {
-        const newQty = item.qty + delta;
-        return newQty > 0 ? { ...item, qty: newQty } : null;
-      }
-      return item;
-    }).filter(Boolean));
-  };
-
-  const updateCartItemNote = (cartItemId, note) => {
-    setCart(cart.map(item => item.cartItemId === cartItemId ? { ...item, note } : item));
-  };
+  const updateCartQty = (cartItemId, delta) => setCart(cart.map(item => { if (item.cartItemId === cartItemId) { const newQty = item.qty + delta; return newQty > 0 ? { ...item, qty: newQty } : null; } return item; }).filter(Boolean));
+  const updateCartItemNote = (cartItemId, note) => setCart(cart.map(item => item.cartItemId === cartItemId ? { ...item, note } : item));
 
   const handleOpenBill = () => {
     if (cart.length === 0) return;
@@ -1317,125 +2158,38 @@ export default function App() {
 
   const printReceipt = () => window.print();
 
-  // LIVE MATERIALS POOL (RAW + PREP)
   const availableMaterials = useMemo(() => {
     const prepsAsMaterials = semiFinished.map(prep => {
-      // 1. Hitung total biaya bahan mentah yang masuk ke Prep berdasarkan harga pasar live
       const totalIngCost = prep.ingredients.reduce((sum, ing) => {
         const rm = rawMaterials.find(r => r.id === ing.rawMaterialId);
         const currentPrice = rm ? rm.price : (ing.snapshotPrice || 0);
         return sum + (currentPrice * ing.qtyUsedFraction);
       }, 0);
-
-      // 2. Tambahkan cost labor & overhead dari Prep
       const totalBatchCost = totalIngCost + (Number(prep.laborCost) || 0) + (Number(prep.overheadCost) || 0);
-
-      // 3. Bagi dengan yield untuk dapat Harga per Satuan
       const costPerUnit = totalBatchCost / Math.max(1, Number(prep.yieldQty) || 1);
-
-      return {
-        id: prep.id,
-        name: `${prep.name} [Prep]`, // Kasih penanda
-        unit: prep.resultUnit,
-        price: costPerUnit,
-        isPrep: true,
-        lastUpdated: prep.lastUpdated || new Date()
-      };
+      return { id: prep.id, name: `${prep.name} [Prep]`, unit: prep.resultUnit, price: costPerUnit, isPrep: true, lastUpdated: prep.lastUpdated || new Date() };
     });
-
     return [...rawMaterials, ...prepsAsMaterials];
   }, [rawMaterials, semiFinished]);
 
-  // Membungkus semua props di Context Value
   const contextValue = {
-    // POS / Cart
-    cart, setCart,
-    addToCart,
-    updateCartQty,
-    updateCartItemNote,
-    isCartOpen, setIsCartOpen,
-    menus, setMenus,
-    selectedMenuForVariant,
-    variantGroups, setVariantGroups,
-    variantSelectedOptions, setVariantSelectedOptions,
-
-    // Payment / Discount
-    appliedVoucher, setAppliedVoucher,
-    manualDiscount, setManualDiscount,
-    voucherInputCode, setVoucherInputCode,
-    getDiscount,
-    getManualDiscountAmount,
-    getPointDiscount,
-
-    // Order / Checkout
-    customerName, setCustomerName,
-    orderType, setOrderType,
-    deliveryFee, setDeliveryFee,
-    customDeliveryFee, setCustomDeliveryFee,
-
-    // Customer
-    activeCustomer,
-    customers, setCustomers,
-    isCustomerDropdownMode, setIsCustomerDropdownMode,
-    pointsToRedeem, setPointsToRedeem,
-
-    // Employee / Payroll
-    employees, setEmployees,
-    employeeDailyRecords, setEmployeeDailyRecords,
-    additionCategories, setAdditionCategories,
-    deductionCategories, setDeductionCategories,
-    payslipModal, setPayslipModal,
-
-    // Inventory / HPP / Materials
-    availableMaterials,
-    editingRecipe, setEditingRecipe,
-    hppLibrary, setHppLibrary,
-    rawMaterials, setRawMaterials,
-    semiFinished, setSemiFinished,
-
-    // Categories
-    categories, setCategories,
-    expenseCategories, setExpenseCategories,
-    incomeCategories, setIncomeCategories,
-    selectedCategory, setSelectedCategory,
-
-    // Finance / History / Report
-    claimsHistory, setClaimsHistory,
-    expenses, setExpenses,
-    incomes, setIncomes,
-    reportDateRange, setReportDateRange,
-    salesHistory, setSalesHistory,
-    shiftHistory, setShiftHistory,
-
-    // Shift
-    currentShift, setCurrentShift,
-
-    // UI State
-    activeTab, setActiveTab,
-    activePreset, setActivePreset,
-    searchQuery, setSearchQuery,
-
-    paymentModal, setPaymentModal,
-    receiptModal, setReceiptModal,
-    customAlert, setCustomAlert,
-    confirmModal, setConfirmModal,
-    isCategoryModalOpen, setIsCategoryModalOpen,
-
-    // Helpers / Calculations
-    getSubtotal,
-    getTaxableAmount,
-    getTaxAmount,
-    getServiceChargeAmount,
-    getTotal,
-    formatRupiah,
-
-    // Actions
-    applyDatePreset,
-    handleOpenBill,
-    loadSavedBill,
-    printReceipt,
-    triggerAlert,
-    triggerConfirm,
+    variantGroups, setVariantGroups, menus, setMenus, salesHistory, setSalesHistory, hppLibrary, setHppLibrary, savedBills, setSavedBills,
+    expenseCategories, setExpenseCategories, expenses, setExpenses, incomeCategories, setIncomeCategories, incomes, setIncomes,
+    customers, setCustomers, vouchers, setVouchers, claimsHistory, setClaimsHistory, storeSettings, setStoreSettings,
+    appliedVoucher, setAppliedVoucher, currentShift, setCurrentShift, shiftHistory, setShiftHistory, manualDiscount, setManualDiscount,
+    getManualDiscountAmount, voucherInputCode, setVoucherInputCode, pointsToRedeem, setPointsToRedeem, isCustomerDropdownMode, setIsCustomerDropdownMode,
+    reportDateRange, setReportDateRange, activePreset, setActivePreset, searchQuery, setSearchQuery, selectedCategory, setSelectedCategory,
+    cart, setCart, isCartOpen, setIsCartOpen, selectedMenuForVariant, setSelectedMenuForVariant, variantSelectedOptions, setVariantSelectedOptions,
+    paymentModal, setPaymentModal, receiptModal, setReceiptModal, customAlert, setCustomAlert, confirmModal, setConfirmModal,
+    customerName, setCustomerName, orderType, setOrderType, deliveryFee, setDeliveryFee, customDeliveryFee, setCustomDeliveryFee,
+    activeCustomer, getSubtotal, getDiscount, getPointDiscount, getTaxableAmount, getTaxAmount, getServiceChargeAmount, getTotal,
+    triggerAlert, triggerConfirm, applyDatePreset, addToCart, updateCartQty, updateCartItemNote, handleOpenBill, loadSavedBill, printReceipt, formatRupiah,
+    rawMaterials, setRawMaterials, semiFinished, setSemiFinished, availableMaterials, categories, setCategories, isCategoryModalOpen, setIsCategoryModalOpen,
+    editingRecipe, setEditingRecipe, activeTab, setActiveTab,
+    // Ekstra HR Context:
+    employees, setEmployees, employeeDailyRecords, setEmployeeDailyRecords,
+    additionCategories, setAdditionCategories, deductionCategories, setDeductionCategories,
+    payslipModal, setPayslipModal
   };
 
   return (
@@ -1472,11 +2226,11 @@ export default function App() {
               { id: 'incomes', icon: TrendingUp, label: 'Pemasukan' },
               { id: 'expenses', icon: TrendingDown, label: 'Pengeluaran' },
               { id: 'reports', icon: PieChart, label: 'Laporan & Profit' },
-              { id: 'employees', icon: Briefcase, label: 'Manajemen Pegawai' },
               { id: 'menu-mgt', icon: List, label: 'Manajemen Menu' },
               { id: 'variant-mgt', icon: Layers, label: 'Manajemen Varian' },
               { id: 'hpp-calc', icon: Calculator, label: 'Manajemen HPP' },
               { id: 'customers', icon: Users, label: 'Pelanggan & Voucher' },
+              { id: 'employees', icon: Briefcase, label: 'Manajemen Pegawai (HR)' }, // MENU BARU HR
               { id: 'settings', icon: Settings, label: 'Pengaturan Sistem' },
               { id: 'account', icon: UserCog, label: 'Manajemen Akun' }
             ].map(item => (
@@ -1501,6 +2255,7 @@ export default function App() {
           </header>
 
           <div className="flex-1 overflow-hidden relative print:overflow-visible flex flex-col">
+            {/* VIEW COMPONENTS */}
             {currentView === 'shift' && <ShiftView />}
             {currentView === 'pos' && <PosView />}
             {currentView === 'menu-mgt' && <MenuManagement />}
@@ -1508,9 +2263,9 @@ export default function App() {
             {currentView === 'hpp-calc' && <HppView />}
             {currentView === 'incomes' && <IncomeView />}
             {currentView === 'expenses' && <ExpenseView />}
+            {currentView === 'employees' && <EmployeeManagementView />}
             {currentView === 'customers' && <CustomerView />}
             {currentView === 'reports' && <ReportsView />}
-            {currentView === 'employees' && <EmployeesView />}
             {currentView === 'settings' && <SettingsView />}
             {currentView === 'account' && <AccountView />}
           </div>
@@ -1550,15 +2305,5 @@ export default function App() {
 
       </div>
     </AppContext.Provider>
-  );
-}
-
-function Layers(props) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-      <polyline points="2 12 12 17 22 12"></polyline>
-      <polyline points="2 17 12 22 22 17"></polyline>
-    </svg>
   );
 }
