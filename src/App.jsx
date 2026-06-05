@@ -504,11 +504,13 @@ const VariantSelectionModal = () => {
 };
 
 const PaymentModal = () => {
-  const { paymentModal, setPaymentModal, getTotal, formatRupiah, activeCustomer, pointsToRedeem, customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, customerName, orderType, cart, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount, deliveryFee, salesHistory, setSalesHistory, setIsCartOpen, setCart, setCustomerName, setAppliedVoucher, setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings, triggerAlert } = useAppContext();
+  const { paymentModal, setPaymentModal, getTotal, getRoundedTotal, getRoundingAdjustment, formatRupiah, activeCustomer, pointsToRedeem, customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, customerName, orderType, cart, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount, deliveryFee, salesHistory, setSalesHistory, setIsCartOpen, setCart, setCustomerName, setAppliedVoucher, setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings, triggerAlert } = useAppContext();
 
   if (!paymentModal.isOpen) return null;
 
-  const total = getTotal();
+  const originalTotal = getTotal();
+  const total = getRoundedTotal();
+  const roundingAdjustment = getRoundingAdjustment();
   const { isSplitMode, splitPayments, method, amountPaid, status } = paymentModal;
 
   // Hitungan untuk Single Payment
@@ -540,6 +542,8 @@ const PaymentModal = () => {
       manualDiscountAmount: getManualDiscountAmount(),
       taxAmount: getTaxAmount(), serviceAmount: getServiceChargeAmount(),
       deliveryFee, total,
+      originalTotal,
+      roundingAdjustment,
       paymentMethod: isSplitMode ? 'Split Payment' : method,
       splitDetails: isSplitMode ? splitPayments : [],
       hppTotal: cart.reduce((sum, item) => sum + (item.hpp * item.qty), 0)
@@ -605,6 +609,11 @@ const PaymentModal = () => {
               <div className="text-center mb-6">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Tagihan</p>
                 <h1 className="font-heading text-4xl font-black text-slate-900">{formatRupiah(total)}</h1>
+                {roundingAdjustment !== 0 && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    Pembulatan: {formatRupiah(roundingAdjustment)}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-3 mb-6">
@@ -739,6 +748,7 @@ const ReceiptModal = () => {
   if (!receiptModal.isOpen || !receiptModal.data) return null;
   const { data, kembalian } = receiptModal;
 
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity duration-300 print:bg-white print:p-0">
 
@@ -755,8 +765,23 @@ const ReceiptModal = () => {
       <div className="bg-white rounded-md w-full max-w-[320px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out print:shadow-none print:w-[58mm]" id="receipt-content">
         <div className="p-6 print:p-2">
           <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
-            {storeSettings.printLogo && <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 mb-1 print:text-lg">MAMAM KASIR</h2>}
-            <p className="text-[10px] text-slate-500 print:text-black">Jl. Teknologi No. 1</p>
+            <div className="text-center mb-2">
+              <h2 className="font-bold text-lg">
+                {storeSettings?.storeName || 'Mamam Drink'}
+              </h2>
+
+              {storeSettings?.storeAddress && (
+                <p className="text-xs">
+                  {storeSettings.storeAddress}
+                </p>
+              )}
+
+              {storeSettings?.storePhone && (
+                <p className="text-xs">
+                  Telp: {storeSettings.storePhone}
+                </p>
+              )}
+            </div>
             <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">{data.date.toLocaleString('id-ID')}</p>
             <p className="text-[10px] text-slate-500 print:text-black">ID: {data.id} | Kasir: Admin</p>
           </div>
@@ -794,7 +819,19 @@ const ReceiptModal = () => {
             {data.taxAmount > 0 && <div className="flex justify-between"><span>Pajak</span> <span>{formatRupiah(data.taxAmount)}</span></div>}
             {data.serviceAmount > 0 && <div className="flex justify-between"><span>Service Chg</span> <span>{formatRupiah(data.serviceAmount)}</span></div>}
             {data.deliveryFee > 0 && <div className="flex justify-between"><span>Ongkir</span> <span>{formatRupiah(data.deliveryFee)}</span></div>}
+            {data.roundingAdjustment !== 0 && (
+              <>
+                <div className="flex justify-between text-xs">
+                  <span>Subtotal Akhir</span>
+                  <span>{formatRupiah(data.originalTotal)}</span>
+                </div>
 
+                <div className="flex justify-between text-xs">
+                  <span>Pembulatan</span>
+                  <span>{formatRupiah(data.roundingAdjustment)}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between text-sm font-bold mt-2 pt-2 border-t border-slate-200 print:border-black">
               <span>TOTAL</span> <span>{formatRupiah(data.total)}</span>
             </div>
@@ -817,8 +854,8 @@ const ReceiptModal = () => {
             )}
           </div>
 
-          <div className="text-center mt-8 text-[10px] text-slate-500 print:mt-4 print:text-black">
-            <p>Terima kasih atas kunjungan Anda!</p>
+          <div className="text-center mt-3 text-xs">
+            {storeSettings?.receiptFooter}
           </div>
         </div>
 
@@ -1259,6 +1296,22 @@ export default function App() {
 
   const getTotal = () => Math.max(0, getTaxableAmount() + getTaxAmount() + getServiceChargeAmount() + (orderType === 'Delivery' ? deliveryFee : 0));
 
+  const getRoundedTotal = () => {
+    const originalTotal = getTotal();
+
+    switch (storeSettings?.roundingMode) {
+      case '500':
+        return Math.floor(originalTotal / 500) * 500;
+
+      default:
+        return originalTotal;
+    }
+  };
+
+  const getRoundingAdjustment = () => {
+    return getRoundedTotal() - getTotal();
+  };
+
   const triggerAlert = (message) => setCustomAlert({ isOpen: true, message });
   const triggerConfirm = (message, onConfirm) => setConfirmModal({ isOpen: true, message, onConfirm });
 
@@ -1359,7 +1412,8 @@ export default function App() {
   // Membungkus semua props di Context Value
   const contextValue = {
     // POS / Cart
-
+    getRoundedTotal,
+    getRoundingAdjustment,
     isAdminMode,
     cart, setCart,
     addToCart,
