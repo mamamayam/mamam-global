@@ -195,6 +195,13 @@ const CartDrawer = () => {
                       onClick={() => {
                         setOrderType(type);
                         if (type !== 'Delivery') setDeliveryFee(0);
+
+                        // RESET DISKON, POIN, DAN VOUCHER JIKA PILIH OJOL
+                        if (type === 'Ojol') {
+                          setAppliedVoucher(null);
+                          setPointsToRedeem(0);
+                          setManualDiscount({ type: 'fixed', value: 0 });
+                        }
                       }}
                       className={`py-2 px-3 text-sm rounded-xl font-bold transition-all duration-200 ${orderType === type
                         ? 'bg-orange-50 text-orange-600 border border-orange-200 shadow-sm'
@@ -254,55 +261,58 @@ const CartDrawer = () => {
               </div>
 
               {/* --- DISCOUNTS & REWARDS --- */}
-              <div className="flex flex-col space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between space-y-2">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1"><Ticket className="w-3.5 h-3.5" /> Kode Voucher</span>
-                    <div className="flex items-center gap-1.5">
-                      <input type="text" placeholder="VOUCHER" value={voucherInputCode} onChange={(e) => setVoucherInputCode(e.target.value.toUpperCase())} className="w-full text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none uppercase" />
-                      <button onClick={() => {
-                        if (!voucherInputCode) return;
-                        const validVoucher = vouchers.find(v => v.code === voucherInputCode);
-                        if (validVoucher) {
-                          if (getSubtotal() >= validVoucher.minPurchase) { setAppliedVoucher(validVoucher); triggerAlert(`Voucher ${validVoucher.code} berhasil dipasang!`); }
-                          else { triggerAlert(`Minimal belanja untuk voucher ini: ${formatRupiah(validVoucher.minPurchase)}`); }
-                        } else { triggerAlert('Voucher tidak ditemukan.'); }
-                      }}
-                        className="px-2.5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold rounded-lg transition-colors shrink-0"
-                      >Pasang</button>
-                    </div>
-                    {appliedVoucher && <span className="text-[10px] text-green-500 font-bold flex items-center gap-0.5 animate-in fade-in">Aktif: -{appliedVoucher.discountType === 'percent' ? `${appliedVoucher.discountValue}%` : formatRupiah(appliedVoucher.discountValue)}</span>}
-                  </div>
+              {orderType !== 'Ojol' && (
+                <div className="flex flex-col space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
 
-                  <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between space-y-2">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1"><Award className="w-3.5 h-3.5 text-yellow-400" /> Klaim Poin</span>
-                    {activeCustomer ? (
-                      <div className="space-y-1.5 animate-in fade-in">
-                        <div className="flex items-center gap-1.5">
-                          <input type="number" min="0" max={activeCustomer.points} placeholder={`Max ${activeCustomer.points}`} value={pointsToRedeem || ''} onChange={(e) => { setPointsToRedeem(Math.min(activeCustomer.points, Math.max(0, Number(e.target.value) || 0))); }} className="w-full text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none" />
-                          <button onClick={() => { setPointsToRedeem(activeCustomer.points); }} className="px-2.5 py-2 bg-yellow-400 hover:bg-yellow-500 text-white text-[11px] font-bold rounded-lg transition-colors shrink-0">Semua</button>
-                        </div>
-                        <span className="text-[10px] text-orange-600 font-bold block">Diskon: {formatRupiah(getPointDiscount())} (1 Poin = Rp100)</span>
+                    <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between space-y-2">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1"><Ticket className="w-3.5 h-3.5" /> Kode Voucher</span>
+                      <div className="flex items-center gap-1.5">
+                        <input type="text" placeholder="VOUCHER" value={voucherInputCode} onChange={(e) => setVoucherInputCode(e.target.value.toUpperCase())} className="w-full text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none uppercase" />
+                        <button onClick={() => {
+                          if (!voucherInputCode) return;
+                          const validVoucher = vouchers.find(v => v.code === voucherInputCode);
+                          if (validVoucher) {
+                            if (getSubtotal() >= validVoucher.minPurchase) { setAppliedVoucher(validVoucher); triggerAlert(`Voucher ${validVoucher.code} berhasil dipasang!`); }
+                            else { triggerAlert(`Minimal belanja untuk voucher ini: ${formatRupiah(validVoucher.minPurchase)}`); }
+                          } else { triggerAlert('Voucher tidak ditemukan.'); }
+                        }}
+                          className="px-2.5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold rounded-lg transition-colors shrink-0"
+                        >Pasang</button>
                       </div>
-                    ) : (
-                      <div className="text-[11px] text-slate-400 italic flex items-center h-full">Masukkan member terdaftar untuk poin.</div>
-                    )}
-                  </div>
-                </div>
+                      {appliedVoucher && <span className="text-[10px] text-green-500 font-bold flex items-center gap-0.5 animate-in fade-in">Aktif: -{appliedVoucher.discountType === 'percent' ? `${appliedVoucher.discountValue}%` : formatRupiah(appliedVoucher.discountValue)}</span>}
+                    </div>
 
-                {/* --- DISKON MANUAL --- */}
-                <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col space-y-2">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1"><Minus className="w-3.5 h-3.5 text-blue-500" /> Diskon Tambahan Manual</span>
-                  <div className="flex items-center gap-1.5">
-                    <select className="w-20 text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition-colors" value={manualDiscount.type} onChange={e => setManualDiscount({ ...manualDiscount, type: e.target.value })}>
-                      <option value="fixed">Rp</option>
-                      <option value="percent">%</option>
-                    </select>
-                    <input type="number" min="0" placeholder="Nominal Diskon Tambahan..." value={manualDiscount.value || ''} onChange={(e) => setManualDiscount({ ...manualDiscount, value: Number(e.target.value) || 0 })} className="w-full text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition-colors" />
+                    <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between space-y-2">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1"><Award className="w-3.5 h-3.5 text-yellow-400" /> Klaim Poin</span>
+                      {activeCustomer ? (
+                        <div className="space-y-1.5 animate-in fade-in">
+                          <div className="flex items-center gap-1.5">
+                            <input type="number" min="0" max={activeCustomer.points} placeholder={`Max ${activeCustomer.points}`} value={pointsToRedeem || ''} onChange={(e) => { setPointsToRedeem(Math.min(activeCustomer.points, Math.max(0, Number(e.target.value) || 0))); }} className="w-full text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none" />
+                            <button onClick={() => { setPointsToRedeem(activeCustomer.points); }} className="px-2.5 py-2 bg-yellow-400 hover:bg-yellow-500 text-white text-[11px] font-bold rounded-lg transition-colors shrink-0">Semua</button>
+                          </div>
+                          <span className="text-[10px] text-orange-600 font-bold block">Diskon: {formatRupiah(getPointDiscount())} (1 Poin = Rp100)</span>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-slate-400 italic flex items-center h-full">Masukkan member terdaftar untuk poin.</div>
+                      )}
+                    </div>
                   </div>
-                  {getManualDiscountAmount() > 0 && <span className="text-[10px] text-blue-600 font-bold block animate-in fade-in">Potongan: -{formatRupiah(getManualDiscountAmount())}</span>}
+
+                  {/* --- DISKON MANUAL --- */}
+                  <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col space-y-2">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1"><Minus className="w-3.5 h-3.5 text-blue-500" /> Diskon Tambahan Manual</span>
+                    <div className="flex items-center gap-1.5">
+                      <select className="w-20 text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition-colors" value={manualDiscount.type} onChange={e => setManualDiscount({ ...manualDiscount, type: e.target.value })}>
+                        <option value="fixed">Rp</option>
+                        <option value="percent">%</option>
+                      </select>
+                      <input type="number" min="0" placeholder="Nominal Diskon Tambahan..." value={manualDiscount.value || ''} onChange={(e) => setManualDiscount({ ...manualDiscount, value: Number(e.target.value) || 0 })} className="w-full text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition-colors" />
+                    </div>
+                    {getManualDiscountAmount() > 0 && <span className="text-[10px] text-blue-600 font-bold block animate-in fade-in">Potongan: -{formatRupiah(getManualDiscountAmount())}</span>}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -621,10 +631,12 @@ const PaymentModal = () => {
             {isSplitMode && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Mode Multi Payment</span>}
           </div>
           <div className="flex items-center gap-2">
-            {!isSplitMode ? (
-              <button onClick={() => setPaymentModal({ ...paymentModal, isSplitMode: true })} className="p-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors text-xs font-bold flex items-center gap-1"><SplitSquareHorizontal className="w-4 h-4" /> Split</button>
-            ) : (
-              <button onClick={() => setPaymentModal({ ...paymentModal, isSplitMode: false, splitPayments: [], amountPaid: '' })} className="p-2 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-colors text-xs font-bold">Batal Split</button>
+            {orderType !== 'Ojol' && (
+              !isSplitMode ? (
+                <button onClick={() => setPaymentModal({ ...paymentModal, isSplitMode: true })} className="p-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors text-xs font-bold flex items-center gap-1"><SplitSquareHorizontal className="w-4 h-4" /> Split</button>
+              ) : (
+                <button onClick={() => setPaymentModal({ ...paymentModal, isSplitMode: false, splitPayments: [], amountPaid: '' })} className="p-2 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-colors text-xs font-bold">Batal Split</button>
+              )
             )}
             <button onClick={() => setPaymentModal({ ...paymentModal, isOpen: false })} className="p-2 bg-white rounded-full shadow-sm text-slate-500 hover:bg-slate-100 transition-colors"><X className="w-5 h-5" /></button>
           </div>
@@ -644,7 +656,7 @@ const PaymentModal = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-2 mb-6">
+              <div className="flex flex-wrap justify-center gap-3 mb-6">
                 {(orderType === 'Ojol'
                   ? [
                     { id: 'Ojol', icon: Motorbike }
@@ -658,13 +670,13 @@ const PaymentModal = () => {
                   <button
                     key={opt.id}
                     onClick={() => setPaymentModal({ ...paymentModal, method: opt.id, status: 'pending' })}
-                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all duration-200 ${method === opt.id
+                    className={`flex flex-col items-center justify-center p-3 w-24 md:w-28 rounded-2xl border-2 transition-all duration-200 ${method === opt.id
                         ? 'border-orange-600 bg-orange-600 text-white shadow-md -translate-y-1'
                         : 'border-slate-100 bg-white text-slate-500 hover:bg-slate-50 hover:border-slate-200'
                       }`}
                   >
-                    <opt.icon className="w-5 h-5 mb-1" />
-                    <span className="text-[10px] md:text-xs font-bold text-center leading-tight">{opt.id}</span>
+                    <opt.icon className="w-6 h-6 mb-2" />
+                    <span className="text-[11px] md:text-xs font-bold text-center leading-tight">{opt.id}</span>
                   </button>
                 ))}
               </div>
