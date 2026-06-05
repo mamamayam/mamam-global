@@ -6,6 +6,7 @@ export const AppContext = createContext();
 // 2. Buat Provider Component untuk membungkus aplikasi
 export const AppProvider = ({ children }) => {
 
+    const [currentView, setCurrentView] = useState('pos');
     const [isAdminMode, setIsAdminMode] = useState(false);
     
     // State Pengaturan Toko
@@ -39,7 +40,8 @@ export const AppProvider = ({ children }) => {
                 setVouchers,
                 claimsHistory,
                 setClaimsHistory,
-                triggerAlert
+                triggerAlert,
+                currentView, setCurrentView
             }}>
             {children}
         </AppContext.Provider>

@@ -8,6 +8,7 @@ import AccountView from './features/AccountView';
 import ExpenseView from './features/ExpenseView';
 import EmployeesView from './features/EmployeesView';
 import HppView from './features/HppView';
+import HistoryView from './features/HistoryView';
 import IncomeView from './features/IncomeView';
 import PinModal from './features/PinModal';
 import PosView from './features/PosView';
@@ -42,6 +43,7 @@ import {
   Menu as MenuIcon,
   Minus,
   MoreHorizontal,
+  Motorbike,
   Package,
   Pencil,
   PieChart,
@@ -511,7 +513,7 @@ const PaymentModal = () => {
   const originalTotal = getTotal();
   const total = getRoundedTotal();
   const roundingAdjustment = getRoundingAdjustment();
-  const { isSplitMode, splitPayments, method, amountPaid, status } = paymentModal;
+  const { isSplitMode, splitPayments, method, amountPaid, status, ojolName, orderNumber } = paymentModal;
 
   // Hitungan untuk Single Payment
   const kembalian = method === 'Tunai' && !isSplitMode ? (Number(amountPaid) - total) : 0;
@@ -545,6 +547,8 @@ const PaymentModal = () => {
       originalTotal,
       roundingAdjustment,
       paymentMethod: isSplitMode ? 'Split Payment' : method,
+      ojolName: method === 'Ojol' ? ojolName : null,             // <- BARIS BARU
+      orderNumber: method === 'Ojol' ? orderNumber : null,
       splitDetails: isSplitMode ? splitPayments : [],
       hppTotal: cart.reduce((sum, item) => sum + (item.hpp * item.qty), 0)
     };
@@ -561,6 +565,8 @@ const PaymentModal = () => {
     setIsCartOpen(false); setCart([]); setCustomerName(''); setAppliedVoucher(null); setVoucherInputCode(''); setPointsToRedeem(0); setManualDiscount({ type: 'fixed', value: 0 });
 
     setReceiptModal({ isOpen: true, data: newOrder, kembalian: isSplitMode ? splitKembalian : (method === 'Tunai' ? kembalian : 0) });
+
+    setCurrentView('history');
 
     if (storeSettings.autoPrint) { setTimeout(() => window.print(), 500); }
   };
@@ -616,14 +622,35 @@ const PaymentModal = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-3 mb-6">
-                {[{ id: 'Tunai', icon: Wallet }, { id: 'QRIS', icon: QrCode }, { id: 'Transfer', icon: CreditCard }].map(opt => (
-                  <button key={opt.id} onClick={() => setPaymentModal({ ...paymentModal, method: opt.id, status: 'pending' })} className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all duration-200 ${method === opt.id ? 'border-orange-600 bg-orange-600 text-white shadow-md -translate-y-1' : 'border-slate-100 bg-white text-slate-500 hover:bg-slate-50 hover:border-slate-200'}`}>
-                    <opt.icon className="w-6 h-6 mb-2" />
-                    <span className="text-xs font-bold">{opt.id}</span>
+              <div className="grid grid-cols-3 md:grid-cols-4 gap-2 mb-6">
+                {[
+                  { id: 'Tunai', icon: Wallet },
+                  { id: 'QRIS', icon: QrCode },
+                  { id: 'Transfer', icon: CreditCard },
+                  { id: 'Ojol', icon: Motorbike }
+                ].map(opt => (
+                  <button key={opt.id} onClick={() => setPaymentModal({ ...paymentModal, method: opt.id, status: 'pending' })} className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all duration-200 ${method === opt.id ? 'border-orange-600 bg-orange-600 text-white shadow-md -translate-y-1' : 'border-slate-100 bg-white text-slate-500 hover:bg-slate-50 hover:border-slate-200'}`}>
+                    <opt.icon className="w-5 h-5 mb-1" />
+                    <span className="text-[10px] md:text-xs font-bold text-center leading-tight">{opt.id}</span>
                   </button>
                 ))}
               </div>
+
+              {/* Logika input tambahan untuk metode Ojol */}
+              {method === 'Ojol' && (
+                <div className="mb-6 p-4 border border-orange-200 bg-orange-50 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="block text-xs font-bold text-slate-700 mb-2">Pilih Aplikasi Ojol</label>
+                  <div className="flex gap-2 mb-4">
+                    {['Shopeefood', 'Grabfood', 'Gofood'].map((ojol) => (
+                      <button key={ojol} onClick={() => setPaymentModal({ ...paymentModal, ojolName: ojol })} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${ojolName === ojol ? 'bg-orange-600 text-white border-orange-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                        {ojol}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="block text-xs font-bold text-slate-700 mb-2">Nomor Order</label>
+                  <input type="text" placeholder="Masukkan nomor order..." value={orderNumber || ''} onChange={(e) => setPaymentModal({ ...paymentModal, orderNumber: e.target.value })} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-600 bg-white text-sm font-bold transition-colors" />
+                </div>
+              )}
 
               {method === 'Tunai' && (
                 <div className="space-y-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -846,7 +873,15 @@ const ReceiptModal = () => {
                 ))}
               </>
             ) : (
-              <div className="flex justify-between"><span>- {data.paymentMethod}</span> <span>{formatRupiah(data.total)}</span></div>
+              <>
+                <div className="flex justify-between"><span>- {data.paymentMethod}</span> <span>{formatRupiah(data.total)}</span></div>
+                {data.paymentMethod === 'Ojol' && data.ojolName && (
+                  <div className="flex justify-between text-slate-500 mt-1"><span>Aplikasi:</span> <span>{data.ojolName}</span></div>
+                )}
+                {data.paymentMethod === 'Ojol' && data.orderNumber && (
+                  <div className="flex justify-between text-slate-500"><span>No. Order:</span> <span>{data.orderNumber}</span></div>
+                )}
+              </>
             )}
 
             {kembalian > 0 && (
@@ -1139,6 +1174,9 @@ const MenuManagement = () => {
   );
 };
 
+
+
+
 export default function App() {
 
   const { isAdminMode, setIsAdminMode } = useAppContext();
@@ -1248,8 +1286,7 @@ export default function App() {
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
-  const [paymentModal, setPaymentModal] = useState({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending' });
-  const [receiptModal, setReceiptModal] = useState({ isOpen: false, data: null });
+  const [paymentModal, setPaymentModal] = useState({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending', ojolName: '', orderNumber: '' }); const [receiptModal, setReceiptModal] = useState({ isOpen: false, data: null });
   const [customAlert, setCustomAlert] = useState({ isOpen: false, message: '' });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null });
 
@@ -1481,6 +1518,7 @@ export default function App() {
     currentShift, setCurrentShift,
 
     // UI State
+    currentView, setCurrentView,
     activeTab, setActiveTab,
     activePreset, setActivePreset,
     searchQuery, setSearchQuery,
@@ -1512,6 +1550,7 @@ export default function App() {
 
     { id: 'shift', icon: Clock, label: 'Shift Kasir' },
     { id: 'pos', icon: ShoppingCart, label: 'Kasir Utama' },
+    { id: 'history', icon: History, label: 'Riwayat Pesanan' },
     { id: 'incomes', icon: TrendingUp, label: 'Pemasukan' },
     { id: 'expenses', icon: TrendingDown, label: 'Pengeluaran' },
     { id: 'reports', icon: PieChart, label: 'Laporan & Profit' },
@@ -1527,7 +1566,7 @@ export default function App() {
   const visibleMenus = isAdminMode
     ? menuItems
     : menuItems.filter(item =>
-      ['shift', 'pos', 'expenses', 'incomes'].includes(item.id)
+      ['shift', 'pos', 'history', 'expenses', 'incomes'].includes(item.id) // Pastikan 'history' ada di sini
     );
 
 
@@ -1622,6 +1661,7 @@ export default function App() {
           <div className="flex-1 overflow-hidden relative print:overflow-visible flex flex-col">
             {currentView === 'shift' && <ShiftView />}
             {currentView === 'pos' && <PosView />}
+            {currentView === 'history' && <HistoryView />}  
             {currentView === 'menu-mgt' && <MenuManagement />}
             {currentView === 'variant-mgt' && <VariantManagement />}
             {currentView === 'hpp-calc' && <HppView />}

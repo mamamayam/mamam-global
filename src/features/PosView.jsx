@@ -1,13 +1,14 @@
 import React from 'react';
-import {useAppContext} from '../context/AppContext';
+import { useAppContext } from '../context/AppContext';
 import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package } from 'lucide-react';
 import { formatRupiah } from '../utils/formatters';
 
 
 const PosView = () => {
+    // Temukan baris ini di PosView
     const { menus, searchQuery, setSearchQuery, selectedCategory, setSelectedCategory,
         setSelectedMenuForVariant, setVariantSelectedOptions, addToCart, formatRupiah,
-        setIsCartOpen, cart, getTotal, currentShift, triggerAlert
+        setIsCartOpen, cart, getTotal, currentShift, triggerAlert, setActiveTab, setCurrentView
     } = useAppContext();
 
     const categories = ['Semua', ...new Set(menus.map(m => m.category))];
@@ -19,6 +20,7 @@ const PosView = () => {
         if (!currentShift) {
             triggerAlert('Peringatan: Shift Kasir belum dibuka. Harap buka shift terlebih dahulu di menu "Shift Kasir".');
             return;
+            setCurrentView('shift');
         }
         if (menu.variantGroupIds.length > 0) {
             setSelectedMenuForVariant(menu);

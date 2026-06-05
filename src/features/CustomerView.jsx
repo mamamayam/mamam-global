@@ -1,15 +1,21 @@
 import React from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2 } from 'lucide-react';
+// Menambahkan icon Save untuk mode edit pelanggan
+import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2, Save } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { formatRupiah } from '../utils/formatters';
 
 const CustomerView = () => {
-  const { customers, setCustomers, vouchers, setVouchers, claimsHistory, triggerAlert, formatRupiah } = useAppContext();
+  // Ambil triggerConfirm dari AppContext (pola yang sama seperti di EmployeesView)
+  const { customers, setCustomers, vouchers, setVouchers, claimsHistory, triggerAlert, triggerConfirm, formatRupiah } = useAppContext();
 
   const [customerSubTab, setCustomerSubTab] = useState('manage');
+  
+  // State Input & Edit Pelanggan
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustNamePhone] = useState('');
+  const [editingCustomerId, setEditingCustomerId] = useState(null);
+
+  // State Input & Edit Voucher
   const [newVoucherCode, setNewVoucherCode] = useState('');
   const [newVoucherDiscount, setNewVoucherDiscount] = useState('');
   const [newVoucherType, setNewVoucherType] = useState('fixed');
@@ -18,17 +24,69 @@ const CustomerView = () => {
   const [editingVoucherId, setEditingVoucherId] = useState(null);
 
 
-  // 1. Fungsi untuk Menghapus Voucher
-  const handleDeleteVoucher = (id) => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus voucher ini?')) {
-      setVouchers(vouchers.filter(v => v.id !== id));
-      triggerAlert('Voucher berhasil dihapus!');
-      // Jika voucher yang sedang diedit ikut dihapus, reset form
-      if (editingVoucherId === id) handleCancelEdit();
+  // =========================================================================
+  // LOGIKA: KELOLA PELANGGAN (Adaptasi Pola Manajemen Karyawan)
+  // =========================================================================
+
+  // 1. Fungsi untuk Menyimpan atau Memperbarui Pelanggan
+  const handleSaveCustomer = () => {
+    if (!newCustName) return triggerAlert('Nama pelanggan wajib diisi!');
+    
+    if (editingCustomerId) {
+      // MODE EDIT / UPDATE PELANGGAN
+      setCustomers(customers.map(c => c.id === editingCustomerId ? {
+        ...c,
+        name: newCustName,
+        phone: newCustPhone
+      } : c));
+      triggerAlert('Data Pelanggan berhasil diperbarui!');
+      handleCancelEditCustomer();
+    } else {
+      // MODE TAMBAH PELANGGAN BARU
+      setCustomers([...customers, { id: `CUST-${Date.now()}`, name: newCustName, phone: newCustPhone, points: 0 }]);
+      setNewCustName(''); 
+      setNewCustNamePhone(''); 
+      triggerAlert('Data Pelanggan berhasil ditambahkan!');
     }
   };
 
-  // 2. Fungsi saat Tombol Edit Diklik (Mengisi Form)
+  // 2. Fungsi untuk Menghapus Pelanggan (DENGAN RE-FIX BINDING CALLBACK AGAR TIDAK LANGSUNG TERHAPUS)
+  const handleDeleteCustomer = (id) => {
+    // Membungkus aksi penghapusan dalam callback ()=>{} supaya hanya berjalan setelah tombol OK ditekan
+    triggerConfirm('Apakah Anda yakin ingin menghapus pelanggan ini? Data riwayat poin mungkin akan kehilangan referensi.', () => {
+      setCustomers(customers.filter(c => c.id !== id));
+      triggerAlert('Data Pelanggan berhasil dihapus.');
+      if (editingCustomerId === id) handleCancelEditCustomer();
+    });
+  };
+
+  // 3. Fungsi untuk Memulai Mode Edit Pelanggan
+  const handleStartEditCustomer = (c) => {
+    setEditingCustomerId(c.id);
+    setNewCustName(c.name);
+    setNewCustNamePhone(c.phone || '');
+  };
+
+  // 4. Fungsi untuk Membatalkan Mode Edit Pelanggan
+  const handleCancelEditCustomer = () => {
+    setEditingCustomerId(null);
+    setNewCustName('');
+    setNewCustNamePhone('');
+  };
+
+
+  // =========================================================================
+  // LOGIKA: KELOLA VOUCHER (Diselaraskan menggunakan triggerConfirm)
+  // =========================================================================
+
+  const handleDeleteVoucher = (id) => {
+    triggerConfirm('Apakah Anda yakin ingin menghapus voucher ini?', () => {
+      setVouchers(vouchers.filter(v => v.id !== id));
+      triggerAlert('Voucher berhasil dihapus!');
+      if (editingVoucherId === id) handleCancelEdit();
+    });
+  };
+
   const handleStartEdit = (v) => {
     setEditingVoucherId(v.id);
     setNewVoucherCode(v.code);
@@ -38,7 +96,6 @@ const CustomerView = () => {
     setNewVoucherQuota(v.quota);
   };
 
-  // 3. Fungsi untuk Membatalkan Edit (Reset Form)
   const handleCancelEdit = () => {
     setEditingVoucherId(null);
     setNewVoucherCode('');
@@ -48,19 +105,12 @@ const CustomerView = () => {
     setNewVoucherQuota('');
   };
 
-  const handleAddCustomer = () => {
-    if (!newCustName) return triggerAlert('Nama pelanggan wajib diisi!');
-    setCustomers([...customers, { id: `CUST-${Date.now()}`, name: newCustName, phone: newCustPhone, points: 0 }]);
-    setNewCustName(''); setNewCustNamePhone(''); triggerAlert('Data Pelanggan berhasil ditambahkan!');
-  };
-
   const handleAddVoucher = () => {
     if (!newVoucherCode || !newVoucherDiscount || !newVoucherQuota) {
       return triggerAlert('Lengkapi data voucher termasuk kuota!');
     }
 
     if (editingVoucherId) {
-      // === MODE EDIT / UPDATE ===
       setVouchers(vouchers.map(v => v.id === editingVoucherId ? {
         ...v,
         code: newVoucherCode.toUpperCase(),
@@ -70,9 +120,8 @@ const CustomerView = () => {
         quota: Number(newVoucherQuota)
       } : v));
       triggerAlert('Voucher berhasil diperbarui!');
-      handleCancelEdit(); // Reset form setelah update
+      handleCancelEdit();
     } else {
-      // === MODE TAMBAH BARU (Kode lama kamu) ===
       setVouchers([...vouchers, {
         id: `VCH-${Date.now()}`,
         code: newVoucherCode.toUpperCase(),
@@ -112,12 +161,31 @@ const CustomerView = () => {
             {/* KOLOM 1: KELOLA PELANGGAN                 */}
             {/* ========================================= */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full min-h-[400px]">
-              <div className="p-4 border-b bg-slate-50 rounded-t-2xl font-bold text-slate-800 shrink-0">Data Pelanggan</div>
+              <div className="p-4 border-b bg-slate-50 rounded-t-2xl font-bold text-slate-800 shrink-0">
+                {editingCustomerId ? 'Edit Data Pelanggan' : 'Data Pelanggan'}
+              </div>
               <div className="p-4 space-y-3 border-b border-slate-100 bg-white shrink-0">
                 <div className="flex gap-2">
                   <input type="text" placeholder="Nama Pelanggan" className="flex-1 p-2.5 bg-slate-50 border rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-orange-100 transition-colors" value={newCustName} onChange={e => setNewCustName(e.target.value)} />
                   <input type="text" placeholder="No. Whatsapp" className="w-1/3 p-2.5 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-100 transition-colors" value={newCustPhone} onChange={e => setNewCustNamePhone(e.target.value)} />
-                  <button onClick={handleAddCustomer} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 transition-colors text-white rounded-xl text-sm font-bold shadow-md hover:-translate-y-0.5 duration-300"><Plus className="w-5 h-5" /></button>
+                  
+                  {/* Tombol Simpan Otomatis Berubah Warna & Icon Sesuai Mode Aktif */}
+                  <button 
+                    onClick={handleSaveCustomer} 
+                    className={`px-4 py-2 text-white rounded-xl text-sm font-bold shadow-md hover:-translate-y-0.5 duration-300 transition-colors flex items-center justify-center ${editingCustomerId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'}`}
+                    title={editingCustomerId ? 'Simpan Perubahan' : 'Tambah Pelanggan'}
+                  >
+                    {editingCustomerId ? <Save className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                  </button>
+
+                  {editingCustomerId && (
+                    <button 
+                      onClick={handleCancelEditCustomer} 
+                      className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-sm font-bold transition-all duration-300 animate-in fade-in"
+                    >
+                      Batal
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50/30 custom-scrollbar">
@@ -127,7 +195,28 @@ const CustomerView = () => {
                       <p className="font-bold text-sm text-slate-800">{c.name}</p>
                       <p className="text-[10px] text-slate-500 font-medium">{c.phone || 'Tanpa No. HP'}</p>
                     </div>
-                    <span className="bg-orange-50 text-orange-600 px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-100">{c.points} Poin</span>
+                    
+                    <div className="flex items-center gap-2">
+                      <span className="bg-orange-50 text-orange-600 px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-100">{c.points} Poin</span>
+                      
+                      {/* Tambahan: Akses tombol Edit Pelanggan */}
+                      <button 
+                        onClick={() => handleStartEditCustomer(c)} 
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Edit Pelanggan"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      
+                      {/* Perbaikan Utama: onClick menggunakan Arrow Function agar tidak trigger instan */}
+                      <button 
+                        onClick={() => handleDeleteCustomer(c.id)} 
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Hapus Pelanggan"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
                 {customers.length === 0 && <p className="text-center text-xs text-slate-400 mt-10">Belum ada pelanggan</p>}
@@ -135,13 +224,12 @@ const CustomerView = () => {
             </div>
 
             {/* ========================================= */}
-            {/* KOLOM 2: VOUCHER DISKON AKTIF (Pindahan)  */}
+            {/* KOLOM 2: VOUCHER DISKON AKTIF             */}
             {/* ========================================= */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full min-h-[400px]">
               <div className="p-4 border-b bg-slate-50 rounded-t-2xl font-bold text-slate-800 shrink-0">Voucher Diskon Aktif</div>
 
               <div className="p-4 space-y-3 border-b border-slate-100 bg-white shrink-0">
-                {/* 1. INPUT KODE VOUCHER */}
                 <input
                   type="text"
                   placeholder="KODE VOUCHER (Maks 10 huruf)"
@@ -151,7 +239,6 @@ const CustomerView = () => {
                   onChange={e => setNewVoucherCode(e.target.value)}
                 />
 
-                {/* 2. INPUT TIPE & NILAI POTONGAN */}
                 <div className="flex gap-2">
                   <select
                     className="w-1/3 p-2.5 bg-slate-50 border rounded-xl text-sm font-semibold outline-none transition-colors focus:ring-2 focus:ring-orange-100"
@@ -170,7 +257,6 @@ const CustomerView = () => {
                   />
                 </div>
 
-                {/* 3. INPUT MINIMAL BELANJA & KUOTA (SEJAJAR) */}
                 <div className="flex gap-2">
                   <input
                     type="number"
@@ -189,7 +275,6 @@ const CustomerView = () => {
                   />
                 </div>
 
-                {/* 4. TOMBOL SIMPAN / UPDATE */}
               <div className="flex gap-2 mt-1">
                 <button 
                   onClick={handleAddVoucher} 
@@ -199,7 +284,6 @@ const CustomerView = () => {
                   {editingVoucherId ? 'Perbarui Voucher' : 'Simpan Voucher'}
                 </button>
                 
-                {/* Munculkan tombol batal hanya saat mode edit aktif */}
                 {editingVoucherId && (
                   <button 
                     onClick={handleCancelEdit} 
@@ -211,7 +295,6 @@ const CustomerView = () => {
               </div>
               </div>
 
-              {/* 5. DAFTAR VOUCHER AKTIF */}
             <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50/30 custom-scrollbar">
               {vouchers.map(v => (
                 <div key={v.id} className="flex justify-between items-center p-3 bg-white border border-orange-100 rounded-xl shadow-sm relative overflow-hidden transition-shadow duration-300">
@@ -223,13 +306,11 @@ const CustomerView = () => {
                     </p>
                   </div>
                   
-                  {/* BAGIAN YANG DIUBAH: Kelompokkan Nilai Diskon dan Tombol Aksi */}
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-sm text-slate-800 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
                       Diskon {v.discountType === 'percent' ? `${v.discountValue}%` : formatRupiah(v.discountValue)}
                     </span>
                     
-                    {/* Tombol Edit */}
                     <button 
                       onClick={() => handleStartEdit(v)} 
                       className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -238,7 +319,6 @@ const CustomerView = () => {
                       <Pencil className="w-4 h-4" />
                     </button>
                     
-                    {/* Tombol Hapus */}
                     <button 
                       onClick={() => handleDeleteVoucher(v.id)} 
                       className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -305,9 +385,9 @@ const CustomerView = () => {
           </div>
         )}
 
-
       </div>
     </div>
   );
 };
+
 export default CustomerView;
