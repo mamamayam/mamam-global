@@ -189,8 +189,18 @@ const CartDrawer = () => {
               <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Tipe Pesanan</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {['Dine-in', 'Takeaway', 'Delivery', 'Lainnya'].map(type => (
-                    <button key={type} onClick={() => { setOrderType(type); if (type !== 'Delivery') setDeliveryFee(0); }} className={`py-2 px-3 text-sm rounded-xl font-bold transition-all duration-200 ${orderType === type ? 'bg-orange-50 text-orange-600 border border-orange-200 shadow-sm' : 'bg-slate-50 text-slate-500 border border-transparent hover:bg-slate-100'}`}>
+                  {['Takeaway', 'Dine-in', 'Delivery', 'Ojol'].map(type => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        setOrderType(type);
+                        if (type !== 'Delivery') setDeliveryFee(0);
+                      }}
+                      className={`py-2 px-3 text-sm rounded-xl font-bold transition-all duration-200 ${orderType === type
+                        ? 'bg-orange-50 text-orange-600 border border-orange-200 shadow-sm'
+                        : 'bg-slate-50 text-slate-500 border border-transparent hover:bg-slate-100'
+                        }`}
+                    >
                       {type}
                     </button>
                   ))}
@@ -319,7 +329,19 @@ const CartDrawer = () => {
             </div>
             <div className="flex gap-2">
               <button onClick={handleOpenBill} className="flex-1 py-3.5 rounded-xl bg-orange-50 text-orange-600 font-bold border border-orange-200 shadow-sm hover:bg-orange-100 transition-all flex items-center justify-center gap-2 text-sm"><Save className="w-4 h-4" /> Simpan Bill</button>
-              <button onClick={() => setPaymentModal({ isOpen: true, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending' })} className="flex-[1.5] py-3.5 rounded-xl bg-orange-600 text-white font-bold shadow-lg hover:bg-orange-700 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">Bayar <ChevronRight className="w-4 h-4" /></button>
+              <button
+                onClick={() => setPaymentModal({
+                  isOpen: true,
+                  isSplitMode: false,
+                  splitPayments: [],
+                  method: orderType === 'Ojol' ? 'Ojol' : 'Tunai', // OTOMATIS SET METODE SESUAI TIPE PESANAN
+                  amountPaid: '',
+                  status: 'pending'
+                })}
+                className="flex-[1.5] py-3.5 rounded-xl bg-orange-600 text-white font-bold shadow-lg hover:bg-orange-700 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+              >
+                Bayar <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
         )}
@@ -623,13 +645,24 @@ const PaymentModal = () => {
               </div>
 
               <div className="grid grid-cols-3 md:grid-cols-4 gap-2 mb-6">
-                {[
-                  { id: 'Tunai', icon: Wallet },
-                  { id: 'QRIS', icon: QrCode },
-                  { id: 'Transfer', icon: CreditCard },
-                  { id: 'Ojol', icon: Motorbike }
-                ].map(opt => (
-                  <button key={opt.id} onClick={() => setPaymentModal({ ...paymentModal, method: opt.id, status: 'pending' })} className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all duration-200 ${method === opt.id ? 'border-orange-600 bg-orange-600 text-white shadow-md -translate-y-1' : 'border-slate-100 bg-white text-slate-500 hover:bg-slate-50 hover:border-slate-200'}`}>
+                {(orderType === 'Ojol'
+                  ? [
+                    { id: 'Ojol', icon: Motorbike }
+                  ]
+                  : [
+                    { id: 'Tunai', icon: Wallet },
+                    { id: 'QRIS', icon: QrCode },
+                    { id: 'Transfer', icon: CreditCard }
+                  ]
+                ).map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setPaymentModal({ ...paymentModal, method: opt.id, status: 'pending' })}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all duration-200 ${method === opt.id
+                        ? 'border-orange-600 bg-orange-600 text-white shadow-md -translate-y-1'
+                        : 'border-slate-100 bg-white text-slate-500 hover:bg-slate-50 hover:border-slate-200'
+                      }`}
+                  >
                     <opt.icon className="w-5 h-5 mb-1" />
                     <span className="text-[10px] md:text-xs font-bold text-center leading-tight">{opt.id}</span>
                   </button>
@@ -1293,7 +1326,7 @@ export default function App() {
   const [payslipModal, setPayslipModal] = useState({ isOpen: false, data: null, month: '' });
 
   const [customerName, setCustomerName] = useState('');
-  const [orderType, setOrderType] = useState('Dine-in');
+  const [orderType, setOrderType] = useState('Takeaway');
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [customDeliveryFee, setCustomDeliveryFee] = useState('');
 
@@ -1661,7 +1694,7 @@ export default function App() {
           <div className="flex-1 overflow-hidden relative print:overflow-visible flex flex-col">
             {currentView === 'shift' && <ShiftView />}
             {currentView === 'pos' && <PosView />}
-            {currentView === 'history' && <HistoryView />}  
+            {currentView === 'history' && <HistoryView />}
             {currentView === 'menu-mgt' && <MenuManagement />}
             {currentView === 'variant-mgt' && <VariantManagement />}
             {currentView === 'hpp-calc' && <HppView />}
