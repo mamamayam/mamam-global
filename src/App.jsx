@@ -1231,7 +1231,7 @@ export default function App() {
     setIsAdminMode(true);
   };
 
-  const [currentView, setCurrentView] = useState('shift');
+  const [currentView, setCurrentView] = useState('pos');
   const [activeTab, setActiveTab] = useState('materials');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
