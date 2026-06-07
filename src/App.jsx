@@ -566,7 +566,7 @@ const ReceiptModal = () => {
 
               {storeSettings?.storePhone && (
                 <p className="text-xs">
-                  Telp: {storeSettings.storePhone}
+                  WA - {storeSettings.storePhone}
                 </p>
               )}
             </div>
@@ -799,16 +799,33 @@ const VariantManagement = () => {
 const MenuManagement = () => {
   const { menus, setMenus, variantGroups, formatRupiah, triggerAlert } = useAppContext();
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({ id: '', name: '', price: 0, hpp: 0, category: 'Makanan', variantGroupIds: [] });
+  const [formData, setFormData] = useState({ id: '', name: '', price: '', hpp: '', category: 'Makanan', variantGroupIds: [] });
 
   const handleSave = () => {
-    if (!formData.name || formData.price <= 0) { triggerAlert("Nama dan harga menu harus diisi dengan benar."); return; }
-    if (formData.id) setMenus(menus.map(m => m.id === formData.id ? formData : m));
-    else setMenus([...menus, { ...formData, id: `m${Date.now()}` }]);
+    if (!formData.name || formData.price === '' || formData.price < 0) { 
+      triggerAlert("Nama dan harga menu harus diisi dengan benar."); 
+      return; 
+    }
+    
+    const dataToSave = {
+      ...formData,
+      price: Number(formData.price),
+      hpp: Number(formData.hpp || 0)
+    };
+
+    if (formData.id) {
+      setMenus(menus.map(m => m.id === formData.id ? dataToSave : m));
+    } else {
+      setMenus([...menus, { ...dataToSave, id: `m${Date.now()}` }]);
+    }
     setIsEditing(false);
   };
 
-  const handleDelete = (id) => setMenus(menus.filter(m => m.id !== id));
+  const handleDelete = (id) => {
+    if (window.confirm("Yakin ingin menghapus menu ini?")) {
+      setMenus(menus.filter(m => m.id !== id));
+    }
+  };
 
   const toggleVariantGroup = (vgId) => {
     setFormData(prev => {
@@ -819,7 +836,10 @@ const MenuManagement = () => {
 
   const groupedMenus = useMemo(() => {
     const groups = {};
-    menus.forEach(menu => { if (!groups[menu.category]) groups[menu.category] = []; groups[menu.category].push(menu); });
+    menus.forEach(menu => { 
+      if (!groups[menu.category]) groups[menu.category] = []; 
+      groups[menu.category].push(menu); 
+    });
     return groups;
   }, [menus]);
 
@@ -829,29 +849,35 @@ const MenuManagement = () => {
         <button onClick={() => setIsEditing(false)} className="mb-4 text-slate-500 flex items-center gap-2 hover:text-slate-800 font-medium transition-colors">
           <ChevronLeft className="w-5 h-5" /> Kembali
         </button>
-        <h2 className="font-heading text-2xl font-bold mb-6 text-slate-800">{formData.id ? 'Edit Menu' : 'Tambah Menu Baru'}</h2>
+        <h2 className="font-heading text-2xl font-bold mb-6 text-slate-800">
+          {formData.id ? 'Edit Menu' : 'Tambah Menu Baru'}
+        </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl pb-20">
+        {/* Hapus pb-20 karena tombol fix di bawah sudah dihilangkan */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
           <div className="space-y-4">
             <h3 className="font-heading font-bold text-slate-800 border-b pb-2">Informasi Dasar</h3>
             <div>
-              <label className="block text-sm font-bold text-slate-600 mb-1">Nama Menu</label>
-              <input type="text" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Misal: Ayam Geprek" />
+              <label htmlFor="menuName" className="block text-sm font-bold text-slate-600 mb-1">Nama Menu</label>
+              <input id="menuName" type="text" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Misal: Lumpia Semarang" />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-600 mb-1">Kategori</label>
-              <select className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none bg-white transition-colors" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
-                <option value="Makanan">Makanan</option><option value="Minuman">Minuman</option><option value="Cemilan">Cemilan</option><option value="Lainnya">Lainnya</option>
+              <label htmlFor="menuCategory" className="block text-sm font-bold text-slate-600 mb-1">Kategori</label>
+              <select id="menuCategory" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none bg-white transition-colors" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+                <option value="Makanan">Makanan</option>
+                <option value="Minuman">Minuman</option>
+                <option value="Cemilan">Cemilan</option>
+                <option value="Lainnya">Lainnya</option>
               </select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-bold text-slate-600 mb-1">Harga Jual (Rp)</label>
-                <input type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.price} onChange={e => setFormData({ ...formData, price: Number(e.target.value) })} />
+                <label htmlFor="menuPrice" className="block text-sm font-bold text-slate-600 mb-1" >Harga Jual (Rp)</label>
+                <input id="menuPrice" type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value === '' ? '' : Number(e.target.value) })} placeholder='0'/>
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-600 mb-1">HPP / Modal (Rp)</label>
-                <input type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.hpp} onChange={e => setFormData({ ...formData, hpp: Number(e.target.value) })} />
+                <label htmlFor="menuHpp" className="block text-sm font-bold text-slate-600 mb-1">HPP / Modal (Rp)</label>
+                <input id="menuHpp" type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.hpp} onChange={e => setFormData({ ...formData, hpp: e.target.value === '' ? '' : Number(e.target.value) })} placeholder='0' />
               </div>
             </div>
           </div>
@@ -877,8 +903,12 @@ const MenuManagement = () => {
           </div>
         </div>
 
-        <div className="fixed bottom-0 right-0 left-0 md:left-64 p-4 bg-white border-t border-slate-100 z-10 flex justify-end">
-          <button onClick={handleSave} className="w-full md:w-auto px-8 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">Simpan Menu</button>
+        {/* PERBAIKAN TOMBOL: Diletakkan di dalam flow normal (bukan fixed) agar pasti terlihat */}
+        <div className="max-w-4xl mt-8 pt-6 border-t border-slate-200 flex justify-end">
+          <button onClick={handleSave} className="w-full md:w-auto px-8 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+            {/* Teks otomatis menyesuaikan aksi */}
+            {formData.id ? 'Simpan Perubahan' : 'Tambah Menu'}
+          </button>
         </div>
       </div>
     );
@@ -888,8 +918,8 @@ const MenuManagement = () => {
     <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <div className="flex justify-between items-center mb-6">
         <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800">Manajemen Menu</h2>
-        <button onClick={() => { setFormData({ id: '', name: '', price: 0, hpp: 0, category: 'Makanan', variantGroupIds: [] }); setIsEditing(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-orange-700 hover:-translate-y-0.5 transition-all duration-300">
-          <Plus className="w-4 h-4" /> Tambah Menu
+        <button onClick={() => { setFormData({ id: '', name: '', price: '', hpp: '', category: 'Makanan', variantGroupIds: [] }); setIsEditing(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-orange-700 hover:-translate-y-0.5 transition-all duration-300">
+          <Plus className="w-4 h-4" /> Tambah Data Menu
         </button>
       </div>
 
