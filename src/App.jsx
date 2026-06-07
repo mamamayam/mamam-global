@@ -1351,10 +1351,12 @@ export default function App() {
         )}
 
         <aside className={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-white shadow-2xl md:shadow-none border-r border-slate-100 transform transition-transform duration-300 ease-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-          <div className="p-6 bg-slate-800 text-white flex items-center justify-between shrink-0">
+          <div className="p-6 bg-orange-600 text-white flex items-center justify-between shrink-0">
             <div>
-              <h2 className="font-heading font-black text-2xl tracking-wide flex items-center gap-2"> MAMAM AYAM</h2>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1 font-bold">Ecosystem</p>
+              <h2 className="font-heading font-black text-xl md:text-2xl tracking-normal md:tracking-wide whitespace-nowrap flex items-center gap-2"> 
+  MAMAM AYAM
+</h2>
+              <p className="text-[10px] text-white uppercase tracking-widest mt-1 font-bold">Ecosystem</p>
             </div>
             <button className="md:hidden p-1.5 bg-slate-700 rounded-md hover:bg-slate-600 transition-colors" onClick={() => setIsSidebarOpen(false)}><X className="w-4 h-4" /></button>
           </div>
