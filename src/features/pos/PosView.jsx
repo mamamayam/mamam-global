@@ -1,7 +1,7 @@
 import React from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../../context/AppContext';
 import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package } from 'lucide-react';
-import { formatRupiah } from '../utils/formatters';
+import { formatRupiah } from '../../utils/formatters';
 
 
 const PosView = () => {
@@ -31,7 +31,7 @@ const PosView = () => {
     };
 
     return (
-        <div className="flex-1 flex flex-col h-full bg-slate-50 pb-20 relative animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
+        <div className="flex-1 flex flex-col h-full bg-slate-50 relative animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
             {!currentShift && (
                 <div className="bg-red-500 text-white p-2 text-center text-xs font-bold flex items-center justify-center gap-2">
                     <AlertCircle className="w-4 h-4" /> Shift Kasir belum dibuka! Transaksi tidak akan masuk ke laporan Shift ini.
@@ -51,7 +51,7 @@ const PosView = () => {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-4 pb-32">
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {filteredMenus.map(menu => (
                         <div key={menu.id} onClick={() => handleMenuClick(menu)}
@@ -75,7 +75,8 @@ const PosView = () => {
                 )}
             </div>
 
-            <div className="fixed bottom-6 right-6 z-40">
+
+            <div className="fixed bottom-20 right-6 z-50">
                 <button onClick={() => setIsCartOpen(true)} className="bg-slate-800 text-white rounded-full py-3 px-5 shadow-[0_10px_25px_rgba(0,0,0,0.3)] flex items-center gap-3 hover:bg-slate-900 transition-all active:scale-95 border border-slate-700">
                     <div className="relative">
                         <ShoppingCart className="w-5 h-5" />

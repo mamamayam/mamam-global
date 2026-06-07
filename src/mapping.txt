@@ -1,0 +1,35 @@
+src/
+│
+├── features/
+│   ├── pos/
+│   │   ├── PosView.jsx
+│   │   ├── CartDrawer.jsx
+│   │   ├── PaymentModal.jsx
+│   │   ├── ReceiptModal.jsx
+│   │   ├── VariantSelectionModal.jsx
+│
+│   ├── hpp/
+│   │   ├── HppView.jsx
+│
+│   ├── hr/
+│   │   ├── EmployeesView.jsx
+│   │   ├── ShiftView.jsx
+│
+│   ├── finance/
+│   │   ├── ExpenseView.jsx
+│   │   ├── IncomeView.jsx
+│
+│   ├── customer/
+│   │   ├── CustomerView.jsx
+│
+│   ├── account/
+│   │   ├── AccountView.jsx
+│
+│   ├── settings/
+│   │   ├── SettingsView.jsx
+│   │   ├── PinModal.jsx
+│
+│   ├── reports/
+│   │   ├── ReportsView.jsx
+│   │   ├── HistoryView.jsx
+
