@@ -42,10 +42,6 @@ src/
 │   │   ├── views/
 │   │   │   ├── HppView.jsx
 │
-│   ├── shift/
-│   │   ├── views/
-│   │   │   ├── ShiftView.jsx
-│
 │   ├── auth/
 │   │   ├── PinModal.jsx
 │   │   ├── AccountView.jsx
