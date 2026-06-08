@@ -111,7 +111,7 @@ const PayslipModal = () => {
         <div className="p-6 print:p-4">
           <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
             <h2 className="text-xl font-bold uppercase tracking-widest text-slate-800 mb-1 print:text-lg">SLIP GAJI</h2>
-            <p className="text-[10px] text-slate-500 font-bold print:text-black">MAMAM OUTLET</p>
+            <p className="text-[10px] text-slate-500 font-bold print:text-black">MAMAM AYAM</p>
             <p className="text-[10px] text-slate-500 mt-2 print:mt-1 print:text-black">Periode: {monthLabel}</p>
           </div>
 
@@ -975,29 +975,6 @@ export default function App() {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
 
-  useEffect(() => {
-    const backListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
-      // 1. Cek apakah ada modal/sidebar/cart yang kebuka
-      if (isCartOpen) {
-        setIsCartOpen(false); // Tutup keranjang kalau lagi buka keranjang
-      } else if (isSidebarOpen) {
-        setIsSidebarOpen(false); // Tutup menu sidebar
-      }
-      // 2. Kalau gak ada modal kebuka dan bisa go back di history
-      else if (canGoBack) {
-        window.history.back();
-      }
-      // 3. Kalau udah di halaman paling depan, keluar dari aplikasi
-      else {
-        setShowExitConfirm(true); // Ganti exitApp() jadi munculin modal konfirmasi
-      }
-    });
-
-    return () => {
-      backListener.remove(); // Cleanup listener
-    };
-  });
-
   const { isAdminMode, setIsAdminMode } = useAppContext();
   const [showPinModal, setShowPinModal] = useState(false);
 
@@ -1105,7 +1082,8 @@ export default function App() {
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
-  const [paymentModal, setPaymentModal] = useState({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending', ojolName: '', orderNumber: '' }); const [receiptModal, setReceiptModal] = useState({ isOpen: false, data: null });
+  const [paymentModal, setPaymentModal] = useState({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending', ojolName: '', orderNumber: '' });
+  const [receiptModal, setReceiptModal] = useState({ isOpen: false, data: null });
   const [customAlert, setCustomAlert] = useState({ isOpen: false, message: '' });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null });
 
@@ -1391,6 +1369,48 @@ export default function App() {
     );
 
 
+  useEffect(() => {
+    const backListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      // 1. PRIORITAS 1: Tutup Modal Struk (jika sedang terbuka)
+      if (receiptModal.isOpen) {
+        setReceiptModal({ ...receiptModal, isOpen: false });
+      }
+      // 2. PRIORITAS 2: Tutup Modal Pembayaran (jika sedang terbuka)
+      else if (paymentModal.isOpen) {
+        setPaymentModal({ ...paymentModal, isOpen: false });
+      }
+      // 3. PRIORITAS 3: Batal keluar jika modal exit terbuka
+      else if (showExitConfirm) {
+        setShowExitConfirm(false);
+      }
+      // 4. PRIORITAS 4: Tutup keranjang belanja
+      else if (isCartOpen) {
+        setIsCartOpen(false);
+      }
+      // 5. PRIORITAS 5: Tutup menu sidebar
+      else if (isSidebarOpen) {
+        setIsSidebarOpen(false);
+      }
+      // 6. Navigasi kembali (jika ada history)
+      else if (canGoBack) {
+        window.history.back();
+      }
+      // 7. Jika di halaman paling awal, munculkan konfirmasi exit
+      else {
+        setShowExitConfirm(true);
+      }
+    });
+
+    return () => {
+      backListener.remove(); // Cleanup listener
+    };
+  }, [
+    receiptModal.isOpen,   // <--- Tambahkan ini
+    paymentModal.isOpen,   // <--- Tambahkan ini
+    showExitConfirm,
+    isCartOpen,
+    isSidebarOpen
+  ]);
 
   return (
     <AppContext.Provider value={contextValue}>
@@ -1583,7 +1603,7 @@ export default function App() {
 
 function Layers(props) {
   return (
-    
+
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
       <polyline points="2 12 12 17 22 12"></polyline>
