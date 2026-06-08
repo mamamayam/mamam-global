@@ -231,31 +231,6 @@ const SettingsView = () => {
                 />
               </div>
             </div>
-
-            {/* PAYMENT PREFERENCES (ROUNDING) */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-6">
-              <div className="flex items-center gap-2 border-b pb-2">
-                <Calculator className="w-5 h-5 text-slate-700" />
-                <h3 className="font-heading font-bold text-slate-800">Preferensi Pembayaran</h3>
-              </div>
-
-              <div>
-                <p className="font-bold text-sm text-slate-600 mb-2">Pembulatan Total Belanja</p>
-                <p className="text-xs text-slate-500 mb-3">Memudahkan kasir memberikan uang kembalian tunai.</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {['none', '100', '500'].map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setLocalSettings(prev => ({ ...prev, roundingMode: mode }))}
-                      className={`py-2 px-2 rounded-xl border-2 font-bold text-xs sm:text-sm transition-all duration-300 ${localSettings.roundingMode === mode ? 'border-slate-800 bg-slate-800 text-white shadow-md' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-                    >
-                      {mode === 'none' ? 'Tanpa Pembulatan' : `Ke Rp${mode}`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 

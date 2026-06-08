@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, createContext, useContext, useRef } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { loadData, saveData } from './storage/localStorage';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from './data/initialData';
 import { AppContext, useAppContext } from './context/AppContext';
@@ -802,11 +803,11 @@ const MenuManagement = () => {
   const [formData, setFormData] = useState({ id: '', name: '', price: '', hpp: '', category: 'Makanan', variantGroupIds: [] });
 
   const handleSave = () => {
-    if (!formData.name || formData.price === '' || formData.price < 0) { 
-      triggerAlert("Nama dan harga menu harus diisi dengan benar."); 
-      return; 
+    if (!formData.name || formData.price === '' || formData.price < 0) {
+      triggerAlert("Nama dan harga menu harus diisi dengan benar.");
+      return;
     }
-    
+
     const dataToSave = {
       ...formData,
       price: Number(formData.price),
@@ -836,9 +837,9 @@ const MenuManagement = () => {
 
   const groupedMenus = useMemo(() => {
     const groups = {};
-    menus.forEach(menu => { 
-      if (!groups[menu.category]) groups[menu.category] = []; 
-      groups[menu.category].push(menu); 
+    menus.forEach(menu => {
+      if (!groups[menu.category]) groups[menu.category] = [];
+      groups[menu.category].push(menu);
     });
     return groups;
   }, [menus]);
@@ -873,7 +874,7 @@ const MenuManagement = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="menuPrice" className="block text-sm font-bold text-slate-600 mb-1" >Harga Jual (Rp)</label>
-                <input id="menuPrice" type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value === '' ? '' : Number(e.target.value) })} placeholder='0'/>
+                <input id="menuPrice" type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value === '' ? '' : Number(e.target.value) })} placeholder='0' />
               </div>
               <div>
                 <label htmlFor="menuHpp" className="block text-sm font-bold text-slate-600 mb-1">HPP / Modal (Rp)</label>
@@ -969,6 +970,33 @@ const MenuManagement = () => {
 
 
 export default function App() {
+
+
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+
+  useEffect(() => {
+    const backListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      // 1. Cek apakah ada modal/sidebar/cart yang kebuka
+      if (isCartOpen) {
+        setIsCartOpen(false); // Tutup keranjang kalau lagi buka keranjang
+      } else if (isSidebarOpen) {
+        setIsSidebarOpen(false); // Tutup menu sidebar
+      }
+      // 2. Kalau gak ada modal kebuka dan bisa go back di history
+      else if (canGoBack) {
+        window.history.back();
+      }
+      // 3. Kalau udah di halaman paling depan, keluar dari aplikasi
+      else {
+        setShowExitConfirm(true); // Ganti exitApp() jadi munculin modal konfirmasi
+      }
+    });
+
+    return () => {
+      backListener.remove(); // Cleanup listener
+    };
+  });
 
   const { isAdminMode, setIsAdminMode } = useAppContext();
   const [showPinModal, setShowPinModal] = useState(false);
@@ -1239,6 +1267,7 @@ export default function App() {
 
   // Membungkus semua props di Context Value
   const contextValue = {
+
     // POS / Cart
     getRoundedTotal,
     getRoundingAdjustment,
@@ -1252,6 +1281,7 @@ export default function App() {
     selectedMenuForVariant, setSelectedMenuForVariant,
     variantGroups, setVariantGroups,
     variantSelectedOptions, setVariantSelectedOptions,
+    isSidebarOpen,
 
     vouchers, setVouchers,
     savedBills, setSavedBills,
@@ -1383,9 +1413,9 @@ export default function App() {
         <aside className={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-white shadow-2xl md:shadow-none border-r border-slate-100 transform transition-transform duration-300 ease-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
           <div className="p-6 bg-orange-600 text-white flex items-center justify-between shrink-0">
             <div>
-              <h2 className="font-heading font-black text-xl md:text-2xl tracking-normal md:tracking-wide whitespace-nowrap flex items-center gap-2"> 
-  MAMAM AYAM
-</h2>
+              <h2 className="font-heading font-black text-xl md:text-2xl tracking-normal md:tracking-wide whitespace-nowrap flex items-center gap-2">
+                MAMAM AYAM
+              </h2>
               <p className="text-[10px] text-white uppercase tracking-widest mt-1 font-bold">Ecosystem</p>
             </div>
             <button className="md:hidden p-1.5 bg-slate-700 rounded-md hover:bg-slate-600 transition-colors" onClick={() => setIsSidebarOpen(false)}><X className="w-4 h-4" /></button>
@@ -1553,6 +1583,7 @@ export default function App() {
 
 function Layers(props) {
   return (
+    
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
       <polyline points="2 12 12 17 22 12"></polyline>
