@@ -11,8 +11,8 @@ const HomeView = () => {
         const d = new Date(dateString);
         const today = new Date();
         return d.getDate() === today.getDate() &&
-               d.getMonth() === today.getMonth() &&
-               d.getFullYear() === today.getFullYear();
+            d.getMonth() === today.getMonth() &&
+            d.getFullYear() === today.getFullYear();
     };
 
     // Kalkulasi Hari Ini
@@ -51,7 +51,7 @@ const HomeView = () => {
             <div className="flex justify-between items-center mb-4">
                 <h3 className="font-heading text-lg font-bold text-slate-800">Riwayat Pesanan Terbaru</h3>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {salesHistory.slice(0, 10).map(order => ( // Tampilkan maksimal 10 terakhir agar tidak berat
                     <div key={order.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 relative flex flex-col hover:shadow-md transition-shadow">
