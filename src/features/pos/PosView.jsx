@@ -1,7 +1,6 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package } from 'lucide-react';
-import { formatRupiah } from '../../utils/formatters';
 
 
 const PosView = () => {

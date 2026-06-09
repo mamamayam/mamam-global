@@ -1,3 +1,5 @@
+
+
 const VariantManagement = () => {
   const { variantGroups, setVariantGroups, menus, setMenus, triggerAlert, formatRupiah } = useAppContext();
   const [isEditing, setIsEditing] = useState(false);
@@ -26,58 +28,62 @@ const VariantManagement = () => {
 
   if (isEditing) {
     return (
-      <div className="p-4 md:p-6 bg-white flex-1 animate-in fade-in slide-in-from-right-4 duration-300 h-full overflow-y-auto ease-out">
-        <button onClick={() => setIsEditing(false)} className="mb-4 text-slate-500 flex items-center gap-2 hover:text-slate-800 font-medium transition-colors">
-          <ChevronLeft className="w-5 h-5" /> Kembali
-        </button>
-        <h2 className="font-heading text-2xl font-bold mb-6 text-slate-800">{formData.id ? 'Edit Kategori Varian' : 'Tambah Kategori Varian'}</h2>
+      /* PERBAIKAN 1: Container utama diubah menjadi flex flex-col tanpa padding */
+      <div className="bg-white flex-1 flex flex-col h-full animate-in fade-in slide-in-from-right-4 duration-300 ease-out">
+        
+        /* PERBAIKAN 2: Area form ini yang akan menampung scroll */
+        <div className="p-4 md:p-6 flex-1 overflow-y-auto custom-scrollbar">
+          <button onClick={() => setIsEditing(false)} className="mb-4 text-slate-500 flex items-center gap-2 hover:text-slate-800 font-medium transition-colors">
+            <ChevronLeft className="w-5 h-5" /> Kembali
+          </button>
+          <h2 className="font-heading text-2xl font-bold mb-6 text-slate-800">{formData.id ? 'Edit Kategori Varian' : 'Tambah Kategori Varian'}</h2>
 
-        {/* PERBAIKAN 1: Menghapus class pb-20 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
-          <div className="space-y-4">
-            <h3 className="font-heading font-bold text-slate-800 border-b pb-2">Pengaturan Kategori</h3>
-            <div>
-              <label className="block text-sm font-bold text-slate-600 mb-1">Nama Kategori Varian</label>
-              <input type="text" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Misal: Topping, Level Pedas" />
-            </div>
-            <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <input type="checkbox" id="isRequired" className="w-5 h-5 accent-orange-600 cursor-pointer" checked={formData.isRequired} onChange={e => setFormData({ ...formData, isRequired: e.target.checked })} />
-              <label htmlFor="isRequired" className="font-bold text-sm text-slate-700 cursor-pointer flex-1">Wajib Dipilih (Required)</label>
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-600 mb-1">Maksimal Pilihan Diizinkan</label>
-              <input type="number" min="1" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.maxSelection} onChange={e => setFormData({ ...formData, maxSelection: Math.max(1, Number(e.target.value)) })} />
-              <p className="text-xs text-slate-400 mt-1">Isi 1 jika hanya boleh pilih salah satu (Radio Button).</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="font-heading font-bold text-slate-800 border-b pb-2">Daftar Pilihan (Opsi)</h3>
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <input type="text" placeholder="Nama Opsi" className="p-2 border rounded-lg text-sm outline-none focus:border-orange-600 transition-colors" value={newOption.name} onChange={e => setNewOption({ ...newOption, name: e.target.value })} />
-                <input type="number" placeholder="Harga (+)" className="p-2 border rounded-lg text-sm outline-none focus:border-orange-600 transition-colors" value={newOption.extraPrice} onChange={e => setNewOption({ ...newOption, extraPrice: e.target.value })} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl pb-10">
+            <div className="space-y-4">
+              <h3 className="font-heading font-bold text-slate-800 border-b pb-2">Pengaturan Kategori</h3>
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">Nama Kategori Varian</label>
+                <input type="text" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Misal: Topping, Level Pedas" />
               </div>
-              <button onClick={handleAddOption} className="w-full py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm hover:bg-slate-300 transition-colors">Tambah Opsi</button>
+              <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <input type="checkbox" id="isRequired" className="w-5 h-5 accent-orange-600 cursor-pointer" checked={formData.isRequired} onChange={e => setFormData({ ...formData, isRequired: e.target.checked })} />
+                <label htmlFor="isRequired" className="font-bold text-sm text-slate-700 cursor-pointer flex-1">Wajib Dipilih (Required)</label>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">Maksimal Pilihan Diizinkan</label>
+                <input type="number" min="1" className="w-full p-3 border rounded-xl focus:border-orange-600 outline-none transition-colors" value={formData.maxSelection} onChange={e => setFormData({ ...formData, maxSelection: Math.max(1, Number(e.target.value)) })} />
+                <p className="text-xs text-slate-400 mt-1">Isi 1 jika hanya boleh pilih salah satu (Radio Button).</p>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              {formData.options.length === 0 && <p className="text-sm text-slate-500 italic">Belum ada opsi ditambahkan.</p>}
-              {formData.options.map(opt => (
-                <div key={opt.id} className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-xl animate-in fade-in slide-in-from-left-2 duration-300">
-                  <div>
-                    <p className="font-bold text-sm text-slate-800">{opt.name}</p>
-                    <p className="text-xs font-semibold text-slate-500">+{formatRupiah(opt.extraPrice)}</p>
-                  </div>
-                  <button onClick={() => handleRemoveOption(opt.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 className="w-4 h-4" /></button>
+            <div className="space-y-4">
+              <h3 className="font-heading font-bold text-slate-800 border-b pb-2">Daftar Pilihan (Opsi)</h3>
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="text" placeholder="Nama Opsi" className="p-2 border rounded-lg text-sm outline-none focus:border-orange-600 transition-colors" value={newOption.name} onChange={e => setNewOption({ ...newOption, name: e.target.value })} />
+                  <input type="number" placeholder="Harga (+)" className="p-2 border rounded-lg text-sm outline-none focus:border-orange-600 transition-colors" value={newOption.extraPrice} onChange={e => setNewOption({ ...newOption, extraPrice: e.target.value })} />
                 </div>
-              ))}
+                <button onClick={handleAddOption} className="w-full py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm hover:bg-slate-300 transition-colors">Tambah Opsi</button>
+              </div>
+
+              <div className="space-y-2">
+                {formData.options.length === 0 && <p className="text-sm text-slate-500 italic">Belum ada opsi ditambahkan.</p>}
+                {formData.options.map(opt => (
+                  <div key={opt.id} className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-xl animate-in fade-in slide-in-from-left-2 duration-300">
+                    <div>
+                      <p className="font-bold text-sm text-slate-800">{opt.name}</p>
+                      <p className="text-xs font-semibold text-slate-500">+{formatRupiah(opt.extraPrice)}</p>
+                    </div>
+                    <button onClick={() => handleRemoveOption(opt.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* PERBAIKAN 2: Diletakkan di dalam flow normal agar bisa di-scroll dan terlihat jelas */}
-        <div className="max-w-4xl mt-8 pt-6 border-t border-slate-200 flex justify-end pb-24">
+        /* PERBAIKAN 3: Tombol ditempatkan sebagai balok tersendiri di posisi paling bawah */
+        <div className="p-4 md:px-6 bg-white border-t border-slate-200 shrink-0 flex justify-end z-10 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
           <button onClick={handleSave} className="w-full md:w-auto px-8 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
             {formData.id ? 'Simpan Perubahan' : 'Simpan Kategori Varian'}
           </button>
@@ -87,7 +93,7 @@ const VariantManagement = () => {
   }
 
   return (
-    <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
+    <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out pb-20">
       <div className="flex justify-between items-center mb-6">
         <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800">Library Varian</h2>
         <button onClick={() => { setFormData({ id: '', name: '', isRequired: false, maxSelection: 1, options: [] }); setIsEditing(true); }} className="bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-orange-700 hover:shadow-md transition-all duration-300">

@@ -10,6 +10,16 @@ const IncomeView = () => {
   const [note, setNote] = useState('');
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7)); // Default YYYY-MM
 
+  useBackButton(({ canGoBack }) => {
+    // Karena di halaman ini tidak ada state modal lokal yang perlu ditutup,
+    // kita langsung perintahkan untuk mundur ke halaman sebelumnya.
+    if (canGoBack) {
+      window.history.back();
+    }
+    // Opsional: Jika Anda menggunakan state "setCurrentView" untuk navigasi,
+    // Anda bisa mengganti window.history.back() menjadi setCurrentView('dashboard') dsb.
+  }, []);
+
   const handleAddIncome = () => {
     if (!currentShift) return triggerAlert('Shift Kasir belum dibuka! Harap buka shift terlebih dahulu.');
     if (!amount || amount <= 0) return triggerAlert('Masukkan nominal pemasukan yang valid!');
@@ -21,13 +31,13 @@ const IncomeView = () => {
 
   const handleDeleteCategory = (cat) => {
     if (cat === 'Modal Tambahan') {
-       return triggerAlert(`Kategori "${cat}" adalah wajib dan tidak bisa dihapus!`);
+      return triggerAlert(`Kategori "${cat}" adalah wajib dan tidak bisa dihapus!`);
     }
-    if(incomeCategories.length <= 1) return triggerAlert('Harus ada minimal 1 kategori!');
-    
+    if (incomeCategories.length <= 1) return triggerAlert('Harus ada minimal 1 kategori!');
+
     triggerConfirm(`Apakah Anda yakin ingin menghapus kategori "${cat}"?`, () => {
       setIncomeCategories(incomeCategories.filter(c => c !== cat));
-      if(category === cat) setCategory(incomeCategories[0]);
+      if (category === cat) setCategory(incomeCategories[0]);
       triggerAlert('Kategori pemasukan berhasil dihapus.');
     });
   };
@@ -48,7 +58,7 @@ const IncomeView = () => {
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-1 flex justify-between">
               Kategori
-              <span className="text-[10px] text-green-600 font-bold cursor-pointer hover:underline transition-all" onClick={() => { const c = prompt('Masukkan Nama Kategori Baru:'); if(c && c.trim()) { setIncomeCategories([...incomeCategories, c.trim()]); setCategory(c.trim()); }}}>+ Kategori Baru</span>
+              <span className="text-[10px] text-green-600 font-bold cursor-pointer hover:underline transition-all" onClick={() => { const c = prompt('Masukkan Nama Kategori Baru:'); if (c && c.trim()) { setIncomeCategories([...incomeCategories, c.trim()]); setCategory(c.trim()); } }}>+ Kategori Baru</span>
             </label>
             <div className="flex gap-2 items-center">
               <select className="flex-1 p-3 bg-slate-50 border rounded-xl outline-none font-semibold text-sm transition-colors focus:border-slate-800" value={category} onChange={e => setCategory(e.target.value)}>
@@ -62,18 +72,18 @@ const IncomeView = () => {
             <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl outline-none text-sm transition-colors focus:border-slate-800" value={note} onChange={e => setNote(e.target.value)} placeholder="Contoh: Modal kembalian pagi" />
           </div>
           <button onClick={handleAddIncome} className="w-full py-3.5 mt-2 bg-green-500 text-white font-bold rounded-xl hover:bg-green-600 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2">
-            <Save className="w-4 h-4"/> Simpan Data
+            <Save className="w-4 h-4" /> Simpan Data
           </button>
         </div>
 
         <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[500px]">
           <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
-            <h3 className="font-heading font-bold text-slate-800 flex items-center gap-2"><History className="w-4 h-4"/> Riwayat Pemasukan Lain</h3>
+            <h3 className="font-heading font-bold text-slate-800 flex items-center gap-2"><History className="w-4 h-4" /> Riwayat Pemasukan Lain</h3>
             <div className="flex items-center gap-2">
-              <input 
-                type="month" 
-                value={filterMonth} 
-                onChange={e => setFilterMonth(e.target.value)} 
+              <input
+                type="month"
+                value={filterMonth}
+                onChange={e => setFilterMonth(e.target.value)}
                 className="p-1.5 text-xs font-bold border border-slate-200 rounded-lg outline-none text-slate-600"
               />
               {filterMonth && (
@@ -82,13 +92,13 @@ const IncomeView = () => {
             </div>
           </div>
           <div className="p-3 bg-green-50 border-b border-green-100 flex justify-between items-center">
-             <span className="text-xs font-bold text-green-700">Total Periode Ini:</span>
-             <span className="text-sm font-black text-green-700">{formatRupiah(filteredIncomes.reduce((s, e) => s + e.amount, 0))}</span>
+            <span className="text-xs font-bold text-green-700">Total Periode Ini:</span>
+            <span className="text-sm font-black text-green-700">{formatRupiah(filteredIncomes.reduce((s, e) => s + e.amount, 0))}</span>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
             {filteredIncomes.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full opacity-50 animate-in fade-in duration-300">
-                <TrendingUp className="w-12 h-12 mb-2 text-slate-400"/>
+                <TrendingUp className="w-12 h-12 mb-2 text-slate-400" />
                 <p className="text-center text-slate-500 font-medium">Belum ada pemasukan pada periode ini.</p>
               </div>
             ) : (

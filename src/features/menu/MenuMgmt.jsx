@@ -1,10 +1,25 @@
-
-
+import React from "react";
+import { useState, useMemo } from "react";
+import { useAppContext } from "../../context/AppContext";
+import { useBackButton } from "../../utils/useBackButton";
 
 const MenuManagement = () => {
   const { menus, setMenus, variantGroups, formatRupiah, triggerAlert } = useAppContext();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({ id: '', name: '', price: '', hpp: '', category: 'Makanan', variantGroupIds: [] });
+
+  useBackButton(({ canGoBack }) => {
+    // 1. Jika form edit/tambah sedang terbuka, tutup form-nya
+    if (isEditing) {
+      setIsEditing(false);
+    }
+    // 2. Jika tidak ada form yang terbuka, kembali ke halaman sebelumnya
+    else if (canGoBack) {
+      window.history.back();
+      // Catatan: Jika Anda pakai state untuk ganti menu utama,
+      // misal setCurrentView('dashboard'), Anda bisa taruh di sini.
+    }
+  }, [isEditing]);
 
   const handleSave = () => {
     if (!formData.name || formData.price === '' || formData.price < 0) {
