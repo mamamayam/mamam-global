@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../../context/AppContext';
 import { Settings, Printer, Store, Save, ReceiptText, MapPin, Phone, Calculator } from 'lucide-react';
 
 // =========================================================================

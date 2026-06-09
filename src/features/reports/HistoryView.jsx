@@ -1,7 +1,7 @@
 import React, { useState } from 'react'; // Tambahkan useState
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../../context/AppContext';
 import { Trash2, Receipt, Search } from 'lucide-react'; // Tambahkan Search
-import { formatRupiah } from '../utils/formatters';
+import { formatRupiah } from '../../utils/formatters';
 
 const HistoryView = () => {
     const { salesHistory, setSalesHistory, isAdminMode, setReceiptModal, triggerConfirm } = useAppContext();

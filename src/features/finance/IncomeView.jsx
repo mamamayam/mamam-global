@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TrendingUp, History, Save, Trash2 } from 'lucide-react';
-import { useAppContext } from '../context/AppContext';
-import { formatRupiah } from '../utils/formatters';
+import { useAppContext } from '../../context/AppContext';
+import { formatRupiah } from '../../utils/formatters';
 
 const IncomeView = () => {
   const { incomes, setIncomes, incomeCategories, setIncomeCategories, triggerAlert, triggerConfirm, formatRupiah, currentShift } = useAppContext();

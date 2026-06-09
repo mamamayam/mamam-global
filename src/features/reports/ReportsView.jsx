@@ -1,8 +1,8 @@
 import React from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../../context/AppContext';
 import { Award, BarChart3, CircleMinus, History, Package } from 'lucide-react';
 import { useMemo } from 'react';
-import { formatRupiah } from '../utils/formatters';
+import { formatRupiah } from '../../utils/formatters';
 
 const ReportsView = () => {
   const { salesHistory, incomes, reportDateRange, setReportDateRange, activePreset, applyDatePreset } = useAppContext();
