@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useBackButton } from '../../utils/useBackButton';
 import { useAppContext } from '../../context/AppContext';
 import { History, Save, Trash2, TrendingDown } from 'lucide-react';
 
@@ -19,16 +18,6 @@ const ExpenseView = () => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7)); 
 
-  useBackButton(({ canGoBack }) => {
-    // Karena di halaman ini tidak ada state modal lokal yang perlu ditutup,
-    // kita langsung perintahkan untuk mundur ke halaman sebelumnya.
-    if (canGoBack) {
-      window.history.back(); 
-    } 
-    // Opsional: Jika Anda menggunakan state "setCurrentView" untuk navigasi,
-    // Anda bisa mengganti window.history.back() menjadi setCurrentView('dashboard') dsb.
-  }, []);
-  
   const handleAddExpense = () => {
     // Disable check currentShift sementara bila tidak dipakai
     // if (!currentShift) return triggerAlert('Shift Kasir belum dibuka! Harap buka shift terlebih dahulu.');

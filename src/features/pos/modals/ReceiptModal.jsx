@@ -1,28 +1,83 @@
 import React from "react";
-import { useAppContext } from "../../../context/AppContext"; // Sesuaikan path ini dengan lokasi file context Anda
-import { Printer } from "lucide-react";
+import { useAppContext } from "../../../context/AppContext";
+import { Printer, Share2 } from "lucide-react";
+import html2canvas from 'html2canvas';
+
+// Import Native Capacitor Plugins
+import { Share } from '@capacitor/share';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const ReceiptModal = () => {
     const { receiptModal, setReceiptModal, storeSettings, formatRupiah, printReceipt } = useAppContext();
     if (!receiptModal.isOpen || !receiptModal.data) return null;
     const { data, kembalian } = receiptModal;
 
+    // Fungsi Share ke Gambar menggunakan Capacitor Native
+    // Fungsi Share ke Gambar menggunakan Capacitor Native (Updated)
+    const handleShareImage = async () => {
+        const receiptElement = document.getElementById('receipt-content');
+        if (!receiptElement) {
+            alert('Error: Elemen HTML struk tidak ditemukan.');
+            return;
+        }
+
+        try {
+            // TAHAP 1: Render HTML ke Canvas
+            const canvas = await html2canvas(receiptElement, { 
+                scale: 2, 
+                backgroundColor: "#ffffff",
+                useCORS: true,
+                allowTaint: true, // Fix untuk error cross-origin di Webview
+                windowWidth: receiptElement.scrollWidth, // Fix untuk bug elemen ber-scroll di Webview
+                windowHeight: receiptElement.scrollHeight
+            });
+            
+            // TAHAP 2: Convert ke Base64
+            const base64Data = canvas.toDataURL('image/png').split(',')[1];
+            // Gunakan Date.now() agar nama file selalu unik (menghindari error replace file di Android)
+            const fileName = `struk-${data.id}-${Date.now()}.png`; 
+
+            // TAHAP 3: Menyimpan file ke Cache Directory Android/iOS
+            const savedFile = await Filesystem.writeFile({
+                path: fileName,
+                data: base64Data,
+                directory: Directory.Cache
+            });
+
+            // TAHAP 4: Trigger Native Share
+            await Share.share({
+                title: 'Struk Pesanan',
+                text: `Terima kasih! Berikut adalah struk pesanan Anda (ID: ${data.id})`,
+                url: savedFile.uri,
+                dialogTitle: 'Bagikan Struk via'
+            });
+
+        } catch (error) {
+            console.error('Log Error Asli:', error);
+            // Menampilkan error asli (Native OS Error) langsung ke layar HP Anda
+            alert(`GAGAL!\n\nDetail Error Sistem: ${error.message || JSON.stringify(error)}`);
+        }
+    };
 
     return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity duration-300 print:bg-white print:p-0">
+        <div className="fixed inset-0 z-[70] flex items-start md:items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto py-10 transition-opacity duration-300 print:bg-white print:p-0">
 
             <style dangerouslySetInnerHTML={{
                 __html: `
         @media print {
           body * { visibility: hidden; }
-          #receipt-content, #receipt-content * { visibility: visible; }
-          #receipt-content { position: absolute; left: 0; top: 0; width: ${storeSettings.paperSize === '80mm' ? '80mm' : '58mm'}; margin: 0; padding: 0; box-shadow: none; }
+          #receipt-wrapper, #receipt-wrapper * { visibility: visible; }
+          #receipt-wrapper { position: absolute; left: 0; top: 0; width: ${storeSettings.paperSize === '80mm' ? '80mm' : '58mm'}; margin: 0; padding: 0; box-shadow: none; }
+          .no-print { display: none !important; }
           @page { margin: 0; }
         }
       `}} />
 
-            <div className="bg-white rounded-md w-full max-w-[320px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out print:shadow-none print:w-[58mm]" id="receipt-content">
-                <div className="p-6 print:p-2">
+            {/* Wrapper Utama (Kotak Putih) */}
+            <div id="receipt-wrapper" className="bg-white rounded-xl w-full max-w-[320px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out flex flex-col shrink-0 print:shadow-none print:w-[58mm] print:rounded-none">
+                
+                {/* --- AREA YANG AKAN DIJADIKAN GAMBAR STRUK --- */}
+                <div id="receipt-content" className="p-6 bg-white rounded-t-xl print:p-2">
                     <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
                         <div className="text-center mb-2">
                             <h2 className="font-bold text-lg">
@@ -126,14 +181,21 @@ const ReceiptModal = () => {
                     </div>
                 </div>
 
-                <div className="absolute -bottom-16 left-0 right-0 flex gap-2 print:hidden">
-                    <button onClick={printReceipt} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
-                        <Printer className="w-4 h-4" /> Cetak
-                    </button>
-                    <button onClick={() => setReceiptModal({ isOpen: false, data: null })} className="flex-1 py-3 rounded-xl bg-white text-slate-800 font-bold shadow-lg hover:bg-slate-100 text-sm transition-colors">
+                {/* --- AREA TOMBOL --- */}
+                <div className="p-4 bg-slate-50 border-t border-slate-100 rounded-b-xl flex flex-col gap-2 no-print">
+                    <div className="flex gap-2">
+                        <button onClick={printReceipt} className="flex-1 py-3 rounded-lg bg-slate-800 text-white font-bold shadow-sm hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
+                            <Printer className="w-4 h-4" /> Cetak
+                        </button>
+                        <button onClick={handleShareImage} className="flex-1 py-3 rounded-lg bg-green-600 text-white font-bold shadow-sm hover:bg-green-700 text-sm flex justify-center items-center gap-2 transition-colors">
+                            <Share2 className="w-4 h-4" /> Bagikan
+                        </button>
+                    </div>
+                    <button onClick={() => setReceiptModal({ isOpen: false, data: null })} className="w-full py-3 rounded-lg bg-white text-slate-800 font-bold shadow-sm hover:bg-slate-100 text-sm transition-colors border border-slate-200">
                         Tutup Selesai
                     </button>
                 </div>
+
             </div>
         </div>
     );
