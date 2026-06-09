@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { TrendingUp, History, Save, Trash2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { formatRupiah } from '../../utils/formatters';
 
 const IncomeView = () => {
   const { incomes, setIncomes, incomeCategories, setIncomeCategories, triggerAlert, triggerConfirm, formatRupiah, currentShift } = useAppContext();
@@ -9,16 +8,6 @@ const IncomeView = () => {
   const [category, setCategory] = useState(incomeCategories[0]);
   const [note, setNote] = useState('');
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7)); // Default YYYY-MM
-
-  useBackButton(({ canGoBack }) => {
-    // Karena di halaman ini tidak ada state modal lokal yang perlu ditutup,
-    // kita langsung perintahkan untuk mundur ke halaman sebelumnya.
-    if (canGoBack) {
-      window.history.back();
-    }
-    // Opsional: Jika Anda menggunakan state "setCurrentView" untuk navigasi,
-    // Anda bisa mengganti window.history.back() menjadi setCurrentView('dashboard') dsb.
-  }, []);
 
   const handleAddIncome = () => {
     if (!currentShift) return triggerAlert('Shift Kasir belum dibuka! Harap buka shift terlebih dahulu.');
