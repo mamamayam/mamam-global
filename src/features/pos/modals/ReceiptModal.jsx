@@ -11,7 +11,7 @@ const ReceiptModal = () => {
     const { receiptModal, setReceiptModal, storeSettings, formatRupiah, printReceipt } = useAppContext();
     if (!receiptModal.isOpen || !receiptModal.data) return null;
     const { data, kembalian } = receiptModal;
-    
+
     const handleShareImage = async () => {
         const receiptElement = document.getElementById('receipt-content');
         if (!receiptElement) {
@@ -28,7 +28,10 @@ const ReceiptModal = () => {
                 const dataUrl = await toPng(receiptElement, {
                     backgroundColor: '#ffffff',
                     pixelRatio: 2,
-                    skipAutoScale: true
+                    skipAutoScale: true,
+                    style: {
+                        width: '320px',
+                    }
                 });
 
                 const base64Data = dataUrl.split(',')[1];
@@ -57,7 +60,10 @@ const ReceiptModal = () => {
                 const blob = await toBlob(receiptElement, {
                     backgroundColor: '#ffffff',
                     pixelRatio: 2,
-                    skipAutoScale: true
+                    skipAutoScale: true,``
+                    style: {
+                        width: '320px',
+                    }
                 });
 
                 if (!blob) return;
@@ -98,11 +104,11 @@ const ReceiptModal = () => {
             <div id="receipt-wrapper" className="bg-white rounded-xl w-full max-w-[320px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out flex flex-col shrink-0 print:shadow-none print:w-[58mm] print:rounded-none">
 
                 {/* --- AREA YANG AKAN DIJADIKAN GAMBAR STRUK --- */}
-                <div id="receipt-content" className="p-6 bg-white rounded-t-xl print:p-2">
+                <div id="receipt-content" className="w-[320px] print:w-full p-6 bg-white rounded-t-xl print:p-2">
                     <div className="text-center border-b-2 border-dashed border-slate-300 pb-4 mb-4 print:pb-2 print:mb-2">
                         <div className="text-center mb-2">
                             <h2 className="font-bold text-lg">
-                                {storeSettings?.storeName || 'Mamam Drink'}
+                                {storeSettings?.storeName || 'Mamam Ayam'}
                             </h2>
 
                             {storeSettings?.storeAddress && (

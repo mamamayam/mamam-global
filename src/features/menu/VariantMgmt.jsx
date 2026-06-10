@@ -1,4 +1,8 @@
+import React, { useState } from "react";
+import { useAppContext } from "../../context/AppContext"; 
 
+// Asumsi menggunakan library lucide-react atau react-feather untuk ikon
+import { ChevronLeft, Plus, Edit3, Trash2 } from "lucide-react";
 
 const VariantManagement = () => {
   const { variantGroups, setVariantGroups, menus, setMenus, triggerAlert, formatRupiah } = useAppContext();

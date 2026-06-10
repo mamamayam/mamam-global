@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { 
-  Settings, Printer, Store, Save, ReceiptText, MapPin, Phone, Calculator, 
+  Settings, Store, Save, ReceiptText, MapPin, Phone, Calculator, 
   Bluetooth, BluetoothSearching, Unplug, CheckCircle 
 } from 'lucide-react';
 
@@ -46,7 +46,7 @@ const SettingsView = () => {
     storeName: '',
     storeAddress: '',
     storePhone: '',
-    receiptFooter: '',
+    receiptFooter: '', // Dipindahkan ke Profil Usaha
     roundingMode: 'none',
     ...storeSettings
   });
@@ -169,6 +169,9 @@ const SettingsView = () => {
               <TextInput label="Nama Toko" placeholder="Misal: Kedai Kopi Senja" value={localSettings.storeName} onChange={(val) => handleTextChange('storeName', val)} />
               <TextInput label="Nomor Telepon / WhatsApp" icon={Phone} type="tel" placeholder="Misal: 081234567890" value={localSettings.storePhone} onChange={(val) => handleTextChange('storePhone', val)} />
               <TextInput label="Alamat Lengkap" icon={MapPin} type="textarea" placeholder="Masukkan alamat lengkap toko..." value={localSettings.storeAddress} onChange={(val) => handleTextChange('storeAddress', val)} helperText="Alamat ini akan dicetak pada bagian atas struk kasir." />
+              
+              {/* Pesan Penutup Struk Dipindahkan Kesini */}
+              <TextInput label="Pesan Penutup Struk (Footer)" icon={ReceiptText} type="textarea" placeholder="Misal: Terima kasih atas kunjungannya!" value={localSettings.receiptFooter} onChange={(val) => handleTextChange('receiptFooter', val)} />
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-6">
@@ -267,36 +270,6 @@ const SettingsView = () => {
                 </div>
               )}
               <p className="text-xs text-slate-500">Pastikan printer sudah menyala dan di-pairing di pengaturan Android HP sebelum melakukan scan.</p>
-            </div>
-
-            {/* PENGATURAN STRUK (Yg Lama) */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-6">
-              <div className="flex items-center gap-2 border-b pb-2">
-                <Printer className="w-5 h-5 text-slate-700" />
-                <h3 className="font-heading font-bold text-slate-800">Format Struk</h3>
-              </div>
-
-              <div>
-                <label className="flex items-center gap-3 p-4 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors group">
-                  <input type="checkbox" className="w-5 h-5 accent-slate-800 cursor-pointer" checked={!!localSettings.autoPrint} onChange={e => setLocalSettings(prev => ({ ...prev, autoPrint: e.target.checked }))} />
-                  <div>
-                    <p className="font-bold text-sm text-slate-800">Cetak Otomatis</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Langsung cetak struk setelah pembayaran berhasil</p>
-                  </div>
-                </label>
-              </div>
-
-              <div>
-                <p className="font-bold text-sm text-slate-600 mb-2">Ukuran Kertas Thermal</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <button type="button" onClick={() => setLocalSettings(prev => ({ ...prev, paperSize: '58mm' }))} className={`py-3 px-4 rounded-xl border-2 font-bold text-sm transition-all duration-300 ${localSettings.paperSize === '58mm' ? 'border-slate-800 bg-slate-800 text-white shadow-md' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>58mm</button>
-                  <button type="button" onClick={() => setLocalSettings(prev => ({ ...prev, paperSize: '80mm' }))} className={`py-3 px-4 rounded-xl border-2 font-bold text-sm transition-all duration-300 ${localSettings.paperSize === '80mm' ? 'border-slate-800 bg-slate-800 text-white shadow-md' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>80mm</button>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <TextInput label="Pesan Penutup Struk (Footer)" icon={ReceiptText} type="textarea" placeholder="Misal: Terima kasih atas kunjungannya!" value={localSettings.receiptFooter} onChange={(val) => handleTextChange('receiptFooter', val)} />
-              </div>
             </div>
           </div>
         </div>

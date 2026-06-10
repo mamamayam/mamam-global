@@ -4,6 +4,8 @@ export const isNativePlatform = () => {
     return Capacitor.isNativePlatform();
 };
 
+
+
 // Fungsi untuk merakit struktur Struk sesuai data keranjang aplikasi lu
 export const getESCPOSData = (data, storeSettings, kembalian) => {
     const lines = [];
