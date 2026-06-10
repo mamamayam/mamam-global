@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { History, Save, Trash2, TrendingDown } from 'lucide-react';
+import { History, Save, Trash2, TrendingDown, Pencil, X } from 'lucide-react';
 
 const ExpenseView = () => {
   const { 
     expenseCategories, setExpenseCategories, 
     expenses, setExpenses, 
     triggerAlert, triggerConfirm, formatRupiah, currentShift,
-    employees, employeeDailyRecords, setEmployeeDailyRecords
+    employees, employeeDailyRecords, setEmployeeDailyRecords,
+    isAdminMode 
   } = useAppContext();
   
   const [amount, setAmount] = useState('');
@@ -17,55 +18,102 @@ const ExpenseView = () => {
   const [paymentMethod, setPaymentMethod] = useState('Tunai');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7)); 
+  
+  // State untuk melacak data yang sedang diedit
+  const [editingId, setEditingId] = useState(null);
 
   const handleAddExpense = () => {
-    // Disable check currentShift sementara bila tidak dipakai
-    // if (!currentShift) return triggerAlert('Shift Kasir belum dibuka! Harap buka shift terlebih dahulu.');
     if (!amount || amount <= 0) return triggerAlert('Masukkan nominal pengeluaran yang valid!');
     if (!dateInput) return triggerAlert('Pilih tanggal pengeluaran!');
     if (category === 'Kasbon Karyawan' && !selectedEmployeeId) return triggerAlert('Pilih karyawan yang melakukan kasbon!');
 
     const expenseDate = new Date(dateInput);
-    const newExp = { 
-      id: `EXP-${Date.now()}`, 
-      amount: Number(amount), 
-      category, 
-      note, 
-      date: expenseDate,
-      paymentMethod,
-      employeeId: category === 'Kasbon Karyawan' ? selectedEmployeeId : null
-    };
 
-    // === INTEGRASI HR: OTOMATIS INPUT KASBON KE RIWAYAT HARIAN KARYAWAN ===
-    if (category === 'Kasbon Karyawan' && selectedEmployeeId) {
-      const dateStr = dateInput;
-      const existingRecordIndex = employeeDailyRecords.findIndex(r => r.employeeId === selectedEmployeeId && r.dateStr === dateStr);
-      
-      const newDeduction = { id: Date.now().toString(), category: 'Kasbon', amount: Number(amount) };
+    if (editingId) {
+      // === MODE EDIT (ADMIN) ===
+      const updatedExpenses = expenses.map(exp => {
+        if (exp.id === editingId) {
+          return {
+            ...exp,
+            amount: Number(amount),
+            category,
+            note,
+            date: expenseDate,
+            paymentMethod,
+            employeeId: category === 'Kasbon Karyawan' ? selectedEmployeeId : null
+          };
+        }
+        return exp;
+      });
 
-      if (existingRecordIndex >= 0) {
-        // Update record yang ada
-        const updatedRecords = [...employeeDailyRecords];
-        updatedRecords[existingRecordIndex].deductions.push(newDeduction);
-        setEmployeeDailyRecords(updatedRecords);
-      } else {
-        // Buat record baru untuk hari itu
-        const newRecord = {
-          id: `REC-${Date.now()}`,
-          employeeId: selectedEmployeeId,
-          date: expenseDate,
-          dateStr: dateStr,
-          hoursWorked: 0,
-          additions: [],
-          deductions: [newDeduction]
-        };
-        setEmployeeDailyRecords([...employeeDailyRecords, newRecord]);
+      setExpenses(updatedExpenses);
+      setEditingId(null);
+      setAmount(''); setNote(''); setSelectedEmployeeId('');
+      triggerAlert('Pengeluaran berhasil diperbarui!');
+    } else {
+      // === MODE BUAT BARU ===
+      const newExp = { 
+        id: `EXP-${Date.now()}`, 
+        amount: Number(amount), 
+        category, 
+        note, 
+        date: expenseDate,
+        paymentMethod,
+        employeeId: category === 'Kasbon Karyawan' ? selectedEmployeeId : null
+      };
+
+      if (category === 'Kasbon Karyawan' && selectedEmployeeId) {
+        const dateStr = dateInput;
+        const existingRecordIndex = employeeDailyRecords.findIndex(r => r.employeeId === selectedEmployeeId && r.dateStr === dateStr);
+        const newDeduction = { id: Date.now().toString(), category: 'Kasbon', amount: Number(amount) };
+
+        if (existingRecordIndex >= 0) {
+          const updatedRecords = [...employeeDailyRecords];
+          updatedRecords[existingRecordIndex].deductions.push(newDeduction);
+          setEmployeeDailyRecords(updatedRecords);
+        } else {
+          const newRecord = {
+            id: `REC-${Date.now()}`,
+            employeeId: selectedEmployeeId,
+            date: expenseDate,
+            dateStr: dateStr,
+            hoursWorked: 0,
+            additions: [],
+            deductions: [newDeduction]
+          };
+          setEmployeeDailyRecords([...employeeDailyRecords, newRecord]);
+        }
       }
-    }
 
-    setExpenses([newExp, ...expenses]);
-    setAmount(''); setNote(''); setSelectedEmployeeId('');
-    triggerAlert('Pengeluaran berhasil dicatat!');
+      setExpenses([newExp, ...expenses]);
+      setAmount(''); setNote(''); setSelectedEmployeeId('');
+      triggerAlert('Pengeluaran berhasil dicatat!');
+    }
+  };
+
+  const handleEditClick = (exp) => {
+    setEditingId(exp.id);
+    setAmount(exp.amount);
+    setCategory(exp.category);
+    setNote(exp.note);
+    setDateInput(new Date(exp.date).toISOString().split('T')[0]);
+    setPaymentMethod(exp.paymentMethod || 'Tunai');
+    setSelectedEmployeeId(exp.employeeId || '');
+  };
+
+  const handleDeleteExpense = (id) => {
+    triggerConfirm('Apakah Anda yakin ingin menghapus catatan pengeluaran ini?', () => {
+      setExpenses(expenses.filter(e => e.id !== id));
+      triggerAlert('Catatan pengeluaran berhasil dihapus.');
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setAmount('');
+    setNote('');
+    setSelectedEmployeeId('');
+    setDateInput(new Date().toISOString().split('T')[0]);
   };
 
   const handleDeleteCategory = (cat) => {
@@ -91,6 +139,12 @@ const ExpenseView = () => {
       </h2>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4 h-fit transition-shadow duration-300 hover:shadow-md">
+          {editingId && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-xs font-bold flex justify-between items-center">
+              <span>Mode Edit Admin Aktif</span>
+              <button onClick={cancelEdit} className="p-1 hover:bg-amber-100 rounded"><X className="w-3.5 h-3.5"/></button>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-1">Tanggal Pengeluaran</label>
             <input type="date" className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-slate-800 transition-colors" value={dateInput} onChange={e => setDateInput(e.target.value)} />
@@ -136,8 +190,8 @@ const ExpenseView = () => {
             <label className="block text-xs font-bold text-slate-500 mb-1">Catatan Tambahan</label>
             <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl outline-none text-sm transition-colors focus:border-slate-800" value={note} onChange={e => setNote(e.target.value)} placeholder="Contoh: Beli beras 5kg / Kasbon Budi" />
           </div>
-          <button onClick={handleAddExpense} className="w-full py-3.5 mt-2 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2">
-            <Save className="w-4 h-4"/> Simpan Data
+          <button onClick={handleAddExpense} className={`w-full py-3.5 mt-2 text-white font-bold rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-red-500 hover:bg-red-600'}`}>
+            <Save className="w-4 h-4"/> {editingId ? 'Perbarui Data' : 'Simpan Data'}
           </button>
         </div>
 
@@ -166,8 +220,8 @@ const ExpenseView = () => {
 
                 return (
                 <div key={exp.id} className="flex justify-between items-center p-3.5 border border-slate-100 rounded-xl hover:bg-slate-50 hover:border-slate-200 transition-all duration-200 animate-in slide-in-from-left-2 duration-300">
-                  <div>
-                    <p className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                  <div className="flex-1 pr-4">
+                    <p className="font-bold text-sm text-slate-800 flex items-center gap-2 flex-wrap">
                       {exp.category} 
                       <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-normal text-[10px]">{new Date(exp.date).toLocaleDateString('id-ID')}</span>
                       {exp.paymentMethod === 'Non-Tunai' && <span className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold">Bank</span>}
@@ -176,8 +230,18 @@ const ExpenseView = () => {
                       {isKasbon && empName ? `[${empName}] ` : ''}{exp.note || 'Tanpa catatan'}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 shrink-0">
                     <p className="font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg text-sm border border-red-100">-{formatRupiah(exp.amount)}</p>
+                    {isAdminMode && (
+                      <div className="flex gap-1">
+                        <button onClick={() => handleEditClick(exp)} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold shadow-sm" title="Edit Catatan">
+                          <Pencil className="w-3.5 h-3.5" /> Edit
+                        </button>
+                        <button onClick={() => handleDeleteExpense(exp.id)} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors shadow-sm" title="Hapus Catatan">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )})

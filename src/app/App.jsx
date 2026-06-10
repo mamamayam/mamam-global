@@ -8,6 +8,7 @@ import PosView from '../features/pos/PosView';
 import HomeView from '../features/home/HomeView';
 import CustomerView from '../features/customer/CustomerView';
 import AccountView from '../auth/AccountView';
+import StockView from '../features/stock/StockView';
 import ExpenseView from '../features/finance/ExpenseView';
 import EmployeesView from '../features/hrd/EmployeesView';
 import HppView from '../features/hpp/HppView';
@@ -76,7 +77,8 @@ import {
   Users,
   UtensilsCrossed,
   Wallet,
-  X
+  X,
+  Warehouse,
 } from 'lucide-react';
 
 
@@ -98,7 +100,7 @@ export default function App() {
     setIsAdminMode(true);
   };
 
-  const [currentView, setCurrentView] = useState('pos');
+  const [currentView, setCurrentView] = useState('kasir');
   const [activeTab, setActiveTab] = useState('materials');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -463,25 +465,27 @@ export default function App() {
 
   const menuItems = [
 
-    { id: 'shift', icon: Clock, label: 'Shift Kasir' },
-    { id: 'pos', icon: ShoppingCart, label: 'Kasir Utama' },
-    { id: 'history', icon: History, label: 'Riwayat Pesanan' },
-    { id: 'incomes', icon: TrendingUp, label: 'Pemasukan' },
-    { id: 'expenses', icon: TrendingDown, label: 'Pengeluaran' },
-    { id: 'reports', icon: PieChart, label: 'Laporan & Profit' },
-    { id: 'employees', icon: Briefcase, label: 'Manajemen Pegawai' },
-    { id: 'menu-mgt', icon: List, label: 'Manajemen Menu' },
-    { id: 'variant-mgt', icon: Layers, label: 'Manajemen Varian' },
-    { id: 'hpp-calc', icon: Calculator, label: 'Manajemen HPP' },
-    { id: 'customers', icon: Users, label: 'Pelanggan & Voucher' },
-    { id: 'settings', icon: Settings, label: 'Pengaturan Sistem' },
-    { id: 'account', icon: UserCog, label: 'Manajemen Akun' }
+    { id: 'dompet', icon: Clock, label: 'Dompet Kasir' },
+    { id: 'kasir', icon: ShoppingCart, label: 'Kasir Utama' },
+    { id: 'riwayat', icon: History, label: 'Riwayat Pesanan' },
+    { id: 'pemasukan', icon: TrendingUp, label: 'Pemasukan' },
+    { id: 'pengeluaran', icon: TrendingDown, label: 'Pengeluaran' },
+    { id: 'laporan', icon: PieChart, label: 'Laporan & Profit' },
+    { id: 'karyawan', icon: Briefcase, label: 'Manajemen Pegawai' },
+    { id: 'menu', icon: List, label: 'Manajemen Menu' },
+    { id: 'varian', icon: Layers, label: 'Manajemen Varian' },
+    { id: 'hpp', icon: Calculator, label: 'Manajemen HPP' },
+    { id: 'pelanggan', icon: Users, label: 'Pelanggan & Voucher' },
+    { id: 'pengaturan', icon: Settings, label: 'Pengaturan Sistem' },
+    { id: 'stok', icon: Warehouse, label: 'Stok Opname' },
+    { id: 'akun', icon: UserCog, label: 'Manajemen Akun' },
+    
   ];
 
   const visibleMenus = isAdminMode
     ? menuItems
     : menuItems.filter(item =>
-      ['shift', 'pos', 'history', 'expenses', 'incomes'].includes(item.id) // Pastikan 'history' ada di sini
+      ['dompet', 'kasir', 'riwayat', 'pengeluaran', 'pemasukan'].includes(item.id) 
     );
 
 
@@ -626,30 +630,31 @@ export default function App() {
               <div><h2 className="font-heading font-black text-slate-900 text-xl tracking-tight capitalize">{currentView.replace('-', ' ')}</h2></div>
             </div>
             <div className="flex items-center gap-3">
-              {currentShift && <span className="hidden md:inline-block bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold border border-blue-100"><Clock className="w-3 h-3 inline-block mr-1 mb-0.5" /> Shift Aktif</span>}
+              {currentShift && <span className="hidden md:inline-block bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold border border-blue-100"><Clock className="w-3 h-3 inline-block mr-1 mb-0.5" /> Dompet Aktif</span>}
               <div className="flex items-center bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-[10px] md:text-xs font-bold border border-slate-200 whitespace-nowrap">{today}</div>
             </div>
           </header>
 
           <div className="flex-1 overflow-hidden relative print:overflow-visible flex flex-col">
             {currentView === 'beranda' && <HomeView />}
-            {currentView === 'shift' && <ShiftView />}
-            {currentView === 'pos' && <PosView />}
-            {currentView === 'history' && <HistoryView />}
-            {currentView === 'menu-mgt' && <MenuManagement />}
-            {currentView === 'variant-mgt' && <VariantManagement />}
-            {currentView === 'hpp-calc' && <HppView />}
-            {currentView === 'incomes' && <IncomeView />}
-            {currentView === 'expenses' && <ExpenseView />}
-            {currentView === 'customers' && <CustomerView />}
-            {currentView === 'reports' && <ReportsView />}
-            {currentView === 'employees' && <EmployeesView />}
-            {currentView === 'settings' && <SettingsView />}
-            {currentView === 'account' && <AccountView />}
+            {currentView === 'dompet' && <ShiftView />}
+            {currentView === 'kasir' && <PosView />}
+            {currentView === 'riwayat' && <HistoryView />}
+            {currentView === 'menu' && <MenuManagement />}
+            {currentView === 'varian' && <VariantManagement />}
+            {currentView === 'hpp' && <HppView />}
+            {currentView === 'pemasukan' && <IncomeView />}
+            {currentView === 'pengeluaran' && <ExpenseView />}
+            {currentView === 'pelanggan' && <CustomerView />}
+            {currentView === 'laporan' && <ReportsView />}
+            {currentView === 'karyawan' && <EmployeesView />}
+            {currentView === 'pengaturan' && <SettingsView />}
+            {currentView === 'stok' && <StockView />}
+            {currentView === 'akun' && <AccountView />}
           </div>
 
           {/* BOTTOM NAVIGATION BAR (TOMBOL PINTAS) */}
-          <div className="bg-white border-t border-slate-200 flex justify-around items-center h-16 shrink-0 z-50 print:hidden shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
+          <div className="bg-white border-t border-slate-200 flex justify-around items-center h-16 shrink-0 z-30 print:hidden shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
             <button
               onClick={() => setCurrentView('beranda')}
               className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${currentView === 'beranda' ? 'text-orange-600' : 'text-slate-400 hover:text-slate-600'}`}
@@ -659,7 +664,7 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => setCurrentView('pos')} // atau 'beranda'/'kasir' sesuai state-mu
+              onClick={() => setCurrentView('kasir')} 
               className="relative flex flex-col items-center justify-end pb-1 h-12 flex-1 group"
             >
               {/* Lingkaran Besar yang Menonjol ke Atas */}
@@ -669,7 +674,7 @@ export default function App() {
               </div>
 
               {/* Label Teks tetap di bawah, sejajar dengan menu lainnya */}
-              <span className={`text-xs font-semibold ${currentView === 'pos' ? 'text-red-500' : 'text-slate-600'}`}>
+              <span className={`text-xs font-semibold ${currentView === 'kasir' ? 'text-red-500' : 'text-slate-600'}`}>
                 Kasir
               </span>
             </button>

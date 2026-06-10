@@ -60,7 +60,7 @@ const ReceiptModal = () => {
                 const blob = await toBlob(receiptElement, {
                     backgroundColor: '#ffffff',
                     pixelRatio: 2,
-                    skipAutoScale: true,``
+                    skipAutoScale: true,
                     style: {
                         width: '320px',
                     }

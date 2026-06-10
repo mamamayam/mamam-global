@@ -1,21 +1,72 @@
 import React, { useState } from 'react';
-import { TrendingUp, History, Save, Trash2 } from 'lucide-react';
+import { TrendingUp, History, Save, Trash2, Pencil, X } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 
 const IncomeView = () => {
-  const { incomes, setIncomes, incomeCategories, setIncomeCategories, triggerAlert, triggerConfirm, formatRupiah, currentShift } = useAppContext();
+  const { incomes, setIncomes, incomeCategories, setIncomeCategories, triggerAlert, triggerConfirm, formatRupiah, currentShift, isAdminMode } = useAppContext();
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(incomeCategories[0]);
   const [note, setNote] = useState('');
-  const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7)); // Default YYYY-MM
+  const [dateInput, setDateInput] = useState(new Date().toISOString().split('T')[0]);
+  const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7)); 
+  
+  // State pelacak data edit
+  const [editingId, setEditingId] = useState(null);
 
   const handleAddIncome = () => {
-    if (!currentShift) return triggerAlert('Shift Kasir belum dibuka! Harap buka shift terlebih dahulu.');
+    if (!currentShift && !editingId) return triggerAlert('Shift Kasir belum dibuka! Harap buka shift terlebih dahulu.');
     if (!amount || amount <= 0) return triggerAlert('Masukkan nominal pemasukan yang valid!');
-    const newInc = { id: `INC-${Date.now()}`, amount: Number(amount), category, note, date: new Date() };
-    setIncomes([newInc, ...incomes]);
-    setAmount(''); setNote('');
-    triggerAlert('Pemasukan non-penjualan berhasil dicatat!');
+    if (!dateInput) return triggerAlert('Pilih tanggal pemasukan!');
+
+    const incomeDate = new Date(dateInput);
+
+    if (editingId) {
+      // === MODE EDIT (ADMIN) ===
+      const updatedIncomes = incomes.map(inc => {
+        if (inc.id === editingId) {
+          return {
+            ...inc,
+            amount: Number(amount),
+            category,
+            note,
+            date: incomeDate
+          };
+        }
+        return inc;
+      });
+      setIncomes(updatedIncomes);
+      setEditingId(null);
+      setAmount(''); setNote('');
+      triggerAlert('Pemasukan non-penjualan berhasil diperbarui!');
+    } else {
+      // === MODE BUAT BARU ===
+      const newInc = { id: `INC-${Date.now()}`, amount: Number(amount), category, note, date: incomeDate };
+      setIncomes([newInc, ...incomes]);
+      setAmount(''); setNote('');
+      triggerAlert('Pemasukan non-penjualan berhasil dicatat!');
+    }
+  };
+
+  const handleEditClick = (inc) => {
+    setEditingId(inc.id);
+    setAmount(inc.amount);
+    setCategory(inc.category);
+    setNote(inc.note);
+    setDateInput(new Date(inc.date).toISOString().split('T')[0]);
+  };
+
+  const handleDeleteIncome = (id) => {
+    triggerConfirm('Apakah Anda yakin ingin menghapus catatan pemasukan ini?', () => {
+      setIncomes(incomes.filter(i => i.id !== id));
+      triggerAlert('Catatan pemasukan berhasil dihapus.');
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setAmount('');
+    setNote('');
+    setDateInput(new Date().toISOString().split('T')[0]);
   };
 
   const handleDeleteCategory = (cat) => {
@@ -31,7 +82,8 @@ const IncomeView = () => {
     });
   };
 
-  const filteredIncomes = incomes.filter(inc => filterMonth === '' || inc.date.toISOString().slice(0, 7) === filterMonth);
+  // Konversi ink.date ke bentuk Date Object untuk menghindari crash string saat pembacaan localStorage
+  const filteredIncomes = incomes.filter(inc => filterMonth === '' || new Date(inc.date).toISOString().slice(0, 7) === filterMonth);
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
@@ -40,6 +92,16 @@ const IncomeView = () => {
       </h2>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4 h-fit transition-shadow duration-300 hover:shadow-md">
+          {editingId && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-xs font-bold flex justify-between items-center">
+              <span>Mode Edit Admin Aktif</span>
+              <button onClick={cancelEdit} className="p-1 hover:bg-amber-100 rounded"><X className="w-3.5 h-3.5"/></button>
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-1">Tanggal Pemasukan</label>
+            <input type="date" className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-slate-800 transition-colors" value={dateInput} onChange={e => setDateInput(e.target.value)} />
+          </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-1">Nominal (Rp)</label>
             <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-slate-800 transition-colors" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" />
@@ -60,8 +122,8 @@ const IncomeView = () => {
             <label className="block text-xs font-bold text-slate-500 mb-1">Catatan Tambahan</label>
             <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl outline-none text-sm transition-colors focus:border-slate-800" value={note} onChange={e => setNote(e.target.value)} placeholder="Contoh: Modal kembalian pagi" />
           </div>
-          <button onClick={handleAddIncome} className="w-full py-3.5 mt-2 bg-green-500 text-white font-bold rounded-xl hover:bg-green-600 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2">
-            <Save className="w-4 h-4" /> Simpan Data
+          <button onClick={handleAddIncome} className={`w-full py-3.5 mt-2 text-white font-bold rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-green-500 hover:bg-green-600'}`}>
+            <Save className="w-4 h-4" /> {editingId ? 'Perbarui Data' : 'Simpan Data'}
           </button>
         </div>
 
@@ -93,12 +155,22 @@ const IncomeView = () => {
             ) : (
               filteredIncomes.map(inc => (
                 <div key={inc.id} className="flex justify-between items-center p-3.5 border border-slate-100 rounded-xl hover:bg-slate-50 hover:border-slate-200 transition-all duration-200 animate-in slide-in-from-left-2 duration-300">
-                  <div>
-                    <p className="font-bold text-sm text-slate-800 flex items-center gap-2">{inc.category} <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-normal text-[10px]">{inc.date.toLocaleDateString('id-ID')}</span></p>
+                  <div className="flex-1 pr-4">
+                    <p className="font-bold text-sm text-slate-800 flex items-center gap-2 flex-wrap">{inc.category} <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-normal text-[10px]">{new Date(inc.date).toLocaleDateString('id-ID')}</span></p>
                     <p className="text-[11px] text-slate-500 mt-1">{inc.note || 'Tanpa catatan'}</p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 shrink-0">
                     <p className="font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg text-sm border border-green-100">+{formatRupiah(inc.amount)}</p>
+                    {isAdminMode && (
+                      <div className="flex gap-1">
+                        <button onClick={() => handleEditClick(inc)} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold shadow-sm" title="Edit Catatan">
+                          <Pencil className="w-3.5 h-3.5" /> Edit
+                        </button>
+                        <button onClick={() => handleDeleteIncome(inc.id)} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors shadow-sm" title="Hapus Catatan">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
