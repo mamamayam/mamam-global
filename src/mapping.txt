@@ -1,0 +1,51 @@
+src/
+│
+├── app/
+│   ├── App.jsx
+│   ├── ViewRenderer.jsx
+│
+├── context/
+│   ├── AppContext.jsx
+│
+├── features/
+│
+│   ├── pos/
+│   │   ├── components/
+│   │   ├── views/
+│   │   │   ├── PosView.jsx
+│   │   │   ├── CartDrawer.jsx
+│
+│   ├── hr/
+│   │   ├── views/
+│   │   │   ├── EmployeesView.jsx
+│   │   │   ├── ShiftView.jsx
+│
+│   ├── finance/
+│   │   ├── views/
+│   │   │   ├── ExpenseView.jsx
+│   │   │   ├── IncomeView.jsx
+│
+│   ├── customer/
+│   │   ├── views/
+│   │   │   ├── CustomerView.jsx
+│
+│   ├── reports/
+│   │   ├── views/
+│   │   │   ├── ReportsView.jsx
+│   │   │   ├── HistoryView.jsx
+│
+│   ├── settings/
+│   │   ├── views/
+│   │   │   ├── SettingsView.jsx
+│
+│   ├── hpp/
+│   │   ├── views/
+│   │   │   ├── HppView.jsx
+│
+│   ├── auth/
+│   │   ├── PinModal.jsx
+│   │   ├── AccountView.jsx
+│
+├── storage/
+├── utils/
+├── data/
