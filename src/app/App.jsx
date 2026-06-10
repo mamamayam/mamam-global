@@ -27,11 +27,6 @@ import VariantSelectionModal from '../features/pos/modals/VariantSelectionModal'
 
 import {
   AlertCircle,
-  ArrowDownCircle,
-  Award,
-  Banknote,
-  BarChart3,
-  BookOpen,
   Briefcase,
   Calculator,
   Calendar,
