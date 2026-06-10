@@ -1,29 +1,24 @@
-import React, { useState, useMemo, useEffect, createContext, useContext, useRef } from 'react';
+import React, { useState, useMemo, useEffect, createContext, useContext, useRef, Suspense, lazy } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { loadData, saveData } from '../storage/localStorage';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
 import { AppContext, useAppContext } from '../context/AppContext';
-import CartDrawer from '../features/pos/CartDrawer';
 import PosView from '../features/pos/PosView';
-import HomeView from '../features/home/HomeView';
-import CustomerView from '../features/customer/CustomerView';
-import AccountView from '../auth/AccountView';
-import StockView from '../features/stock/StockView';
-import ExpenseView from '../features/finance/ExpenseView';
-import EmployeesView from '../features/hrd/EmployeesView';
-import HppView from '../features/hpp/HppView';
-import HistoryView from '../features/reports/HistoryView';
-import IncomeView from '../features/finance/IncomeView';
 import PinModal from '../auth/PinModal';
-import ReportsView from '../features/reports/ReportsView';
-import SettingsView from '../features/settings/SettingsView';
-import ShiftView from '../features/finance/ShiftView';
-import ReceiptModal from '../features/pos/modals/ReceiptModal';
-import PaymentModal from '../features/pos/modals/PaymentModal';
-import PayslipModal from '../features/hrd/modals/PayslipModal';
-import MenuManagement from '../features/menu/MenuMgmt';
-import VariantManagement from '../features/menu/VariantMgmt';
-import VariantSelectionModal from '../features/pos/modals/VariantSelectionModal';
+import AccountView from '../auth/AccountView';
+import CustomerView from '../features/customer/CustomerView';
+const HomeView = lazy(() => import('../features/home/HomeView'));
+const HistoryView = lazy(() => import('../features/reports/HistoryView'));
+const HppView = lazy(() => import('../features/hpp/HppView'));
+const StockView = lazy(() => import('../features/stock/StockView'));
+const ExpenseView = lazy(() => import('../features/finance/ExpenseView'));
+const EmployeesView = lazy(() => import('../features/hrd/EmployeesView'));
+const IncomeView = lazy(() => import('../features/finance/IncomeView'));
+const ReportsView = lazy(() => import('../features/reports/ReportsView'));
+const SettingsView = lazy(() => import('../features/settings/SettingsView'));
+const ShiftView = lazy(() => import('../features/finance/ShiftView'));
+const MenuManagement = lazy(() => import('../features/menu/MenuMgmt'));
+const VariantManagement = lazy(() => import('../features/menu/VariantMgmt'));
 
 import {
   AlertCircle,
@@ -479,13 +474,13 @@ export default function App() {
     { id: 'pengaturan', icon: Settings, label: 'Pengaturan Sistem' },
     { id: 'stok', icon: Warehouse, label: 'Stok Opname' },
     { id: 'akun', icon: UserCog, label: 'Manajemen Akun' },
-    
+
   ];
 
   const visibleMenus = isAdminMode
     ? menuItems
     : menuItems.filter(item =>
-      ['dompet', 'kasir', 'riwayat', 'pengeluaran', 'pemasukan'].includes(item.id) 
+      ['dompet', 'kasir', 'riwayat', 'pengeluaran', 'pemasukan'].includes(item.id)
     );
 
 
@@ -634,24 +629,29 @@ export default function App() {
               <div className="flex items-center bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-[10px] md:text-xs font-bold border border-slate-200 whitespace-nowrap">{today}</div>
             </div>
           </header>
-
-          <div className="flex-1 overflow-hidden relative print:overflow-visible flex flex-col">
-            {currentView === 'beranda' && <HomeView />}
-            {currentView === 'dompet' && <ShiftView />}
-            {currentView === 'kasir' && <PosView />}
-            {currentView === 'riwayat' && <HistoryView />}
-            {currentView === 'menu' && <MenuManagement />}
-            {currentView === 'varian' && <VariantManagement />}
-            {currentView === 'hpp' && <HppView />}
-            {currentView === 'pemasukan' && <IncomeView />}
-            {currentView === 'pengeluaran' && <ExpenseView />}
-            {currentView === 'pelanggan' && <CustomerView />}
-            {currentView === 'laporan' && <ReportsView />}
-            {currentView === 'karyawan' && <EmployeesView />}
-            {currentView === 'pengaturan' && <SettingsView />}
-            {currentView === 'stok' && <StockView />}
-            {currentView === 'akun' && <AccountView />}
-          </div>
+          <Suspense fallback={
+            <div className="flex h-full w-full items-center justify-center font-bold text-slate-400">
+              Memuat . . .
+            </div>
+          }>
+            <div className="flex-1 overflow-hidden relative print:overflow-visible flex flex-col">
+              {currentView === 'beranda' && <HomeView />}
+              {currentView === 'dompet' && <ShiftView />}
+              {currentView === 'kasir' && <PosView />}
+              {currentView === 'riwayat' && <HistoryView />}
+              {currentView === 'menu' && <MenuManagement />}
+              {currentView === 'varian' && <VariantManagement />}
+              {currentView === 'hpp' && <HppView />}
+              {currentView === 'pemasukan' && <IncomeView />}
+              {currentView === 'pengeluaran' && <ExpenseView />}
+              {currentView === 'pelanggan' && <CustomerView />}
+              {currentView === 'laporan' && <ReportsView />}
+              {currentView === 'karyawan' && <EmployeesView />}
+              {currentView === 'pengaturan' && <SettingsView />}
+              {currentView === 'stok' && <StockView />}
+              {currentView === 'akun' && <AccountView />}
+            </div>
+          </Suspense>
 
           {/* BOTTOM NAVIGATION BAR (TOMBOL PINTAS) */}
           <div className="bg-white border-t border-slate-200 flex justify-around items-center h-16 shrink-0 z-30 print:hidden shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
@@ -664,7 +664,7 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => setCurrentView('kasir')} 
+              onClick={() => setCurrentView('kasir')}
               className="relative flex flex-col items-center justify-end pb-1 h-12 flex-1 group"
             >
               {/* Lingkaran Besar yang Menonjol ke Atas */}
@@ -715,11 +715,6 @@ export default function App() {
         )}
 
         {/* Global Modals */}
-        <CartDrawer />
-        <VariantSelectionModal />
-        <PaymentModal />
-        <ReceiptModal />
-        <PayslipModal />
 
         <PinModal
           isOpen={showPinModal}

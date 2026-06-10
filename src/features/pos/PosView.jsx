@@ -1,6 +1,10 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package } from 'lucide-react';
+import CartDrawer from '../pos/CartDrawer';
+import PaymentModal from '../pos/modals/PaymentModal';
+import ReceiptModal from '../pos/modals/ReceiptModal';
+import VariantSelectionModal from '../pos/modals/VariantSelectionModal';
 
 
 const PosView = () => {
@@ -91,6 +95,10 @@ const PosView = () => {
                     </div>
                 </button>
             </div>
+            <CartDrawer />
+            <PaymentModal />
+            <ReceiptModal />
+            <VariantSelectionModal />
         </div>
     );
 };
