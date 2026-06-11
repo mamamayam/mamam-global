@@ -1,21 +1,16 @@
-import React, { useState } from 'react';
-import { X, Lock, Key, ShieldAlert } from 'lucide-react'; // 💡 Tambahan ikon Key & ShieldAlert
+import React, { useState, useEffect } from 'react'; // 💡 Ditambahkan useEffect
+import { X, Lock, Key, ShieldAlert } from 'lucide-react';
 
 const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
-  // 💡 Konstanta Super Master PIN (Ganti sesuai kebutuhan)
+  // 💡 Konstanta Super Master PIN
   const SUPER_MASTER_PIN = '999999';
 
-  // 💡 State untuk menyimpan PIN aktif saat ini (bisa diubah saat reset)
+  // 💡 State
   const [activePin, setActivePin] = useState('123456');
-
   const [pinInput, setPinInput] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState(''); // 💡 State untuk pesan sukses
-
-  // 💡 State mode: 'verify' (normal), 'super' (input super pin), 'reset' (input pin baru)
-  const [mode, setMode] = useState('verify');
-
-  if (!isOpen) return null;
+  const [successMessage, setSuccessMessage] = useState('');
+  const [mode, setMode] = useState('verify'); // 'verify', 'super', 'reset'
 
   const resetModalState = () => {
     setPinInput('');
@@ -31,16 +26,16 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
 
   const handleNumberClick = (num) => {
     if (errorMessage) setErrorMessage('');
-    if (successMessage && mode !== 'reset') setSuccessMessage(''); // Hilangkan success message kecuali saat mau reset
-    
+    if (successMessage && mode !== 'reset') setSuccessMessage('');
+
     if (pinInput.length < 6) {
-      setPinInput(pinInput + num);
+      setPinInput(prev => prev.length < 6 ? prev + num : prev);
     }
   };
 
   const handleBackspace = () => {
     if (errorMessage) setErrorMessage('');
-    setPinInput(pinInput.slice(0, -1));
+    setPinInput(prev => prev.slice(0, -1));
   };
 
   const handleClear = () => {
@@ -49,7 +44,6 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
   };
 
   const handleSubmit = () => {
-    // 💡 Logika berdasarkan mode yang sedang aktif
     if (mode === 'verify') {
       if (pinInput === activePin) {
         onSuccess();
@@ -78,18 +72,49 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
     }
   };
 
+  // 💡 Fitur Akses Keyboard Laptop
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (event) => {
+      // Abaikan jika fokus sedang berada di elemen input text/textarea lain (jika ada)
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+
+      if (event.key >= '0' && event.key <= '9') {
+        handleNumberClick(event.key);
+      } else if (event.key === 'Backspace') {
+        handleBackspace();
+      } else if (event.key === 'Enter') {
+        event.preventDefault(); // 💡 INI KUNCINYA: Cegah browser men-trigger klik pada tombol yang sedang fokus
+
+        if (pinInput.length === 6) {
+          handleSubmit();
+        }
+      } else if (event.key === 'Escape') {
+        handleClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, pinInput, mode, errorMessage, successMessage]);
+
+  // Kondisi render dipindah ke sini agar tidak melanggar aturan Hooks
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-xs rounded-3xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-250 flex flex-col items-center">
-        
+
         {/* Header Modal */}
         <div className="w-full flex justify-between items-center mb-2">
           <div className="flex items-center gap-2 text-slate-800">
-            {/* 💡 Ikon & Judul berubah dinamis sesuai mode */}
             {mode === 'verify' && <Lock className="w-4 h-4 text-orange-500" />}
             {mode === 'super' && <ShieldAlert className="w-4 h-4 text-red-500" />}
             {mode === 'reset' && <Key className="w-4 h-4 text-blue-500" />}
-            
+
             <span className="font-bold text-sm">
               {mode === 'verify' ? 'Masukkan PIN' : mode === 'super' ? 'Super Master PIN' : 'Buat PIN Baru'}
             </span>
@@ -106,30 +131,29 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
           </div>
         )}
 
-        {/* 💡 Pesan Sukses */}
+        {/* Pesan Sukses */}
         {successMessage && !errorMessage && (
           <div className="w-full bg-green-50 text-green-600 text-xs font-bold p-2.5 rounded-xl text-center mt-2 border border-green-100 animate-in zoom-in duration-200">
             {successMessage}
           </div>
         )}
 
-        {/* Display PIN (Bulatan Rahasia) */}
+        {/* Display PIN (Bulatan) */}
         <div className={`flex gap-3 my-4 justify-center ${(errorMessage || successMessage) ? 'mt-2' : 'mt-4'}`}>
           {[...Array(6)].map((_, i) => (
-            <div 
-              key={i} 
-              className={`w-4 h-4 rounded-full border-2 transition-all ${
-                errorMessage 
-                  ? 'border-red-300 bg-red-50' 
+            <div
+              key={i}
+              className={`w-4 h-4 rounded-full border-2 transition-all ${errorMessage
+                  ? 'border-red-300 bg-red-50'
                   : mode === 'reset' && i < pinInput.length
-                    ? 'bg-blue-500 scale-110 border-blue-500' // 💡 Warna biru saat buat PIN baru
+                    ? 'bg-blue-500 scale-110 border-blue-500'
                     : i < pinInput.length ? 'bg-slate-800 scale-110 border-slate-800' : 'bg-slate-50 border-slate-300'
-              }`}
+                }`}
             />
           ))}
         </div>
 
-        {/* Numpad / Tombol Angka */}
+        {/* Numpad */}
         <div className="grid grid-cols-3 gap-3 w-full mt-2">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
             <button
@@ -158,39 +182,38 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
         <button
           onClick={handleSubmit}
           disabled={pinInput.length !== 6}
-          className={`w-full mt-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all ${
-            pinInput.length === 6 
-              ? mode === 'reset' 
-                ? 'bg-blue-600 text-white hover:bg-blue-700' // Tombol biru saat reset
-                : 'bg-slate-800 text-white hover:bg-slate-900' // Tombol gelap normal
+          className={`w-full mt-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all ${pinInput.length === 6
+              ? mode === 'reset'
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-slate-800 text-white hover:bg-slate-900'
               : 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
-          }`}
+            }`}
         >
           {mode === 'verify' ? 'Konfirmasi PIN' : mode === 'super' ? 'Verifikasi Super PIN' : 'Simpan PIN Baru'}
         </button>
 
-        {/* 💡 Tombol Lupa PIN / Batal */}
+        {/* Tombol Lupa PIN / Batal */}
         <div className="mt-4 text-center w-full">
           {mode === 'verify' ? (
-            <button 
-              onClick={() => { 
-                setMode('super'); 
-                setPinInput(''); 
-                setErrorMessage(''); 
-                setSuccessMessage(''); 
-              }} 
+            <button
+              onClick={() => {
+                setMode('super');
+                setPinInput('');
+                setErrorMessage('');
+                setSuccessMessage('');
+              }}
               className="text-xs text-slate-500 hover:text-slate-800 font-medium underline underline-offset-2 transition-colors"
             >
               Lupa PIN?
             </button>
           ) : (
-            <button 
-              onClick={() => { 
-                setMode('verify'); 
-                setPinInput(''); 
-                setErrorMessage(''); 
-                setSuccessMessage(''); 
-              }} 
+            <button
+              onClick={() => {
+                setMode('verify');
+                setPinInput('');
+                setErrorMessage('');
+                setSuccessMessage('');
+              }}
               className="text-xs text-slate-500 hover:text-slate-800 font-medium underline underline-offset-2 transition-colors"
             >
               Batal Reset
