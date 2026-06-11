@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, createContext, useContext, useRef } from 'react';
 import { formatRupiah } from '../../utils/formatters';
 import {useAppContext} from '../../context/AppContext';
+import PayslipModal from '../hrd/modals/PayslipModal';
 import { 
   Calendar, 
   ChevronDown, 
@@ -677,6 +678,7 @@ const EmployeesView = () => {
          {activeTab === 'reports' && renderReportsTab()}
          {activeTab === 'manage' && renderManageTab()}
       </div>
+      <PayslipModal />
     </div>
   );
 };

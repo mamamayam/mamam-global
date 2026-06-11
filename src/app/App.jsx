@@ -3,7 +3,6 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { loadData, saveData } from '../storage/localStorage';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
 import { AppContext, useAppContext } from '../context/AppContext';
-import CartDrawer from '../features/pos/CartDrawer';
 import PosView from '../features/pos/PosView';
 import HomeView from '../features/home/HomeView';
 import CustomerView from '../features/customer/CustomerView';
@@ -18,12 +17,8 @@ import PinModal from '../auth/PinModal';
 import ReportsView from '../features/reports/ReportsView';
 import SettingsView from '../features/settings/SettingsView';
 import ShiftView from '../features/finance/ShiftView';
-import ReceiptModal from '../features/pos/modals/ReceiptModal';
-import PaymentModal from '../features/pos/modals/PaymentModal';
-import PayslipModal from '../features/hrd/modals/PayslipModal';
 import MenuManagement from '../features/menu/MenuMgmt';
 import VariantManagement from '../features/menu/VariantMgmt';
-import VariantSelectionModal from '../features/pos/modals/VariantSelectionModal';
 
 import {
   AlertCircle,
@@ -31,9 +26,6 @@ import {
   Calculator,
   Calendar,
   CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   TrendingDown,
   Clock,
   Coffee,
@@ -708,13 +700,6 @@ export default function App() {
             </div>
           </div>
         )}
-
-        {/* Global Modals */}
-        <CartDrawer />
-        <VariantSelectionModal />
-        <PaymentModal />
-        <ReceiptModal />
-        <PayslipModal />
 
         <PinModal
           isOpen={showPinModal}

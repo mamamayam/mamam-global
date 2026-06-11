@@ -1,6 +1,10 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package } from 'lucide-react';
+import CartDrawer from '../pos/CartDrawer';
+import ReceiptModal from '../pos/modals/ReceiptModal';
+import PaymentModal from '../pos/modals/PaymentModal';
+import VariantSelectionModal from '../pos/modals/VariantSelectionModal';
 
 
 const PosView = () => {
@@ -17,9 +21,9 @@ const PosView = () => {
 
     const handleMenuClick = (menu) => {
         if (!currentShift) {
-            triggerAlert('Peringatan: Shift Kasir belum dibuka. Harap buka shift terlebih dahulu di menu "Shift Kasir".');
+            triggerAlert('Peringatan: Dompet belum dibuka. Harap buka dompet terlebih dahulu di menu "Dompet Kasir".');
+            setCurrentView('dompet');
             return;
-            setCurrentView('shift');
         }
         if (menu.variantGroupIds.length > 0) {
             setSelectedMenuForVariant(menu);
@@ -91,6 +95,10 @@ const PosView = () => {
                     </div>
                 </button>
             </div>
+            <CartDrawer />
+            <ReceiptModal />
+            <PaymentModal />
+            <VariantSelectionModal />
         </div>
     );
 };

@@ -4,64 +4,88 @@ export const isNativePlatform = () => {
     return Capacitor.isNativePlatform();
 };
 
+// Fungsi Ajaib untuk bikin rata kanan-kiri ala Alfamart
+const justifyBetween = (leftStr, rightStr, maxWidth = 32) => {
+    const left = String(leftStr);
+    const right = String(rightStr);
+    const spacesNeeded = maxWidth - left.length - right.length;
+    
+    // Kalau muat, sisipkan spasi di tengah. Kalau kepanjangan, pisah dengan 1 spasi aja.
+    if (spacesNeeded > 0) {
+        return left + ' '.repeat(spacesNeeded) + right;
+    }
+    return left + ' ' + right; 
+};
 
-
-// Fungsi untuk merakit struktur Struk sesuai data keranjang aplikasi lu
 export const getESCPOSData = (data, storeSettings, kembalian) => {
     const lines = [];
+    const rp = (n) => Number(n).toLocaleString('id-ID'); // Format angka tanpa 'Rp' biar hemat tempat
 
-    // --- HEADER STRUK ---
-    lines.push('\x1B\x61\x01'); // Rata Tengah (Center align)
-    lines.push(`${storeSettings?.storeName || 'Mamam Drink'}\n`);
+    lines.push('\x1B\x40'); // Init Printer
+
+    // --- HEADER STRUK (Rata Tengah) ---
+    lines.push('\x1B\x61\x31'); 
+    lines.push(`${storeSettings?.storeName || 'Mamam Ayam'}\n`);
     if (storeSettings?.storeAddress) lines.push(`${storeSettings.storeAddress}\n`);
-    if (storeSettings?.storePhone) lines.push(`WA - ${storeSettings.storePhone}\n`);
+    if (storeSettings?.storePhone) lines.push(`WA: ${storeSettings.storePhone}\n`);
     lines.push('--------------------------------\n');
-    lines.push(`ID: ${data.id} | Kasir: Admin\n`);
-    lines.push(`${new Date(data.date).toLocaleString('id-ID')}\n`);
-    if (data.customerName) lines.push(`Pelanggan: ${data.customerName}\n`);
-    lines.push(`Tipe: ${data.orderType}\n`);
+    
+    // --- INFO TRANSAKSI (Rata Kiri) ---
+    lines.push('\x1B\x61\x30'); 
+    lines.push(justifyBetween(
+        new Date(data.date).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }).replace(',', ''), 
+        'Kasir: Admin'
+    ) + '\n');
+    lines.push(justifyBetween(`No: ${data.id}`, data.orderType) + '\n');
+    if (data.customerName) lines.push(justifyBetween('Pelanggan:', data.customerName) + '\n');
     lines.push('--------------------------------\n');
 
-    // --- DAFTAR BARANG ---
-    lines.push('\x1B\x61\x00'); // Rata Kiri (Left align)
-    const rp = (n) => `Rp ${Number(n).toLocaleString('id-ID')}`;
-
+    // --- DAFTAR BARANG (Rata Kiri & Kanan) ---
     data.items.forEach(item => {
-        lines.push(`${item.name}\n`);
+        lines.push(`${item.name}\n`); // Nama barang di baris sendiri
         if (item.variantName) lines.push(`  - ${item.variantName}\n`);
         if (item.note) lines.push(`  * ${item.note}\n`);
-        lines.push(`  ${item.qty}x ${rp(item.price)}  ${rp(item.price * item.qty)}\n`);
+        
+        // Baris harga: "2 x 20.000" (kiri) ..... "40.000" (kanan)
+        const qtyPrice = `  ${item.qty} x ${rp(item.price)}`;
+        const totalItem = rp(item.price * item.qty);
+        lines.push(justifyBetween(qtyPrice, totalItem) + '\n');
     });
 
-    // --- TOTALAN & PAJAK ---
     lines.push('--------------------------------\n');
-    lines.push(`Subtotal:    ${rp(data.subtotal)}\n`);
-    if (data.discount > 0) lines.push(`Diskon Vcr: -${rp(data.discount)}\n`);
-    if (data.pointDiscount > 0) lines.push(`Potong Poin:-${rp(data.pointDiscount)}\n`);
-    if (data.manualDiscountAmount > 0) lines.push(`Diskon Man: -${rp(data.manualDiscountAmount)}\n`);
 
-    if (data.taxAmount > 0) lines.push(`Pajak:       ${rp(data.taxAmount)}\n`);
-    if (data.serviceAmount > 0) lines.push(`Service:     ${rp(data.serviceAmount)}\n`);
-    if (data.deliveryFee > 0) lines.push(`Ongkir:      ${rp(data.deliveryFee)}\n`);
+    // --- TOTALAN (Rata Kanan-Kiri) ---
+    lines.push(justifyBetween('Subtotal', rp(data.subtotal)) + '\n');
+    if (data.discount > 0) lines.push(justifyBetween('Diskon Vcr', '-' + rp(data.discount)) + '\n');
+    if (data.pointDiscount > 0) lines.push(justifyBetween('Potong Poin', '-' + rp(data.pointDiscount)) + '\n');
+    if (data.manualDiscountAmount > 0) lines.push(justifyBetween('Diskon Man', '-' + rp(data.manualDiscountAmount)) + '\n');
+
+    if (data.taxAmount > 0) lines.push(justifyBetween('Pajak', rp(data.taxAmount)) + '\n');
+    if (data.serviceAmount > 0) lines.push(justifyBetween('Service', rp(data.serviceAmount)) + '\n');
+    if (data.deliveryFee > 0) lines.push(justifyBetween('Ongkir', rp(data.deliveryFee)) + '\n');
+
+    lines.push('--------------------------------\n');
 
     // --- PEMBAYARAN ---
-    lines.push('--------------------------------\n');
-    lines.push(`TOTAL:       ${rp(data.total)}\n`);
+    lines.push(justifyBetween('TOTAL', rp(data.total)) + '\n');
 
     if (data.paymentMethod === 'Split Payment') {
         data.splitDetails.forEach(p => {
-            lines.push(`- ${p.method}:  ${rp(p.amount)}\n`);
+            lines.push(justifyBetween(`Bayar (${p.method})`, rp(p.amount)) + '\n');
         });
     } else {
-        lines.push(`Bayar (${data.paymentMethod}): ${rp(data.total)}\n`);
+        const uangDiterima = data.total + (kembalian || 0);
+        lines.push(justifyBetween(`Bayar (${data.paymentMethod})`, rp(uangDiterima)) + '\n');
     }
 
-    if (kembalian > 0) lines.push(`Kembalian:   ${rp(kembalian)}\n`);
+    if (kembalian > 0) lines.push(justifyBetween('Kembali', rp(kembalian)) + '\n');
 
-    // --- FOOTER ---
     lines.push('--------------------------------\n');
-    lines.push('\x1B\x61\x01'); // Rata Tengah (Center align)
-    lines.push(`${storeSettings?.receiptFooter || 'Terima Kasih'}\n\n\n`); // \n\n\n untuk ngeluarin kertas sisa biar gampang disobek
+
+    // --- FOOTER (Rata Tengah) ---
+    lines.push('\x1B\x61\x31'); 
+    lines.push(`${storeSettings?.receiptFooter || 'Terima Kasih'}\n`);
+    lines.push('Selamat Menikmati Hidangan Kami\n\n\n\n'); 
 
     return lines.join('');
 };
@@ -72,7 +96,6 @@ export const printNativeBluetooth = async (data, storeSettings, kembalian) => {
         return false;
     }
 
-    // 1. Ambil Mac Address printer yang udah di-set dari UI SettingsView tadi
     const savedAddress = localStorage.getItem('my_printer_mac');
     const savedName = localStorage.getItem('my_printer_name');
 
@@ -84,7 +107,6 @@ export const printNativeBluetooth = async (data, storeSettings, kembalian) => {
     return new Promise((resolve) => {
         window.bluetoothSerial.isEnabled(
             () => {
-                // 2. Langsung hajar konek pakai address yang disimpen, GAK PERLU SCAN LAGI
                 window.bluetoothSerial.connect(
                     savedAddress,
                     () => {
@@ -106,7 +128,6 @@ export const printNativeBluetooth = async (data, storeSettings, kembalian) => {
                         );
                     },
                     (err) => {
-                        // Kalau gagal konek (misal printernya mati), hapus memori biar user setting ulang
                         localStorage.removeItem('my_printer_mac');
                         localStorage.removeItem('my_printer_name');
                         alert(`Gagal terhubung ke Printer "${savedName}". Pastikan printernya nyala!\n\nError: ${err}`);
@@ -115,7 +136,7 @@ export const printNativeBluetooth = async (data, storeSettings, kembalian) => {
                 );
             },
             () => {
-                alert('Bluetooth HP lu mati. Nyalain dulu bos!');
+                alert('Bluetooth HP mati. Nyalain dulu!');
                 resolve(false);
             }
         );

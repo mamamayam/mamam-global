@@ -74,7 +74,7 @@ const PaymentModal = () => {
 
     setReceiptModal({ isOpen: true, data: newOrder, kembalian: isSplitMode ? splitKembalian : (method === 'Tunai' ? kembalian : 0) });
 
-    setCurrentView('history');
+    setCurrentView('kasir');
 
     if (storeSettings.autoPrint) { setTimeout(() => window.print(), 500); }
   };
