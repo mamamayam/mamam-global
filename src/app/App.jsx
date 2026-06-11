@@ -3,22 +3,12 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { loadData, saveData } from '../storage/localStorage';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
 import { AppContext, useAppContext } from '../context/AppContext';
-import PosView from '../features/pos/PosView';
-import HomeView from '../features/home/HomeView';
-import CustomerView from '../features/customer/CustomerView';
-import AccountView from '../auth/AccountView';
-import StockView from '../features/stock/StockView';
-import ExpenseView from '../features/finance/ExpenseView';
-import EmployeesView from '../features/hrd/EmployeesView';
-import HppView from '../features/hpp/HppView';
-import HistoryView from '../features/reports/HistoryView';
-import IncomeView from '../features/finance/IncomeView';
 import PinModal from '../auth/PinModal';
-import ReportsView from '../features/reports/ReportsView';
-import SettingsView from '../features/settings/SettingsView';
-import ShiftView from '../features/finance/ShiftView';
-import MenuManagement from '../features/menu/MenuMgmt';
-import VariantManagement from '../features/menu/VariantMgmt';
+import AppRoutes from '../app/AppRoutes';
+import AppLayout from '../app/AppLayout';
+import Sidebar from '../app/layout/Sidebar';
+import Header from '../app/layout/Header';
+import BottomNav from '../app/layout/BottomNav';
 
 import {
   AlertCircle,
@@ -466,13 +456,13 @@ export default function App() {
     { id: 'pengaturan', icon: Settings, label: 'Pengaturan Sistem' },
     { id: 'stok', icon: Warehouse, label: 'Stok Opname' },
     { id: 'akun', icon: UserCog, label: 'Manajemen Akun' },
-    
+
   ];
 
   const visibleMenus = isAdminMode
     ? menuItems
     : menuItems.filter(item =>
-      ['dompet', 'kasir', 'riwayat', 'pengeluaran', 'pemasukan'].includes(item.id) 
+      ['dompet', 'kasir', 'riwayat', 'pengeluaran', 'pemasukan'].includes(item.id)
     );
 
 
@@ -535,6 +525,36 @@ export default function App() {
 
   return (
     <AppContext.Provider value={contextValue}>
+      <AppLayout
+      
+        sidebar={<Sidebar
+          currentView={currentView}
+          setCurrentView={setCurrentView}
+          isSidebarOpen={isSidebarOpen}
+          setIsSidebarOpen={setIsSidebarOpen}
+          visibleMenus={visibleMenus}
+          isAdminMode={isAdminMode}
+          setShowPinModal={setShowPinModal}
+          triggerConfirm={triggerConfirm}
+          setIsAdminMode={setIsAdminMode} />
+        }
+
+        header={<Header
+          currentView={currentView}
+          currentShift={currentShift}
+          setIsSidebarOpen={setIsSidebarOpen}
+          today={today} />
+        }
+
+        content={
+          <AppRoutes currentView={currentView} />
+        }
+
+        bottomNav={<BottomNav
+          currentView={currentView}
+          setCurrentView={setCurrentView} />
+        }
+      />
       <div className="flex h-screen bg-slate-50 font-body text-slate-800 overflow-hidden w-full relative">
         <style dangerouslySetInnerHTML={{
           __html: `
@@ -551,128 +571,9 @@ export default function App() {
           <div className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-opacity duration-300" onClick={() => setIsSidebarOpen(false)} />
         )}
 
-        <aside className={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-white shadow-2xl md:shadow-none border-r border-slate-100 transform transition-transform duration-300 ease-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-          <div className="p-6 bg-orange-600 text-white flex items-center justify-between shrink-0">
-            <div>
-              <h2 className="font-heading font-black text-xl md:text-2xl tracking-normal md:tracking-wide whitespace-nowrap flex items-center gap-2">
-                MAMAM AYAM
-              </h2>
-              <p className="text-[10px] text-white uppercase tracking-widest mt-1 font-bold">Ecosystem</p>
-            </div>
-            <button className="md:hidden p-1.5 bg-slate-700 rounded-md hover:bg-slate-600 transition-colors" onClick={() => setIsSidebarOpen(false)}><X className="w-4 h-4" /></button>
-          </div>
-
-          <nav className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
-            {visibleMenus.map(item => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setCurrentView(item.id);
-                  setIsSidebarOpen(false);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 font-bold text-sm ${currentView === item.id
-                  ? 'bg-slate-100 text-slate-900 shadow-sm translate-x-1'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 hover:translate-x-1'
-                  }`}
-              >
-                <item.icon
-                  className={`w-5 h-5 transition-colors duration-300 ${currentView === item.id
-                    ? 'text-slate-900'
-                    : 'text-slate-400'
-                    }`}
-                />
-                {item.label}
-              </button>
-            ))}
-
-            <div className="p-3 border-t">
-              {!isAdminMode ? (
-                <button
-                  onClick={() => setShowPinModal(true)}
-                  className="w-full bg-orange-600 text-white py-3 rounded-xl font-bold"
-                >
-                  Login Admin
-                </button>
-              ) : (
-                <button
-                  onClick={() =>
-                    triggerConfirm(
-                      'Yakin ingin keluar dari mode admin?',
-                      () => setIsAdminMode(false)
-                    )
-                  }
-                  className="w-full bg-red-500 text-white py-3 rounded-xl font-bold"
-                >
-                  Keluar Admin
-                </button>
-              )}
-            </div>
-          </nav>
-        </aside>
-
         <main className="flex-1 flex flex-col min-w-0 relative">
-          <header className="bg-white border-b border-slate-100 h-16 flex items-center justify-between px-4 z-20 shadow-[0_4px_20px_rgba(0,0,0,0.02)] shrink-0">
-            <div className="flex items-center gap-3">
-              <button className="p-2 hover:bg-slate-100 rounded-lg md:hidden text-slate-600 transition-colors" onClick={() => setIsSidebarOpen(true)}><MenuIcon className="w-6 h-6" /></button>
-              <div><h2 className="font-heading font-black text-slate-900 text-xl tracking-tight capitalize">{currentView.replace('-', ' ')}</h2></div>
-            </div>
-            <div className="flex items-center gap-3">
-              {currentShift && <span className="hidden md:inline-block bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold border border-blue-100"><Clock className="w-3 h-3 inline-block mr-1 mb-0.5" /> Dompet Aktif</span>}
-              <div className="flex items-center bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-[10px] md:text-xs font-bold border border-slate-200 whitespace-nowrap">{today}</div>
-            </div>
-          </header>
-
           <div className="flex-1 overflow-hidden relative print:overflow-visible flex flex-col">
-            {currentView === 'beranda' && <HomeView />}
-            {currentView === 'dompet' && <ShiftView />}
-            {currentView === 'kasir' && <PosView />}
-            {currentView === 'riwayat' && <HistoryView />}
-            {currentView === 'menu' && <MenuManagement />}
-            {currentView === 'varian' && <VariantManagement />}
-            {currentView === 'hpp' && <HppView />}
-            {currentView === 'pemasukan' && <IncomeView />}
-            {currentView === 'pengeluaran' && <ExpenseView />}
-            {currentView === 'pelanggan' && <CustomerView />}
-            {currentView === 'laporan' && <ReportsView />}
-            {currentView === 'karyawan' && <EmployeesView />}
-            {currentView === 'pengaturan' && <SettingsView />}
-            {currentView === 'stok' && <StockView />}
-            {currentView === 'akun' && <AccountView />}
-          </div>
-
-          {/* BOTTOM NAVIGATION BAR (TOMBOL PINTAS) */}
-          <div className="bg-white border-t border-slate-200 flex justify-around items-center h-16 shrink-0 z-30 print:hidden shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
-            <button
-              onClick={() => setCurrentView('beranda')}
-              className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${currentView === 'beranda' ? 'text-orange-600' : 'text-slate-400 hover:text-slate-600'}`}
-            >
-              <Home className="w-5 h-5" />
-              <span className="text-[10px] font-bold">Beranda</span>
-            </button>
-
-            <button
-              onClick={() => setCurrentView('kasir')} 
-              className="relative flex flex-col items-center justify-end pb-1 h-12 flex-1 group"
-            >
-              {/* Lingkaran Besar yang Menonjol ke Atas */}
-              <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-14 h-14 bg-red-500 rounded-full flex items-center justify-center shadow-md border-4 border-white transition-all duration-200 group-hover:scale-105 active:scale-95 z-10">
-                {/* Ganti dengan Icon Kasir/Keranjang yang kamu gunakan (misal: ShoppingCart atau Store) */}
-                <ShoppingCart className="w-6 h-6 text-white" />
-              </div>
-
-              {/* Label Teks tetap di bawah, sejajar dengan menu lainnya */}
-              <span className={`text-xs font-semibold ${currentView === 'kasir' ? 'text-red-500' : 'text-slate-600'}`}>
-                Kasir
-              </span>
-            </button>
-
-            <button
-              onClick={() => setCurrentView('settings')}
-              className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${currentView === 'settings' ? 'text-orange-600' : 'text-slate-400 hover:text-slate-600'}`}
-            >
-              <Settings className="w-5 h-5" />
-              <span className="text-[10px] font-bold">Pengaturan</span>
-            </button>
+            <AppRoutes currentView={currentView} />
           </div>
         </main>
 
@@ -718,7 +619,6 @@ export default function App() {
 
 function Layers(props) {
   return (
-
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
       <polyline points="2 12 12 17 22 12"></polyline>
