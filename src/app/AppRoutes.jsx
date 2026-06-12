@@ -1,51 +1,131 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, Component } from 'react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
-const HomeView        = lazy(() => import('../features/home/HomeView'));
-const ShiftView       = lazy(() => import('../features/finance/ShiftView'));
-const PosView         = lazy(() => import('../features/pos/PosView'));
-const HistoryView     = lazy(() => import('../features/reports/HistoryView'));
-const MenuManagement  = lazy(() => import('../features/menu/MenuMgmt'));
+const HomeView          = lazy(() => import('../features/home/HomeView'));
+const ShiftView         = lazy(() => import('../features/finance/ShiftView'));
+const PosView           = lazy(() => import('../features/pos/PosView'));
+const HistoryView       = lazy(() => import('../features/reports/HistoryView'));
+const MenuManagement    = lazy(() => import('../features/menu/MenuMgmt'));
 const VariantManagement = lazy(() => import('../features/menu/VariantMgmt'));
-const HppView         = lazy(() => import('../features/hpp/HppView'));
-const IncomeView      = lazy(() => import('../features/finance/IncomeView'));
-const ExpenseView     = lazy(() => import('../features/finance/ExpenseView'));
-const CustomerView    = lazy(() => import('../features/customer/CustomerView'));
-const ReportsView     = lazy(() => import('../features/reports/ReportsView'));
-const EmployeesView   = lazy(() => import('../features/hrd/EmployeesView'));
-const SettingsView    = lazy(() => import('../features/settings/SettingsView'));
-const BackupView      = lazy(() => import('../features/settings/BackupView'));
-const StockView       = lazy(() => import('../features/stock/StockView'));
-const AccountView     = lazy(() => import('../auth/AccountView'));
+const HppView           = lazy(() => import('../features/hpp/HppView'));
+const IncomeView        = lazy(() => import('../features/finance/IncomeView'));
+const ExpenseView       = lazy(() => import('../features/finance/ExpenseView'));
+const CustomerView      = lazy(() => import('../features/customer/CustomerView'));
+const ReportsView       = lazy(() => import('../features/reports/ReportsView'));
+const EmployeesView     = lazy(() => import('../features/hrd/EmployeesView'));
+const SettingsView      = lazy(() => import('../features/settings/SettingsView'));
+const BackupView        = lazy(() => import('../features/settings/BackupView'));
+const StockView         = lazy(() => import('../features/stock/StockView'));
+const AccountView       = lazy(() => import('../auth/AccountView'));
 
 const VIEWS = {
-    beranda:    HomeView,
-    dompet:     ShiftView,
-    kasir:      PosView,
-    riwayat:    HistoryView,
-    menu:       MenuManagement,
-    varian:     VariantManagement,
-    hpp:        HppView,
-    pemasukan:  IncomeView,
+    beranda:     HomeView,
+    dompet:      ShiftView,
+    kasir:       PosView,
+    riwayat:     HistoryView,
+    menu:        MenuManagement,
+    varian:      VariantManagement,
+    hpp:         HppView,
+    pemasukan:   IncomeView,
     pengeluaran: ExpenseView,
-    pelanggan:  CustomerView,
-    laporan:    ReportsView,
-    karyawan:   EmployeesView,
-    pengaturan: SettingsView,
-    backup:     BackupView,
-    stok:       StockView,
-    akun:       AccountView,
+    pelanggan:   CustomerView,
+    laporan:     ReportsView,
+    karyawan:    EmployeesView,
+    pengaturan:  SettingsView,
+    backup:      BackupView,
+    stok:        StockView,
+    akun:        AccountView,
 };
 
+// --- Error Boundary (harus class component, React belum support hooks untuk ini) ---
+class ViewErrorBoundary extends Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+    }
+
+    static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error, info) {
+        console.error('[ErrorBoundary] Fitur crash:', error, info);
+    }
+
+    // Reset error saat berpindah halaman
+    componentDidUpdate(prevProps) {
+        if (prevProps.viewKey !== this.props.viewKey && this.state.hasError) {
+            this.setState({ hasError: false, error: null });
+        }
+    }
+
+    handleRetry = () => {
+        this.setState({ hasError: false, error: null });
+    };
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center gap-4">
+                    <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
+                        <AlertCircle className="w-8 h-8 text-red-500" />
+                    </div>
+                    <div>
+                        <h2 className="font-bold text-slate-800 text-lg mb-1">Halaman ini mengalami error</h2>
+                        <p className="text-slate-500 text-sm mb-1">Data kamu aman, hanya tampilan ini yang bermasalah.</p>
+                        {this.state.error && (
+                            <p className="text-xs text-red-400 font-mono bg-red-50 rounded px-3 py-1 mt-2 max-w-xs mx-auto break-all">
+                                {this.state.error.message}
+                            </p>
+                        )}
+                    </div>
+                    <button
+                        onClick={this.handleRetry}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-white rounded-xl font-semibold text-sm hover:bg-orange-700 transition-colors active:scale-95"
+                    >
+                        <RefreshCw className="w-4 h-4" />
+                        Coba Lagi
+                    </button>
+                </div>
+            );
+        }
+
+        return this.props.children;
+    }
+}
+
+// --- Loading Skeleton ---
+function ViewSkeleton() {
+    return (
+        <div className="flex-1 flex flex-col p-4 gap-4 animate-pulse">
+            <div className="h-10 bg-slate-200 rounded-xl w-3/4" />
+            <div className="h-10 bg-slate-200 rounded-xl w-full" />
+            <div className="grid grid-cols-2 gap-4 mt-2">
+                {[...Array(6)].map((_, i) => (
+                    <div key={i} className="h-24 bg-slate-200 rounded-2xl" />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// --- Main AppRoutes ---
 export default function AppRoutes({ currentView }) {
     const ActiveView = VIEWS[currentView];
 
     if (!ActiveView) {
-        return <div>View tidak ditemukan</div>;
+        return (
+            <div className="flex-1 flex items-center justify-center text-slate-400">
+                Halaman tidak ditemukan: <code className="ml-1 text-sm bg-slate-100 px-2 py-0.5 rounded">{currentView}</code>
+            </div>
+        );
     }
 
     return (
-        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-400">Memuat...</div>}>
-            <ActiveView />
-        </Suspense>
+        <ViewErrorBoundary viewKey={currentView}>
+            <Suspense fallback={<ViewSkeleton />}>
+                <ActiveView />
+            </Suspense>
+        </ViewErrorBoundary>
     );
 }

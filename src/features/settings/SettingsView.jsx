@@ -146,7 +146,7 @@ const SettingsView = () => {
     <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 max-w-5xl">
         <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <Settings className="w-6 h-6 text-slate-800" /> Pengaturan
+          <Settings className="w-6 h-6 text-orange-500" /> Pengaturan
         </h2>
 
         <div className={`transition-all duration-300 ${isSaved ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>

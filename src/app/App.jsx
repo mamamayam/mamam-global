@@ -70,6 +70,9 @@ export default function App() {
 
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
+  // Guard supaya sync tidak jalan saat initial load pertama kali
+  const isFirstRender = useRef(true);
+
 
   const { isAdminMode, setIsAdminMode } = useAppContext();
   const [showPinModal, setShowPinModal] = useState(false);
@@ -133,15 +136,15 @@ export default function App() {
   // --- SIMPAN PERUBAHAN KE "DATABASE" (localStorage) ---
   useEffect(() => { saveData('variantGroups', variantGroups); }, [variantGroups]);
   useEffect(() => { saveData('menus', menus); }, [menus]);
-  useEffect(() => { saveData('salesHistory', salesHistory); }, [salesHistory]);
+  useEffect(() => { saveData('salesHistory', salesHistory); if (!isFirstRender.current) window.__triggerSupabaseSync?.(); }, [salesHistory]);
   useEffect(() => { saveData('hppLibrary', hppLibrary); }, [hppLibrary]);
   useEffect(() => { saveData('savedBills', savedBills); }, [savedBills]);
   useEffect(() => { saveData('expenseCategories', expenseCategories); }, [expenseCategories]);
-  useEffect(() => { saveData('expenses', expenses); }, [expenses]);
+  useEffect(() => { saveData('expenses', expenses); if (!isFirstRender.current) window.__triggerSupabaseSync?.(); }, [expenses]);
   useEffect(() => { saveData('incomeCategories', incomeCategories); }, [incomeCategories]);
-  useEffect(() => { saveData('incomes', incomes); }, [incomes]);
+  useEffect(() => { saveData('incomes', incomes); if (!isFirstRender.current) window.__triggerSupabaseSync?.(); }, [incomes]);
   useEffect(() => { saveData('currentShift', currentShift); }, [currentShift]);
-  useEffect(() => { saveData('shiftHistory', shiftHistory); }, [shiftHistory]);
+  useEffect(() => { saveData('shiftHistory', shiftHistory); if (!isFirstRender.current) window.__triggerSupabaseSync?.(); }, [shiftHistory]);
   useEffect(() => { saveData('customers', customers); }, [customers]);
   useEffect(() => { saveData('vouchers', vouchers); }, [vouchers]);
   useEffect(() => { saveData('claimsHistory', claimsHistory); }, [claimsHistory]);
@@ -153,6 +156,8 @@ export default function App() {
   useEffect(() => { saveData('employeeDailyRecords', employeeDailyRecords); }, [employeeDailyRecords]);
   useEffect(() => { saveData('additionCategories', additionCategories); }, [additionCategories]);
   useEffect(() => { saveData('deductionCategories', deductionCategories); }, [deductionCategories]);
+  // Setelah semua saveData effect jalan di mount pertama, tandai render berikutnya sebagai bukan initial
+  useEffect(() => { isFirstRender.current = false; }, []);
 
   // --- STATES APLIKASI ---
   const [appliedVoucher, setAppliedVoucher] = useState(null);
