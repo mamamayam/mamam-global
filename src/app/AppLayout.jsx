@@ -3,6 +3,7 @@ export default function AppLayout({
   header,
   content,
   bottomNav,
+  overlays,
 }) {
   return (
     <div className="flex h-screen bg-slate-50 font-body text-slate-800 overflow-hidden w-full relative">
@@ -17,6 +18,9 @@ export default function AppLayout({
 
         {bottomNav}
       </main>
+
+      {/* Modal, overlay, dan elemen fixed lainnya */}
+      {overlays}
     </div>
   );
 }

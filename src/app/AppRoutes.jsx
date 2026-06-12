@@ -1,35 +1,39 @@
-import HomeView from '../features/home/HomeView';
-import ShiftView from '../features/finance/ShiftView';
-import PosView from '../features/pos/PosView';
-import HistoryView from '../features/reports/HistoryView';
-import MenuManagement from '../features/menu/MenuMgmt';
-import VariantManagement from '../features/menu/VariantMgmt';
-import HppView from '../features/hpp/HppView';
-import IncomeView from '../features/finance/IncomeView';
-import ExpenseView from '../features/finance/ExpenseView';
-import CustomerView from '../features/customer/CustomerView';
-import ReportsView from '../features/reports/ReportsView';
-import EmployeesView from '../features/hrd/EmployeesView';
-import SettingsView from '../features/settings/SettingsView';
-import StockView from '../features/stock/StockView';
-import AccountView from '../auth/AccountView';
+import { lazy, Suspense } from 'react';
+
+const HomeView        = lazy(() => import('../features/home/HomeView'));
+const ShiftView       = lazy(() => import('../features/finance/ShiftView'));
+const PosView         = lazy(() => import('../features/pos/PosView'));
+const HistoryView     = lazy(() => import('../features/reports/HistoryView'));
+const MenuManagement  = lazy(() => import('../features/menu/MenuMgmt'));
+const VariantManagement = lazy(() => import('../features/menu/VariantMgmt'));
+const HppView         = lazy(() => import('../features/hpp/HppView'));
+const IncomeView      = lazy(() => import('../features/finance/IncomeView'));
+const ExpenseView     = lazy(() => import('../features/finance/ExpenseView'));
+const CustomerView    = lazy(() => import('../features/customer/CustomerView'));
+const ReportsView     = lazy(() => import('../features/reports/ReportsView'));
+const EmployeesView   = lazy(() => import('../features/hrd/EmployeesView'));
+const SettingsView    = lazy(() => import('../features/settings/SettingsView'));
+const BackupView      = lazy(() => import('../features/settings/BackupView'));
+const StockView       = lazy(() => import('../features/stock/StockView'));
+const AccountView     = lazy(() => import('../auth/AccountView'));
 
 const VIEWS = {
-    beranda: HomeView,
-    dompet: ShiftView,
-    kasir: PosView,
-    riwayat: HistoryView,
-    menu: MenuManagement,
-    varian: VariantManagement,
-    hpp: HppView,
-    pemasukan: IncomeView,
+    beranda:    HomeView,
+    dompet:     ShiftView,
+    kasir:      PosView,
+    riwayat:    HistoryView,
+    menu:       MenuManagement,
+    varian:     VariantManagement,
+    hpp:        HppView,
+    pemasukan:  IncomeView,
     pengeluaran: ExpenseView,
-    pelanggan: CustomerView,
-    laporan: ReportsView,
-    karyawan: EmployeesView,
+    pelanggan:  CustomerView,
+    laporan:    ReportsView,
+    karyawan:   EmployeesView,
     pengaturan: SettingsView,
-    stok: StockView,
-    akun: AccountView,
+    backup:     BackupView,
+    stok:       StockView,
+    akun:       AccountView,
 };
 
 export default function AppRoutes({ currentView }) {
@@ -39,5 +43,9 @@ export default function AppRoutes({ currentView }) {
         return <div>View tidak ditemukan</div>;
     }
 
-    return <ActiveView />;
+    return (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-400">Memuat...</div>}>
+            <ActiveView />
+        </Suspense>
+    );
 }

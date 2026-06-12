@@ -22,6 +22,7 @@ import {
   Copy,
   CreditCard,
   DollarSign,
+  Download,
   Edit3,
   FileText,
   History,
@@ -454,6 +455,7 @@ export default function App() {
     { id: 'hpp', icon: Calculator, label: 'Manajemen HPP' },
     { id: 'pelanggan', icon: Users, label: 'Pelanggan & Voucher' },
     { id: 'pengaturan', icon: Settings, label: 'Pengaturan Sistem' },
+    { id: 'backup', icon: Download, label: 'Backup & Restore' },
     { id: 'stok', icon: Warehouse, label: 'Stok Opname' },
     { id: 'akun', icon: UserCog, label: 'Manajemen Akun' },
 
@@ -525,95 +527,124 @@ export default function App() {
 
   return (
     <AppContext.Provider value={contextValue}>
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        .font-heading { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .font-body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: #94a3b8; }
+      `
+      }} />
+
       <AppLayout
-      
-        sidebar={<Sidebar
-          currentView={currentView}
-          setCurrentView={setCurrentView}
-          isSidebarOpen={isSidebarOpen}
-          setIsSidebarOpen={setIsSidebarOpen}
-          visibleMenus={visibleMenus}
-          isAdminMode={isAdminMode}
-          setShowPinModal={setShowPinModal}
-          triggerConfirm={triggerConfirm}
-          setIsAdminMode={setIsAdminMode} />
+        sidebar={
+          <Sidebar
+            currentView={currentView}
+            setCurrentView={setCurrentView}
+            isSidebarOpen={isSidebarOpen}
+            setIsSidebarOpen={setIsSidebarOpen}
+            visibleMenus={visibleMenus}
+            isAdminMode={isAdminMode}
+            setShowPinModal={setShowPinModal}
+            triggerConfirm={triggerConfirm}
+            setIsAdminMode={setIsAdminMode}
+          />
         }
-
-        header={<Header
-          currentView={currentView}
-          currentShift={currentShift}
-          setIsSidebarOpen={setIsSidebarOpen}
-          today={today} />
+        header={
+          <Header
+            currentView={currentView}
+            currentShift={currentShift}
+            setIsSidebarOpen={setIsSidebarOpen}
+            today={today}
+          />
         }
-
         content={
           <AppRoutes currentView={currentView} />
         }
+        bottomNav={
+          <BottomNav
+            currentView={currentView}
+            setCurrentView={setCurrentView}
+          />
+        }
+        overlays={
+          <>
+            {/* Overlay backdrop sidebar mobile */}
+            {isSidebarOpen && (
+              <div
+                className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-opacity duration-300"
+                onClick={() => setIsSidebarOpen(false)}
+              />
+            )}
 
-        bottomNav={<BottomNav
-          currentView={currentView}
-          setCurrentView={setCurrentView} />
+            {/* Alert modal */}
+            {customAlert.isOpen && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
+                <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
+                  <div className="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-heading font-bold text-slate-900 text-lg mb-2">Pemberitahuan</h3>
+                  <p className="text-slate-500 text-sm mb-6">{customAlert.message}</p>
+                  <button
+                    onClick={() => setCustomAlert({ isOpen: false, message: '' })}
+                    className="w-full py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-colors"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Confirm modal */}
+            {confirmModal.isOpen && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
+                <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
+                  <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-heading font-bold text-slate-900 text-lg mb-2">Konfirmasi Tindakan</h3>
+                  <p className="text-slate-500 text-sm mb-6 leading-relaxed">{confirmModal.message}</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setConfirmModal({ isOpen: false, message: '', onConfirm: null })}
+                      className="flex-1 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirmModal.onConfirm) confirmModal.onConfirm();
+                        setConfirmModal({ isOpen: false, message: '', onConfirm: null });
+                      }}
+                      className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors"
+                    >
+                      Ya
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* PIN Modal */}
+            <PinModal
+              isOpen={showPinModal}
+              onClose={() => setShowPinModal(false)}
+              onSuccess={() => {
+                setIsAdminMode(true);
+                setShowPinModal(false);
+              }}
+              triggerAlert={triggerAlert}
+            />
+          </>
         }
       />
-      <div className="flex h-screen bg-slate-50 font-body text-slate-800 overflow-hidden w-full relative">
-        <style dangerouslySetInnerHTML={{
-          __html: `
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-          .font-heading { font-family: 'Plus Jakarta Sans', sans-serif; }
-          .font-body { font-family: 'Inter', sans-serif; }
-          .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-          .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-          .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-          .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: #94a3b8; }
-        `}} />
 
-        {isSidebarOpen && (
-          <div className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-opacity duration-300" onClick={() => setIsSidebarOpen(false)} />
-        )}
-
-        <main className="flex-1 flex flex-col min-w-0 relative">
-          <div className="flex-1 overflow-hidden relative print:overflow-visible flex flex-col">
-            <AppRoutes currentView={currentView} />
-          </div>
-        </main>
-
-        {customAlert.isOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
-            <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
-              <div className="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in"><CheckCircle2 className="w-6 h-6" /></div>
-              <h3 className="font-heading font-bold text-slate-900 text-lg mb-2">Pemberitahuan</h3>
-              <p className="text-slate-500 text-sm mb-6">{customAlert.message}</p>
-              <button onClick={() => setCustomAlert({ isOpen: false, message: '' })} className="w-full py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-colors">Tutup</button>
-            </div>
-          </div>
-        )}
-
-        {confirmModal.isOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
-            <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
-              <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in"><AlertCircle className="w-6 h-6" /></div>
-              <h3 className="font-heading font-bold text-slate-900 text-lg mb-2">Konfirmasi Tindakan</h3>
-              <p className="text-slate-500 text-sm mb-6 leading-relaxed">{confirmModal.message}</p>
-              <div className="flex gap-2">
-                <button onClick={() => setConfirmModal({ isOpen: false, message: '', onConfirm: null })} className="flex-1 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors">Batal</button>
-                <button onClick={() => { if (confirmModal.onConfirm) confirmModal.onConfirm(); setConfirmModal({ isOpen: false, message: '', onConfirm: null }); }} className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors">Ya</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <PinModal
-          isOpen={showPinModal}
-          onClose={() => setShowPinModal(false)}
-          onSuccess={() => {
-            setIsAdminMode(true);
-            setShowPinModal(false);
-          }}
-          triggerAlert={triggerAlert}
-        />
-
-      </div>
-    </AppContext.Provider >
+    </AppContext.Provider>
   );
 }
 
