@@ -1,5 +1,15 @@
 {
   "appId": "com.admin.mamam",
-  "appName": "Mamam Admin",
-  "webDir": "dist"
+  "appName": "Mamam Global",
+  "webDir": "dist",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "launchAutoHide": true,
+      "backgroundColor": "#ffffff",
+      "androidSplashResourceName": "splash",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false
+    }
+  }
 }
