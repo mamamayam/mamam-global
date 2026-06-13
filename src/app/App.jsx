@@ -316,10 +316,55 @@ export default function App() {
 
   const handleOpenBill = () => {
     if (cart.length === 0) return;
-    const bill = { id: `BILL-${Date.now().toString().slice(-4)}`, customerName: customerName || 'Tanpa Nama', cart, orderType, date: new Date() };
+    
+    // Buat ID Transaksi
+    const idTransaksi = `BILL-${Date.now().toString().slice(-4)}`;
+    
+    // 1. Format untuk disimpan ke "Saved Bills" (Draft)
+    const bill = { 
+        id: idTransaksi, 
+        customerName: customerName || 'Tanpa Nama', 
+        cart, 
+        orderType, 
+        date: new Date() 
+    };
     setSavedBills([...savedBills, bill]);
-    triggerAlert('Bill disimpan sebagai Open Bill!');
-    setCart([]); setCustomerName(''); setAppliedVoucher(null); setPointsToRedeem(0); setManualDiscount({ type: 'fixed', value: 0 }); setIsCartOpen(false);
+
+    // 2. Format untuk dilempar ke Struk (Receipt Modal)
+    const openBillData = {
+        id: idTransaksi,
+        date: new Date().toISOString(),
+        orderType,
+        customerName: customerName || 'Tanpa Nama',
+        items: cart,
+        subtotal: getSubtotal(),
+        discount: getDiscount(),
+        pointDiscount: getPointDiscount(),
+        manualDiscountAmount: getManualDiscountAmount(),
+        taxAmount: getTaxAmount(),
+        serviceAmount: getServiceChargeAmount(),
+        deliveryFee: orderType === 'Delivery' ? deliveryFee : 0,
+        total: getTotal(),
+        
+        // --- KUNCI PENANDA BELUM LUNAS ---
+        status: 'OPEN', 
+        paymentMethod: 'Belum Bayar' 
+    };
+
+    // 3. Tampilkan Pop-up Struk!
+    setReceiptModal({ 
+        isOpen: true, 
+        data: openBillData, 
+        kembalian: 0 
+    });
+
+    // 4. Reset Cart dan tutup sidebar/modal keranjang
+    setCart([]); 
+    setCustomerName(''); 
+    setAppliedVoucher(null); 
+    setPointsToRedeem(0); 
+    setManualDiscount({ type: 'fixed', value: 0 }); 
+    setIsCartOpen(false);
   };
 
   const loadSavedBill = (bill) => {

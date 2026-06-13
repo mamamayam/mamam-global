@@ -12,7 +12,11 @@ const ReceiptModal = () => {
     if (!receiptModal.isOpen || !receiptModal.data) return null;
     const { data, kembalian } = receiptModal;
 
+    // --- LOGIKA OPEN BILL ---
+    const isOpenBill = data.status === 'OPEN' || data.status === 'UNPAID';
+
     const handleShareImage = async () => {
+        // ... (Fungsi handleShareImage tetap sama persis seperti kode asli Anda)
         const receiptElement = document.getElementById('receipt-content');
         if (!receiptElement) {
             alert('Error: Elemen HTML struk tidak ditemukan.');
@@ -68,6 +72,7 @@ const ReceiptModal = () => {
 
     return (
         <div className="fixed inset-0 z-[70] flex items-start md:items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto py-10 transition-opacity duration-300 print:bg-white print:p-0">
+            {/* Style Print Tetap Sama */}
             <style dangerouslySetInnerHTML={{
                 __html: `
         @media print {
@@ -79,153 +84,141 @@ const ReceiptModal = () => {
         }
       `}} />
 
-            <div id="receipt-wrapper" className="bg-white rounded-xl w-full max-w-[300px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out flex flex-col shrink-0 print:shadow-none print:w-[58mm] print:rounded-none">
+            <div id="receipt-wrapper" className="bg-white rounded-xl w-full max-w-[300px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out flex flex-col shrink-0 print:shadow-none print:w-[58mm] print:rounded-none overflow-hidden">
 
                 {/* --- KONTEN STRUK --- */}
-                <div id="receipt-content" className="w-[300px] bg-white p-4 font-mono text-[11px] leading-tight text-black mx-auto">
+                <div id="receipt-content" className="w-[300px] bg-white p-4 font-mono text-[11px] leading-tight text-black mx-auto relative">
                     
-                    {/* Header */}
-                    <div className="text-center mb-3">
-                        <div className="font-bold text-lg uppercase tracking-wide">
-                            {storeSettings?.storeName || "Mamam Ayam"}
-                        </div>
-                        {storeSettings?.storeAddress && <div className="text-[10px] mt-1">{storeSettings.storeAddress}</div>}
-                        {storeSettings?.storePhone && <div className="text-[10px]">WA: {storeSettings.storePhone}</div>}
-                    </div>
-
-                    <div className="border-b border-dashed border-gray-500 mb-2"></div>
-
-                    {/* Info Transaksi */}
-                    <div className="flex justify-between mb-1">
-                        <span>{new Date(data.date).toLocaleString("id-ID", { dateStyle: 'short', timeStyle: 'short' }).replace(',', '')}</span>
-                        <span>Kasir: Admin</span>
-                    </div>
-                    <div className="flex justify-between mb-1">
-                        <span>No: {data.id}</span>
-                        <span>{data.orderType}</span>
-                    </div>
-                    {data.customerName && (
-                        <div className="flex justify-between mb-1">
-                            <span>Pelanggan:</span>
-                            <span>{data.customerName}</span>
+                    {/* WATERMARK KHUSUS OPEN BILL */}
+                    {isOpenBill && (
+                        <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none overflow-hidden">
+                            <div className="border-4 border-gray-300 text-gray-300 text-3xl font-black uppercase tracking-widest p-2 rotate-[-35deg] opacity-60">
+                                BELUM LUNAS
+                            </div>
                         </div>
                     )}
 
-                    <div className="border-b border-dashed border-gray-500 my-2"></div>
-
-                    {/* Daftar Item */}
-                    <div className="mb-2">
-                        {data.items.map((item, idx) => (
-                            <div key={idx} className="mb-2">
-                                <div className="font-bold">{item.name}</div>
-                                {item.variantName && <div className="pl-2 text-[10px] text-gray-700">- {item.variantName}</div>}
-                                {item.note && <div className="pl-2 text-[10px] text-gray-700">* {item.note}</div>}
-                                <div className="flex justify-between pl-2 mt-0.5">
-                                    <span>{item.qty} x {formatRupiah(item.price)}</span>
-                                    <span>{formatRupiah(item.price * item.qty)}</span>
-                                </div>
+                    {/* Tambahkan z-10 relatif pada konten agar tulisan tetap di atas watermark */}
+                    <div className="relative z-10">
+                        {/* Header */}
+                        <div className="text-center mb-3">
+                            <div className="font-bold text-lg uppercase tracking-wide">
+                                {storeSettings?.storeName || "Mamam Ayam"}
                             </div>
-                        ))}
-                    </div>
-
-                    <div className="border-b border-dashed border-gray-500 my-2"></div>
-
-                    {/* Perhitungan Total */}
-                    <div className="flex flex-col gap-1 mb-2">
-                        <div className="flex justify-between">
-                            <span>Subtotal</span>
-                            <span>{formatRupiah(data.subtotal)}</span>
-                        </div>
-                        {data.discount > 0 && (
-                            <div className="flex justify-between">
-                                <span>Diskon Vcr</span>
-                                <span>-{formatRupiah(data.discount)}</span>
-                            </div>
-                        )}
-                        {data.pointDiscount > 0 && (
-                            <div className="flex justify-between">
-                                <span>Potong Poin</span>
-                                <span>-{formatRupiah(data.pointDiscount)}</span>
-                            </div>
-                        )}
-                        {data.manualDiscountAmount > 0 && (
-                            <div className="flex justify-between">
-                                <span>Diskon Man</span>
-                                <span>-{formatRupiah(data.manualDiscountAmount)}</span>
-                            </div>
-                        )}
-                        {data.taxAmount > 0 && (
-                            <div className="flex justify-between">
-                                <span>Pajak</span>
-                                <span>{formatRupiah(data.taxAmount)}</span>
-                            </div>
-                        )}
-                        {data.serviceAmount > 0 && (
-                            <div className="flex justify-between">
-                                <span>Service</span>
-                                <span>{formatRupiah(data.serviceAmount)}</span>
-                            </div>
-                        )}
-                        {data.deliveryFee > 0 && (
-                            <div className="flex justify-between">
-                                <span>Ongkir</span>
-                                <span>{formatRupiah(data.deliveryFee)}</span>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="border-b border-dashed border-gray-500 my-2"></div>
-
-                    {/* Pembayaran */}
-                    <div className="flex flex-col gap-1 mb-3">
-                        <div className="flex justify-between font-bold text-[13px]">
-                            <span>TOTAL</span>
-                            <span>{formatRupiah(data.total)}</span>
+                            {storeSettings?.storeAddress && <div className="text-[10px] mt-1">{storeSettings.storeAddress}</div>}
+                            {storeSettings?.storePhone && <div className="text-[10px]">WA: {storeSettings.storePhone}</div>}
                         </div>
 
-                        {data.paymentMethod === "Split Payment" ? (
-                            data.splitDetails.map((p, i) => (
-                                <div key={i} className="flex justify-between">
-                                    <span>Bayar ({p.method})</span>
-                                    <span>{formatRupiah(p.amount)}</span>
+                        {/* JUDUL STRUK DINAMIS */}
+                        <div className="text-center font-bold mb-2 pb-2 border-b border-dashed border-gray-500">
+                            {isOpenBill ? '*** BILL SEMENTARA ***' : '*** LUNAS ***'}
+                        </div>
+
+                        {/* Info Transaksi */}
+                        <div className="flex justify-between mb-1">
+                            <span>{new Date(data.date).toLocaleString("id-ID", { dateStyle: 'short', timeStyle: 'short' }).replace(',', '')}</span>
+                            <span>Kasir: Admin</span>
+                        </div>
+                        <div className="flex justify-between mb-1">
+                            <span>No: {data.id}</span>
+                            <span>{data.orderType}</span>
+                        </div>
+                        {data.customerName && (
+                            <div className="flex justify-between mb-1">
+                                <span>Pelanggan:</span>
+                                <span>{data.customerName}</span>
+                            </div>
+                        )}
+
+                        <div className="border-b border-dashed border-gray-500 my-2"></div>
+
+                        {/* Daftar Item */}
+                        <div className="mb-2">
+                            {data.items.map((item, idx) => (
+                                <div key={idx} className="mb-2">
+                                    <div className="font-bold">{item.name}</div>
+                                    {item.variantName && <div className="pl-2 text-[10px] text-gray-700">- {item.variantName}</div>}
+                                    {item.note && <div className="pl-2 text-[10px] text-gray-700">* {item.note}</div>}
+                                    <div className="flex justify-between pl-2 mt-0.5">
+                                        <span>{item.qty} x {formatRupiah(item.price)}</span>
+                                        <span>{formatRupiah(item.price * item.qty)}</span>
+                                    </div>
                                 </div>
-                            ))
-                        ) : (
+                            ))}
+                        </div>
+
+                        <div className="border-b border-dashed border-gray-500 my-2"></div>
+
+                        {/* Perhitungan Total */}
+                        <div className="flex flex-col gap-1 mb-2">
                             <div className="flex justify-between">
-                                <span>Bayar ({data.paymentMethod})</span>
-                                <span>{formatRupiah(data.total + (kembalian || 0))}</span>
+                                <span>Subtotal</span>
+                                <span>{formatRupiah(data.subtotal)}</span>
                             </div>
-                        )}
+                            {/* ... (Blok diskon/pajak/ongkir tetap sama) ... */}
+                            {data.discount > 0 && <div className="flex justify-between"><span>Diskon Vcr</span><span>-{formatRupiah(data.discount)}</span></div>}
+                            {data.pointDiscount > 0 && <div className="flex justify-between"><span>Potong Poin</span><span>-{formatRupiah(data.pointDiscount)}</span></div>}
+                            {data.manualDiscountAmount > 0 && <div className="flex justify-between"><span>Diskon Man</span><span>-{formatRupiah(data.manualDiscountAmount)}</span></div>}
+                            {data.taxAmount > 0 && <div className="flex justify-between"><span>Pajak</span><span>{formatRupiah(data.taxAmount)}</span></div>}
+                            {data.serviceAmount > 0 && <div className="flex justify-between"><span>Service</span><span>{formatRupiah(data.serviceAmount)}</span></div>}
+                            {data.deliveryFee > 0 && <div className="flex justify-between"><span>Ongkir</span><span>{formatRupiah(data.deliveryFee)}</span></div>}
+                        </div>
 
-                        {kembalian > 0 && (
-                            <div className="flex justify-between">
-                                <span>Kembalian</span>
-                                <span>{formatRupiah(kembalian)}</span>
+                        <div className="border-b border-dashed border-gray-500 my-2"></div>
+
+                        {/* Pembayaran - KONDISIONAL BERDASARKAN STATUS */}
+                        <div className="flex flex-col gap-1 mb-3">
+                            <div className="flex justify-between font-bold text-[13px]">
+                                <span>TOTAL TAGIHAN</span>
+                                <span>{formatRupiah(data.total)}</span>
                             </div>
-                        )}
-                    </div>
 
-                    <div className="border-b border-dashed border-gray-500 mb-3"></div>
+                            {!isOpenBill && (
+                                <>
+                                    {data.paymentMethod === "Split Payment" ? (
+                                        data.splitDetails.map((p, i) => (
+                                            <div key={i} className="flex justify-between">
+                                                <span>Bayar ({p.method})</span>
+                                                <span>{formatRupiah(p.amount)}</span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="flex justify-between">
+                                            <span>Bayar ({data.paymentMethod})</span>
+                                            <span>{formatRupiah(data.total + (kembalian || 0))}</span>
+                                        </div>
+                                    )}
 
-                    {/* Footer */}
-                    <div className="text-center text-[10px]">
-                        <div className="font-bold">{storeSettings?.receiptFooter || "Terima Kasih"}</div>
+                                    {kembalian > 0 && (
+                                        <div className="flex justify-between">
+                                            <span>Kembalian</span>
+                                            <span>{formatRupiah(kembalian)}</span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        <div className="border-b border-dashed border-gray-500 mb-3"></div>
+
+                        {/* Footer */}
+                        <div className="text-center text-[10px]">
+                            {isOpenBill ? (
+                                <div className="font-bold text-gray-600">
+                                    Silakan bayar di kasir<br/>saat Anda selesai.
+                                </div>
+                            ) : (
+                                <div className="font-bold">{storeSettings?.receiptFooter || "Terima Kasih"}</div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
-                {/* --- AREA TOMBOL --- */}
-                <div className="p-4 bg-slate-50 border-t border-slate-100 rounded-b-xl flex flex-col gap-2 no-print">
-                    <div className="flex gap-2">
-                        <button
-                            onClick={async () => {
-                                if (isNativePlatform()) {
-                                    await printNativeBluetooth(data, storeSettings, kembalian);
-                                } else {
-                                    printReceipt();
-                                }
-                            }}
-                            className="flex-1 py-3 rounded-lg bg-slate-800 text-white font-bold shadow-sm hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors"
-                        >
+                {/* --- AREA TOMBOL (Tetap Sama) --- */}
+                <div className="p-4 bg-slate-50 border-t border-slate-100 rounded-b-xl flex flex-col gap-2 no-print relative z-20">
+                    {/* ... Tombol Cetak, Bagikan, Tutup Selesai ... */}
+                     <div className="flex gap-2">
+                        <button onClick={async () => { if (isNativePlatform()) { await printNativeBluetooth(data, storeSettings, kembalian); } else { printReceipt(); } }} className="flex-1 py-3 rounded-lg bg-slate-800 text-white font-bold shadow-sm hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
                             <Printer className="w-4 h-4" /> Cetak
                         </button>
                         <button onClick={handleShareImage} className="flex-1 py-3 rounded-lg bg-green-600 text-white font-bold shadow-sm hover:bg-green-700 text-sm flex justify-center items-center gap-2 transition-colors">
