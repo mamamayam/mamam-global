@@ -2,7 +2,6 @@ import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package } from 'lucide-react';
 import CartDrawer from '../pos/CartDrawer';
-import ReceiptModal from '../pos/modals/ReceiptModal';
 import PaymentModal from '../pos/modals/PaymentModal';
 import VariantSelectionModal from '../pos/modals/VariantSelectionModal';
 
@@ -96,7 +95,6 @@ const PosView = () => {
                 </button>
             </div>
             <CartDrawer />
-            <ReceiptModal />
             <PaymentModal />
             <VariantSelectionModal />
         </div>

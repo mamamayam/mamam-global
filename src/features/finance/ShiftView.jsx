@@ -1,11 +1,14 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Clock, FileText, History, Printer, Edit, X, Trash2 } from 'lucide-react';
+import { Clock, FileText, History, Printer, Edit, X, Trash2, Share2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
+import { isNativePlatform, printShiftNativeBluetooth } from '../../library/printer';
+import { toPng, toBlob } from 'html-to-image';
+import { generateUUID } from '../../utils/formatters';
 
 const ShiftView = () => {
-  const { currentShift, setCurrentShift, shiftHistory, setShiftHistory, 
-    salesHistory, expenses, incomes, formatRupiah, triggerAlert, triggerConfirm, 
+  const { currentShift, setCurrentShift, shiftHistory, setShiftHistory,
+    salesHistory, expenses, incomes, formatRupiah, triggerAlert, triggerConfirm,
     storeSettings, isAdminMode, setIsAdminMode } = useAppContext();
 
   const [initialCashInput, setInitialCashInput] = useState('');
@@ -19,6 +22,60 @@ const ShiftView = () => {
 
   // Filter Bulan untuk Rekapitulasi Riwayat Shift di Bagian Bawah
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7)); // Default YYYY-MM
+
+  const handleShareImage = async () => {
+    const reportElement = document.getElementById('xreading-content');
+    if (!reportElement) {
+      alert('Error: Elemen laporan tidak ditemukan.');
+      return;
+    }
+
+    try {
+      if (Capacitor.isNativePlatform()) {
+        const dataUrl = await toPng(reportElement, {
+          backgroundColor: '#ffffff',
+          pixelRatio: 3,
+          skipAutoScale: true,
+          style: { width: '300px' }
+        });
+
+        const base64Data = dataUrl.split(',')[1];
+        const fileName = `laporan-shift-${closedShiftData.id}-${Date.now()}.png`;
+
+        const savedFile = await Filesystem.writeFile({
+          path: fileName,
+          data: base64Data,
+          directory: Directory.Cache
+        });
+
+        await Share.share({
+          title: 'Laporan Tutup Dompet',
+          text: `Berikut adalah Laporan Tutup Dompet (ID: ${closedShiftData.id})`,
+          url: savedFile.uri,
+          dialogTitle: 'Bagikan Laporan via'
+        });
+      } else {
+        const blob = await toBlob(reportElement, {
+          backgroundColor: '#ffffff',
+          pixelRatio: 2,
+          skipAutoScale: true,
+          style: { width: '300px' }
+        });
+
+        if (!blob) return;
+        const file = new File([blob], `laporan-shift-${closedShiftData.id}.png`, { type: 'image/png' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `laporan-shift-${closedShiftData.id}.png`;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Log Error Asli:', error);
+      if (error.name !== 'AbortError') alert(`GAGAL SHARE!\n\nPesan Error: ${error.message || JSON.stringify(error)}`);
+    }
+  };
 
   // Calculate stats for current shift
   const shiftStats = useMemo(() => {
@@ -56,7 +113,7 @@ const ShiftView = () => {
   const handleOpenShift = () => {
     if (!initialCashInput || Number(initialCashInput) < 0) return triggerAlert('Masukkan nominal saldo awal yang valid.');
     setCurrentShift({
-      id: `DOMPET-${Date.now().toString().slice(-6)}`,
+      id: `DOMPET-${generateUUID().split('-')[0].toUpperCase()}`,
       startTime: new Date(),
       initialCash: Number(initialCashInput)
     });
@@ -210,9 +267,35 @@ const ShiftView = () => {
           </div>
         </div>
 
-        <div className="flex gap-2 mt-6 print:hidden w-full max-w-sm">
-          <button onClick={() => window.print()} className="flex-1 py-3 bg-slate-800 text-white font-bold rounded-xl shadow-lg hover:bg-slate-900 transition-colors flex items-center justify-center gap-2"><Printer className="w-4 h-4" /> Cetak</button>
-          <button onClick={() => setShowXReading(false)} className="flex-1 py-3 bg-white text-slate-800 border border-slate-200 font-bold rounded-xl shadow-sm hover:bg-slate-50 transition-colors">Tutup</button>
+        {/* AREA TOMBOL CETAK & BAGIKAN */}
+        <div className="flex flex-col gap-2 mt-6 print:hidden w-full max-w-sm">
+          <div className="flex gap-2">
+            <button 
+              onClick={async () => {
+                  if (isNativePlatform()) {
+                      await printShiftNativeBluetooth(closedShiftData, storeSettings);
+                  } else {
+                      window.print();
+                  }
+              }} 
+              className="flex-1 py-3 bg-slate-800 text-white font-bold rounded-xl shadow-lg hover:bg-slate-900 transition-colors flex items-center justify-center gap-2"
+            >
+              <Printer className="w-4 h-4" /> Cetak
+            </button>
+            
+            <button 
+              onClick={handleShareImage} 
+              className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Share2 className="w-4 h-4" /> Bagikan
+            </button>
+          </div>
+          <button 
+            onClick={() => setShowXReading(false)} 
+            className="w-full py-3 bg-white text-slate-800 border border-slate-200 font-bold rounded-xl shadow-sm hover:bg-slate-50 transition-colors"
+          >
+            Tutup
+          </button>
         </div>
       </div>
     );
@@ -227,8 +310,8 @@ const ShiftView = () => {
       {!currentShift ? (
         <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-lg border border-slate-100 text-center animate-in zoom-in-95 duration-500 mt-10 mb-8 shrink-0">
           <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4"><Clock className="w-8 h-8" /></div>
-          <h3 className="font-heading text-2xl font-black text-slate-800 mb-2">Buka Dompet</h3>
-          <p className="text-slate-500 text-sm mb-6">Masukkan jumlah uang tunai fisik yang ada di dalam dompet saat ini sebagai modal harian.</p>
+          <h3 className="font-heading text-2xl font-black text-slate-800 mb-2">Dompet Belom Dibuka</h3>
+          <p className="text-slate-500 text-sm mb-6">Masukkan jumlah uang tunai yang ada di dalam dompet saat ini sebagai modal harian.</p>
 
           <div className="text-left mb-6">
             <label className="block text-xs font-bold text-slate-500 mb-2">Saldo Awal</label>
@@ -295,7 +378,7 @@ const ShiftView = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
             <h3 className="font-heading text-lg font-bold text-slate-800 flex items-center gap-2">
-              <History className="w-5 h-5 text-orange-600" /> Riwayat 
+              <History className="w-5 h-5 text-orange-600" /> Riwayat
             </h3>
             <p className="text-xs text-slate-400">Laporan performa dan akurasi kas di dompet.</p>
           </div>

@@ -3,8 +3,12 @@ import {
   FileJson, Sheet, CloudUpload,
   Upload, FileUp, AlertTriangle, CheckCircle,
   Database, RefreshCw, X, ArrowLeft,
-  Calendar, Info, Zap, ToggleLeft, ToggleRight,
+  Calendar, Info, ToggleLeft, ToggleRight,
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { loadData, saveData, exportAllData } from '../../storage/db';
 
 // ── Konstanta ────────────────────────────────────────────────────────────
 
@@ -17,54 +21,59 @@ const ALL_KEYS = [
 ];
 
 const DATE_FILTERABLE_KEYS = {
-  salesHistory:        'date',
-  expenses:            'date',
-  incomes:             'date',
-  shiftHistory:        'startTime',
-  employeeDailyRecords:'date',
+  salesHistory:         'date',
+  expenses:             'date',
+  incomes:              'date',
+  shiftHistory:         'startTime',
+  employeeDailyRecords: 'date',
 };
 
-const TRANSACTION_KEYS = ['salesHistory', 'expenses', 'incomes', 'shiftHistory'];
+// Key transaksi: array of objects with `id`, di-upsert per-row ke tabel masing-masing
+const TRANSACTION_KEYS = [
+  'salesHistory', 'expenses', 'incomes', 'shiftHistory',
+  'employeeDailyRecords', 'claimsHistory', 'savedBills',
+];
 
-const PREFIX = 'mamam_kasir_';
+// Key konfigurasi: disimpan sebagai blob JSON ke tabel `app_config` { key, value }
+const CONFIG_KEYS = [
+  'menus', 'variantGroups', 'categories', 'hppLibrary',
+  'customers', 'vouchers', 'employees',
+  'expenseCategories', 'incomeCategories', 'additionCategories', 'deductionCategories',
+  'rawMaterials', 'semiFinished', 'storeSettings', 'currentShift',
+];
 
-// ── Helpers localStorage ─────────────────────────────────────────────────
+// ── Helpers Dexie ─────────────────────────────────────────────────────────
 
-function readAllFromLocalStorage() {
-  const result = {};
-  for (const key of ALL_KEYS) {
-    try {
-      const raw = localStorage.getItem(`${PREFIX}${key}`);
-      if (raw) result[key] = JSON.parse(raw);
-    } catch { /* skip invalid entries */ }
-  }
-  return result;
-}
+/**
+ * FIX: Ganti readAllFromLocalStorage → exportAllData() dari Dexie.
+ * Tidak diperlukan lagi sebagai fungsi terpisah; panggil langsung exportAllData().
+ */
 
-function writeAllToLocalStorage(data, mode = 'merge') {
+/**
+ * FIX: Ganti writeAllToLocalStorage → tulis ke Dexie dengan merge/replace.
+ */
+async function writeAllToDexie(data, mode = 'merge') {
   for (const key of ALL_KEYS) {
     if (!(key in data)) continue;
-    try {
-      if (mode === 'replace') {
-        localStorage.setItem(`${PREFIX}${key}`, JSON.stringify(data[key]));
-      } else {
-        const existing = localStorage.getItem(`${PREFIX}${key}`);
-        if (!existing) {
-          localStorage.setItem(`${PREFIX}${key}`, JSON.stringify(data[key]));
-          continue;
-        }
-        const parsed = JSON.parse(existing);
-        if (Array.isArray(parsed) && Array.isArray(data[key])) {
-          const merged = [...parsed];
-          for (const item of data[key]) {
-            if (!merged.find(e => e.id === item.id)) merged.push(item);
-          }
-          localStorage.setItem(`${PREFIX}${key}`, JSON.stringify(merged));
-        } else {
-          localStorage.setItem(`${PREFIX}${key}`, JSON.stringify(data[key]));
-        }
+    if (mode === 'replace') {
+      await saveData(key, data[key]);
+    } else {
+      // mode merge: gabungkan array berdasarkan id, non-array langsung replace
+      const existing = await loadData(key, null);
+      if (existing === null) {
+        await saveData(key, data[key]);
+        continue;
       }
-    } catch { /* skip invalid entries */ }
+      if (Array.isArray(existing) && Array.isArray(data[key])) {
+        const merged = [...existing];
+        for (const item of data[key]) {
+          if (!merged.find(e => e.id === item.id)) merged.push(item);
+        }
+        await saveData(key, merged);
+      } else {
+        await saveData(key, data[key]);
+      }
+    }
   }
 }
 
@@ -91,30 +100,40 @@ function filterByDateRange(data, startDate, endDate) {
   return result;
 }
 
-function getStorageSize() {
-  let total = 0;
-  for (const key of ALL_KEYS) {
-    const val = localStorage.getItem(`${PREFIX}${key}`);
-    if (val) total += val.length;
-  }
+/**
+ * FIX: Hitung ukuran dari data Dexie, bukan localStorage.
+ */
+function calcStorageSize(allData) {
+  const total = JSON.stringify(allData).length;
   if (total < 1024)    return `${total} B`;
   if (total < 1048576) return `${(total / 1024).toFixed(1)} KB`;
   return `${(total / 1048576).toFixed(1)} MB`;
 }
 
-function countRecords() {
+/**
+ * FIX: Hitung record dari data Dexie, bukan localStorage.
+ */
+function calcRecordCount(allData) {
   let count = 0;
   for (const key of ['salesHistory', 'expenses', 'incomes', 'employees']) {
-    try {
-      const raw = localStorage.getItem(`${PREFIX}${key}`);
-      if (raw) count += JSON.parse(raw).length;
-    } catch { /* skip */ }
+    if (Array.isArray(allData[key])) count += allData[key].length;
   }
   return count;
 }
 
-// ── Supabase sync ────────────────────────────────────────────────────────
-
+/**
+ * Upload semua data ke Supabase:
+ * - TRANSACTION_KEYS → tabel masing-masing, upsert by id, batch 100
+ * - CONFIG_KEYS      → tabel `app_config`, upsert by key sebagai JSON blob
+ *
+ * Tabel yang dibutuhkan di Supabase:
+ *   salesHistory, expenses, incomes, shiftHistory,
+ *   employeeDailyRecords, claimsHistory, savedBills
+ *     → kolom: id (text PK), payload (jsonb)
+ *
+ *   app_config
+ *     → kolom: key (text PK), value (jsonb)
+ */
 async function syncToSupabase() {
   const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
   const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
@@ -124,22 +143,75 @@ async function syncToSupabase() {
 
   const { createClient } = await import('@supabase/supabase-js');
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  const data = readAllFromLocalStorage();
+  const data = await exportAllData();
   let totalUpserted = 0;
 
+  // 1. Sync transaksi — upsert per row ke tabel masing-masing
   for (const key of TRANSACTION_KEYS) {
     const items = data[key];
     if (!items?.length) continue;
     for (let i = 0; i < items.length; i += 100) {
       const batch = items.slice(i, i + 100).map(item => ({ id: item.id, payload: item }));
       const { error } = await supabase.from(key).upsert(batch, { onConflict: 'id' });
-      if (error) throw new Error(`Gagal sync ${key}: ${error.message}`);
-      totalUpserted += Math.min(100, items.length - i);
+      if (error) throw new Error(`Gagal sync transaksi [${key}]: ${error.message}`);
+      totalUpserted += batch.length;
     }
+  }
+
+  // 2. Sync config — upsert ke tabel app_config sebagai JSON blob per key
+  const configBatch = CONFIG_KEYS
+    .filter(key => data[key] !== undefined)
+    .map(key => ({ key, value: data[key] }));
+
+  if (configBatch.length) {
+    const { error } = await supabase.from('app_config').upsert(configBatch, { onConflict: 'key' });
+    if (error) throw new Error(`Gagal sync config: ${error.message}`);
+    totalUpserted += configBatch.length;
   }
 
   localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
   return totalUpserted;
+}
+
+/**
+ * Restore semua data dari Supabase ke Dexie lokal.
+ * Dipanggil saat pindah HP / install ulang.
+ * Mode 'replace' = hapus lokal dulu; 'merge' = gabungkan by id.
+ */
+async function restoreFromSupabase(mode = 'replace') {
+  const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
+  const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    throw new Error('Konfigurasi Supabase belum ada di .env');
+  }
+
+  const { createClient } = await import('@supabase/supabase-js');
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  const restored = {};
+
+  // 1. Ambil semua transaksi dari tabel masing-masing
+  for (const key of TRANSACTION_KEYS) {
+    const { data: rows, error } = await supabase.from(key).select('payload');
+    if (error) throw new Error(`Gagal restore transaksi [${key}]: ${error.message}`);
+    restored[key] = (rows || []).map(r => r.payload);
+  }
+
+  // 2. Ambil semua config dari tabel app_config
+  const { data: configRows, error: configError } = await supabase
+    .from('app_config')
+    .select('key, value')
+    .in('key', CONFIG_KEYS);
+
+  if (configError) throw new Error(`Gagal restore config: ${configError.message}`);
+
+  for (const row of configRows || []) {
+    restored[row.key] = row.value;
+  }
+
+  // 3. Tulis ke Dexie lokal
+  await writeAllToDexie(restored, mode);
+
+  return Object.keys(restored).length;
 }
 
 // ── DateRangeModal ───────────────────────────────────────────────────────
@@ -294,7 +366,7 @@ const IMPORT_MODES = [
 ];
 
 function ImportModal({ type, onClose, onConfirm }) {
-  const inputRef = useRef(null);  // fix: pakai useRef, bukan plain object
+  const inputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [file,     setFile    ] = useState(null);
   const [mode,     setMode    ] = useState('merge');
@@ -470,6 +542,11 @@ const BackupView = ({ onBack }) => {
   const [importModal,     setImportModal   ] = useState(null);
   const [dateRangeModal,  setDateRangeModal] = useState(null);
   const [isSyncing,       setIsSyncing     ] = useState(false);
+  const [isRestoring,     setIsRestoring   ] = useState(false);
+
+  // FIX: storageSize & recordCount sekarang dihitung dari Dexie secara async
+  const [storageSize,  setStorageSize ] = useState('Menghitung...');
+  const [recordCount,  setRecordCount ] = useState('...');
 
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(
     () => localStorage.getItem('mamam_auto_sync_enabled') === 'true'
@@ -479,9 +556,15 @@ const BackupView = ({ onBack }) => {
     return raw ? new Date(raw).toLocaleString('id-ID') : null;
   });
 
-  const storageSize = getStorageSize();
-  const recordCount = countRecords();
-  const lastBackup  = localStorage.getItem('mamam_last_backup') || 'Belum pernah';
+  const lastBackup = localStorage.getItem('mamam_last_backup') || 'Belum pernah';
+
+  // FIX: Load stats dari Dexie saat mount
+  useEffect(() => {
+    exportAllData().then(allData => {
+      setStorageSize(calcStorageSize(allData));
+      setRecordCount(calcRecordCount(allData));
+    });
+  }, []);
 
   // Persist auto-sync preference
   useEffect(() => {
@@ -534,49 +617,91 @@ const BackupView = ({ onBack }) => {
   function handleExportJsonWithRange(startDate, endDate) {
     setDateRangeModal(null);
     const tag = startDate && endDate ? `${startDate}_${endDate}` : 'semua';
-    startAction('exportJson', 300, 'File JSON berhasil diunduh!', () => {
-      const data = filterByDateRange(readAllFromLocalStorage(), startDate, endDate);
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url  = URL.createObjectURL(blob);
-      Object.assign(document.createElement('a'), { href: url, download: `backup-mamam-${tag}.json` }).click();
-      URL.revokeObjectURL(url);
+    const filename = `backup-mamam-${tag}.json`;
+
+    startAction('exportJson', 300, Capacitor.isNativePlatform() ? 'Membuka menu simpan...' : 'File JSON berhasil diunduh!', async () => {
+      // FIX: baca dari Dexie, bukan localStorage
+      const raw  = await exportAllData();
+      const data = filterByDateRange(raw, startDate, endDate);
+      const jsonString = JSON.stringify(data, null, 2);
+
+      if (Capacitor.isNativePlatform()) {
+        const base64Data = btoa(encodeURIComponent(jsonString).replace(/%([0-9A-F]{2})/g, (match, p1) => {
+          return String.fromCharCode(parseInt(p1, 16));
+        }));
+        const fileResult = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache
+        });
+        await Share.share({
+          title: filename,
+          url: fileResult.uri,
+          dialogTitle: 'Simpan / Bagikan Backup JSON'
+        });
+      } else {
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        Object.assign(document.createElement('a'), { href: url, download: filename }).click();
+        URL.revokeObjectURL(url);
+      }
     });
   }
 
   function handleExportExcelWithRange(startDate, endDate) {
     setDateRangeModal(null);
     const tag = startDate && endDate ? `${startDate}_${endDate}` : 'semua';
-    startAction('exportExcel', 400, 'File Excel berhasil diunduh!', async () => {
+    const filename = `laporan-mamam-${tag}.xlsx`;
+
+    startAction('exportExcel', 400, Capacitor.isNativePlatform() ? 'Membuka menu simpan...' : 'File Excel berhasil diunduh!', async () => {
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs');
-      const data = filterByDateRange(readAllFromLocalStorage(), startDate, endDate);
+      // FIX: baca dari Dexie, bukan localStorage
+      const raw  = await exportAllData();
+      const data = filterByDateRange(raw, startDate, endDate);
       const wb   = XLSX.utils.book_new();
       const sheetMap = {
-        salesHistory:        'Riwayat Penjualan',
-        expenses:            'Pengeluaran',
-        incomes:             'Pemasukan',
-        employees:           'Karyawan',
-        employeeDailyRecords:'Absensi',
-        shiftHistory:        'Riwayat Shift',
-        customers:           'Pelanggan',
+        salesHistory:         'Riwayat Penjualan',
+        expenses:             'Pengeluaran',
+        incomes:              'Pemasukan',
+        employees:            'Karyawan',
+        employeeDailyRecords: 'Absensi',
+        shiftHistory:         'Riwayat Shift',
+        customers:            'Pelanggan',
       };
       for (const [key, name] of Object.entries(sheetMap)) {
         if (data[key]?.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data[key]), name);
       }
       if (startDate || endDate) {
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{
-          Dari:        startDate || 'Awal data',
-          Sampai:      endDate   || 'Sekarang',
+          Dari:         startDate || 'Awal data',
+          Sampai:       endDate   || 'Sekarang',
           DiExportPada: new Date().toLocaleString('id-ID'),
         }]), 'Info Export');
       }
-      XLSX.writeFile(wb, `laporan-mamam-${tag}.xlsx`);
+
+      if (Capacitor.isNativePlatform()) {
+        const base64Data = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+        const fileResult = await Filesystem.writeFile({
+          path: filename,
+          data: base64Data,
+          directory: Directory.Cache
+        });
+        await Share.share({
+          title: filename,
+          url: fileResult.uri,
+          dialogTitle: 'Simpan / Bagikan Laporan Excel'
+        });
+      } else {
+        XLSX.writeFile(wb, filename);
+      }
     });
   }
 
   function handleImportConfirm(file, mode) {
     setImportModal(null);
     startAction('importJson', 200, 'Data berhasil diimpor! Muat ulang aplikasi.', async () => {
-      writeAllToLocalStorage(JSON.parse(await file.text()), mode);
+      // FIX: tulis ke Dexie, bukan localStorage
+      await writeAllToDexie(JSON.parse(await file.text()), mode);
       setTimeout(() => window.location.reload(), 1500);
     });
   }
@@ -586,11 +711,25 @@ const BackupView = ({ onBack }) => {
     try {
       const count = await syncToSupabase();
       setLastSyncTime(new Date().toLocaleString('id-ID'));
-      showToast(`Sync selesai — ${count} record diupload`);
+      showToast(`Sync selesai — ${count} key diupload`);
     } catch (err) {
       showToast('Gagal: ' + err.message, 'error');
     } finally {
       setIsSyncing(false);
+    }
+  }
+
+  async function handleRestoreFromSupabase() {
+    if (!window.confirm('Restore semua data dari Supabase? Data lokal akan ditimpa.')) return;
+    setIsRestoring(true);
+    try {
+      const count = await restoreFromSupabase('replace');
+      showToast(`Restore selesai — ${count} key dipulihkan`);
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) {
+      showToast('Gagal: ' + err.message, 'error');
+    } finally {
+      setIsRestoring(false);
     }
   }
 
@@ -707,7 +846,7 @@ const BackupView = ({ onBack }) => {
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-bold text-sm text-slate-800">Sync setiap transaksi</p>
+                <p className="font-bold text-sm text-slate-800">Sync otomatis setiap transaksi</p>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {autoSyncEnabled
                     ? `Aktif · terakhir: ${lastSyncTime || 'belum pernah'}`
@@ -725,9 +864,10 @@ const BackupView = ({ onBack }) => {
               </button>
             </div>
 
+            {/* Sync sekarang */}
             <button
               onClick={handleManualSync}
-              disabled={isSyncing}
+              disabled={isSyncing || isRestoring}
               className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2
                 ${isSyncing
                   ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
@@ -736,9 +876,30 @@ const BackupView = ({ onBack }) => {
             >
               {isSyncing
                 ? <><RefreshCw className="w-4 h-4 animate-spin" /> Menyinkronkan...</>
-                : <><CloudUpload className="w-4 h-4" /> Sync Sekarang</>
+                : <><CloudUpload className="w-4 h-4" /> Sync Sekarang (Upload)</>
               }
             </button>
+
+            {/* Restore dari Supabase */}
+            <div className="border-t border-slate-100 pt-3">
+              <p className="text-xs text-slate-400 mb-2">
+                Pindah HP atau install ulang? Tarik semua data dari cloud.
+              </p>
+              <button
+                onClick={handleRestoreFromSupabase}
+                disabled={isSyncing || isRestoring}
+                className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border-2
+                  ${isRestoring
+                    ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700'
+                  }`}
+              >
+                {isRestoring
+                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Memulihkan...</>
+                  : <><Upload className="w-4 h-4" /> Restore dari Supabase</>
+                }
+              </button>
+            </div>
           </div>
         </div>
 

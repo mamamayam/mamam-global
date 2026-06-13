@@ -81,7 +81,7 @@ const ReceiptModal = () => {
 
             <div id="receipt-wrapper" className="bg-white rounded-xl w-full max-w-[300px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out flex flex-col shrink-0 print:shadow-none print:w-[58mm] print:rounded-none">
 
-                {/* --- KONTEN STRUK ALA ALFAMART --- */}
+                {/* --- KONTEN STRUK --- */}
                 <div id="receipt-content" className="w-[300px] bg-white p-4 font-mono text-[11px] leading-tight text-black mx-auto">
                     
                     {/* Header */}

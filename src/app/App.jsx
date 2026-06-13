@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, createContext, useContext, useRef } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
-import { loadData, saveData } from '../storage/localStorage';
+import { loadData } from '../storage/localStorage';
+import { saveData } from '../storage/db';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
 import { AppContext, useAppContext } from '../context/AppContext';
 import PinModal from '../auth/PinModal';
@@ -9,6 +10,7 @@ import AppLayout from '../app/AppLayout';
 import Sidebar from '../app/layout/Sidebar';
 import Header from '../app/layout/Header';
 import BottomNav from '../app/layout/BottomNav';
+import ReceiptModal from '../features/pos/modals/ReceiptModal';
 
 import {
   AlertCircle,
@@ -133,30 +135,43 @@ export default function App() {
     autoPrint: false, paperSize: '58mm', printLogo: true, taxRate: 0, serviceCharge: 0
   }));
 
-  // --- SIMPAN PERUBAHAN KE "DATABASE" (localStorage) ---
-  useEffect(() => { saveData('variantGroups', variantGroups); }, [variantGroups]);
-  useEffect(() => { saveData('menus', menus); }, [menus]);
-  useEffect(() => { saveData('salesHistory', salesHistory); if (!isFirstRender.current) window.__triggerSupabaseSync?.(); }, [salesHistory]);
-  useEffect(() => { saveData('hppLibrary', hppLibrary); }, [hppLibrary]);
-  useEffect(() => { saveData('savedBills', savedBills); }, [savedBills]);
-  useEffect(() => { saveData('expenseCategories', expenseCategories); }, [expenseCategories]);
-  useEffect(() => { saveData('expenses', expenses); if (!isFirstRender.current) window.__triggerSupabaseSync?.(); }, [expenses]);
-  useEffect(() => { saveData('incomeCategories', incomeCategories); }, [incomeCategories]);
-  useEffect(() => { saveData('incomes', incomes); if (!isFirstRender.current) window.__triggerSupabaseSync?.(); }, [incomes]);
-  useEffect(() => { saveData('currentShift', currentShift); }, [currentShift]);
-  useEffect(() => { saveData('shiftHistory', shiftHistory); if (!isFirstRender.current) window.__triggerSupabaseSync?.(); }, [shiftHistory]);
-  useEffect(() => { saveData('customers', customers); }, [customers]);
-  useEffect(() => { saveData('vouchers', vouchers); }, [vouchers]);
-  useEffect(() => { saveData('claimsHistory', claimsHistory); }, [claimsHistory]);
-  useEffect(() => { saveData('storeSettings', storeSettings); }, [storeSettings]);
-  useEffect(() => { saveData('rawMaterials', rawMaterials); }, [rawMaterials]);
-  useEffect(() => { saveData('semiFinished', semiFinished); }, [semiFinished]);
-  useEffect(() => { saveData('categories', categories); }, [categories]);
-  useEffect(() => { saveData('employees', employees); }, [employees]);
-  useEffect(() => { saveData('employeeDailyRecords', employeeDailyRecords); }, [employeeDailyRecords]);
-  useEffect(() => { saveData('additionCategories', additionCategories); }, [additionCategories]);
-  useEffect(() => { saveData('deductionCategories', deductionCategories); }, [deductionCategories]);
-  // Setelah semua saveData effect jalan di mount pertama, tandai render berikutnya sebagai bukan initial
+  const configSyncTimer = useRef(null);
+  const triggerConfigSync = () => {
+    if (isFirstRender.current) return;
+    clearTimeout(configSyncTimer.current);
+    configSyncTimer.current = setTimeout(() => window.__triggerSupabaseSync?.(), 3000);
+  };
+  const triggerTransactionSync = () => {
+    if (!isFirstRender.current) window.__triggerSupabaseSync?.();
+  };
+
+  // Transaksi — sync langsung
+  useEffect(() => { saveData('salesHistory', salesHistory);        triggerTransactionSync(); }, [salesHistory]);
+  useEffect(() => { saveData('expenses', expenses);                triggerTransactionSync(); }, [expenses]);
+  useEffect(() => { saveData('incomes', incomes);                  triggerTransactionSync(); }, [incomes]);
+  useEffect(() => { saveData('shiftHistory', shiftHistory);        triggerTransactionSync(); }, [shiftHistory]);
+  useEffect(() => { saveData('employeeDailyRecords', employeeDailyRecords); triggerTransactionSync(); }, [employeeDailyRecords]);
+  useEffect(() => { saveData('claimsHistory', claimsHistory);      triggerTransactionSync(); }, [claimsHistory]);
+  useEffect(() => { saveData('savedBills', savedBills);            triggerTransactionSync(); }, [savedBills]);
+
+  // Config — sync debounce 3 detik
+  useEffect(() => { saveData('menus', menus);                      triggerConfigSync(); }, [menus]);
+  useEffect(() => { saveData('variantGroups', variantGroups);      triggerConfigSync(); }, [variantGroups]);
+  useEffect(() => { saveData('categories', categories);            triggerConfigSync(); }, [categories]);
+  useEffect(() => { saveData('hppLibrary', hppLibrary);            triggerConfigSync(); }, [hppLibrary]);
+  useEffect(() => { saveData('customers', customers);              triggerConfigSync(); }, [customers]);
+  useEffect(() => { saveData('vouchers', vouchers);                triggerConfigSync(); }, [vouchers]);
+  useEffect(() => { saveData('employees', employees);              triggerConfigSync(); }, [employees]);
+  useEffect(() => { saveData('expenseCategories', expenseCategories); triggerConfigSync(); }, [expenseCategories]);
+  useEffect(() => { saveData('incomeCategories', incomeCategories); triggerConfigSync(); }, [incomeCategories]);
+  useEffect(() => { saveData('additionCategories', additionCategories); triggerConfigSync(); }, [additionCategories]);
+  useEffect(() => { saveData('deductionCategories', deductionCategories); triggerConfigSync(); }, [deductionCategories]);
+  useEffect(() => { saveData('rawMaterials', rawMaterials);        triggerConfigSync(); }, [rawMaterials]);
+  useEffect(() => { saveData('semiFinished', semiFinished);        triggerConfigSync(); }, [semiFinished]);
+  useEffect(() => { saveData('storeSettings', storeSettings);      triggerConfigSync(); }, [storeSettings]);
+  useEffect(() => { saveData('currentShift', currentShift);        triggerConfigSync(); }, [currentShift]);
+
+  // Tandai initial render selesai
   useEffect(() => { isFirstRender.current = false; }, []);
 
   // --- STATES APLIKASI ---
@@ -645,6 +660,8 @@ export default function App() {
               }}
               triggerAlert={triggerAlert}
             />
+
+            <ReceiptModal />
           </>
         }
       />

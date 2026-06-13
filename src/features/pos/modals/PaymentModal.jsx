@@ -1,5 +1,6 @@
 import React from "react";
-import { useAppContext } from '../../../context/AppContext'; // Sesuaikan path ini dengan lokasi file context Anda
+import { useAppContext } from '../../../context/AppContext'; 
+import { generateUUID } from '../../../utils/formatters';
 import { 
   SplitSquareHorizontal, 
   X, 
@@ -43,11 +44,11 @@ const PaymentModal = () => {
 
     if (activeCustomer && pointsToRedeem > 0) {
       setCustomers(customers.map(c => c.id === activeCustomer.id ? { ...c, points: c.points - pointsToRedeem } : c));
-      setClaimsHistory([{ id: `cl-${Date.now()}`, customerName: activeCustomer.name, rewardName: `Potongan Belanja ${formatRupiah(getPointDiscount())}`, pointsUsed: pointsToRedeem, date: new Date() }, ...claimsHistory]);
+      setClaimsHistory([{ id: `cl-${generateUUID()}`, customerName: activeCustomer.name, rewardName: `Potongan Belanja ${formatRupiah(getPointDiscount())}`, pointsUsed: pointsToRedeem, date: new Date() }, ...claimsHistory]);
     }
 
     const newOrder = {
-      id: `ORD-${Date.now().toString().slice(-6)}`, date: new Date(), customerName: customerName || 'Tanpa Nama', orderType, items: [...cart],
+      id: `ORD-${generateUUID().split('-')[0].toUpperCase()}`, date: new Date(), customerName: customerName || 'Tanpa Nama', orderType, items: [...cart],
       subtotal: getSubtotal(), discount: getDiscount(), pointDiscount: getPointDiscount(),
       manualDiscountAmount: getManualDiscountAmount(),
       taxAmount: getTaxAmount(), serviceAmount: getServiceChargeAmount(),

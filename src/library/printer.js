@@ -142,3 +142,101 @@ export const printNativeBluetooth = async (data, storeSettings, kembalian) => {
         );
     });
 };
+
+export const getShiftESCPOSData = (shiftData, storeSettings) => {
+    const lines = [];
+    const rp = (n) => Number(n).toLocaleString('id-ID'); // Format angka
+
+    lines.push('\x1B\x40'); // Init Printer
+
+    // --- HEADER ---
+    lines.push('\x1B\x61\x31'); // Rata Tengah
+    lines.push(`DOMPET\n`);
+    lines.push(`LAPORAN TUTUP DOMPET\n`);
+    lines.push(`ID: ${shiftData.id}\n`);
+    lines.push('--------------------------------\n');
+    
+    // --- INFO WAKTU ---
+    lines.push('\x1B\x61\x30'); // Rata Kiri
+    lines.push(justifyBetween('Buka:', new Date(shiftData.startTime).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }).replace(',', '')) + '\n');
+    lines.push(justifyBetween('Tutup:', new Date(shiftData.endTime).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }).replace(',', '')) + '\n');
+    lines.push('--------------------------------\n');
+
+    // --- RINCIAN KAS ---
+    lines.push(justifyBetween('Saldo Awal', rp(shiftData.stats.initialCash)) + '\n');
+    lines.push(justifyBetween('Penjualan Tunai', rp(shiftData.stats.cashSales)) + '\n');
+    lines.push(justifyBetween('Pemasukan Lain', rp(shiftData.stats.cashIncomes)) + '\n');
+    lines.push(justifyBetween('Pengeluaran', '-' + rp(shiftData.stats.cashExpenses)) + '\n');
+    lines.push('--------------------------------\n');
+
+    // --- TOTALAN & SELISIH ---
+    lines.push(justifyBetween('Total Seharusnya', rp(shiftData.stats.expectedCash)) + '\n');
+    lines.push(justifyBetween('Saldo Aktual', rp(shiftData.actualCash)) + '\n');
+    lines.push('\n');
+
+    let selisihLabel = 'BALANCE (PAS)';
+    if (shiftData.difference < 0) selisihLabel = 'SELISIH MINUS';
+    else if (shiftData.difference > 0) selisihLabel = 'SELISIH LEBIH';
+
+    lines.push(justifyBetween(selisihLabel, rp(shiftData.difference)) + '\n');
+    lines.push('--------------------------------\n');
+
+    // --- FOOTER ---
+    lines.push('\x1B\x61\x31'); // Rata Tengah
+    lines.push('-- Akhir Laporan --\n\n\n\n\n'); 
+
+    return lines.join('');
+};
+
+export const printShiftNativeBluetooth = async (shiftData, storeSettings) => {
+    if (!window.bluetoothSerial) {
+        alert('Plugin Bluetooth tidak terdeteksi di HP ini.');
+        return false;
+    }
+
+    const savedAddress = localStorage.getItem('my_printer_mac');
+    const savedName = localStorage.getItem('my_printer_name');
+
+    if (!savedAddress) {
+        alert('Printer belum diatur! Silakan pergi ke menu Pengaturan > Scan Printer Bluetooth terlebih dahulu.');
+        return false;
+    }
+
+    return new Promise((resolve) => {
+        window.bluetoothSerial.isEnabled(
+            () => {
+                window.bluetoothSerial.connect(
+                    savedAddress,
+                    () => {
+                        const encoder = new TextEncoder();
+                        const rawText = getShiftESCPOSData(shiftData, storeSettings);
+                        const binaryData = encoder.encode(rawText);
+
+                        window.bluetoothSerial.write(
+                            binaryData,
+                            () => {
+                                window.bluetoothSerial.disconnect(); 
+                                resolve(true);
+                            },
+                            (err) => {
+                                alert(`Gagal mengirim data ke printer: ${err}`);
+                                window.bluetoothSerial.disconnect();
+                                resolve(false);
+                            }
+                        );
+                    },
+                    (err) => {
+                        localStorage.removeItem('my_printer_mac');
+                        localStorage.removeItem('my_printer_name');
+                        alert(`Gagal terhubung ke Printer "${savedName}". Pastikan printernya nyala!\n\nError: ${err}`);
+                        resolve(false);
+                    }
+                );
+            },
+            () => {
+                alert('Bluetooth HP mati. Nyalain dulu!');
+                resolve(false);
+            }
+        );
+    });
+};
