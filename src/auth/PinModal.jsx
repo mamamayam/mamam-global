@@ -105,35 +105,35 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-xs rounded-3xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-250 flex flex-col items-center">
+    <div className="fixed inset-0 bg-slate-950 dark:bg-black/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-xs rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-6 animate-in zoom-in-95 duration-250 flex flex-col items-center">
 
         {/* Header Modal */}
         <div className="w-full flex justify-between items-center mb-2">
-          <div className="flex items-center gap-2 text-slate-800">
-            {mode === 'verify' && <Lock className="w-4 h-4 text-orange-500" />}
-            {mode === 'super' && <ShieldAlert className="w-4 h-4 text-red-500" />}
-            {mode === 'reset' && <Key className="w-4 h-4 text-blue-500" />}
+          <div className="flex items-center gap-2 text-slate-800 dark:text-slate-100">
+            {mode === 'verify' && <Lock className="w-4 h-4 text-orange-500 dark:text-orange-400" />}
+            {mode === 'super' && <ShieldAlert className="w-4 h-4 text-red-500 dark:text-red-400" />}
+            {mode === 'reset' && <Key className="w-4 h-4 text-blue-500 dark:text-blue-400" />}
 
             <span className="font-bold text-sm">
               {mode === 'verify' ? 'Masukkan PIN' : mode === 'super' ? 'Super Master PIN' : 'Buat PIN Baru'}
             </span>
           </div>
-          <button onClick={handleClose} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-full">
+          <button onClick={handleClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 p-1 bg-slate-50 dark:bg-slate-950 rounded-full">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Pesan Error */}
         {errorMessage && (
-          <div className="w-full bg-red-50 text-red-500 text-xs font-bold p-2.5 rounded-xl text-center mt-2 border border-red-100 animate-in zoom-in duration-200">
+          <div className="w-full bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 text-xs font-bold p-2.5 rounded-xl text-center mt-2 border border-red-100 dark:border-red-500/20 animate-in zoom-in duration-200">
             {errorMessage}
           </div>
         )}
 
         {/* Pesan Sukses */}
         {successMessage && !errorMessage && (
-          <div className="w-full bg-green-50 text-green-600 text-xs font-bold p-2.5 rounded-xl text-center mt-2 border border-green-100 animate-in zoom-in duration-200">
+          <div className="w-full bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-bold p-2.5 rounded-xl text-center mt-2 border border-green-100 dark:border-green-500/20 animate-in zoom-in duration-200">
             {successMessage}
           </div>
         )}
@@ -144,10 +144,10 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
             <div
               key={i}
               className={`w-4 h-4 rounded-full border-2 transition-all ${errorMessage
-                  ? 'border-red-300 bg-red-50'
+                  ? 'border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10'
                   : mode === 'reset' && i < pinInput.length
-                    ? 'bg-blue-500 scale-110 border-blue-500'
-                    : i < pinInput.length ? 'bg-slate-800 scale-110 border-slate-800' : 'bg-slate-50 border-slate-300'
+                    ? 'bg-blue-500 dark:bg-blue-600 scale-110 border-blue-500 dark:border-blue-500'
+                    : i < pinInput.length ? 'bg-slate-800 scale-110 border-slate-800 dark:border-slate-100' : 'bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-600'
                 }`}
             />
           ))}
@@ -159,21 +159,21 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
             <button
               key={num}
               onClick={() => handleNumberClick(num.toString())}
-              className="py-3.5 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 font-black text-xl rounded-2xl border border-slate-100 transition-colors"
+              className="py-3.5 bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 text-slate-800 dark:text-slate-100 font-black text-xl rounded-2xl border border-slate-100 dark:border-slate-800 transition-colors"
             >
               {num}
             </button>
           ))}
-          <button onClick={handleClear} className="text-xs font-bold text-red-500 hover:bg-red-50 rounded-2xl border border-transparent transition-colors">
+          <button onClick={handleClear} className="text-xs font-bold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-2xl border border-transparent transition-colors">
             Clear
           </button>
           <button
             onClick={() => handleNumberClick('0')}
-            className="py-3.5 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 font-black text-xl rounded-2xl border border-slate-100 transition-colors"
+            className="py-3.5 bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 text-slate-800 dark:text-slate-100 font-black text-xl rounded-2xl border border-slate-100 dark:border-slate-800 transition-colors"
           >
             0
           </button>
-          <button onClick={handleBackspace} className="text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-2xl border border-transparent transition-colors">
+          <button onClick={handleBackspace} className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950 rounded-2xl border border-transparent transition-colors">
             Del
           </button>
         </div>
@@ -184,9 +184,9 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
           disabled={pinInput.length !== 6}
           className={`w-full mt-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all ${pinInput.length === 6
               ? mode === 'reset'
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                ? 'bg-blue-600 dark:bg-blue-500 text-white hover:bg-blue-700 dark:hover:bg-blue-600'
                 : 'bg-slate-800 text-white hover:bg-slate-900'
-              : 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none'
             }`}
         >
           {mode === 'verify' ? 'Konfirmasi PIN' : mode === 'super' ? 'Verifikasi Super PIN' : 'Simpan PIN Baru'}
@@ -202,7 +202,7 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
                 setErrorMessage('');
                 setSuccessMessage('');
               }}
-              className="text-xs text-slate-500 hover:text-slate-800 font-medium underline underline-offset-2 transition-colors"
+              className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 font-medium underline underline-offset-2 transition-colors"
             >
               Lupa PIN?
             </button>
@@ -214,7 +214,7 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
                 setErrorMessage('');
                 setSuccessMessage('');
               }}
-              className="text-xs text-slate-500 hover:text-slate-800 font-medium underline underline-offset-2 transition-colors"
+              className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 font-medium underline underline-offset-2 transition-colors"
             >
               Batal Reset
             </button>

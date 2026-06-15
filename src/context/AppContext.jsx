@@ -1,54 +1,35 @@
 import { createContext, useContext, useState } from 'react';
 
-// 1. Inisialisasi Context
+// ⚠️ CATATAN ARSITEKTUR:
+// AppContext di sini di-provide DUA KALI:
+//   1. Di sini (lewat AppProvider, dibungkus di main.jsx) — provider LUAR.
+//   2. Di app/App.jsx (lewat <AppContext.Provider value={contextValue}>) — provider DALAM.
+//
+// Provider DALAM (App.jsx) berisi SEMUA state bisnis yang sebenarnya
+// (menus, salesHistory, customers, storeSettings, dst) dan menang untuk
+// semua komponen di bawah App.jsx (React context "nearest provider wins").
+//
+// Provider LUAR ini HANYA dipakai untuk satu hal: `isAdminMode` /
+// `setIsAdminMode`. App.jsx membaca state ini dari provider LUAR (karena
+// App.jsx memanggil useAppContext() SEBELUM provider DALAM-nya sendiri ada),
+// lalu meneruskannya ke provider DALAM — jadi semua komponen tetap
+// mendapat nilai isAdminMode yang sama & konsisten.
+//
+// Jangan tambah state lain di sini — taruh di App.jsx, karena state di sini
+// TIDAK akan terlihat oleh komponen manapun (akan ke-shadow oleh provider DALAM).
+
 export const AppContext = createContext();
 
-// 2. Buat Provider Component untuk membungkus aplikasi
 export const AppProvider = ({ children }) => {
-
-    const [currentView, setCurrentView] = useState('pos');
     const [isAdminMode, setIsAdminMode] = useState(false);
-    
-    // State Pengaturan Toko
-    const [storeSettings, setStoreSettings] = useState({
-        taxRate: 10,
-        serviceCharge: 0,
-        autoPrint: false,
-        paperSize: '58mm',
-    });
-
-    // State untuk data pelanggan dan voucher (agar CustomerView.jsx tidak error)
-    const [customers, setCustomers] = useState([]);
-    const [vouchers, setVouchers] = useState([]);
-    const [claimsHistory, setClaimsHistory] = useState([]);
-
-    // Fungsi Alert global
-    const triggerAlert = (message) => {
-        alert(message);
-    };
 
     return (
-        <AppContext.Provider
-            value={{
-                isAdminMode,
-                setIsAdminMode,
-                storeSettings,
-                setStoreSettings,
-                customers,
-                setCustomers,
-                vouchers,
-                setVouchers,
-                claimsHistory,
-                setClaimsHistory,
-                triggerAlert,
-                currentView, setCurrentView
-            }}>
+        <AppContext.Provider value={{ isAdminMode, setIsAdminMode }}>
             {children}
         </AppContext.Provider>
     );
 };
 
-// 3. Custom Hook untuk mempermudah pemanggilan context
 export const useAppContext = () => {
     const context = useContext(AppContext);
     if (!context) {

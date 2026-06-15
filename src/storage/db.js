@@ -21,7 +21,7 @@ const DATE_KEYS = [
 ];
 
 // Konversi field date setelah data dibaca dari DB
-const reviveDates = (key, data) => {
+export const reviveDates = (key, data) => {
   if (!data) return data;
 
   if (DATE_KEYS.includes(key) && Array.isArray(data)) {

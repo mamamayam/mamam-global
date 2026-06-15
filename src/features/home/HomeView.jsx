@@ -23,56 +23,56 @@ const HomeView = () => {
     const totalExpensesToday = expensesToday.reduce((sum, exp) => sum + exp.amount, 0);
 
     return (
-        <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto pb-6 animate-in fade-in duration-300">
+        <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto pb-6 animate-in fade-in duration-300">
             {/* Kartu Ringkasan */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-green-50 text-green-500 flex items-center justify-center shrink-0">
+                <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-green-50 dark:bg-green-500/10 text-green-500 dark:text-green-400 flex items-center justify-center shrink-0">
                         <TrendingUp className="w-6 h-6" />
                     </div>
                     <div>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Penjualan Hari Ini</p>
-                        <p className="font-heading text-2xl font-black text-slate-800">{formatRupiah(totalSalesToday)}</p>
+                        <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Penjualan Hari Ini</p>
+                        <p className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100">{formatRupiah(totalSalesToday)}</p>
                     </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center shrink-0">
+                <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 flex items-center justify-center shrink-0">
                         <TrendingDown className="w-6 h-6" />
                     </div>
                     <div>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Pengeluaran Hari Ini</p>
-                        <p className="font-heading text-2xl font-black text-slate-800">{formatRupiah(totalExpensesToday)}</p>
+                        <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pengeluaran Hari Ini</p>
+                        <p className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100">{formatRupiah(totalExpensesToday)}</p>
                     </div>
                 </div>
             </div>
 
             {/* Riwayat Pesanan Singkat */}
             <div className="flex justify-between items-center mb-4">
-                <h3 className="font-heading text-lg font-bold text-slate-800">Riwayat Pesanan Terbaru</h3>
+                <h3 className="font-heading text-lg font-bold text-slate-800 dark:text-slate-100">Riwayat Pesanan Terbaru</h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {salesHistory.slice(0, 10).map(order => ( // Tampilkan maksimal 10 terakhir agar tidak berat
-                    <div key={order.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 relative flex flex-col hover:shadow-md transition-shadow">
-                        <div className="flex justify-between items-start mb-3 border-b border-dashed border-slate-200 pb-3">
+                    <div key={order.id} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-4 relative flex flex-col hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start mb-3 border-b border-dashed border-slate-200 dark:border-slate-700 pb-3">
                             <div>
-                                <h3 className="font-bold text-sm text-slate-800">#{order.id}</h3>
-                                <p className="text-[10px] text-slate-500">{new Date(order.date).toLocaleString('id-ID')}</p>
+                                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">#{order.id}</h3>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(order.date).toLocaleString('id-ID')}</p>
                             </div>
-                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${order.paymentMethod === 'Ojol' ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${order.paymentMethod === 'Ojol' ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-500/20' : 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-100 dark:border-green-500/20'}`}>
                                 {order.paymentMethod} {order.paymentMethod === 'Ojol' && `(${order.ojolName})`}
                             </span>
                         </div>
 
                         <div className="mb-4 flex-1 space-y-1">
-                            <p className="text-xs font-bold text-slate-700">Pelanggan: {order.customerName}</p>
-                            <p className="text-xs text-slate-500">{order.items.length} Item • {order.orderType}</p>
+                            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Pelanggan: {order.customerName}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{order.items.length} Item • {order.orderType}</p>
                         </div>
 
-                        <div className="flex justify-between items-center border-t border-slate-50 pt-3 mt-auto">
-                            <span className="font-black text-slate-800">{formatRupiah(order.total)}</span>
-                            <button onClick={() => setReceiptModal({ isOpen: true, data: order, kembalian: 0 })} className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold">
+                        <div className="flex justify-between items-center border-t border-slate-50 dark:border-slate-900 pt-3 mt-auto">
+                            <span className="font-black text-slate-800 dark:text-slate-100">{formatRupiah(order.total)}</span>
+                            <button onClick={() => setReceiptModal({ isOpen: true, data: order, kembalian: 0 })} className="px-3 py-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/15 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold">
                                 <Receipt className="w-4 h-4" /> Struk
                             </button>
                         </div>
@@ -80,7 +80,7 @@ const HomeView = () => {
                 ))}
 
                 {salesHistory.length === 0 && (
-                    <div className="col-span-full py-10 text-center text-slate-400">
+                    <div className="col-span-full py-10 text-center text-slate-400 dark:text-slate-500">
                         Belum ada pesanan hari ini.
                     </div>
                 )}

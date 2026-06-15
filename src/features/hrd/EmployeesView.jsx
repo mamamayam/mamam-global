@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, createContext, useContext, useRef } from 'react';
-import { formatRupiah } from '../../utils/formatters';
+import { formatRupiah, toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import {useAppContext} from '../../context/AppContext';
 import PayslipModal from '../hrd/modals/PayslipModal';
 import { 
@@ -39,10 +39,10 @@ const EmployeesView = () => {
 
   // --- STATE UNTUK TAB: KELOLA KARYAWAN ---
   const [isEditingEmp, setIsEditingEmp] = useState(false);
-  const [empFormData, setEmpFormData] = useState({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: new Date().toISOString().split('T')[0] });
+  const [empFormData, setEmpFormData] = useState({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: toLocalDateString() });
 
   // --- STATE UNTUK TAB: INPUT HARIAN ---
-  const [dailyDate, setDailyDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dailyDate, setDailyDate] = useState(toLocalDateString());
   const [dailyEmpId, setDailyEmpId] = useState('');
   const [hoursWorked, setHoursWorked] = useState('');
   const [additions, setAdditions] = useState([]);
@@ -70,7 +70,7 @@ const EmployeesView = () => {
   }, []);
 
   // --- STATE UNTUK TAB: REKAP LAPORAN ---
-  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7)); 
+  const [reportMonth, setReportMonth] = useState(toLocalMonthString());
 
   // --- LOGIC: KELOLA KARYAWAN ---
   const handleSaveEmployee = () => {
@@ -84,7 +84,7 @@ const EmployeesView = () => {
       triggerAlert('Karyawan baru berhasil ditambahkan.');
     }
     setIsEditingEmp(false);
-    setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: new Date().toISOString().split('T')[0] });
+    setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: toLocalDateString() });
   };
 
   const handleDeleteEmployee = (id) => {
@@ -199,7 +199,7 @@ const EmployeesView = () => {
   };
 
   const filteredRecordsForReport = useMemo(() => {
-    return employeeDailyRecords.filter(r => new Date(r.date).toISOString().slice(0, 7) === reportMonth);
+    return employeeDailyRecords.filter(r => toLocalMonthString(r.date) === reportMonth);
   }, [employeeDailyRecords, reportMonth]);
 
   const employeePerformance = useMemo(() => {
@@ -235,40 +235,40 @@ const EmployeesView = () => {
 
   const renderInputTab = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full animate-in fade-in slide-in-from-right-4 duration-300">
-      <div className="lg:col-span-1 bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-fit">
-        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
-          <Calendar className="w-5 h-5 text-slate-800"/>
-          <h3 className="font-heading font-bold text-slate-800">Form Input Harian</h3>
+      <div className="lg:col-span-1 bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col h-fit">
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <Calendar className="w-5 h-5 text-slate-800 dark:text-slate-100"/>
+          <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Form Input Harian</h3>
         </div>
 
         <div className="space-y-4">
           <div className="flex gap-2">
             <div className="flex-1 relative" ref={empDropdownRef}>
-              <label className="block text-xs font-bold text-slate-500 mb-1">Karyawan</label>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Karyawan</label>
               <div 
-                className="w-full p-3 bg-slate-50 border rounded-xl font-semibold text-sm cursor-pointer flex justify-between items-center hover:bg-slate-100 transition-colors"
+                className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold text-sm cursor-pointer flex justify-between items-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 onClick={() => setShowEmpDropdown(!showEmpDropdown)}
               >
                 <span>{dailyEmpId ? employees.find(e => e.id === dailyEmpId)?.name : '-- Pilih Karyawan --'}</span>
-                <ChevronDown className="w-4 h-4 text-slate-400" />
+                <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
               </div>
               
               {showEmpDropdown && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 shadow-xl rounded-xl z-10 overflow-hidden flex flex-col animate-in slide-in-from-top-1 duration-200 max-h-60">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl rounded-xl z-10 overflow-hidden flex flex-col animate-in slide-in-from-top-1 duration-200 max-h-60">
                   <div className="overflow-y-auto custom-scrollbar flex-1">
                     {employees.map(emp => (
                       <div 
                         key={emp.id} 
-                        className={`p-3 text-sm font-semibold cursor-pointer transition-colors ${dailyEmpId === emp.id ? 'bg-orange-50 text-orange-600' : 'hover:bg-slate-50 text-slate-700'}`}
+                        className={`p-3 text-sm font-semibold cursor-pointer transition-colors ${dailyEmpId === emp.id ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400' : 'hover:bg-slate-50 dark:hover:bg-slate-950 text-slate-700 dark:text-slate-200'}`}
                         onClick={() => {setDailyEmpId(emp.id); setShowEmpDropdown(false);}}
                       >
                         {emp.name}
                       </div>
                     ))}
-                    {employees.length === 0 && <div className="p-3 text-xs text-slate-400 text-center">Belum ada karyawan</div>}
+                    {employees.length === 0 && <div className="p-3 text-xs text-slate-400 dark:text-slate-500 text-center">Belum ada karyawan</div>}
                   </div>
                   <div 
-                    className="p-3 bg-slate-800 text-white text-xs font-bold text-center cursor-pointer hover:bg-slate-900 flex items-center justify-center gap-2 transition-colors border-t border-slate-700"
+                    className="p-3 bg-slate-800 text-white text-xs font-bold text-center cursor-pointer hover:bg-slate-900 flex items-center justify-center gap-2 transition-colors border-t border-slate-700 dark:border-slate-300"
                     onClick={() => {setShowEmpDropdown(false); setActiveTab('manage');}}
                   >
                     <UserCog className="w-4 h-4" /> Kelola Karyawan
@@ -277,38 +277,38 @@ const EmployeesView = () => {
               )}
             </div>
             <div className="w-1/3">
-              <label className="block text-xs font-bold text-slate-500 mb-1">Tanggal</label>
-              <input type="date" className="w-full p-3 bg-slate-50 border rounded-xl font-bold text-sm outline-none focus:border-slate-800 transition-colors" value={dailyDate} onChange={e => setDailyDate(e.target.value)} />
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Tanggal</label>
+              <input type="date" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-bold text-sm outline-none focus:border-slate-800 dark:focus:border-slate-100 transition-colors" value={dailyDate} onChange={e => setDailyDate(e.target.value)} />
             </div>
           </div>
           
           {isEditRecordMode && (
-             <div className="bg-blue-50 text-blue-600 p-2 rounded-lg text-xs font-bold flex items-center gap-2 border border-blue-100 animate-in fade-in">
+             <div className="bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 p-2 rounded-lg text-xs font-bold flex items-center gap-2 border border-blue-100 dark:border-blue-500/20 animate-in fade-in">
                <Info className="w-4 h-4"/> Data sudah ada, mengubah data yang ada.
              </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">Jumlah Jam Kerja (Per Jam)</label>
-            <input type="number" min="0" step="0.5" className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-orange-600 transition-colors" value={hoursWorked} onChange={e => setHoursWorked(e.target.value)} placeholder="Contoh: 8" />
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Jumlah Jam Kerja (Per Jam)</label>
+            <input type="number" min="0" step="0.5" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={hoursWorked} onChange={e => setHoursWorked(e.target.value)} placeholder="Contoh: 8" />
           </div>
 
-          <div className="border border-slate-200 rounded-xl p-4 bg-white mt-4 shadow-sm">
+          <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-white dark:bg-slate-900 mt-4 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
-              <Wallet className="w-5 h-5 text-green-600" />
-              <h4 className="font-heading font-bold text-slate-800 text-sm">Tambahan & Potongan</h4>
+              <Wallet className="w-5 h-5 text-green-600 dark:text-green-400" />
+              <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">Tambahan & Potongan</h4>
             </div>
 
-            <div className="flex gap-4 p-3 bg-slate-50 border border-slate-200 rounded-xl mb-4">
+            <div className="flex gap-4 p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl mb-4">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input 
                   type="radio" 
                   name="adjType" 
                   checked={adjType === 'addition'} 
                   onChange={() => { setAdjType('addition'); setAdjCategory(''); }}
-                  className="w-4 h-4 text-orange-600 focus:ring-orange-500"
+                  className="w-4 h-4 text-orange-600 dark:text-orange-400 focus:ring-orange-500 dark:focus:ring-orange-500"
                 />
-                <span className="text-sm font-bold text-slate-700">Penghasilan (+)</span>
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Penghasilan (+)</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input 
@@ -316,17 +316,17 @@ const EmployeesView = () => {
                   name="adjType" 
                   checked={adjType === 'deduction'} 
                   onChange={() => { setAdjType('deduction'); setAdjCategory(''); }}
-                  className="w-4 h-4 text-orange-600 focus:ring-orange-500"
+                  className="w-4 h-4 text-orange-600 dark:text-orange-400 focus:ring-orange-500 dark:focus:ring-orange-500"
                 />
-                <span className="text-sm font-bold text-slate-700">Potongan (-)</span>
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Potongan (-)</span>
               </label>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Kategori</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Kategori</label>
                 <select 
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:border-orange-500 transition-colors"
+                  className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
                   value={adjCategory}
                   onChange={(e) => setAdjCategory(e.target.value)}
                 >
@@ -339,10 +339,10 @@ const EmployeesView = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Nominal (Rp)</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Nominal (Rp)</label>
                 <input 
                   type="number" 
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-orange-500 transition-colors" 
+                  className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors" 
                   placeholder="0" 
                   value={adjAmount}
                   onChange={(e) => setAdjAmount(e.target.value)}
@@ -351,17 +351,17 @@ const EmployeesView = () => {
 
               {adjType === 'deduction' && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-                  <label className="block text-xs font-bold text-slate-500 mb-1">Metode (Sumber Potongan)</label>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Metode (Sumber Potongan)</label>
                   <div className="grid grid-cols-2 gap-2">
                     <button 
                       onClick={() => setAdjPaymentMethod('Tunai')} 
-                      className={`py-2 rounded-xl text-xs font-bold transition-all border ${adjPaymentMethod === 'Tunai' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                      className={`py-2 rounded-xl text-xs font-bold transition-all border ${adjPaymentMethod === 'Tunai' ? 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/30' : 'bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                     >
                       Tunai
                     </button>
                     <button 
                       onClick={() => setAdjPaymentMethod('Non-Tunai')} 
-                      className={`py-2 rounded-xl text-xs font-bold transition-all border ${adjPaymentMethod === 'Non-Tunai' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                      className={`py-2 rounded-xl text-xs font-bold transition-all border ${adjPaymentMethod === 'Non-Tunai' ? 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/30' : 'bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                     >
                       Non-Tunai (Bank)
                     </button>
@@ -370,10 +370,10 @@ const EmployeesView = () => {
               )}
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Catatan</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Catatan</label>
                 <input 
                   type="text" 
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-orange-500 transition-colors" 
+                  className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors" 
                   placeholder="Opsional" 
                   value={adjNote}
                   onChange={(e) => setAdjNote(e.target.value)}
@@ -382,7 +382,7 @@ const EmployeesView = () => {
 
               <button 
                 onClick={handleAddAdjustment} 
-                className={`w-full py-3 mt-2 text-white font-bold rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center gap-2 ${adjType === 'addition' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'}`}
+                className={`w-full py-3 mt-2 text-white font-bold rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center gap-2 ${adjType === 'addition' ? 'bg-green-600 dark:bg-green-500 hover:bg-green-700 dark:hover:bg-green-600' : 'bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-500'}`}
               >
                 <Plus className="w-4 h-4"/> 
                 {adjType === 'addition' ? 'Tambah Penghasilan' : 'Tambah Potongan'}
@@ -391,22 +391,22 @@ const EmployeesView = () => {
           </div>
 
           {(additions.length > 0 || deductions.length > 0) && (
-            <div className="border border-slate-100 p-3 rounded-xl bg-slate-50 space-y-3">
-               <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Daftar Penyesuaian</h5>
+            <div className="border border-slate-100 dark:border-slate-800 p-3 rounded-xl bg-slate-50 dark:bg-slate-950 space-y-3">
+               <h5 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Daftar Penyesuaian</h5>
                
                {additions.length > 0 && (
                  <div>
-                    <span className="text-[10px] font-bold text-green-600 flex items-center gap-1 mb-1"><Plus className="w-3 h-3"/> PENGHASILAN</span>
+                    <span className="text-[10px] font-bold text-green-600 dark:text-green-400 flex items-center gap-1 mb-1"><Plus className="w-3 h-3"/> PENGHASILAN</span>
                     <div className="space-y-1.5">
                       {additions.map((add) => (
-                        <div key={add.id} className="flex justify-between items-center bg-white p-2 border border-slate-100 rounded-lg shadow-sm text-xs">
+                        <div key={add.id} className="flex justify-between items-center bg-white dark:bg-slate-900 p-2 border border-slate-100 dark:border-slate-800 rounded-lg shadow-sm text-xs">
                           <div>
-                            <span className="font-bold text-slate-700">{add.category}</span>
-                            {add.note && <span className="text-slate-400 ml-1 text-[10px]">({add.note})</span>}
+                            <span className="font-bold text-slate-700 dark:text-slate-200">{add.category}</span>
+                            {add.note && <span className="text-slate-400 dark:text-slate-500 ml-1 text-[10px]">({add.note})</span>}
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-green-600">+{formatRupiah(add.amount)}</span>
-                            <button onClick={() => setAdditions(additions.filter(a => a.id !== add.id))} className="text-red-400 hover:text-red-600"><Trash2 className="w-3 h-3"/></button>
+                            <span className="font-bold text-green-600 dark:text-green-400">+{formatRupiah(add.amount)}</span>
+                            <button onClick={() => setAdditions(additions.filter(a => a.id !== add.id))} className="text-red-400 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400"><Trash2 className="w-3 h-3"/></button>
                           </div>
                         </div>
                       ))}
@@ -416,18 +416,18 @@ const EmployeesView = () => {
 
                {deductions.length > 0 && (
                  <div>
-                    <span className="text-[10px] font-bold text-red-500 flex items-center gap-1 mb-1 mt-2"><Minus className="w-3 h-3"/> POTONGAN</span>
+                    <span className="text-[10px] font-bold text-red-500 dark:text-red-400 flex items-center gap-1 mb-1 mt-2"><Minus className="w-3 h-3"/> POTONGAN</span>
                     <div className="space-y-1.5">
                       {deductions.map((ded) => (
-                        <div key={ded.id} className="flex justify-between items-center bg-white p-2 border border-slate-100 rounded-lg shadow-sm text-xs">
+                        <div key={ded.id} className="flex justify-between items-center bg-white dark:bg-slate-900 p-2 border border-slate-100 dark:border-slate-800 rounded-lg shadow-sm text-xs">
                           <div>
-                            <span className="font-bold text-slate-700">{ded.category}</span>
-                            {ded.paymentMethod && <span className="bg-slate-100 text-slate-500 px-1 py-0.5 rounded text-[9px] ml-1">{ded.paymentMethod}</span>}
-                            {ded.note && <span className="text-slate-400 ml-1 text-[10px]">({ded.note})</span>}
+                            <span className="font-bold text-slate-700 dark:text-slate-200">{ded.category}</span>
+                            {ded.paymentMethod && <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1 py-0.5 rounded text-[9px] ml-1">{ded.paymentMethod}</span>}
+                            {ded.note && <span className="text-slate-400 dark:text-slate-500 ml-1 text-[10px]">({ded.note})</span>}
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-red-500">-{formatRupiah(ded.amount)}</span>
-                            <button onClick={() => setDeductions(deductions.filter(d => d.id !== ded.id))} className="text-red-400 hover:text-red-600"><Trash2 className="w-3 h-3"/></button>
+                            <span className="font-bold text-red-500 dark:text-red-400">-{formatRupiah(ded.amount)}</span>
+                            <button onClick={() => setDeductions(deductions.filter(d => d.id !== ded.id))} className="text-red-400 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400"><Trash2 className="w-3 h-3"/></button>
                           </div>
                         </div>
                       ))}
@@ -437,22 +437,22 @@ const EmployeesView = () => {
             </div>
           )}
 
-          <button onClick={handleSaveDailyRecord} className="w-full py-3.5 mt-4 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2">
+          <button onClick={handleSaveDailyRecord} className="w-full py-3.5 mt-4 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2">
             <Save className="w-4 h-4"/> {isEditRecordMode ? 'Simpan Perubahan' : 'Simpan Data Harian'}
           </button>
         </div>
       </div>
 
-      <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[650px]">
-        <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
-          <h3 className="font-heading font-bold text-slate-800 flex items-center gap-2"><History className="w-4 h-4"/> Riwayat Input Harian</h3>
-          <div className="text-xs text-slate-500 font-semibold">{employeeDailyRecords.length} Catatan</div>
+      <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col h-[650px]">
+        <div className="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
+          <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><History className="w-4 h-4"/> Riwayat Input Harian</h3>
+          <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold">{employeeDailyRecords.length} Catatan</div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
           {employeeDailyRecords.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full opacity-50">
-              <Calendar className="w-12 h-12 mb-2 text-slate-400"/>
-              <p className="text-center text-slate-500 font-medium">Belum ada riwayat input karyawan.</p>
+              <Calendar className="w-12 h-12 mb-2 text-slate-400 dark:text-slate-500"/>
+              <p className="text-center text-slate-500 dark:text-slate-400 font-medium">Belum ada riwayat input karyawan.</p>
             </div>
           ) : (
             employeeDailyRecords.slice(0, 50).map(rec => {
@@ -460,27 +460,27 @@ const EmployeesView = () => {
               const addSum = rec.additions.reduce((s,a)=>s+a.amount, 0);
               const dedSum = rec.deductions.reduce((s,d)=>s+d.amount, 0);
               return (
-                <div key={rec.id} className="flex flex-col p-4 border border-slate-100 rounded-xl hover:bg-slate-50 hover:border-orange-200 transition-all duration-200 animate-in slide-in-from-left-2">
+                <div key={rec.id} className="flex flex-col p-4 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-orange-200 dark:hover:border-orange-500/30 transition-all duration-200 animate-in slide-in-from-left-2">
                   <div className="flex justify-between items-start mb-2">
                     <div>
-                      <p className="font-bold text-sm text-slate-800">{emp ? emp.name : 'Karyawan (Dihapus)'}</p>
-                      <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {new Date(rec.date).toLocaleDateString('id-ID')} • {rec.hoursWorked} Jam</p>
+                      <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{emp ? emp.name : 'Karyawan (Dihapus)'}</p>
+                      <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3"/> {new Date(rec.date).toLocaleDateString('id-ID')} • {rec.hoursWorked} Jam</p>
                     </div>
                     <div className="flex gap-1">
                       <button onClick={() => {
                         setDailyEmpId(rec.employeeId); setDailyDate(rec.dateStr); 
-                      }} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4"/></button>
-                      <button onClick={() => handleDeleteDailyRecord(rec.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                      }} className="p-1.5 text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"><Edit3 className="w-4 h-4"/></button>
+                      <button onClick={() => handleDeleteDailyRecord(rec.id)} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100 text-xs">
+                  <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
                     <div>
-                      <span className="text-green-600 font-bold block mb-1">Tambahan: +{formatRupiah(addSum)}</span>
-                      {rec.additions.map((a,i)=><div key={i} className="text-[10px] text-slate-500">- {a.category} ({formatRupiah(a.amount)})</div>)}
+                      <span className="text-green-600 dark:text-green-400 font-bold block mb-1">Tambahan: +{formatRupiah(addSum)}</span>
+                      {rec.additions.map((a,i)=><div key={i} className="text-[10px] text-slate-500 dark:text-slate-400">- {a.category} ({formatRupiah(a.amount)})</div>)}
                     </div>
                     <div>
-                      <span className="text-red-500 font-bold block mb-1">Potongan: -{formatRupiah(dedSum)}</span>
-                      {rec.deductions.map((d,i)=><div key={i} className="text-[10px] text-slate-500">- {d.category} ({formatRupiah(d.amount)})</div>)}
+                      <span className="text-red-500 dark:text-red-400 font-bold block mb-1">Potongan: -{formatRupiah(dedSum)}</span>
+                      {rec.deductions.map((d,i)=><div key={i} className="text-[10px] text-slate-500 dark:text-slate-400">- {d.category} ({formatRupiah(d.amount)})</div>)}
                     </div>
                   </div>
                 </div>
@@ -494,33 +494,33 @@ const EmployeesView = () => {
 
   const renderReportsTab = () => (
     <div className="space-y-6 h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-        <h3 className="font-heading font-bold text-slate-800 flex items-center gap-2"><PieChart className="w-5 h-5 text-orange-600"/> Rekap Penggajian</h3>
+      <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+        <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PieChart className="w-5 h-5 text-orange-600 dark:text-orange-400"/> Rekap Penggajian</h3>
         <div className="flex items-center gap-2">
-          <label className="text-xs font-bold text-slate-500">Bulan Laporan:</label>
-          <input type="month" value={reportMonth} onChange={e => setReportMonth(e.target.value)} className="p-2 text-sm font-bold border border-slate-200 rounded-xl outline-none text-slate-700 focus:border-orange-500" />
+          <label className="text-xs font-bold text-slate-500 dark:text-slate-400">Bulan Laporan:</label>
+          <input type="month" value={reportMonth} onChange={e => setReportMonth(e.target.value)} className="p-2 text-sm font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-700 dark:text-slate-200 focus:border-orange-500 dark:focus:border-orange-500" />
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-800 text-white p-5 rounded-2xl shadow-sm border border-slate-700 flex flex-col justify-center">
-          <p className="text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400">Total Expenses Payroll</p>
+        <div className="bg-slate-800 text-white p-5 rounded-2xl shadow-sm border border-slate-700 dark:border-slate-300 flex flex-col justify-center">
+          <p className="text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400 dark:text-slate-500">Total Expenses Payroll</p>
           <h3 className="font-heading text-2xl font-black text-white">{formatRupiah(totalPayrollExpense)}</h3>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center">
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Karyawan Aktif (Bulan Ini)</p>
-          <h3 className="font-heading text-2xl font-black text-slate-800">{employeePerformance.length} Orang</h3>
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-center">
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-2">Karyawan Aktif (Bulan Ini)</p>
+          <h3 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100">{employeePerformance.length} Orang</h3>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-          <h3 className="font-heading font-bold text-slate-800 text-sm">Performa & Rincian Gaji Karyawan</h3>
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-between items-center">
+          <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">Performa & Rincian Gaji Karyawan</h3>
         </div>
-        <div className="divide-y divide-slate-100 overflow-x-auto custom-scrollbar">
+        <div className="divide-y divide-slate-100 dark:divide-slate-800 overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
-              <tr className="bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              <tr className="bg-white dark:bg-slate-900 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 <th className="p-4">Nama Karyawan</th>
                 <th className="p-4 text-center">Total Jam</th>
                 <th className="p-4 text-right">Tambahan</th>
@@ -531,20 +531,20 @@ const EmployeesView = () => {
             </thead>
             <tbody>
               {employeePerformance.length === 0 ? (
-                <tr><td colSpan="6" className="p-8 text-center text-slate-400 italic text-sm">Tidak ada data penggajian pada bulan ini.</td></tr>
+                <tr><td colSpan="6" className="p-8 text-center text-slate-400 dark:text-slate-500 italic text-sm">Tidak ada data penggajian pada bulan ini.</td></tr>
               ) : (
                 employeePerformance.map(p => (
-                  <tr key={p.employee.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={p.employee.id} className="hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors">
                     <td className="p-4">
-                      <p className="font-bold text-sm text-slate-800">{p.employee.name}</p>
-                      <p className="text-[10px] text-slate-500">Upah/Jam: {formatRupiah(p.employee.hourlyRate)}</p>
+                      <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{p.employee.name}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Upah/Jam: {formatRupiah(p.employee.hourlyRate)}</p>
                     </td>
-                    <td className="p-4 text-center font-semibold text-slate-700 text-sm">{p.totalHours}</td>
-                    <td className="p-4 text-right font-bold text-green-600 text-sm">+{formatRupiah(p.totalAdditions)}</td>
-                    <td className="p-4 text-right font-bold text-red-500 text-sm">-{formatRupiah(p.totalDeductions)}</td>
-                    <td className="p-4 text-right font-black text-slate-900 text-sm">{formatRupiah(p.netPay)}</td>
+                    <td className="p-4 text-center font-semibold text-slate-700 dark:text-slate-200 text-sm">{p.totalHours}</td>
+                    <td className="p-4 text-right font-bold text-green-600 dark:text-green-400 text-sm">+{formatRupiah(p.totalAdditions)}</td>
+                    <td className="p-4 text-right font-bold text-red-500 dark:text-red-400 text-sm">-{formatRupiah(p.totalDeductions)}</td>
+                    <td className="p-4 text-right font-black text-slate-900 dark:text-slate-50 text-sm">{formatRupiah(p.netPay)}</td>
                     <td className="p-4 text-center">
-                      <button onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })} className="px-3 py-1.5 bg-orange-100 text-orange-600 hover:bg-orange-200 font-bold text-xs rounded-lg transition-colors inline-flex items-center gap-1">
+                      <button onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })} className="px-3 py-1.5 bg-orange-100 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-500/20 font-bold text-xs rounded-lg transition-colors inline-flex items-center gap-1">
                         <Printer className="w-3 h-3"/> Cetak Slip
                       </button>
                     </td>
@@ -556,20 +556,20 @@ const EmployeesView = () => {
         </div>
       </div>
       
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mt-6 mb-10">
-         <h4 className="font-heading font-bold text-slate-800 text-sm mb-4">Riwayat Bulan Sebelumnya</h4>
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 mt-6 mb-10">
+         <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-4">Riwayat Bulan Sebelumnya</h4>
          <div className="space-y-2">
             {[1, 2, 3].map(i => {
               const d = new Date();
               d.setMonth(d.getMonth() - i);
-              const pastMonth = d.toISOString().slice(0,7);
+              const pastMonth = toLocalMonthString(d);
               return (
-                <div key={i} className="flex justify-between items-center p-3 border border-slate-100 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => setReportMonth(pastMonth)}>
+                <div key={i} className="flex justify-between items-center p-3 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 cursor-pointer transition-colors" onClick={() => setReportMonth(pastMonth)}>
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center"><Calendar className="w-4 h-4 text-slate-500"/></div>
-                    <span className="font-bold text-sm text-slate-700">{d.toLocaleDateString('id-ID', {month: 'long', year: 'numeric'})}</span>
+                    <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center"><Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400"/></div>
+                    <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{d.toLocaleDateString('id-ID', {month: 'long', year: 'numeric'})}</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400"/>
+                  <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500"/>
                 </div>
               )
             })}
@@ -581,45 +581,45 @@ const EmployeesView = () => {
   const renderManageTab = () => (
     <div className="h-full animate-in fade-in slide-in-from-left-4 duration-300">
       {isEditingEmp ? (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 max-w-3xl">
-          <button onClick={() => setIsEditingEmp(false)} className="mb-4 text-slate-500 flex items-center gap-2 hover:text-slate-800 font-medium transition-colors">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 max-w-3xl">
+          <button onClick={() => setIsEditingEmp(false)} className="mb-4 text-slate-500 dark:text-slate-400 flex items-center gap-2 hover:text-slate-800 dark:hover:text-slate-100 font-medium transition-colors">
             <ChevronLeft className="w-5 h-5"/> Kembali
           </button>
-          <h2 className="font-heading text-xl font-bold mb-6 text-slate-800 border-b pb-2">{empFormData.id ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}</h2>
+          <h2 className="font-heading text-xl font-bold mb-6 text-slate-800 dark:text-slate-100 border-b pb-2">{empFormData.id ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">Nama Lengkap</label>
-              <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl font-semibold outline-none focus:border-orange-600 transition-colors" value={empFormData.name} onChange={e => setEmpFormData({...empFormData, name: e.target.value})} placeholder="Misal: Budi Santoso" />
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Nama Lengkap</label>
+              <input type="text" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.name} onChange={e => setEmpFormData({...empFormData, name: e.target.value})} placeholder="Misal: Budi Santoso" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">No. Handphone (WA)</label>
-              <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl font-semibold outline-none focus:border-orange-600 transition-colors" value={empFormData.phone} onChange={e => setEmpFormData({...empFormData, phone: e.target.value})} placeholder="Misal: 0812345678" />
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">No. Handphone (WA)</label>
+              <input type="text" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.phone} onChange={e => setEmpFormData({...empFormData, phone: e.target.value})} placeholder="Misal: 0812345678" />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-500 mb-1">Alamat</label>
-              <input type="text" className="w-full p-3 bg-slate-50 border rounded-xl font-semibold outline-none focus:border-orange-600 transition-colors" value={empFormData.address} onChange={e => setEmpFormData({...empFormData, address: e.target.value})} placeholder="Alamat lengkap..." />
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Alamat</label>
+              <input type="text" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.address} onChange={e => setEmpFormData({...empFormData, address: e.target.value})} placeholder="Alamat lengkap..." />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">Upah per Jam (Rp)</label>
-              <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none focus:border-orange-600 transition-colors" value={empFormData.hourlyRate} onChange={e => setEmpFormData({...empFormData, hourlyRate: Number(e.target.value)})} placeholder="0" />
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Upah per Jam (Rp)</label>
+              <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.hourlyRate} onChange={e => setEmpFormData({...empFormData, hourlyRate: Number(e.target.value)})} placeholder="0" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">Mulai Kerja</label>
-              <input type="date" className="w-full p-3 bg-slate-50 border rounded-xl font-semibold outline-none focus:border-orange-600 transition-colors" value={empFormData.startDate} onChange={e => setEmpFormData({...empFormData, startDate: e.target.value})} />
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Mulai Kerja</label>
+              <input type="date" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.startDate} onChange={e => setEmpFormData({...empFormData, startDate: e.target.value})} />
             </div>
           </div>
           
-          <button onClick={handleSaveEmployee} className="px-8 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+          <button onClick={handleSaveEmployee} className="px-8 py-3 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
             Simpan Data Karyawan
           </button>
         </div>
       ) : (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="font-heading font-bold text-slate-800 flex items-center gap-2"><Briefcase className="w-5 h-5 text-slate-700"/> Daftar Karyawan</h3>
+          <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Briefcase className="w-5 h-5 text-slate-700 dark:text-slate-200"/> Daftar Karyawan</h3>
             <button onClick={() => {
-              setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: new Date().toISOString().split('T')[0] });
+              setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: toLocalDateString() });
               setIsEditingEmp(true);
             }} className="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-slate-900 transition-all duration-300">
               <Plus className="w-4 h-4"/> Tambah Karyawan
@@ -628,33 +628,33 @@ const EmployeesView = () => {
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-10">
             {employees.map(emp => (
-              <div key={emp.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 relative group hover:shadow-md transition-shadow duration-300">
+              <div key={emp.id} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 relative group hover:shadow-md transition-shadow duration-300">
                 <div className="absolute top-4 right-4 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => { setEmpFormData(emp); setIsEditingEmp(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4"/></button>
-                  <button onClick={() => handleDeleteEmployee(emp.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                  <button onClick={() => { setEmpFormData(emp); setIsEditingEmp(true); }} className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"><Edit3 className="w-4 h-4"/></button>
+                  <button onClick={() => handleDeleteEmployee(emp.id)} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
                 </div>
                 
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center font-heading font-black text-xl">
+                  <div className="w-12 h-12 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-full flex items-center justify-center font-heading font-black text-xl">
                     {emp.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <h4 className="font-heading font-bold text-slate-800 text-base leading-tight pr-10">{emp.name}</h4>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Gabung: {new Date(emp.startDate).toLocaleDateString('id-ID')}</p>
+                    <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base leading-tight pr-10">{emp.name}</h4>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Gabung: {new Date(emp.startDate).toLocaleDateString('id-ID')}</p>
                   </div>
                 </div>
                 
-                <div className="space-y-1.5 border-t border-slate-100 pt-3 text-sm">
-                  <div className="flex justify-between"><span className="text-slate-500 font-medium">No. HP:</span><span className="font-semibold text-slate-700">{emp.phone || '-'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500 font-medium">Upah/Jam:</span><span className="font-bold text-orange-600">{formatRupiah(emp.hourlyRate)}</span></div>
-                  <div className="flex flex-col mt-2 pt-2 border-t border-dashed border-slate-100">
-                    <span className="text-[10px] text-slate-400 mb-0.5">Alamat:</span>
-                    <span className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{emp.address || '-'}</span>
+                <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-800 pt-3 text-sm">
+                  <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400 font-medium">No. HP:</span><span className="font-semibold text-slate-700 dark:text-slate-200">{emp.phone || '-'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400 font-medium">Upah/Jam:</span><span className="font-bold text-orange-600 dark:text-orange-400">{formatRupiah(emp.hourlyRate)}</span></div>
+                  <div className="flex flex-col mt-2 pt-2 border-t border-dashed border-slate-100 dark:border-slate-800">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 mb-0.5">Alamat:</span>
+                    <span className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">{emp.address || '-'}</span>
                   </div>
                 </div>
               </div>
             ))}
-            {employees.length === 0 && <div className="col-span-full p-8 text-center text-slate-400 italic">Belum ada data karyawan.</div>}
+            {employees.length === 0 && <div className="col-span-full p-8 text-center text-slate-400 dark:text-slate-500 italic">Belum ada data karyawan.</div>}
           </div>
         </div>
       )}
@@ -662,14 +662,14 @@ const EmployeesView = () => {
   );
 
   return (
-    <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
+    <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
       <div className="shrink-0 mb-6">
-        <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 mb-4 flex items-center gap-2"><UserCog className="w-6 h-6 text-slate-800" /> Manajemen Pegawai (HR)</h2>
+        <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2"><UserCog className="w-6 h-6 text-slate-800 dark:text-slate-100" /> Manajemen Pegawai (HR)</h2>
         
-        <div className="flex gap-2 border-b border-slate-200 pb-3 overflow-x-auto hide-scrollbar">
-          <button onClick={() => setActiveTab('input')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'input' ? 'bg-orange-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}`}>Input Harian</button>
-          <button onClick={() => setActiveTab('reports')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'reports' ? 'bg-orange-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}`}>Rekap Laporan</button>
-          <button onClick={() => setActiveTab('manage')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'manage' ? 'bg-orange-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}`}>Kelola Karyawan</button>
+        <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-3 overflow-x-auto hide-scrollbar">
+          <button onClick={() => setActiveTab('input')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'input' ? 'bg-orange-600 dark:bg-orange-500 text-white shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Input Harian</button>
+          <button onClick={() => setActiveTab('reports')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'reports' ? 'bg-orange-600 dark:bg-orange-500 text-white shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Rekap Laporan</button>
+          <button onClick={() => setActiveTab('manage')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'manage' ? 'bg-orange-600 dark:bg-orange-500 text-white shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Kelola Karyawan</button>
         </div>
       </div>
 

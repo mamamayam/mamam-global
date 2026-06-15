@@ -91,20 +91,20 @@ const HistoryView = () => {
     };
 
     return (
-        <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto">
+        <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto">
             
             <div className="flex-shrink-0 w-full mb-2">
                 
                 {/* Header & Filter Controls */}
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-4 gap-4">
-                    <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800">Riwayat Pesanan</h2>
+                    <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100">Riwayat Pesanan</h2>
                     
                     <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
                         
                         {/* Dropdown Filter Tipe Order */}
                         <div className="relative w-full sm:w-48">
                             <select 
-                                className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all text-sm bg-white text-slate-700 cursor-pointer"
+                                className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
                                 value={orderTypeFilter}
                                 onChange={(e) => setOrderTypeFilter(e.target.value)}
                             >
@@ -113,16 +113,16 @@ const HistoryView = () => {
                                     <option key={type} value={type}>{type}</option>
                                 ))}
                             </select>
-                            <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+                            <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
                         </div>
 
                         {/* Input Pencarian */}
                         <div className="relative w-full sm:w-72">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
                             <input 
                                 type="text"
                                 placeholder="Cari No. Order, ID, atau Nama..."
-                                className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all text-sm"
+                                className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
@@ -132,15 +132,15 @@ const HistoryView = () => {
 
                 {/* Tab Filter Periode Tanggal */}
                 <div className="flex items-center gap-2 overflow-x-auto pb-3 w-full scrollbar-hide">
-                    <Calendar className="text-slate-400 w-5 h-5 flex-shrink-0 mr-1" />
+                    <Calendar className="text-slate-400 dark:text-slate-500 w-5 h-5 flex-shrink-0 mr-1" />
                     {filterTabs.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setDateFilter(tab.id)}
                             className={`flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold transition-all border ${
                                 dateFilter === tab.id 
-                                ? 'bg-slate-800 text-white border-slate-800 shadow-sm' 
-                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                ? 'bg-slate-800 text-white border-slate-800 dark:border-slate-100 shadow-sm' 
+                                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
                             }`}
                         >
                             {tab.label}
@@ -150,24 +150,24 @@ const HistoryView = () => {
 
                 {/* Input Khusus Tanggal Kustom */}
                 {dateFilter === 'kustom' && (
-                    <div className="flex items-center gap-2 mb-4 p-3 bg-white border border-slate-200 rounded-xl max-w-fit shadow-sm">
+                    <div className="flex items-center gap-2 mb-4 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl max-w-fit shadow-sm">
                         <div className="flex flex-col">
-                            <label className="text-[10px] text-slate-500 font-bold mb-1 ml-1">Dari Tanggal</label>
+                            <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">Dari Tanggal</label>
                             <input 
                                 type="date" 
                                 value={customStartDate}
                                 onChange={(e) => setCustomStartDate(e.target.value)}
-                                className="text-sm px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-slate-700"
+                                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 text-slate-700 dark:text-slate-200"
                             />
                         </div>
-                        <ChevronRight className="w-4 h-4 text-slate-300 mt-4" />
+                        <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 mt-4" />
                         <div className="flex flex-col">
-                            <label className="text-[10px] text-slate-500 font-bold mb-1 ml-1">Sampai Tanggal</label>
+                            <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">Sampai Tanggal</label>
                             <input 
                                 type="date" 
                                 value={customEndDate}
                                 onChange={(e) => setCustomEndDate(e.target.value)}
-                                className="text-sm px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-slate-700"
+                                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 text-slate-700 dark:text-slate-200"
                             />
                         </div>
                     </div>
@@ -179,33 +179,33 @@ const HistoryView = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20">
                 {filteredHistory.length > 0 ? (
                     filteredHistory.map(order => (
-                        <div key={order.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 relative flex flex-col hover:shadow-md transition-shadow">
-                            <div className="flex justify-between items-start mb-3 border-b border-dashed border-slate-200 pb-3">
+                        <div key={order.id} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-4 relative flex flex-col hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-3 border-b border-dashed border-slate-200 dark:border-slate-700 pb-3">
                                 <div>
-                                    <h3 className="font-bold text-sm text-slate-800">#{order.id}</h3>
-                                    <p className="text-[10px] text-slate-500">{new Date(order.date).toLocaleString('id-ID')}</p>
+                                    <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">#{order.id}</h3>
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(order.date).toLocaleString('id-ID')}</p>
                                 </div>
-                                <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${order.paymentMethod === 'Ojol' ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                                <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${order.paymentMethod === 'Ojol' ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-500/20' : 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-100 dark:border-green-500/20'}`}>
                                     {order.paymentMethod} {order.paymentMethod === 'Ojol' && `(${order.ojolName})`}
                                 </span>
                             </div>
 
                             <div className="mb-4 flex-1 space-y-1">
-                                <p className="text-xs font-bold text-slate-700">Pelanggan: {order.customerName}</p>
-                                <p className="text-xs text-slate-500">{order.items.length} Item • {order.orderType}</p>
+                                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Pelanggan: {order.customerName}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">{order.items.length} Item • {order.orderType}</p>
                                 {order.paymentMethod === 'Ojol' && (
-                                    <p className="text-[10px] text-slate-500 font-bold">No. Order: <span className="text-orange-600">{order.orderNumber}</span></p>
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">No. Order: <span className="text-orange-600 dark:text-orange-400">{order.orderNumber}</span></p>
                                 )}
                             </div>
 
-                            <div className="flex justify-between items-center border-t border-slate-50 pt-3 mt-auto">
-                                <span className="font-black text-slate-800">{formatRupiah(order.total)}</span>
+                            <div className="flex justify-between items-center border-t border-slate-50 dark:border-slate-900 pt-3 mt-auto">
+                                <span className="font-black text-slate-800 dark:text-slate-100">{formatRupiah(order.total)}</span>
                                 <div className="flex gap-2">
-                                    <button onClick={() => setReceiptModal({ isOpen: true, data: order, kembalian: 0 })} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold">
+                                    <button onClick={() => setReceiptModal({ isOpen: true, data: order, kembalian: 0 })} className="p-2 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/15 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold">
                                         <Receipt className="w-4 h-4" /> Struk
                                     </button>
                                     {isAdminMode && (
-                                        <button onClick={() => handleDelete(order.id)} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors">
+                                        <button onClick={() => handleDelete(order.id)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/15 rounded-lg transition-colors">
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     )}
@@ -215,9 +215,9 @@ const HistoryView = () => {
                     ))
                 ) : (
                     <div className="col-span-full py-16 flex flex-col items-center justify-center text-center">
-                        <Calendar className="w-12 h-12 text-slate-200 mb-3" />
-                        <h3 className="text-slate-600 font-bold mb-1">Tidak ada pesanan</h3>
-                        <p className="text-slate-400 text-sm">Coba ubah rentang filter atau kata kunci pencarian.</p>
+                        <Calendar className="w-12 h-12 text-slate-200 dark:text-slate-700 mb-3" />
+                        <h3 className="text-slate-600 dark:text-slate-300 font-bold mb-1">Tidak ada pesanan</h3>
+                        <p className="text-slate-400 dark:text-slate-500 text-sm">Coba ubah rentang filter atau kata kunci pencarian.</p>
                     </div>
                 )}
             </div>

@@ -1,78 +1,71 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  FileJson, Sheet, CloudUpload,
+  FileJson, Sheet,
   Upload, FileUp, AlertTriangle, CheckCircle,
   Database, RefreshCw, X, ArrowLeft,
-  Calendar, Info, ToggleLeft, ToggleRight,
+  Calendar, Info, Wifi, WifiOff,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { loadData, saveData, exportAllData } from '../../storage/db';
+import { toLocalDateString } from '../../utils/formatters';
+import { ALL_KEYS, TRANSACTION_KEYS, CONFIG_KEYS, DATE_FILTERABLE_KEYS } from '../../storage/syncKeys';
+import { isSupabaseConfigured, getDeviceId } from '../../storage/syncClient';
+import { pushTransactionUpsert, pushConfig } from '../../storage/realtimeSync';
 
 // ── Konstanta ────────────────────────────────────────────────────────────
-
-const ALL_KEYS = [
-  'variantGroups', 'menus', 'salesHistory', 'hppLibrary', 'savedBills',
-  'expenseCategories', 'expenses', 'incomeCategories', 'incomes',
-  'currentShift', 'shiftHistory', 'customers', 'vouchers', 'claimsHistory',
-  'storeSettings', 'rawMaterials', 'semiFinished', 'categories',
-  'employees', 'employeeDailyRecords', 'additionCategories', 'deductionCategories',
-];
-
-const DATE_FILTERABLE_KEYS = {
-  salesHistory:         'date',
-  expenses:             'date',
-  incomes:              'date',
-  shiftHistory:         'startTime',
-  employeeDailyRecords: 'date',
-};
-
-// Key transaksi: array of objects with `id`, di-upsert per-row ke tabel masing-masing
-const TRANSACTION_KEYS = [
-  'salesHistory', 'expenses', 'incomes', 'shiftHistory',
-  'employeeDailyRecords', 'claimsHistory', 'savedBills',
-];
-
-// Key konfigurasi: disimpan sebagai blob JSON ke tabel `app_config` { key, value }
-const CONFIG_KEYS = [
-  'menus', 'variantGroups', 'categories', 'hppLibrary',
-  'customers', 'vouchers', 'employees',
-  'expenseCategories', 'incomeCategories', 'additionCategories', 'deductionCategories',
-  'rawMaterials', 'semiFinished', 'storeSettings', 'currentShift',
-];
+// ALL_KEYS, TRANSACTION_KEYS, CONFIG_KEYS, DATE_FILTERABLE_KEYS
+// sekarang berasal dari storage/syncKeys.js (dipakai bersama dengan sync engine).
 
 // ── Helpers Dexie ─────────────────────────────────────────────────────────
 
 /**
- * FIX: Ganti readAllFromLocalStorage → exportAllData() dari Dexie.
- * Tidak diperlukan lagi sebagai fungsi terpisah; panggil langsung exportAllData().
- */
-
-/**
- * FIX: Ganti writeAllToLocalStorage → tulis ke Dexie dengan merge/replace.
+ * Tulis hasil import (JSON backup) ke Dexie, lalu propagate ke Supabase
+ * (per-record untuk transaksi, per-key untuk config) supaya device lain
+ * ikut menerima data hasil import secara realtime.
+ *
+ * mode 'replace' : timpa total tiap key dengan data dari file.
+ * mode 'merge'   : - array (transaksi): upsert per id (item baru ditambah,
+ *                    item dengan id sama di-update, bukan cuma di-skip).
+ *                  - objek (config seperti storeSettings/currentShift):
+ *                    digabung per-field (existing di-override field yang ada di file).
  */
 async function writeAllToDexie(data, mode = 'merge') {
   for (const key of ALL_KEYS) {
     if (!(key in data)) continue;
+    const incoming = data[key];
+
+    let finalValue;
+
     if (mode === 'replace') {
-      await saveData(key, data[key]);
-    } else {
-      // mode merge: gabungkan array berdasarkan id, non-array langsung replace
+      finalValue = incoming;
+    } else if (Array.isArray(incoming)) {
+      // mode merge, array transaksi: upsert by id (tambah baru, update yang sudah ada)
+      const existing = await loadData(key, []);
+      const existingArr = Array.isArray(existing) ? existing : [];
+      const merged = [...existingArr];
+      for (const item of incoming) {
+        const idx = merged.findIndex(e => e.id === item.id);
+        if (idx === -1) merged.push(item);
+        else merged[idx] = item;
+      }
+      finalValue = merged;
+    } else if (incoming && typeof incoming === 'object') {
+      // mode merge, objek config (storeSettings, currentShift, dll): merge per-field
       const existing = await loadData(key, null);
-      if (existing === null) {
-        await saveData(key, data[key]);
-        continue;
-      }
-      if (Array.isArray(existing) && Array.isArray(data[key])) {
-        const merged = [...existing];
-        for (const item of data[key]) {
-          if (!merged.find(e => e.id === item.id)) merged.push(item);
-        }
-        await saveData(key, merged);
-      } else {
-        await saveData(key, data[key]);
-      }
+      finalValue = (existing && typeof existing === 'object') ? { ...existing, ...incoming } : incoming;
+    } else {
+      finalValue = incoming;
+    }
+
+    await saveData(key, finalValue);
+
+    // Propagate ke Supabase supaya device lain ikut update (realtime)
+    if (TRANSACTION_KEYS.includes(key) && Array.isArray(finalValue)) {
+      for (const item of finalValue) pushTransactionUpsert(key, item);
+    } else if (CONFIG_KEYS.includes(key)) {
+      pushConfig(key, finalValue, 0);
     }
   }
 }
@@ -121,105 +114,11 @@ function calcRecordCount(allData) {
   return count;
 }
 
-/**
- * Upload semua data ke Supabase:
- * - TRANSACTION_KEYS → tabel masing-masing, upsert by id, batch 100
- * - CONFIG_KEYS      → tabel `app_config`, upsert by key sebagai JSON blob
- *
- * Tabel yang dibutuhkan di Supabase:
- *   salesHistory, expenses, incomes, shiftHistory,
- *   employeeDailyRecords, claimsHistory, savedBills
- *     → kolom: id (text PK), payload (jsonb)
- *
- *   app_config
- *     → kolom: key (text PK), value (jsonb)
- */
-async function syncToSupabase() {
-  const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
-  const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    throw new Error('Konfigurasi Supabase belum ada di .env');
-  }
-
-  const { createClient } = await import('@supabase/supabase-js');
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  const data = await exportAllData();
-  let totalUpserted = 0;
-
-  // 1. Sync transaksi — upsert per row ke tabel masing-masing
-  for (const key of TRANSACTION_KEYS) {
-    const items = data[key];
-    if (!items?.length) continue;
-    for (let i = 0; i < items.length; i += 100) {
-      const batch = items.slice(i, i + 100).map(item => ({ id: item.id, payload: item }));
-      const { error } = await supabase.from(key).upsert(batch, { onConflict: 'id' });
-      if (error) throw new Error(`Gagal sync transaksi [${key}]: ${error.message}`);
-      totalUpserted += batch.length;
-    }
-  }
-
-  // 2. Sync config — upsert ke tabel app_config sebagai JSON blob per key
-  const configBatch = CONFIG_KEYS
-    .filter(key => data[key] !== undefined)
-    .map(key => ({ key, value: data[key] }));
-
-  if (configBatch.length) {
-    const { error } = await supabase.from('app_config').upsert(configBatch, { onConflict: 'key' });
-    if (error) throw new Error(`Gagal sync config: ${error.message}`);
-    totalUpserted += configBatch.length;
-  }
-
-  localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
-  return totalUpserted;
-}
-
-/**
- * Restore semua data dari Supabase ke Dexie lokal.
- * Dipanggil saat pindah HP / install ulang.
- * Mode 'replace' = hapus lokal dulu; 'merge' = gabungkan by id.
- */
-async function restoreFromSupabase(mode = 'replace') {
-  const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
-  const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    throw new Error('Konfigurasi Supabase belum ada di .env');
-  }
-
-  const { createClient } = await import('@supabase/supabase-js');
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  const restored = {};
-
-  // 1. Ambil semua transaksi dari tabel masing-masing
-  for (const key of TRANSACTION_KEYS) {
-    const { data: rows, error } = await supabase.from(key).select('payload');
-    if (error) throw new Error(`Gagal restore transaksi [${key}]: ${error.message}`);
-    restored[key] = (rows || []).map(r => r.payload);
-  }
-
-  // 2. Ambil semua config dari tabel app_config
-  const { data: configRows, error: configError } = await supabase
-    .from('app_config')
-    .select('key, value')
-    .in('key', CONFIG_KEYS);
-
-  if (configError) throw new Error(`Gagal restore config: ${configError.message}`);
-
-  for (const row of configRows || []) {
-    restored[row.key] = row.value;
-  }
-
-  // 3. Tulis ke Dexie lokal
-  await writeAllToDexie(restored, mode);
-
-  return Object.keys(restored).length;
-}
-
 // ── DateRangeModal ───────────────────────────────────────────────────────
 
 function DateRangeModal({ onClose, onConfirm, exportType }) {
-  const today        = new Date().toISOString().slice(0, 10);
-  const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    .toISOString().slice(0, 10);
+  const today        = toLocalDateString();
+  const firstOfMonth = toLocalDateString(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
   const [startDate, setStartDate] = useState(firstOfMonth);
   const [endDate,   setEndDate  ] = useState(today);
@@ -235,7 +134,7 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
       getRange: () => {
         const d = new Date(), day = d.getDay(), mon = new Date(d);
         mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
-        return { s: mon.toISOString().slice(0, 10), e: today };
+        return { s: toLocalDateString(mon), e: today };
       },
     },
     {
@@ -248,7 +147,7 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
         const d = new Date();
         const first = new Date(d.getFullYear(), d.getMonth() - 1, 1);
         const last  = new Date(d.getFullYear(), d.getMonth(), 0);
-        return { s: first.toISOString().slice(0, 10), e: last.toISOString().slice(0, 10) };
+        return { s: toLocalDateString(first), e: toLocalDateString(last) };
       },
     },
     {
@@ -284,18 +183,18 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
     >
       <div
         onClick={e => e.stopPropagation()}
-        className="bg-white w-full max-w-md rounded-t-3xl p-5 pb-8"
+        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-3xl p-5 pb-8"
         style={{ animation: 'slideUp 0.25s ease' }}
       >
-        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-5" />
 
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center text-xl">
+          <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-xl">
             {exportType === 'json' ? '📦' : '📊'}
           </div>
           <div>
-            <p className="font-black text-slate-900 text-base">Export {label} — Pilih Rentang</p>
-            <p className="text-xs text-slate-400">Filter berdasarkan tanggal transaksi</p>
+            <p className="font-black text-slate-900 dark:text-slate-50 text-base">Export {label} — Pilih Rentang</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Filter berdasarkan tanggal transaksi</p>
           </div>
         </div>
 
@@ -306,8 +205,8 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
               onClick={() => applyPreset(p)}
               className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all
                 ${preset === p.id
-                  ? 'border-orange-500 bg-orange-500 text-white'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-orange-300'
+                  ? 'border-orange-500 dark:border-orange-500 bg-orange-500 dark:bg-orange-600 text-white'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-orange-300 dark:hover:border-orange-500/40'
                 }`}
             >
               {p.label}
@@ -322,12 +221,12 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
               ['Sampai Tanggal', endDate,   setEndDate  ],
             ].map(([lbl, val, set]) => (
               <div key={lbl}>
-                <p className="text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">{lbl}</p>
+                <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1.5 uppercase tracking-wider">{lbl}</p>
                 <input
                   type="date"
                   value={val}
                   onChange={e => set(e.target.value)}
-                  className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 focus:outline-none focus:border-orange-400"
+                  className="w-full border-2 border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-orange-400 dark:focus:border-orange-500/50"
                 />
               </div>
             ))}
@@ -335,21 +234,21 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
         )}
 
         {hasRange && (
-          <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-orange-500 shrink-0" />
-            <p className="text-xs text-orange-700 font-semibold">{startDate || '∞'} — {endDate || '∞'}</p>
+          <div className="bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-orange-500 dark:text-orange-400 shrink-0" />
+            <p className="text-xs text-orange-700 dark:text-orange-300 font-semibold">{startDate || '∞'} — {endDate || '∞'}</p>
           </div>
         )}
         {isAllTime && (
-          <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
-            <Info className="w-4 h-4 text-slate-400 shrink-0" />
-            <p className="text-xs text-slate-500 font-semibold">Semua data tanpa filter tanggal</p>
+          <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
+            <Info className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">Semua data tanpa filter tanggal</p>
           </div>
         )}
 
         <button
           onClick={() => onConfirm(confirmStart, confirmEnd)}
-          className="w-full py-4 rounded-xl font-black text-sm bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-200 transition-all"
+          className="w-full py-4 rounded-xl font-black text-sm bg-orange-500 dark:bg-orange-600 hover:bg-orange-600 dark:hover:bg-orange-500 text-white shadow-lg shadow-orange-200 transition-all"
         >
           Download {label}
         </button>
@@ -386,18 +285,18 @@ function ImportModal({ type, onClose, onConfirm }) {
     >
       <div
         onClick={e => e.stopPropagation()}
-        className="bg-white w-full max-w-md rounded-t-3xl p-5 pb-8"
+        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-3xl p-5 pb-8"
         style={{ animation: 'slideUp 0.25s ease' }}
       >
-        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
+        <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-5" />
 
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
-            <FileUp className="w-5 h-5 text-orange-500" />
+          <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
+            <FileUp className="w-5 h-5 text-orange-500 dark:text-orange-400" />
           </div>
           <div>
-            <p className="font-black text-slate-900 text-base">Import dari {label}</p>
-            <p className="text-xs text-slate-400">Pilih file untuk dipulihkan</p>
+            <p className="font-black text-slate-900 dark:text-slate-50 text-base">Import dari {label}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Pilih file untuk dipulihkan</p>
           </div>
         </div>
 
@@ -408,33 +307,33 @@ function ImportModal({ type, onClose, onConfirm }) {
           onDrop={e => { e.preventDefault(); setDragOver(false); setFile(e.dataTransfer.files[0]); }}
           onClick={() => !file && inputRef.current?.click()}
           className={`border-2 border-dashed rounded-2xl p-6 text-center mb-4 cursor-pointer transition-all
-            ${dragOver ? 'border-orange-400 bg-orange-50' :
-              file     ? 'border-green-400 bg-green-50'   :
-              'border-slate-200 bg-slate-50 hover:border-orange-300'}`}
+            ${dragOver ? 'border-orange-400 dark:border-orange-500/50 bg-orange-50 dark:bg-orange-500/10' :
+              file     ? 'border-green-400 dark:border-green-500/50 bg-green-50 dark:bg-green-500/10'   :
+              'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 hover:border-orange-300 dark:hover:border-orange-500/40'}`}
         >
           {file ? (
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-                <CheckCircle className="w-5 h-5 text-green-600" />
+              <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-500/15 flex items-center justify-center shrink-0">
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div className="text-left flex-1 min-w-0">
-                <p className="font-bold text-sm text-slate-800 truncate">{file.name}</p>
-                <p className="text-xs text-slate-400">{fmtBytes(file.size)}</p>
+                <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{file.name}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">{fmtBytes(file.size)}</p>
               </div>
               <button
                 onClick={e => { e.stopPropagation(); setFile(null); }}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 p-1"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <>
-              <Upload className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="font-semibold text-sm text-slate-600">
+              <Upload className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+              <p className="font-semibold text-sm text-slate-600 dark:text-slate-300">
                 {dragOver ? 'Lepaskan file di sini' : 'Ketuk untuk pilih file'}
               </p>
-              <p className="text-xs text-slate-400 mt-1">atau seret & lepas file {label}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">atau seret & lepas file {label}</p>
             </>
           )}
         </div>
@@ -447,7 +346,7 @@ function ImportModal({ type, onClose, onConfirm }) {
           onChange={e => setFile(e.target.files[0])}
         />
 
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Mode Import</p>
+        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Mode Import</p>
         <div className="grid grid-cols-2 gap-2 mb-4">
           {IMPORT_MODES.map(({ val, label: l, desc, icon }) => (
             <button
@@ -455,21 +354,21 @@ function ImportModal({ type, onClose, onConfirm }) {
               onClick={() => setMode(val)}
               className={`p-3 rounded-xl border-2 text-left transition-all
                 ${mode === val
-                  ? 'border-orange-500 bg-orange-50'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
+                  ? 'border-orange-500 dark:border-orange-500 bg-orange-50 dark:bg-orange-500/10'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-600'
                 }`}
             >
               <p className="text-base mb-1">{icon}</p>
-              <p className={`font-bold text-xs ${mode === val ? 'text-orange-600' : 'text-slate-700'}`}>{l}</p>
-              <p className="text-xs text-slate-400">{desc}</p>
+              <p className={`font-bold text-xs ${mode === val ? 'text-orange-600 dark:text-orange-400' : 'text-slate-700 dark:text-slate-200'}`}>{l}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">{desc}</p>
             </button>
           ))}
         </div>
 
         {mode === 'replace' && (
-          <div className="flex gap-2 items-start bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
-            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-            <p className="text-xs text-red-700">
+          <div className="flex gap-2 items-start bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-xl p-3 mb-4">
+            <AlertTriangle className="w-4 h-4 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-red-700 dark:text-red-300">
               Mode <strong>Timpa Semua</strong> akan menghapus seluruh data yang ada.
             </p>
           </div>
@@ -480,8 +379,8 @@ function ImportModal({ type, onClose, onConfirm }) {
           disabled={!file}
           className={`w-full py-4 rounded-xl font-black text-sm transition-all
             ${file
-              ? 'bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-200'
-              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              ? 'bg-orange-500 dark:bg-orange-600 hover:bg-orange-600 dark:hover:bg-orange-500 text-white shadow-lg shadow-orange-200'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
             }`}
         >
           {file ? `Import ${label}` : 'Pilih file terlebih dahulu'}
@@ -498,37 +397,37 @@ function ActionItem({ icon: Icon, label, sublabel, onClick, loading, done, iconB
     <button
       onClick={loading || done ? undefined : onClick}
       className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-all
-        ${done    ? 'border-green-200 bg-green-50' :
-          loading ? 'border-orange-200 bg-orange-50' :
-          'border-slate-100 bg-white hover:border-orange-200 hover:bg-orange-50'}`}
+        ${done    ? 'border-green-200 dark:border-green-500/30 bg-green-50 dark:bg-green-500/10' :
+          loading ? 'border-orange-200 dark:border-orange-500/30 bg-orange-50 dark:bg-orange-500/10' :
+          'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-orange-200 dark:hover:border-orange-500/30 hover:bg-orange-50 dark:hover:bg-orange-500/10'}`}
     >
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${done ? 'bg-green-100' : iconBgClass}`}>
+      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${done ? 'bg-green-100 dark:bg-green-500/15' : iconBgClass}`}>
         {loading
-          ? <RefreshCw className="w-5 h-5 text-orange-500 animate-spin" />
+          ? <RefreshCw className="w-5 h-5 text-orange-500 dark:text-orange-400 animate-spin" />
           : done
-            ? <CheckCircle className="w-5 h-5 text-green-600" />
+            ? <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
             : <Icon className={`w-5 h-5 ${iconColorClass}`} />
         }
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="font-bold text-sm text-slate-800">{label}</p>
+          <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{label}</p>
           {badge && (
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600">
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400">
               {badge}
             </span>
           )}
         </div>
         <p className="text-xs mt-0.5">
           {loading
-            ? <span className="text-orange-500 font-semibold">Memproses...</span>
+            ? <span className="text-orange-500 dark:text-orange-400 font-semibold">Memproses...</span>
             : done
-              ? <span className="text-green-600 font-semibold">Selesai</span>
-              : <span className="text-slate-400">{sublabel}</span>
+              ? <span className="text-green-600 dark:text-green-400 font-semibold">Selesai</span>
+              : <span className="text-slate-400 dark:text-slate-500">{sublabel}</span>
           }
         </p>
       </div>
-      {!loading && !done && <span className="text-slate-300 text-xl font-bold">›</span>}
+      {!loading && !done && <span className="text-slate-300 dark:text-slate-600 text-xl font-bold">›</span>}
     </button>
   );
 }
@@ -541,20 +440,15 @@ const BackupView = ({ onBack }) => {
   const [toast,           setToast         ] = useState(null);
   const [importModal,     setImportModal   ] = useState(null);
   const [dateRangeModal,  setDateRangeModal] = useState(null);
-  const [isSyncing,       setIsSyncing     ] = useState(false);
-  const [isRestoring,     setIsRestoring   ] = useState(false);
 
   // FIX: storageSize & recordCount sekarang dihitung dari Dexie secara async
   const [storageSize,  setStorageSize ] = useState('Menghitung...');
   const [recordCount,  setRecordCount ] = useState('...');
 
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(
-    () => localStorage.getItem('mamam_auto_sync_enabled') === 'true'
-  );
-  const [lastSyncTime, setLastSyncTime] = useState(() => {
-    const raw = localStorage.getItem('mamam_last_supabase_sync');
-    return raw ? new Date(raw).toLocaleString('id-ID') : null;
-  });
+  // Status koneksi realtime ke Supabase (push per-record sudah otomatis
+  // ditangani oleh usePersistState; di sini hanya tampilan status saja)
+  const realtimeConfigured = isSupabaseConfigured();
+  const deviceId = getDeviceId();
 
   const lastBackup = localStorage.getItem('mamam_last_backup') || 'Belum pernah';
 
@@ -565,25 +459,6 @@ const BackupView = ({ onBack }) => {
       setRecordCount(calcRecordCount(allData));
     });
   }, []);
-
-  // Persist auto-sync preference
-  useEffect(() => {
-    localStorage.setItem('mamam_auto_sync_enabled', autoSyncEnabled ? 'true' : 'false');
-  }, [autoSyncEnabled]);
-
-  // Expose global trigger — panggil dari handler transaksi: window.__triggerSupabaseSync?.()
-  useEffect(() => {
-    window.__triggerSupabaseSync = async () => {
-      if (!autoSyncEnabled) return;
-      try {
-        await syncToSupabase();
-        setLastSyncTime(new Date().toLocaleString('id-ID'));
-      } catch (err) {
-        console.warn('[mamam] sync gagal:', err.message);
-      }
-    };
-    return () => { delete window.__triggerSupabaseSync; };
-  }, [autoSyncEnabled]);
 
   // ── helpers ─────────────────────────────────────────────────────────────
 
@@ -699,57 +574,29 @@ const BackupView = ({ onBack }) => {
 
   function handleImportConfirm(file, mode) {
     setImportModal(null);
-    startAction('importJson', 200, 'Data berhasil diimpor! Muat ulang aplikasi.', async () => {
-      // FIX: tulis ke Dexie, bukan localStorage
+    startAction('importJson', 200, 'Data berhasil diimpor!', async () => {
+      // FIX: tulis ke Dexie + propagate ke Supabase (realtime), bukan localStorage
       await writeAllToDexie(JSON.parse(await file.text()), mode);
       setTimeout(() => window.location.reload(), 1500);
     });
-  }
-
-  async function handleManualSync() {
-    setIsSyncing(true);
-    try {
-      const count = await syncToSupabase();
-      setLastSyncTime(new Date().toLocaleString('id-ID'));
-      showToast(`Sync selesai — ${count} key diupload`);
-    } catch (err) {
-      showToast('Gagal: ' + err.message, 'error');
-    } finally {
-      setIsSyncing(false);
-    }
-  }
-
-  async function handleRestoreFromSupabase() {
-    if (!window.confirm('Restore semua data dari Supabase? Data lokal akan ditimpa.')) return;
-    setIsRestoring(true);
-    try {
-      const count = await restoreFromSupabase('replace');
-      showToast(`Restore selesai — ${count} key dipulihkan`);
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (err) {
-      showToast('Gagal: ' + err.message, 'error');
-    } finally {
-      setIsRestoring(false);
-    }
   }
 
   // ── render ───────────────────────────────────────────────────────────────
 
   const STATUS_ROWS = [
     { label: 'Backup terakhir',        value: lastBackup },
-    { label: 'Sync Supabase terakhir', value: lastSyncTime || 'Belum pernah' },
     { label: 'Total record',           value: `±${recordCount} data` },
     { label: 'Ukuran tersimpan',       value: storageSize },
   ];
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-y-auto">
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto">
 
       {/* Toast */}
       {toast && (
         <div
           className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl text-white text-sm font-bold shadow-xl whitespace-nowrap
-            ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'}`}
+            ${toast.type === 'error' ? 'bg-red-500 dark:bg-red-600' : 'bg-green-500 dark:bg-green-600'}`}
           style={{ animation: 'fadeInDown 0.2s ease' }}
         >
           {toast.msg}
@@ -773,19 +620,19 @@ const BackupView = ({ onBack }) => {
       )}
 
       {/* Header */}
-      <div className="bg-white border-b border-slate-100 px-4 py-4 flex items-center gap-3 shrink-0">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-4 py-4 flex items-center gap-3 shrink-0">
         {onBack && (
-          <button onClick={onBack} className="p-1 hover:bg-slate-100 rounded-lg transition-colors">
-            <ArrowLeft className="w-5 h-5 text-slate-600" />
+          <button onClick={onBack} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+            <ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-300" />
           </button>
         )}
-        <h2 className="font-black text-xl text-slate-800 flex items-center gap-2 flex-1">
-          <Database className="w-6 h-6 text-orange-500" /> Backup & Restore
+        <h2 className="font-black text-xl text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-1">
+          <Database className="w-6 h-6 text-orange-500 dark:text-orange-400" /> Backup & Restore
         </h2>
-        {autoSyncEnabled && (
-          <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-full px-3 py-1">
-            <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-            <span className="text-xs font-bold text-blue-600">Auto-Sync</span>
+        {realtimeConfigured && (
+          <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-full px-3 py-1">
+            <span className="w-2 h-2 bg-blue-500 dark:bg-blue-600 rounded-full animate-pulse" />
+            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">Realtime Sync</span>
           </div>
         )}
       </div>
@@ -793,18 +640,18 @@ const BackupView = ({ onBack }) => {
       <div className="p-4 space-y-4">
 
         {/* Status */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <p className="font-bold text-sm text-slate-700">Status Data Lokal</p>
-            <span className="text-xs font-bold text-green-600 bg-green-50 border border-green-200 rounded-full px-3 py-0.5">
+            <p className="font-bold text-sm text-slate-700 dark:text-slate-200">Status Data Lokal</p>
+            <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 rounded-full px-3 py-0.5">
               ● Aktif
             </span>
           </div>
           <div className="space-y-2">
             {STATUS_ROWS.map(({ label, value }) => (
-              <div key={label} className="flex justify-between items-center py-1.5 border-b border-slate-50 last:border-0">
-                <span className="text-xs text-slate-400">{label}</span>
-                <span className="text-xs font-bold text-slate-700">{value}</span>
+              <div key={label} className="flex justify-between items-center py-1.5 border-b border-slate-50 dark:border-slate-900 last:border-0">
+                <span className="text-xs text-slate-400 dark:text-slate-500">{label}</span>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{value}</span>
               </div>
             ))}
           </div>
@@ -812,7 +659,7 @@ const BackupView = ({ onBack }) => {
 
         {/* Export */}
         <div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Export / Backup</p>
+          <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 px-1">Export / Backup</p>
           <div className="space-y-2">
             <ActionItem
               icon={FileJson}
@@ -822,8 +669,8 @@ const BackupView = ({ onBack }) => {
               onClick={() => setDateRangeModal('json')}
               loading={loadingState['exportJson']}
               done={doneState['exportJson']}
-              iconBgClass="bg-orange-50"
-              iconColorClass="text-orange-500"
+              iconBgClass="bg-orange-50 dark:bg-orange-500/10"
+              iconColorClass="text-orange-500 dark:text-orange-400"
             />
             <ActionItem
               icon={Sheet}
@@ -833,79 +680,42 @@ const BackupView = ({ onBack }) => {
               onClick={() => setDateRangeModal('excel')}
               loading={loadingState['exportExcel']}
               done={doneState['exportExcel']}
-              iconBgClass="bg-green-50"
-              iconColorClass="text-green-600"
+              iconBgClass="bg-green-50 dark:bg-green-500/10"
+              iconColorClass="text-green-600 dark:text-green-400"
             />
           </div>
         </div>
 
-        {/* Supabase Sync */}
+        {/* Realtime Sync Status */}
         <div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Cloud Sync — Supabase</p>
-          <div className="bg-white rounded-2xl border-2 border-slate-100 p-4 space-y-4">
-
+          <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 px-1">Cloud Sync — Supabase</p>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-bold text-sm text-slate-800">Sync otomatis setiap transaksi</p>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {autoSyncEnabled
-                    ? `Aktif · terakhir: ${lastSyncTime || 'belum pernah'}`
-                    : 'Nonaktif'}
+                <p className="font-bold text-sm text-slate-800 dark:text-slate-100">Sinkronisasi Realtime</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  {realtimeConfigured
+                    ? 'Aktif — perubahan tersinkron otomatis ke semua device'
+                    : 'Belum dikonfigurasi (.env Supabase belum diisi)'}
                 </p>
               </div>
-              <button
-                onClick={() => setAutoSyncEnabled(v => !v)}
-                className={`transition-colors ${autoSyncEnabled ? 'text-blue-500' : 'text-slate-300'}`}
-              >
-                {autoSyncEnabled
-                  ? <ToggleRight className="w-8 h-8" />
-                  : <ToggleLeft  className="w-8 h-8" />
-                }
-              </button>
-            </div>
-
-            {/* Sync sekarang */}
-            <button
-              onClick={handleManualSync}
-              disabled={isSyncing || isRestoring}
-              className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2
-                ${isSyncing
-                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                  : 'bg-blue-500 hover:bg-blue-600 text-white shadow-md shadow-blue-200'
-                }`}
-            >
-              {isSyncing
-                ? <><RefreshCw className="w-4 h-4 animate-spin" /> Menyinkronkan...</>
-                : <><CloudUpload className="w-4 h-4" /> Sync Sekarang (Upload)</>
+              {realtimeConfigured
+                ? <Wifi className="w-6 h-6 text-blue-500 dark:text-blue-400" />
+                : <WifiOff className="w-6 h-6 text-slate-300 dark:text-slate-600" />
               }
-            </button>
-
-            {/* Restore dari Supabase */}
-            <div className="border-t border-slate-100 pt-3">
-              <p className="text-xs text-slate-400 mb-2">
-                Pindah HP atau install ulang? Tarik semua data dari cloud.
+            </div>
+            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-xl px-3 py-2">
+              <Info className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                ID Device ini: <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{deviceId.slice(0, 8)}</span>
               </p>
-              <button
-                onClick={handleRestoreFromSupabase}
-                disabled={isSyncing || isRestoring}
-                className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border-2
-                  ${isRestoring
-                    ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                    : 'border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700'
-                  }`}
-              >
-                {isRestoring
-                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Memulihkan...</>
-                  : <><Upload className="w-4 h-4" /> Restore dari Supabase</>
-                }
-              </button>
             </div>
           </div>
         </div>
 
         {/* Import */}
         <div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Import / Restore</p>
+          <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 px-1">Import / Restore</p>
           <ActionItem
             icon={FileUp}
             label="Import dari JSON"
@@ -913,8 +723,8 @@ const BackupView = ({ onBack }) => {
             onClick={() => setImportModal('json')}
             loading={loadingState['importJson']}
             done={doneState['importJson']}
-            iconBgClass="bg-orange-50"
-            iconColorClass="text-orange-500"
+            iconBgClass="bg-orange-50 dark:bg-orange-500/10"
+            iconColorClass="text-orange-500 dark:text-orange-400"
           />
         </div>
       </div>

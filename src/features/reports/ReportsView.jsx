@@ -2,7 +2,7 @@ import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Award, BarChart3, CircleMinus, History, Package } from 'lucide-react';
 import { useMemo } from 'react';
-import { formatRupiah } from '../../utils/formatters';
+import { formatRupiah, toLocalDateString } from '../../utils/formatters';
 
 const ReportsView = () => {
   const { salesHistory, incomes, reportDateRange, setReportDateRange, activePreset, applyDatePreset } = useAppContext();
@@ -10,7 +10,7 @@ const ReportsView = () => {
   // Filter Penjualan
   const filteredSales = useMemo(() => {
     return salesHistory.filter(order => {
-      const orderDate = new Date(order.date).toISOString().split('T')[0];
+      const orderDate = toLocalDateString(order.date);
       return orderDate >= reportDateRange.start && orderDate <= reportDateRange.end;
     });
   }, [salesHistory, reportDateRange]);
@@ -18,7 +18,7 @@ const ReportsView = () => {
   // Filter Pemasukan Lain
   const filteredIncomes = useMemo(() => {
     return incomes.filter(inc => {
-      const incDate = new Date(inc.date).toISOString().split('T')[0];
+      const incDate = toLocalDateString(inc.date);
       return incDate >= reportDateRange.start && incDate <= reportDateRange.end;
     });
   }, [incomes, reportDateRange]);
@@ -35,13 +35,14 @@ const ReportsView = () => {
   const salesByDate = useMemo(() => {
     const salesMap = {};
     filteredSales.forEach(order => {
-      const dStr = new Date(order.date).toISOString().split('T')[0];
+      const dStr = toLocalDateString(order.date);
       salesMap[dStr] = (salesMap[dStr] || 0) + order.total;
     });
     // Urutkan berdasarkan tanggal kalender secara kronologis
     const sortedEntries = Object.entries(salesMap).sort((a, b) => a[0].localeCompare(b[0]));
     return sortedEntries.map(([rawDate, total]) => {
-      const d = new Date(rawDate);
+      const [y, m, day] = rawDate.split('-').map(Number);
+      const d = new Date(y, m - 1, day);
       const label = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
       return { date: label, total };
     });
@@ -87,13 +88,13 @@ const ReportsView = () => {
   }, [salesByDate]);
 
   return (
-    <div className="p-4 md:p-6 bg-slate-50 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-slate-100 pb-4">
-        <div><h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800">Dashboard Laporan</h2></div>
+    <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+        <div><h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100">Dashboard Laporan</h2></div>
       </div>
 
       {/* --- KONTROL RENTANG TANGGAL & PRESET --- */}
-      <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-6">
+      <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 mb-6">
         <div className="flex flex-wrap gap-1.5 shrink-0">
           {[
             { id: 'hari_ini', label: 'Hari Ini' },
@@ -104,13 +105,13 @@ const ReportsView = () => {
             <button
               key={preset.id}
               onClick={() => applyDatePreset(preset.id)}
-              className={`px-3 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${activePreset === preset.id ? 'bg-orange-600 text-white shadow-md' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+              className={`px-3 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${activePreset === preset.id ? 'bg-orange-600 dark:bg-orange-500 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'}`}
             >
               {preset.label}
             </button>
           ))}
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-xs font-bold text-slate-500">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-xs font-bold text-slate-500 dark:text-slate-400">
           <div className="flex items-center gap-2">
             <span>Dari:</span>
             <input
@@ -120,7 +121,7 @@ const ReportsView = () => {
                 setReportDateRange(prev => ({ ...prev, start: e.target.value }));
                 applyDatePreset('custom');
               }}
-              className="px-3 py-2 border border-slate-200 rounded-xl outline-none bg-slate-50 text-slate-700 font-semibold focus:border-orange-500 focus:bg-white transition-all"
+              className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-200 font-semibold focus:border-orange-500 dark:focus:border-orange-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -132,7 +133,7 @@ const ReportsView = () => {
                 setReportDateRange(prev => ({ ...prev, end: e.target.value }));
                 applyDatePreset('custom');
               }}
-              className="px-3 py-2 border border-slate-200 rounded-xl outline-none bg-slate-50 text-slate-700 font-semibold focus:border-orange-500 focus:bg-white transition-all"
+              className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-200 font-semibold focus:border-orange-500 dark:focus:border-orange-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
             />
           </div>
         </div>
@@ -140,43 +141,43 @@ const ReportsView = () => {
       
       {/* --- METRIC CARDS --- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center transition-all hover:shadow-md">
-          <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Total Penjualan</p>
-          <h3 className="font-heading text-lg md:text-2xl font-black text-slate-900">{formatRupiah(totalRevenue)}</h3>
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-center transition-all hover:shadow-md">
+          <p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-2">Total Penjualan</p>
+          <h3 className="font-heading text-lg md:text-2xl font-black text-slate-900 dark:text-slate-50">{formatRupiah(totalRevenue)}</h3>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center transition-all hover:shadow-md">
-          <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Pemasukan Lain</p>
-          <h3 className="font-heading text-lg md:text-2xl font-black text-green-600">{formatRupiah(totalOtherIncome)}</h3>
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-center transition-all hover:shadow-md">
+          <p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-2">Pemasukan Lain</p>
+          <h3 className="font-heading text-lg md:text-2xl font-black text-green-600 dark:text-green-400">{formatRupiah(totalOtherIncome)}</h3>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center transition-all hover:shadow-md bg-gradient-to-br from-orange-50/40 to-transparent">
-          <p className="text-[10px] md:text-xs text-orange-600 font-bold uppercase tracking-wider mb-2">Total Pendapatan</p>
-          <h3 className="font-heading text-lg md:text-2xl font-black text-orange-600">{formatRupiah(totalCombinedIncome)}</h3>
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-center transition-all hover:shadow-md bg-gradient-to-br from-orange-50 dark:from-orange-500/40 to-transparent">
+          <p className="text-[10px] md:text-xs text-orange-600 dark:text-orange-400 font-bold uppercase tracking-wider mb-2">Total Pendapatan</p>
+          <h3 className="font-heading text-lg md:text-2xl font-black text-orange-600 dark:text-orange-400">{formatRupiah(totalCombinedIncome)}</h3>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center transition-all hover:shadow-md">
-          <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Laba Kotor</p>
-          <h3 className="font-heading text-lg md:text-2xl font-black text-blue-600">{formatRupiah(grossProfit)}</h3>
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-center transition-all hover:shadow-md">
+          <p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-2">Laba Kotor</p>
+          <h3 className="font-heading text-lg md:text-2xl font-black text-blue-600 dark:text-blue-400">{formatRupiah(grossProfit)}</h3>
         </div>
       </div>
 
       {/* --- RIWAYAT TRANSAKSI --- */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col mb-6">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50"><h3 className="font-heading font-bold text-slate-800 flex items-center gap-2 text-sm"><History className="w-4 h-4 text-slate-500"/> Riwayat Transaksi</h3></div>
-        <div className="divide-y divide-slate-100 max-h-[220px] overflow-y-auto custom-scrollbar">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col mb-6">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950"><h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm"><History className="w-4 h-4 text-slate-500 dark:text-slate-400"/> Riwayat Transaksi</h3></div>
+        <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[220px] overflow-y-auto custom-scrollbar">
           {filteredSales.map((order, idx) => (
-            <div key={order.id} className="p-4 hover:bg-slate-50 transition-colors animate-in fade-in slide-in-from-left-2">
+            <div key={order.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors animate-in fade-in slide-in-from-left-2">
               <div className="flex justify-between items-start mb-1">
                 <div>
-                  <p className="font-bold text-slate-800 text-sm">{order.id} <span className="font-normal text-slate-500">- {order.customerName}</span></p>
-                  <span className="text-[10px] text-slate-400 font-medium">{new Date(order.date).toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                  <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{order.id} <span className="font-normal text-slate-500 dark:text-slate-400">- {order.customerName}</span></p>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{new Date(order.date).toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-slate-900">{formatRupiah(order.total)}</p>
+                  <p className="font-bold text-slate-900 dark:text-slate-50">{formatRupiah(order.total)}</p>
                 </div>
               </div>
             </div>
           ))}
           {filteredSales.length === 0 && (
-            <div className="p-8 text-center text-slate-400 italic text-sm">Tidak ada transaksi pada periode ini</div>
+            <div className="p-8 text-center text-slate-400 dark:text-slate-500 italic text-sm">Tidak ada transaksi pada periode ini</div>
           )}
         </div>
       </div>
@@ -185,9 +186,9 @@ const ReportsView = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-2 pb-10">
         
         {/* Grafik 1: Tren Penjualan Harian */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex flex-col">
-          <h3 className="font-heading font-bold text-slate-800 text-sm mb-4 flex items-center gap-2">
-            <CircleMinus className="w-4 h-4 text-orange-600" /> Tren Penjualan Harian
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 flex flex-col">
+          <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-4 flex items-center gap-2">
+            <CircleMinus className="w-4 h-4 text-orange-600 dark:text-orange-400" /> Tren Penjualan Harian
           </h3>
           <div className="flex-1 flex items-center justify-center min-h-[180px]">
             {lineChartData ? (
@@ -265,7 +266,7 @@ const ReportsView = () => {
                 })}
               </svg>
             ) : (
-              <div className="flex flex-col items-center justify-center text-slate-400 text-xs">
+              <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-xs">
                 <BarChart3 className="w-10 h-10 opacity-30 mb-2" />
                 <p>Belum ada data grafik untuk ditampilkan</p>
               </div>
@@ -274,9 +275,9 @@ const ReportsView = () => {
         </div>
 
         {/* Grafik 2: Menu Paling Laris (Best Seller) */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex flex-col">
-          <h3 className="font-heading font-bold text-slate-800 text-sm mb-4 flex items-center gap-2">
-            <Award className="w-4 h-4 text-orange-600" /> 5 Menu Terlaris (Best Seller)
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 flex flex-col">
+          <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-4 flex items-center gap-2">
+            <Award className="w-4 h-4 text-orange-600 dark:text-orange-400" /> 5 Menu Terlaris (Best Seller)
           </h3>
           <div className="flex-1 flex flex-col justify-center min-h-[180px]">
             {bestSellers.length > 0 ? (
@@ -286,18 +287,18 @@ const ReportsView = () => {
                   const pct = (item.qty / maxQty) * 100;
                   return (
                     <div key={idx} className="space-y-1 animate-in fade-in duration-300">
-                      <div className="flex justify-between items-center text-xs font-bold text-slate-700">
+                      <div className="flex justify-between items-center text-xs font-bold text-slate-700 dark:text-slate-200">
                         <span className="flex items-center gap-2 truncate pr-4">
-                          <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold ${idx === 0 ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-slate-100 text-slate-500'}`}>
+                          <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold ${idx === 0 ? 'bg-orange-100 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300 ring-1 ring-orange-300 dark:ring-orange-500/40' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
                             {idx + 1}
                           </span>
                           <span className="truncate">{item.name}</span>
                         </span>
-                        <span className="text-orange-600 shrink-0">{item.qty} Porsi</span>
+                        <span className="text-orange-600 dark:text-orange-400 shrink-0">{item.qty} Porsi</span>
                       </div>
-                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-gradient-to-r from-orange-500 to-orange-600 rounded-full transition-all duration-500 ease-out"
+                          className="h-full bg-gradient-to-r from-orange-500 dark:from-orange-600 to-orange-600 dark:to-orange-500 rounded-full transition-all duration-500 ease-out"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
@@ -306,7 +307,7 @@ const ReportsView = () => {
                 })}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center text-slate-400 text-xs">
+              <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-xs">
                 <Package className="w-10 h-10 opacity-30 mb-2" />
                 <p>Belum ada data menu terlaris pada periode ini</p>
               </div>

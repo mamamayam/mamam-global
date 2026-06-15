@@ -8,15 +8,22 @@ import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const ReceiptModal = () => {
-    const { receiptModal, setReceiptModal, storeSettings, formatRupiah, printReceipt } = useAppContext();
+    // 1. TAMBAHKAN 'customers' DI SINI UNTUK MEMANGGIL DATABASE PELANGGAN
+    const { receiptModal, setReceiptModal, storeSettings, formatRupiah, printReceipt, customers } = useAppContext();
+    
     if (!receiptModal.isOpen || !receiptModal.data) return null;
     const { data, kembalian } = receiptModal;
 
     // --- LOGIKA OPEN BILL ---
     const isOpenBill = data.status === 'OPEN' || data.status === 'UNPAID';
 
+    // 2. CARI DATA PELANGGAN DI DATABASE BERDASARKAN NAMA & AMBIL SISA POINNYA
+    const matchedCustomer = customers?.find(c => c.name === data.customerName);
+    // Asumsi properti poin pelanggan di database bernama "points" (sesuaikan jika namanya "poin" atau lainnya)
+    const sisaPoin = matchedCustomer ? matchedCustomer.points : (data.customerPoints || 0); 
+    const pointsUsed = (data.pointDiscount || 0) / 100;
+
     const handleShareImage = async () => {
-        // ... (Fungsi handleShareImage tetap sama persis seperti kode asli Anda)
         const receiptElement = document.getElementById('receipt-content');
         if (!receiptElement) {
             alert('Error: Elemen HTML struk tidak ditemukan.');
@@ -71,8 +78,7 @@ const ReceiptModal = () => {
     };
 
     return (
-        <div className="fixed inset-0 z-[70] flex items-start md:items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto py-10 transition-opacity duration-300 print:bg-white print:p-0">
-            {/* Style Print Tetap Sama */}
+        <div className="fixed inset-0 z-[70] flex items-start md:items-center justify-center p-4 bg-black backdrop-blur-md overflow-y-auto py-10 transition-opacity duration-300 print:bg-white print:p-0">
             <style dangerouslySetInnerHTML={{
                 __html: `
         @media print {
@@ -84,23 +90,19 @@ const ReceiptModal = () => {
         }
       `}} />
 
-            <div id="receipt-wrapper" className="bg-white rounded-xl w-full max-w-[300px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out flex flex-col shrink-0 print:shadow-none print:w-[58mm] print:rounded-none overflow-hidden">
+            <div id="receipt-wrapper" className="bg-white dark:bg-slate-900 rounded-xl w-full max-w-[300px] shadow-2xl relative font-mono text-sm animate-in zoom-in-95 duration-300 ease-out flex flex-col shrink-0 print:shadow-none print:w-[58mm] print:rounded-none overflow-hidden">
 
-                {/* --- KONTEN STRUK --- */}
-                <div id="receipt-content" className="w-[300px] bg-white p-4 font-mono text-[11px] leading-tight text-black mx-auto relative">
+                <div id="receipt-content" className="w-[300px] bg-white dark:bg-slate-900 p-4 font-mono text-[11px] leading-tight text-black dark:text-white mx-auto relative">
                     
-                    {/* WATERMARK KHUSUS OPEN BILL */}
                     {isOpenBill && (
                         <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none overflow-hidden">
-                            <div className="border-4 border-gray-300 text-gray-300 text-3xl font-black uppercase tracking-widest p-2 rotate-[-35deg] opacity-60">
+                            <div className="border-4 border-gray-300 dark:border-slate-600 text-gray-300 dark:text-slate-600 text-3xl font-black uppercase tracking-widest p-2 rotate-[-35deg] opacity-60">
                                 BELUM LUNAS
                             </div>
                         </div>
                     )}
 
-                    {/* Tambahkan z-10 relatif pada konten agar tulisan tetap di atas watermark */}
                     <div className="relative z-10">
-                        {/* Header */}
                         <div className="text-center mb-3">
                             <div className="font-bold text-lg uppercase tracking-wide">
                                 {storeSettings?.storeName || "Mamam Ayam"}
@@ -109,12 +111,10 @@ const ReceiptModal = () => {
                             {storeSettings?.storePhone && <div className="text-[10px]">WA: {storeSettings.storePhone}</div>}
                         </div>
 
-                        {/* JUDUL STRUK DINAMIS */}
-                        <div className="text-center font-bold mb-2 pb-2 border-b border-dashed border-gray-500">
+                        <div className="text-center font-bold mb-2 pb-2 border-b border-dashed border-gray-500 dark:border-slate-400">
                             {isOpenBill ? '*** BILL SEMENTARA ***' : '*** LUNAS ***'}
                         </div>
 
-                        {/* Info Transaksi */}
                         <div className="flex justify-between mb-1">
                             <span>{new Date(data.date).toLocaleString("id-ID", { dateStyle: 'short', timeStyle: 'short' }).replace(',', '')}</span>
                             <span>Kasir: Admin</span>
@@ -123,22 +123,37 @@ const ReceiptModal = () => {
                             <span>No: {data.id}</span>
                             <span>{data.orderType}</span>
                         </div>
+                        
                         {data.customerName && (
-                            <div className="flex justify-between mb-1">
-                                <span>Pelanggan:</span>
-                                <span>{data.customerName}</span>
-                            </div>
+                            <>
+                                <div className="flex justify-between mb-1">
+                                    <span>Pelanggan:</span>
+                                    <span>{data.customerName}</span>
+                                </div>
+                                
+                                {/* TAMPILKAN SISA POIN DARI DATABASE DI SINI */}
+                                <div className="text-center my-3 py-2 border-y border-dashed border-gray-500 dark:border-slate-400">
+                                    <div className="text-[10px] font-bold text-gray-600 dark:text-gray-300">SISA POIN ANDA</div>
+                                    <div className="text-2xl font-black text-black dark:text-white">
+                                        {sisaPoin}
+                                    </div>
+                                    {pointsUsed > 0 && (
+                                        <div className="text-[9px] text-gray-500 dark:text-slate-400 mt-1">
+                                            (Poin dipakai transaksi ini: {pointsUsed})
+                                        </div>
+                                    )}
+                                </div>
+                            </>
                         )}
 
-                        <div className="border-b border-dashed border-gray-500 my-2"></div>
+                        <div className="border-b border-dashed border-gray-500 dark:border-slate-400 my-2"></div>
 
-                        {/* Daftar Item */}
                         <div className="mb-2">
                             {data.items.map((item, idx) => (
                                 <div key={idx} className="mb-2">
                                     <div className="font-bold">{item.name}</div>
-                                    {item.variantName && <div className="pl-2 text-[10px] text-gray-700">- {item.variantName}</div>}
-                                    {item.note && <div className="pl-2 text-[10px] text-gray-700">* {item.note}</div>}
+                                    {item.variantName && <div className="pl-2 text-[10px] text-gray-700 dark:text-slate-200">- {item.variantName}</div>}
+                                    {item.note && <div className="pl-2 text-[10px] text-gray-700 dark:text-slate-200">* {item.note}</div>}
                                     <div className="flex justify-between pl-2 mt-0.5">
                                         <span>{item.qty} x {formatRupiah(item.price)}</span>
                                         <span>{formatRupiah(item.price * item.qty)}</span>
@@ -147,15 +162,13 @@ const ReceiptModal = () => {
                             ))}
                         </div>
 
-                        <div className="border-b border-dashed border-gray-500 my-2"></div>
+                        <div className="border-b border-dashed border-gray-500 dark:border-slate-400 my-2"></div>
 
-                        {/* Perhitungan Total */}
                         <div className="flex flex-col gap-1 mb-2">
                             <div className="flex justify-between">
                                 <span>Subtotal</span>
                                 <span>{formatRupiah(data.subtotal)}</span>
                             </div>
-                            {/* ... (Blok diskon/pajak/ongkir tetap sama) ... */}
                             {data.discount > 0 && <div className="flex justify-between"><span>Diskon Vcr</span><span>-{formatRupiah(data.discount)}</span></div>}
                             {data.pointDiscount > 0 && <div className="flex justify-between"><span>Potong Poin</span><span>-{formatRupiah(data.pointDiscount)}</span></div>}
                             {data.manualDiscountAmount > 0 && <div className="flex justify-between"><span>Diskon Man</span><span>-{formatRupiah(data.manualDiscountAmount)}</span></div>}
@@ -164,9 +177,8 @@ const ReceiptModal = () => {
                             {data.deliveryFee > 0 && <div className="flex justify-between"><span>Ongkir</span><span>{formatRupiah(data.deliveryFee)}</span></div>}
                         </div>
 
-                        <div className="border-b border-dashed border-gray-500 my-2"></div>
+                        <div className="border-b border-dashed border-gray-500 dark:border-slate-400 my-2"></div>
 
-                        {/* Pembayaran - KONDISIONAL BERDASARKAN STATUS */}
                         <div className="flex flex-col gap-1 mb-3">
                             <div className="flex justify-between font-bold text-[13px]">
                                 <span>TOTAL TAGIHAN</span>
@@ -199,33 +211,37 @@ const ReceiptModal = () => {
                             )}
                         </div>
 
-                        <div className="border-b border-dashed border-gray-500 mb-3"></div>
+                        <div className="border-b border-dashed border-gray-500 dark:border-slate-400 mb-3"></div>
 
-                        {/* Footer */}
                         <div className="text-center text-[10px]">
                             {isOpenBill ? (
-                                <div className="font-bold text-gray-600">
+                                <div className="font-bold text-gray-600 dark:text-slate-300">
                                     Silakan bayar di kasir<br/>saat Anda selesai.
                                 </div>
                             ) : (
                                 <div className="font-bold">{storeSettings?.receiptFooter || "Terima Kasih"}</div>
                             )}
+
+                            <div className="mt-4 pt-3 border-t border-dotted border-gray-500 dark:border-slate-400 text-[9px] leading-relaxed text-gray-600 dark:text-slate-300">
+                                <strong>Ketentuan Penukaran Poin:</strong><br />
+                                1 Poin = 100 Rupiah<br />
+                                Setiap pembelian 10.000 dan kelipatannya mendapatkan 1 Poin
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* --- AREA TOMBOL (Tetap Sama) --- */}
-                <div className="p-4 bg-slate-50 border-t border-slate-100 rounded-b-xl flex flex-col gap-2 no-print relative z-20">
-                    {/* ... Tombol Cetak, Bagikan, Tutup Selesai ... */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 rounded-b-xl flex flex-col gap-2 no-print relative z-20">
                      <div className="flex gap-2">
-                        <button onClick={async () => { if (isNativePlatform()) { await printNativeBluetooth(data, storeSettings, kembalian); } else { printReceipt(); } }} className="flex-1 py-3 rounded-lg bg-slate-800 text-white font-bold shadow-sm hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
+                        {/* 3. TERUSKAN NILAI sisaPoin KE FUNGSI PRINTER */}
+                        <button onClick={async () => { if (isNativePlatform()) { await printNativeBluetooth(data, storeSettings, kembalian, sisaPoin); } else { printReceipt(); } }} className="flex-1 py-3 rounded-lg bg-slate-800 text-white font-bold shadow-sm hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
                             <Printer className="w-4 h-4" /> Cetak
                         </button>
-                        <button onClick={handleShareImage} className="flex-1 py-3 rounded-lg bg-green-600 text-white font-bold shadow-sm hover:bg-green-700 text-sm flex justify-center items-center gap-2 transition-colors">
+                        <button onClick={handleShareImage} className="flex-1 py-3 rounded-lg bg-green-600 dark:bg-green-500 text-white font-bold shadow-sm hover:bg-green-700 dark:hover:bg-green-600 text-sm flex justify-center items-center gap-2 transition-colors">
                             <Share2 className="w-4 h-4" /> Bagikan
                         </button>
                     </div>
-                    <button onClick={() => setReceiptModal({ isOpen: false, data: null })} className="w-full py-3 rounded-lg bg-white text-slate-800 font-bold shadow-sm hover:bg-slate-100 text-sm transition-colors border border-slate-200">
+                    <button onClick={() => setReceiptModal({ isOpen: false, data: null })} className="w-full py-3 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold shadow-sm hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors border border-slate-200 dark:border-slate-700">
                         Tutup Selesai
                     </button>
                 </div>

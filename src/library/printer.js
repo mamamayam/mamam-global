@@ -4,24 +4,22 @@ export const isNativePlatform = () => {
     return Capacitor.isNativePlatform();
 };
 
-// Fungsi Ajaib untuk bikin rata kanan-kiri ala Alfamart
 const justifyBetween = (leftStr, rightStr, maxWidth = 32) => {
     const left = String(leftStr);
     const right = String(rightStr);
     const spacesNeeded = maxWidth - left.length - right.length;
     
-    // Kalau muat, sisipkan spasi di tengah. Kalau kepanjangan, pisah dengan 1 spasi aja.
     if (spacesNeeded > 0) {
         return left + ' '.repeat(spacesNeeded) + right;
     }
     return left + ' ' + right; 
 };
 
-export const getESCPOSData = (data, storeSettings, kembalian) => {
+// 1. TAMBAHKAN PARAMETER 'sisaPoin' DI SINI
+export const getESCPOSData = (data, storeSettings, kembalian, sisaPoin) => {
     const lines = [];
     const rp = (n) => Number(n).toLocaleString('id-ID');
 
-    // Cek Status
     const isOpenBill = data.status === 'OPEN' || data.status === 'UNPAID';
 
     lines.push('\x1B\x40'); // Init Printer
@@ -33,7 +31,6 @@ export const getESCPOSData = (data, storeSettings, kembalian) => {
     if (storeSettings?.storePhone) lines.push(`WA: ${storeSettings.storePhone}\n`);
     lines.push('--------------------------------\n');
     
-    // JUDUL OPEN BILL JIKA STATUS TERBUKA
     if (isOpenBill) {
         lines.push('*** BILL SEMENTARA ***\n');
         lines.push('--------------------------------\n');
@@ -46,7 +43,28 @@ export const getESCPOSData = (data, storeSettings, kembalian) => {
         'Kasir: Admin'
     ) + '\n');
     lines.push(justifyBetween(`No: ${data.id}`, data.orderType) + '\n');
-    if (data.customerName) lines.push(justifyBetween('Pelanggan:', data.customerName) + '\n');
+    
+    if (data.customerName) {
+        lines.push(justifyBetween('Pelanggan:', data.customerName) + '\n');
+
+        const pointsUsed = (data.pointDiscount || 0) / 100;
+        
+        // 2. GUNAKAN 'sisaPoin' YANG BERASAL DARI DATABASE
+        const finalPoin = sisaPoin !== undefined ? sisaPoin : (data.customerPoints || 0);
+
+        lines.push('\x1B\x61\x31'); // Set Rata Tengah
+        lines.push('\x1B\x45\x31'); // Set Bold ON
+        lines.push('\x1B\x21\x10'); // Set Font Double Height
+        lines.push(`\nSISA POIN: ${finalPoin}\n\n`);
+        lines.push('\x1B\x21\x00'); // Reset ukuran Font normal
+        lines.push('\x1B\x45\x30'); // Reset Bold OFF
+        
+        if (pointsUsed > 0) {
+            lines.push(`(Poin Dipakai: ${pointsUsed})\n`);
+        }
+        lines.push('\x1B\x61\x30'); // Set Rata Kiri kembali
+    }
+    
     lines.push('--------------------------------\n');
 
     // --- DAFTAR BARANG ---
@@ -76,7 +94,6 @@ export const getESCPOSData = (data, storeSettings, kembalian) => {
     // --- PEMBAYARAN ---
     lines.push(justifyBetween('TOTAL TAGIHAN', rp(data.total)) + '\n');
 
-    // Logika Kondisional Pembayaran
     if (!isOpenBill) {
         if (data.paymentMethod === 'Split Payment') {
             data.splitDetails.forEach(p => {
@@ -89,7 +106,6 @@ export const getESCPOSData = (data, storeSettings, kembalian) => {
 
         if (kembalian > 0) lines.push(justifyBetween('Kembali', rp(kembalian)) + '\n');
     } else {
-        // Teks penanda Belum Lunas jika Open Bill
         lines.push('\n');
         lines.push('\x1B\x61\x31'); // Rata Tengah
         lines.push('[ B E L U M   L U N A S ]\n');
@@ -101,16 +117,24 @@ export const getESCPOSData = (data, storeSettings, kembalian) => {
     lines.push('\x1B\x61\x31'); // Rata Tengah
     if (isOpenBill) {
         lines.push(`Silakan bawa struk ini\n`);
-        lines.push(`ke kasir untuk pembayaran\n\n\n\n`);
+        lines.push(`ke kasir untuk pembayaran\n\n`);
     } else {
         lines.push(`${storeSettings?.receiptFooter || 'Terima Kasih'}\n`);
-        lines.push('Selamat Menikmati Hidangan Kami\n\n\n\n'); 
+        lines.push('Selamat Menikmati Hidangan Kami\n\n'); 
     }
+
+    lines.push('--------------------------------\n');
+    lines.push('Ketentuan Penukaran Poin:\n');
+    lines.push('1 Poin = 100 Rupiah\n');
+    lines.push('Setiap pembelian 10.000 dan\n');
+    lines.push('kelipatannya mendapat 1 Poin\n');
+    lines.push('--------------------------------\n\n\n\n');
 
     return lines.join('');
 };
 
-export const printNativeBluetooth = async (data, storeSettings, kembalian) => {
+// 3. TAMBAHKAN PARAMETER 'sisaPoin' JUGA DI SINI
+export const printNativeBluetooth = async (data, storeSettings, kembalian, sisaPoin) => {
     if (!window.bluetoothSerial) {
         alert('Plugin Bluetooth tidak terdeteksi di HP ini.');
         return false;
@@ -131,7 +155,8 @@ export const printNativeBluetooth = async (data, storeSettings, kembalian) => {
                     savedAddress,
                     () => {
                         const encoder = new TextEncoder();
-                        const rawText = getESCPOSData(data, storeSettings, kembalian);
+                        // 4. TERUSKAN 'sisaPoin' KE FUNGSI getESCPOSData
+                        const rawText = getESCPOSData(data, storeSettings, kembalian, sisaPoin);
                         const binaryData = encoder.encode(rawText);
 
                         window.bluetoothSerial.write(
@@ -165,31 +190,27 @@ export const printNativeBluetooth = async (data, storeSettings, kembalian) => {
 
 export const getShiftESCPOSData = (shiftData, storeSettings) => {
     const lines = [];
-    const rp = (n) => Number(n).toLocaleString('id-ID'); // Format angka
+    const rp = (n) => Number(n).toLocaleString('id-ID');
 
-    lines.push('\x1B\x40'); // Init Printer
+    lines.push('\x1B\x40'); 
 
-    // --- HEADER ---
-    lines.push('\x1B\x61\x31'); // Rata Tengah
+    lines.push('\x1B\x61\x31'); 
     lines.push(`DOMPET\n`);
     lines.push(`LAPORAN TUTUP DOMPET\n`);
     lines.push(`ID: ${shiftData.id}\n`);
     lines.push('--------------------------------\n');
     
-    // --- INFO WAKTU ---
-    lines.push('\x1B\x61\x30'); // Rata Kiri
+    lines.push('\x1B\x61\x30'); 
     lines.push(justifyBetween('Buka:', new Date(shiftData.startTime).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }).replace(',', '')) + '\n');
     lines.push(justifyBetween('Tutup:', new Date(shiftData.endTime).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }).replace(',', '')) + '\n');
     lines.push('--------------------------------\n');
 
-    // --- RINCIAN KAS ---
     lines.push(justifyBetween('Saldo Awal', rp(shiftData.stats.initialCash)) + '\n');
     lines.push(justifyBetween('Penjualan Tunai', rp(shiftData.stats.cashSales)) + '\n');
     lines.push(justifyBetween('Pemasukan Lain', rp(shiftData.stats.cashIncomes)) + '\n');
     lines.push(justifyBetween('Pengeluaran', '-' + rp(shiftData.stats.cashExpenses)) + '\n');
     lines.push('--------------------------------\n');
 
-    // --- TOTALAN & SELISIH ---
     lines.push(justifyBetween('Total Seharusnya', rp(shiftData.stats.expectedCash)) + '\n');
     lines.push(justifyBetween('Saldo Aktual', rp(shiftData.actualCash)) + '\n');
     lines.push('\n');
@@ -201,8 +222,7 @@ export const getShiftESCPOSData = (shiftData, storeSettings) => {
     lines.push(justifyBetween(selisihLabel, rp(shiftData.difference)) + '\n');
     lines.push('--------------------------------\n');
 
-    // --- FOOTER ---
-    lines.push('\x1B\x61\x31'); // Rata Tengah
+    lines.push('\x1B\x61\x31'); 
     lines.push('-- Akhir Laporan --\n\n\n\n\n'); 
 
     return lines.join('');

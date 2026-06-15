@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect, createContext, useContext, useRef } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
-import { loadData } from '../storage/localStorage';
-import { saveData } from '../storage/db';
+import { usePersistState } from '../hook/usePersistState';
+import { initRealtimeSync } from '../storage/realtimeSync';
+import { reviveDates as reviveDatesForKey } from '../storage/db';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
+import { toLocalDateString } from '../utils/formatters';
 import { AppContext, useAppContext } from '../context/AppContext';
 import PinModal from '../auth/PinModal';
 import AppRoutes from '../app/AppRoutes';
@@ -72,9 +74,6 @@ export default function App() {
 
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
-  // Guard supaya sync tidak jalan saat initial load pertama kali
-  const isFirstRender = useRef(true);
-
 
   const { isAdminMode, setIsAdminMode } = useAppContext();
   const [showPinModal, setShowPinModal] = useState(false);
@@ -88,91 +87,143 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // --- DATABASE STATES ---
-  const [variantGroups, setVariantGroups] = useState(() => loadData('variantGroups', INITIAL_VARIANT_GROUPS));
-  const [menus, setMenus] = useState(() => loadData('menus', INITIAL_MENUS));
-  const [salesHistory, setSalesHistory] = useState(() => loadData('salesHistory', []));
-  const [hppLibrary, setHppLibrary] = useState(() => loadData('hppLibrary', []));
-  const [savedBills, setSavedBills] = useState(() => loadData('savedBills', []));
+  const [variantGroups, setVariantGroups, l1] = usePersistState('variantGroups', INITIAL_VARIANT_GROUPS, { syncMode: 'config' });
+  const [variantCategories, setVariantCategories, l24] = usePersistState('variantCategories', ['Topping', 'Level Pedas', 'Ukuran'], { syncMode: 'config' });
+  const [menus, setMenus, l2] = usePersistState('menus', INITIAL_MENUS, { syncMode: 'config' });
+  const [salesHistory, setSalesHistory, l3] = usePersistState('salesHistory', [], { syncMode: 'transaction' });
+  const [hppLibrary, setHppLibrary, l4] = usePersistState('hppLibrary', [], { syncMode: 'config' });
+  const [savedBills, setSavedBills, l5] = usePersistState('savedBills', [], { syncMode: 'transaction' });
 
   // --- HPP & BAHAN BAKU ---
-  const [rawMaterials, setRawMaterials] = useState(() => loadData('rawMaterials', INITIAL_RAW_MATERIALS));
-  const [semiFinished, setSemiFinished] = useState(() => loadData('semiFinished', []));
-  const [categories, setCategories] = useState(() => loadData('categories', INITIAL_CATEGORIES));
+  const [rawMaterials, setRawMaterials, l6] = usePersistState('rawMaterials', INITIAL_RAW_MATERIALS, { syncMode: 'config' });
+  const [semiFinished, setSemiFinished, l7] = usePersistState('semiFinished', [], { syncMode: 'config' });
+  const [categories, setCategories, l8] = usePersistState('categories', INITIAL_CATEGORIES, { syncMode: 'config' });
   const [editingRecipe, setEditingRecipe] = useState(null);
 
   // --- KEUANGAN ---
-  const [expenseCategories, setExpenseCategories] = useState(() => loadData('expenseCategories', ['Belanja', 'Biaya', 'Kasbon Karyawan', 'Lain-lain']));
-  const [expenses, setExpenses] = useState(() => loadData('expenses', []));
-  const [incomeCategories, setIncomeCategories] = useState(() => loadData('incomeCategories', ['Modal Tambahan', 'Pendapatan Lain', 'Titipan Uang']));
-  const [incomes, setIncomes] = useState(() => loadData('incomes', []));
+  const [expenseCategories, setExpenseCategories, l9] = usePersistState('expenseCategories', ['Belanja', 'Biaya', 'Kasbon Karyawan', 'Lain-lain'], { syncMode: 'config' });
+  const [expenses, setExpenses, l10] = usePersistState('expenses', [], { syncMode: 'transaction' });
+  const [incomeCategories, setIncomeCategories, l11] = usePersistState('incomeCategories', ['Modal Tambahan', 'Pendapatan Lain', 'Titipan Uang'], { syncMode: 'config' });
+  const [incomes, setIncomes, l12] = usePersistState('incomes', [], { syncMode: 'transaction' });
 
   // --- SHIFT ---
-  const [currentShift, setCurrentShift] = useState(() => loadData('currentShift', null));
-  const [shiftHistory, setShiftHistory] = useState(() => loadData('shiftHistory', []));
+  const [currentShift, setCurrentShift, l13] = usePersistState('currentShift', null, { syncMode: 'config' });
+  const [shiftHistory, setShiftHistory, l14] = usePersistState('shiftHistory', [], { syncMode: 'transaction' });
 
   // --- PELANGGAN ----
-  const [customers, setCustomers] = useState(() => loadData('customers', [
+  const [customers, setCustomers, l15] = usePersistState('customers', [
     { id: 'c1', name: 'Budi Santoso', phone: '08123456789', points: 120 },
     { id: 'c2', name: 'Siti Rahma', phone: '08571234567', points: 250 },
     { id: 'c3', name: 'Andi Wijaya', phone: '08998765432', points: 45 }
-  ]));
-  const [vouchers, setVouchers] = useState(() => loadData('vouchers', [
+  ], { syncMode: 'config' });
+  const [vouchers, setVouchers, l16] = usePersistState('vouchers', [
     { id: 'v1', code: 'MAMAMKENYANG', discountType: 'fixed', discountValue: 5000, minPurchase: 30000 }
-  ]));
-  const [claimsHistory, setClaimsHistory] = useState(() => loadData('claimsHistory', []));
+  ], { syncMode: 'config' });
+  const [claimsHistory, setClaimsHistory, l17] = usePersistState('claimsHistory', [], { syncMode: 'transaction' });
 
   // --- PAYROLL STATES ---
-  const [employees, setEmployees] = useState(() => loadData('employees', [
+  const [employees, setEmployees, l18] = usePersistState('employees', [
     { id: 'EMP-001', name: 'Budi Pekerja', phone: '0812345678', address: 'Jl. Melati', hourlyRate: 15000, startDate: '2023-01-10' }
-  ]));
-  const [employeeDailyRecords, setEmployeeDailyRecords] = useState(() => loadData('employeeDailyRecords', []));
-  const [additionCategories, setAdditionCategories] = useState(() => loadData('additionCategories', ['Ongkir', 'Lembur', 'Bonus', 'Potongin Ayam']));
-  const [deductionCategories, setDeductionCategories] = useState(() => loadData('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi']));
+  ], { syncMode: 'config' });
+  const [employeeDailyRecords, setEmployeeDailyRecords, l19] = usePersistState('employeeDailyRecords', [], { syncMode: 'transaction' });
+  const [additionCategories, setAdditionCategories, l20] = usePersistState('additionCategories', ['Ongkir', 'Lembur', 'Bonus', 'Potongin Ayam'], { syncMode: 'config' });
+  const [deductionCategories, setDeductionCategories, l21] = usePersistState('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi'], { syncMode: 'config' });
 
 
   // --- SETTINGS ---
-  const [storeSettings, setStoreSettings] = useState(() => loadData('storeSettings', {
+  const [storeSettings, setStoreSettings, l22] = usePersistState('storeSettings', {
     autoPrint: false, paperSize: '58mm', printLogo: true, taxRate: 0, serviceCharge: 0
-  }));
+  }, { syncMode: 'config' });
 
-  const configSyncTimer = useRef(null);
-  const triggerConfigSync = () => {
-    if (isFirstRender.current) return;
-    clearTimeout(configSyncTimer.current);
-    configSyncTimer.current = setTimeout(() => window.__triggerSupabaseSync?.(), 3000);
+  // --- TEMA (LIGHT / DARK) — preferensi per-device, tidak disinkron ke device lain
+  const [theme, setTheme, l23] = usePersistState('theme', 'light');
+
+  // Terapkan class .dark ke <html> setiap kali tema berubah
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [theme]);
+
+  // Semua data dari Dexie sudah selesai dimuat?
+  const allDataLoaded = ![l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24].some(Boolean);
+
+  // ── REALTIME SYNC (Supabase) ────────────────────────────────────────────
+  // Push per-record sudah dihandle otomatis oleh usePersistState (syncMode).
+  // Di sini kita hanya tangani arah sebaliknya: terima perubahan dari device
+  // lain (realtime) dan terapkan ke state lokal supaya UI langsung update.
+  const transactionSetters = useRef({});
+  transactionSetters.current = {
+    salesHistory: setSalesHistory,
+    expenses: setExpenses,
+    incomes: setIncomes,
+    shiftHistory: setShiftHistory,
+    employeeDailyRecords: setEmployeeDailyRecords,
+    claimsHistory: setClaimsHistory,
+    savedBills: setSavedBills,
   };
-  const triggerTransactionSync = () => {
-    if (!isFirstRender.current) window.__triggerSupabaseSync?.();
+
+  const configSetters = useRef({});
+  configSetters.current = {
+    menus: setMenus,
+    variantGroups: setVariantGroups,
+    variantCategories: setVariantCategories,
+    categories: setCategories,
+    hppLibrary: setHppLibrary,
+    customers: setCustomers,
+    vouchers: setVouchers,
+    employees: setEmployees,
+    expenseCategories: setExpenseCategories,
+    incomeCategories: setIncomeCategories,
+    additionCategories: setAdditionCategories,
+    deductionCategories: setDeductionCategories,
+    rawMaterials: setRawMaterials,
+    semiFinished: setSemiFinished,
+    storeSettings: setStoreSettings,
+    currentShift: setCurrentShift,
   };
 
-  // Transaksi — sync langsung
-  useEffect(() => { saveData('salesHistory', salesHistory);        triggerTransactionSync(); }, [salesHistory]);
-  useEffect(() => { saveData('expenses', expenses);                triggerTransactionSync(); }, [expenses]);
-  useEffect(() => { saveData('incomes', incomes);                  triggerTransactionSync(); }, [incomes]);
-  useEffect(() => { saveData('shiftHistory', shiftHistory);        triggerTransactionSync(); }, [shiftHistory]);
-  useEffect(() => { saveData('employeeDailyRecords', employeeDailyRecords); triggerTransactionSync(); }, [employeeDailyRecords]);
-  useEffect(() => { saveData('claimsHistory', claimsHistory);      triggerTransactionSync(); }, [claimsHistory]);
-  useEffect(() => { saveData('savedBills', savedBills);            triggerTransactionSync(); }, [savedBills]);
+  useEffect(() => {
+    if (!allDataLoaded) return;
 
-  // Config — sync debounce 3 detik
-  useEffect(() => { saveData('menus', menus);                      triggerConfigSync(); }, [menus]);
-  useEffect(() => { saveData('variantGroups', variantGroups);      triggerConfigSync(); }, [variantGroups]);
-  useEffect(() => { saveData('categories', categories);            triggerConfigSync(); }, [categories]);
-  useEffect(() => { saveData('hppLibrary', hppLibrary);            triggerConfigSync(); }, [hppLibrary]);
-  useEffect(() => { saveData('customers', customers);              triggerConfigSync(); }, [customers]);
-  useEffect(() => { saveData('vouchers', vouchers);                triggerConfigSync(); }, [vouchers]);
-  useEffect(() => { saveData('employees', employees);              triggerConfigSync(); }, [employees]);
-  useEffect(() => { saveData('expenseCategories', expenseCategories); triggerConfigSync(); }, [expenseCategories]);
-  useEffect(() => { saveData('incomeCategories', incomeCategories); triggerConfigSync(); }, [incomeCategories]);
-  useEffect(() => { saveData('additionCategories', additionCategories); triggerConfigSync(); }, [additionCategories]);
-  useEffect(() => { saveData('deductionCategories', deductionCategories); triggerConfigSync(); }, [deductionCategories]);
-  useEffect(() => { saveData('rawMaterials', rawMaterials);        triggerConfigSync(); }, [rawMaterials]);
-  useEffect(() => { saveData('semiFinished', semiFinished);        triggerConfigSync(); }, [semiFinished]);
-  useEffect(() => { saveData('storeSettings', storeSettings);      triggerConfigSync(); }, [storeSettings]);
-  useEffect(() => { saveData('currentShift', currentShift);        triggerConfigSync(); }, [currentShift]);
+    const unsubscribe = initRealtimeSync({
+      // item === null -> hasil initial pull (fullArray = array hasil merge, replace state)
+      // item !== null -> 1 record baru/berubah dari device lain (realtime), upsert ke array
+      onTransactionUpsert: (tableKey, item, fullArray) => {
+        const setter = transactionSetters.current[tableKey];
+        if (!setter) return;
+        if (item === null && fullArray) {
+          setter(reviveDatesForKey(tableKey, fullArray));
+          return;
+        }
+        const revived = reviveDatesForKey(tableKey, [item])[0];
+        setter(prev => {
+          const arr = Array.isArray(prev) ? prev : [];
+          const idx = arr.findIndex(p => String(p?.id) === String(revived?.id));
+          if (idx === -1) return [...arr, revived];
+          const next = [...arr];
+          next[idx] = revived;
+          return next;
+        });
+      },
+      onTransactionDelete: (tableKey, id) => {
+        const setter = transactionSetters.current[tableKey];
+        if (!setter) return;
+        setter(prev => (Array.isArray(prev) ? prev.filter(p => String(p?.id) !== String(id)) : prev));
+      },
+      onConfigUpdate: (key, value) => {
+        const setter = configSetters.current[key];
+        if (!setter) return;
+        setter(reviveDatesForKey(key, value));
+      },
+    });
 
-  // Tandai initial render selesai
-  useEffect(() => { isFirstRender.current = false; }, []);
+    return unsubscribe;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allDataLoaded]);
 
   // --- STATES APLIKASI ---
   const [appliedVoucher, setAppliedVoucher] = useState(null);
@@ -183,13 +234,13 @@ export default function App() {
 
   const getBulanIniStart = () => {
     const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29).toISOString().split('T')[0];
+    return toLocalDateString(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29));
   };
-  const [reportDateRange, setReportDateRange] = useState({ start: getBulanIniStart(), end: new Date().toISOString().split('T')[0] });
+  const [reportDateRange, setReportDateRange] = useState({ start: getBulanIniStart(), end: toLocalDateString() });
   const [activePreset, setActivePreset] = useState('bulan_ini');
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Semua');
+  const [selectedCategory, setSelectedCategory] = useState('Favorit');
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -266,14 +317,14 @@ export default function App() {
   const triggerConfirm = (message, onConfirm) => setConfirmModal({ isOpen: true, message, onConfirm });
 
   const applyDatePreset = (preset) => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = toLocalDateString();
     const d = new Date();
     setActivePreset(preset);
 
     if (preset === 'hari_ini') setReportDateRange({ start: todayStr, end: todayStr });
-    else if (preset === 'minggu_ini') setReportDateRange({ start: new Date(d.getFullYear(), d.getMonth(), d.getDate() - 6).toISOString().split('T')[0], end: todayStr });
-    else if (preset === 'bulan_ini') setReportDateRange({ start: new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29).toISOString().split('T')[0], end: todayStr });
-    else if (preset === 'bulan_berjalan') setReportDateRange({ start: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0], end: todayStr });
+    else if (preset === 'minggu_ini') setReportDateRange({ start: toLocalDateString(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 6)), end: todayStr });
+    else if (preset === 'bulan_ini') setReportDateRange({ start: toLocalDateString(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29)), end: todayStr });
+    else if (preset === 'bulan_berjalan') setReportDateRange({ start: toLocalDateString(new Date(d.getFullYear(), d.getMonth(), 1)), end: todayStr });
   };
 
   const addToCart = (menu, selectedOptions = {}) => {
@@ -419,12 +470,14 @@ export default function App() {
     menus, setMenus,
     selectedMenuForVariant, setSelectedMenuForVariant,
     variantGroups, setVariantGroups,
+    variantCategories, setVariantCategories,
     variantSelectedOptions, setVariantSelectedOptions,
     isSidebarOpen,
 
     vouchers, setVouchers,
     savedBills, setSavedBills,
     storeSettings, setStoreSettings,
+    theme, setTheme,
 
     // Payment / Discount
     appliedVoucher, setAppliedVoucher,
@@ -641,23 +694,23 @@ export default function App() {
             {/* Overlay backdrop sidebar mobile */}
             {isSidebarOpen && (
               <div
-                className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-opacity duration-300"
+                className="fixed inset-0 bg-black z-40 md:hidden backdrop-blur-sm transition-opacity duration-300"
                 onClick={() => setIsSidebarOpen(false)}
               />
             )}
 
             {/* Alert modal */}
             {customAlert.isOpen && (
-              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
-                <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
-                  <div className="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black backdrop-blur-sm transition-opacity duration-300">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
+                  <div className="w-12 h-12 bg-green-50 dark:bg-green-500/10 text-green-500 dark:text-green-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
                     <CheckCircle2 className="w-6 h-6" />
                   </div>
-                  <h3 className="font-heading font-bold text-slate-900 text-lg mb-2">Pemberitahuan</h3>
-                  <p className="text-slate-500 text-sm mb-6">{customAlert.message}</p>
+                  <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg mb-2">Pemberitahuan</h3>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">{customAlert.message}</p>
                   <button
                     onClick={() => setCustomAlert({ isOpen: false, message: '' })}
-                    className="w-full py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-colors"
+                    className="w-full py-3 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-700 dark:hover:bg-orange-600 transition-colors"
                   >
                     Tutup
                   </button>
@@ -667,17 +720,17 @@ export default function App() {
 
             {/* Confirm modal */}
             {confirmModal.isOpen && (
-              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
-                <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
-                  <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black backdrop-blur-sm transition-opacity duration-300">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
+                  <div className="w-12 h-12 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
                     <AlertCircle className="w-6 h-6" />
                   </div>
-                  <h3 className="font-heading font-bold text-slate-900 text-lg mb-2">Konfirmasi Tindakan</h3>
-                  <p className="text-slate-500 text-sm mb-6 leading-relaxed">{confirmModal.message}</p>
+                  <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg mb-2">Konfirmasi Tindakan</h3>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm mb-6 leading-relaxed">{confirmModal.message}</p>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setConfirmModal({ isOpen: false, message: '', onConfirm: null })}
-                      className="flex-1 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors"
+                      className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                     >
                       Batal
                     </button>
@@ -686,7 +739,7 @@ export default function App() {
                         if (confirmModal.onConfirm) confirmModal.onConfirm();
                         setConfirmModal({ isOpen: false, message: '', onConfirm: null });
                       }}
-                      className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors"
+                      className="flex-1 py-3 bg-red-500 dark:bg-red-600 text-white font-bold rounded-xl hover:bg-red-600 dark:hover:bg-red-500 transition-colors"
                     >
                       Ya
                     </button>

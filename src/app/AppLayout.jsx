@@ -6,7 +6,7 @@ export default function AppLayout({
   overlays,
 }) {
   return (
-    <div className="flex h-screen bg-slate-50 font-body text-slate-800 overflow-hidden w-full relative">
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 font-body text-slate-800 dark:text-slate-100 overflow-hidden w-full relative">
       {sidebar}
 
       <main className="flex-1 flex flex-col min-w-0 relative">

@@ -7,7 +7,7 @@
 
 // Semua key yang dikenal aplikasi.
 export const ALL_KEYS = [
-  'variantGroups', 'menus', 'salesHistory', 'hppLibrary', 'savedBills',
+  'variantGroups', 'variantCategories', 'menus', 'salesHistory', 'hppLibrary', 'savedBills',
   'expenseCategories', 'expenses', 'incomeCategories', 'incomes',
   'currentShift', 'shiftHistory', 'customers', 'vouchers', 'claimsHistory',
   'storeSettings', 'rawMaterials', 'semiFinished', 'categories',
@@ -28,7 +28,7 @@ export const TRANSACTION_KEYS = [
 // masih murah — last-write-wins berdasarkan updated_at.
 // Tabel Supabase: kolom (key text PK, value jsonb, updated_at timestamptz, updated_by text)
 export const CONFIG_KEYS = [
-  'menus', 'variantGroups', 'categories', 'hppLibrary',
+  'menus', 'variantGroups', 'variantCategories', 'categories', 'hppLibrary',
   'customers', 'vouchers', 'employees',
   'expenseCategories', 'incomeCategories', 'additionCategories', 'deductionCategories',
   'rawMaterials', 'semiFinished', 'storeSettings', 'currentShift',
