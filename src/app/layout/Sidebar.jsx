@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 
 export default function Sidebar({
     currentView,
-    setCurrentView,
+    navigate,
     isSidebarOpen,
     setIsSidebarOpen,
     visibleMenus,
@@ -30,7 +30,7 @@ export default function Sidebar({
                     <button
                         key={item.id}
                         onClick={() => {
-                            setCurrentView(item.id);
+                            navigate(item.id);
                             setIsSidebarOpen(false);
                         }}
                         className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 font-bold text-sm ${currentView === item.id

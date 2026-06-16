@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 const PaymentModal = () => {
-  const { paymentModal, setPaymentModal, getTotal, getRoundedTotal, getRoundingAdjustment, formatRupiah, activeCustomer, pointsToRedeem, customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, customerName, orderType, cart, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount, deliveryFee, salesHistory, setSalesHistory, setIsCartOpen, setCart, setCustomerName, setAppliedVoucher, setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings, triggerAlert, setCurrentView } = useAppContext();
+  const { paymentModal, setPaymentModal, getTotal, getRoundedTotal, getRoundingAdjustment, formatRupiah, activeCustomer, pointsToRedeem, customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, customerName, orderType, cart, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount, deliveryFee, salesHistory, setSalesHistory, setIsCartOpen, setCart, setCustomerName, setAppliedVoucher, setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings, triggerAlert, navigate } = useAppContext();
 
   if (!paymentModal.isOpen) return null;
 
@@ -75,7 +75,7 @@ const PaymentModal = () => {
 
     setReceiptModal({ isOpen: true, data: newOrder, kembalian: isSplitMode ? splitKembalian : (method === 'Tunai' ? kembalian : 0) });
 
-    setCurrentView('kasir');
+    navigate('kasir');
 
     if (storeSettings.autoPrint) { setTimeout(() => window.print(), 500); }
   };
@@ -91,12 +91,14 @@ const PaymentModal = () => {
       amountPaid: '',
       method: 'Tunai' // reset default after add
     });
+    navigate('kasir');
   };
 
   const removeSplitPayment = (index) => {
     const newSplits = [...splitPayments];
     newSplits.splice(index, 1);
     setPaymentModal({ ...paymentModal, splitPayments: newSplits });
+    navigate('kasir');
   }
 
   return (

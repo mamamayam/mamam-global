@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, createContext, useContext, useRef } from 'react';
+import React, { useState, useMemo, useEffect, createContext, useContext, useRef, useCallback } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { usePersistState } from '../hook/usePersistState';
 import { initRealtimeSync } from '../storage/realtimeSync';
@@ -72,7 +72,11 @@ import {
 export default function App() {
 
 
-  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  // --- BACK NAVIGATION ---
+  const [viewHistory, setViewHistory]     = useState([]);
+  const [showExitToast, setShowExitToast] = useState(false);
+  const lastBackPressRef  = useRef(null);
+  const exitToastTimerRef = useRef(null);
 
 
   const { isAdminMode, setIsAdminMode } = useAppContext();
@@ -85,6 +89,57 @@ export default function App() {
   const [currentView, setCurrentView] = useState('kasir');
   const [activeTab, setActiveTab] = useState('materials');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // --- FUNGSI NAVIGASI DENGAN HISTORY STACK ---
+  // Root views = tab utama; navigasi ke sini me-reset history
+  const ROOT_VIEWS = useMemo(() => new Set(['beranda', 'kasir', 'pengaturan']), []);
+
+  // Tampilkan toast "ketuk sekali lagi" dan handle double-tap exit
+  const handleExitAttempt = useCallback(() => {
+    const now = Date.now();
+    if (lastBackPressRef.current && now - lastBackPressRef.current < 2000) {
+      // Tekan kedua dalam 2 detik → keluar aplikasi
+      CapacitorApp.exitApp();
+    } else {
+      // Tekan pertama → tampilkan toast
+      lastBackPressRef.current = now;
+      setShowExitToast(true);
+      clearTimeout(exitToastTimerRef.current);
+      exitToastTimerRef.current = setTimeout(() => {
+        setShowExitToast(false);
+        lastBackPressRef.current = null;
+      }, 2000);
+    }
+  }, []);
+
+  // navigate(view) → push ke history stack, lalu pindah view
+  const navigate = useCallback((view) => {
+    if (view === currentView) return;
+    if (ROOT_VIEWS.has(view)) {
+      // Navigasi ke root → reset stack
+      setViewHistory([]);
+    } else {
+      // Navigasi ke sub-halaman → simpan halaman saat ini ke stack
+      setViewHistory(prev => [...prev, currentView]);
+    }
+    setCurrentView(view);
+  }, [currentView, ROOT_VIEWS]);
+
+  // navigateBack() → dipanggil saat tombol back ditekan
+  const navigateBack = useCallback(() => {
+    if (viewHistory.length > 0) {
+      // Ada history → kembali ke view sebelumnya
+      const prev = viewHistory[viewHistory.length - 1];
+      setViewHistory(h => h.slice(0, -1));
+      setCurrentView(prev);
+    } else if (currentView !== 'beranda') {
+      // Tidak ada history, bukan beranda → ke beranda
+      setCurrentView('beranda');
+    } else {
+      // Di beranda tanpa history → double-tap exit
+      handleExitAttempt();
+    }
+  }, [viewHistory, currentView, handleExitAttempt]);
 
   // --- SYNC READY REF ---
   // Promise ini di-resolve setelah initial pull Supabase selesai.
@@ -544,7 +599,7 @@ export default function App() {
     currentShift, setCurrentShift,
 
     // UI State
-    currentView, setCurrentView,
+    currentView, setCurrentView, navigate,
     activeTab, setActiveTab,
     activePreset, setActivePreset,
     searchQuery, setSearchQuery,
@@ -603,56 +658,46 @@ export default function App() {
     // 1. Buat variabel untuk menyimpan handle listener
     let backListenerHandle = null;
 
-    // 2. Buat fungsi async untuk mendaftarkan listener
+    // 2. Daftarkan listener tombol back hardware (Capacitor/Android)
     const setupListener = async () => {
-      backListenerHandle = await CapacitorApp.addListener('backButton', ({ canGoBack }) => {
-        // 1. PRIORITAS 1: Tutup Modal Struk (jika sedang terbuka)
+      backListenerHandle = await CapacitorApp.addListener('backButton', () => {
+        // PRIORITAS 1: Tutup Modal Struk
         if (receiptModal.isOpen) {
-          setReceiptModal({ ...receiptModal, isOpen: false });
+          setReceiptModal(r => ({ ...r, isOpen: false }));
         }
-        // 2. PRIORITAS 2: Tutup Modal Pembayaran (jika sedang terbuka)
+        // PRIORITAS 2: Tutup Modal Pembayaran
         else if (paymentModal.isOpen) {
-          setPaymentModal({ ...paymentModal, isOpen: false });
+          setPaymentModal(p => ({ ...p, isOpen: false }));
         }
-        // 3. PRIORITAS 3: Batal keluar jika modal exit terbuka
-        else if (showExitConfirm) {
-          setShowExitConfirm(false);
-        }
-        // 4. PRIORITAS 4: Tutup keranjang belanja
+        // PRIORITAS 3: Tutup keranjang belanja
         else if (isCartOpen) {
           setIsCartOpen(false);
         }
-        // 5. PRIORITAS 5: Tutup menu sidebar
+        // PRIORITAS 4: Tutup sidebar mobile
         else if (isSidebarOpen) {
           setIsSidebarOpen(false);
         }
-        // 6. Navigasi kembali (jika ada history)
-        else if (canGoBack) {
-          window.history.back();
-        }
-        // 7. Jika di halaman paling awal, munculkan konfirmasi exit
+        // PRIORITAS 5: Navigasi kembali (pop history stack / toast exit)
         else {
-          setShowExitConfirm(true);
+          navigateBack();
         }
       });
     };
 
-    // 3. Panggil fungsi setup
+    // 3. Panggil setup
     setupListener();
 
-    // 4. Cleanup function
+    // 4. Cleanup saat unmount atau deps berubah
     return () => {
-      // Pastikan handle sudah ada sebelum mencoba menghapusnya
-      if (backListenerHandle) {
-        backListenerHandle.remove();
-      }
+      if (backListenerHandle) backListenerHandle.remove();
+      clearTimeout(exitToastTimerRef.current);
     };
   }, [
     receiptModal.isOpen,
     paymentModal.isOpen,
-    showExitConfirm,
     isCartOpen,
-    isSidebarOpen
+    isSidebarOpen,
+    navigateBack,
   ]);
 
 
@@ -668,14 +713,22 @@ export default function App() {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: #94a3b8; }
+        @keyframes exitToastIn {
+          from { opacity: 0; transform: translate(-50%, 12px) scale(0.95); }
+          to   { opacity: 1; transform: translate(-50%, 0)    scale(1); }
+        }
+        .exit-toast { animation: exitToastIn 0.2s cubic-bezier(0.34,1.56,0.64,1) forwards; }
       `
       }} />
 
       <AppLayout
+        isSidebarOpen={isSidebarOpen}
+        onSwipeOpen={() => setIsSidebarOpen(true)}
+        onSwipeClose={() => setIsSidebarOpen(false)}
         sidebar={
           <Sidebar
             currentView={currentView}
-            setCurrentView={setCurrentView}
+            navigate={navigate}
             isSidebarOpen={isSidebarOpen}
             setIsSidebarOpen={setIsSidebarOpen}
             visibleMenus={visibleMenus}
@@ -699,11 +752,21 @@ export default function App() {
         bottomNav={
           <BottomNav
             currentView={currentView}
-            setCurrentView={setCurrentView}
+            navigate={navigate}
           />
         }
         overlays={
           <>
+            {/* Toast "Ketuk sekali lagi untuk keluar" */}
+            {showExitToast && (
+              <div className="fixed bottom-24 left-1/2 z-[300] pointer-events-none exit-toast">
+                <div className="flex items-center gap-2 bg-slate-800/95 dark:bg-slate-700/95 text-white text-sm font-semibold px-5 py-3 rounded-full shadow-2xl backdrop-blur-sm border border-white/10 whitespace-nowrap">
+                  <span>👋</span>
+                  <span>Ketuk sekali lagi untuk keluar</span>
+                </div>
+              </div>
+            )}
+
             {/* Overlay backdrop sidebar mobile */}
             {isSidebarOpen && (
               <div

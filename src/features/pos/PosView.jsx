@@ -10,7 +10,7 @@ const PosView = () => {
     // Temukan baris ini di PosView
     const { menus, searchQuery, setSearchQuery, selectedCategory, setSelectedCategory,
         setSelectedMenuForVariant, setVariantSelectedOptions, addToCart, formatRupiah,
-        setIsCartOpen, cart, getTotal, currentShift, triggerAlert, setActiveTab, setCurrentView,
+        setIsCartOpen, cart, getTotal, currentShift, triggerAlert, setActiveTab, navigate,
         salesHistory
     } = useAppContext();
 
@@ -44,7 +44,7 @@ const PosView = () => {
     const handleMenuClick = (menu) => {
         if (!currentShift) {
             triggerAlert('Peringatan: Dompet belum dibuka. Harap buka dompet terlebih dahulu di menu "Dompet Kasir".');
-            setCurrentView('dompet');
+            navigate('dompet');
             return;
         }
         if (menu.variantGroupIds.length > 0) {

@@ -3,12 +3,12 @@ import { Home, ShoppingCart, Settings } from "lucide-react";
 
 export default function BottomNav({
     currentView,
-    setCurrentView,
+    navigate,
 }) {
     return (
         <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex justify-around items-center h-16 shrink-0 z-30 print:hidden shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
             <button
-                onClick={() => setCurrentView('beranda')}
+                onClick={() => navigate('beranda')}
                 className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${currentView === 'beranda' ? 'text-orange-600 dark:text-orange-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}
             >
                 <Home className="w-5 h-5" />
@@ -16,7 +16,7 @@ export default function BottomNav({
             </button>
 
             <button
-                onClick={() => setCurrentView('kasir')}
+                onClick={() => navigate('kasir')}
                 className="relative flex flex-col items-center justify-end pb-1 h-12 flex-1 group"
             >
                 {/* Lingkaran Besar yang Menonjol ke Atas */}
@@ -32,7 +32,7 @@ export default function BottomNav({
             </button>
 
             <button
-                onClick={() => setCurrentView('pengaturan')}
+                onClick={() => navigate('pengaturan')}
                 className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${currentView === 'pengaturan' ? 'text-orange-600 dark:text-orange-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}
             >
                 <Settings className="w-5 h-5" />
