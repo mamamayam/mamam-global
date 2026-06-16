@@ -86,54 +86,60 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('materials');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  // --- SYNC READY REF ---
+  // Promise ini di-resolve setelah initial pull Supabase selesai.
+  // Semua usePersistState dengan syncMode menerima ref ini supaya push
+  // tidak jalan sebelum data dari Supabase selesai di-merge ke lokal.
+  const syncReadyRef = useRef(Promise.resolve());
+
   // --- DATABASE STATES ---
-  const [variantGroups, setVariantGroups, l1] = usePersistState('variantGroups', INITIAL_VARIANT_GROUPS, { syncMode: 'config' });
-  const [variantCategories, setVariantCategories, l24] = usePersistState('variantCategories', ['Topping', 'Level Pedas', 'Ukuran'], { syncMode: 'config' });
-  const [menus, setMenus, l2] = usePersistState('menus', INITIAL_MENUS, { syncMode: 'config' });
-  const [salesHistory, setSalesHistory, l3] = usePersistState('salesHistory', [], { syncMode: 'transaction' });
-  const [hppLibrary, setHppLibrary, l4] = usePersistState('hppLibrary', [], { syncMode: 'config' });
-  const [savedBills, setSavedBills, l5] = usePersistState('savedBills', [], { syncMode: 'transaction' });
+  const [variantGroups, setVariantGroups, l1, setVariantGroupsRemote] = usePersistState('variantGroups', INITIAL_VARIANT_GROUPS, { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [variantCategories, setVariantCategories, l24, setVariantCategoriesRemote] = usePersistState('variantCategories', ['Topping', 'Level Pedas', 'Ukuran'], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [menus, setMenus, l2, setMenusRemote] = usePersistState('menus', INITIAL_MENUS, { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [salesHistory, setSalesHistory, l3, setSalesHistoryRemote] = usePersistState('salesHistory', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
+  const [hppLibrary, setHppLibrary, l4, setHppLibraryRemote] = usePersistState('hppLibrary', [], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [savedBills, setSavedBills, l5, setSavedBillsRemote] = usePersistState('savedBills', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
 
   // --- HPP & BAHAN BAKU ---
-  const [rawMaterials, setRawMaterials, l6] = usePersistState('rawMaterials', INITIAL_RAW_MATERIALS, { syncMode: 'config' });
-  const [semiFinished, setSemiFinished, l7] = usePersistState('semiFinished', [], { syncMode: 'config' });
-  const [categories, setCategories, l8] = usePersistState('categories', INITIAL_CATEGORIES, { syncMode: 'config' });
+  const [rawMaterials, setRawMaterials, l6, setRawMaterialsRemote] = usePersistState('rawMaterials', INITIAL_RAW_MATERIALS, { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [semiFinished, setSemiFinished, l7, setSemiFinishedRemote] = usePersistState('semiFinished', [], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [categories, setCategories, l8, setCategoriesRemote] = usePersistState('categories', INITIAL_CATEGORIES, { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
   const [editingRecipe, setEditingRecipe] = useState(null);
 
   // --- KEUANGAN ---
-  const [expenseCategories, setExpenseCategories, l9] = usePersistState('expenseCategories', ['Belanja', 'Biaya', 'Kasbon Karyawan', 'Lain-lain'], { syncMode: 'config' });
-  const [expenses, setExpenses, l10] = usePersistState('expenses', [], { syncMode: 'transaction' });
-  const [incomeCategories, setIncomeCategories, l11] = usePersistState('incomeCategories', ['Modal Tambahan', 'Pendapatan Lain', 'Titipan Uang'], { syncMode: 'config' });
-  const [incomes, setIncomes, l12] = usePersistState('incomes', [], { syncMode: 'transaction' });
+  const [expenseCategories, setExpenseCategories, l9, setExpenseCategoriesRemote] = usePersistState('expenseCategories', ['Belanja', 'Biaya', 'Kasbon Karyawan', 'Lain-lain'], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [expenses, setExpenses, l10, setExpensesRemote] = usePersistState('expenses', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
+  const [incomeCategories, setIncomeCategories, l11, setIncomeCategoriesRemote] = usePersistState('incomeCategories', ['Modal Tambahan', 'Pendapatan Lain', 'Titipan Uang'], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [incomes, setIncomes, l12, setIncomesRemote] = usePersistState('incomes', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
 
   // --- SHIFT ---
-  const [currentShift, setCurrentShift, l13] = usePersistState('currentShift', null, { syncMode: 'config' });
-  const [shiftHistory, setShiftHistory, l14] = usePersistState('shiftHistory', [], { syncMode: 'transaction' });
+  const [currentShift, setCurrentShift, l13, setCurrentShiftRemote] = usePersistState('currentShift', null, { syncMode: 'config', syncReadyPromise: syncReadyRef.current, pushDelay: 0 }); // pushDelay:0 = langsung push tanpa debounce, kritis untuk tutup shift
+  const [shiftHistory, setShiftHistory, l14, setShiftHistoryRemote] = usePersistState('shiftHistory', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
 
   // --- PELANGGAN ----
-  const [customers, setCustomers, l15] = usePersistState('customers', [
+  const [customers, setCustomers, l15, setCustomersRemote] = usePersistState('customers', [
     { id: 'c1', name: 'Budi Santoso', phone: '08123456789', points: 120 },
     { id: 'c2', name: 'Siti Rahma', phone: '08571234567', points: 250 },
     { id: 'c3', name: 'Andi Wijaya', phone: '08998765432', points: 45 }
-  ], { syncMode: 'config' });
-  const [vouchers, setVouchers, l16] = usePersistState('vouchers', [
+  ], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [vouchers, setVouchers, l16, setVouchersRemote] = usePersistState('vouchers', [
     { id: 'v1', code: 'MAMAMKENYANG', discountType: 'fixed', discountValue: 5000, minPurchase: 30000 }
-  ], { syncMode: 'config' });
-  const [claimsHistory, setClaimsHistory, l17] = usePersistState('claimsHistory', [], { syncMode: 'transaction' });
+  ], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [claimsHistory, setClaimsHistory, l17, setClaimsHistoryRemote] = usePersistState('claimsHistory', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
 
   // --- PAYROLL STATES ---
-  const [employees, setEmployees, l18] = usePersistState('employees', [
+  const [employees, setEmployees, l18, setEmployeesRemote] = usePersistState('employees', [
     { id: 'EMP-001', name: 'Budi Pekerja', phone: '0812345678', address: 'Jl. Melati', hourlyRate: 15000, startDate: '2023-01-10' }
-  ], { syncMode: 'config' });
-  const [employeeDailyRecords, setEmployeeDailyRecords, l19] = usePersistState('employeeDailyRecords', [], { syncMode: 'transaction' });
-  const [additionCategories, setAdditionCategories, l20] = usePersistState('additionCategories', ['Ongkir', 'Lembur', 'Bonus', 'Potongin Ayam'], { syncMode: 'config' });
-  const [deductionCategories, setDeductionCategories, l21] = usePersistState('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi'], { syncMode: 'config' });
+  ], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [employeeDailyRecords, setEmployeeDailyRecords, l19, setEmployeeDailyRecordsRemote] = usePersistState('employeeDailyRecords', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
+  const [additionCategories, setAdditionCategories, l20, setAdditionCategoriesRemote] = usePersistState('additionCategories', ['Ongkir', 'Lembur', 'Bonus', 'Potongin Ayam'], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [deductionCategories, setDeductionCategories, l21, setDeductionCategoriesRemote] = usePersistState('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi'], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
 
 
   // --- SETTINGS ---
-  const [storeSettings, setStoreSettings, l22] = usePersistState('storeSettings', {
+  const [storeSettings, setStoreSettings, l22, setStoreSettingsRemote] = usePersistState('storeSettings', {
     autoPrint: false, paperSize: '58mm', printLogo: true, taxRate: 0, serviceCharge: 0
-  }, { syncMode: 'config' });
+  }, { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
 
   // --- TEMA (LIGHT / DARK) — preferensi per-device, tidak disinkron ke device lain
   const [theme, setTheme, l23] = usePersistState('theme', 'light');
@@ -155,41 +161,44 @@ export default function App() {
   // Push per-record sudah dihandle otomatis oleh usePersistState (syncMode).
   // Di sini kita hanya tangani arah sebaliknya: terima perubahan dari device
   // lain (realtime) dan terapkan ke state lokal supaya UI langsung update.
+  // Pakai setter *Remote* supaya update yang datang dari Supabase (device lain)
+  // tidak di-push balik ke Supabase → mencegah loop & konflik data.
   const transactionSetters = useRef({});
   transactionSetters.current = {
-    salesHistory: setSalesHistory,
-    expenses: setExpenses,
-    incomes: setIncomes,
-    shiftHistory: setShiftHistory,
-    employeeDailyRecords: setEmployeeDailyRecords,
-    claimsHistory: setClaimsHistory,
-    savedBills: setSavedBills,
+    salesHistory: setSalesHistoryRemote,
+    expenses: setExpensesRemote,
+    incomes: setIncomesRemote,
+    shiftHistory: setShiftHistoryRemote,
+    employeeDailyRecords: setEmployeeDailyRecordsRemote,
+    claimsHistory: setClaimsHistoryRemote,
+    savedBills: setSavedBillsRemote,
   };
 
   const configSetters = useRef({});
   configSetters.current = {
-    menus: setMenus,
-    variantGroups: setVariantGroups,
-    variantCategories: setVariantCategories,
-    categories: setCategories,
-    hppLibrary: setHppLibrary,
-    customers: setCustomers,
-    vouchers: setVouchers,
-    employees: setEmployees,
-    expenseCategories: setExpenseCategories,
-    incomeCategories: setIncomeCategories,
-    additionCategories: setAdditionCategories,
-    deductionCategories: setDeductionCategories,
-    rawMaterials: setRawMaterials,
-    semiFinished: setSemiFinished,
-    storeSettings: setStoreSettings,
-    currentShift: setCurrentShift,
+    menus: setMenusRemote,
+    variantGroups: setVariantGroupsRemote,
+    variantCategories: setVariantCategoriesRemote,
+    categories: setCategoriesRemote,
+    hppLibrary: setHppLibraryRemote,
+    customers: setCustomersRemote,
+    vouchers: setVouchersRemote,
+    employees: setEmployeesRemote,
+    expenseCategories: setExpenseCategoriesRemote,
+    incomeCategories: setIncomeCategoriesRemote,
+    additionCategories: setAdditionCategoriesRemote,
+    deductionCategories: setDeductionCategoriesRemote,
+    rawMaterials: setRawMaterialsRemote,
+    semiFinished: setSemiFinishedRemote,
+    storeSettings: setStoreSettingsRemote,
+    currentShift: setCurrentShiftRemote,
   };
 
   useEffect(() => {
     if (!allDataLoaded) return;
 
-    const unsubscribe = initRealtimeSync({
+    // initRealtimeSync sekarang return { unsubscribe, syncReadyPromise }
+    const { unsubscribe, syncReadyPromise } = initRealtimeSync({
       // item === null -> hasil initial pull (fullArray = array hasil merge, replace state)
       // item !== null -> 1 record baru/berubah dari device lain (realtime), upsert ke array
       onTransactionUpsert: (tableKey, item, fullArray) => {
@@ -220,6 +229,10 @@ export default function App() {
         setter(reviveDatesForKey(key, value));
       },
     });
+
+    // Simpan syncReadyPromise ke ref supaya push dari usePersistState
+    // bisa await sampai initial pull benar-benar selesai.
+    syncReadyRef.current = syncReadyPromise;
 
     return unsubscribe;
   // eslint-disable-next-line react-hooks/exhaustive-deps

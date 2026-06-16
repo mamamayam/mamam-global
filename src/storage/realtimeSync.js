@@ -24,20 +24,26 @@ import { saveData, loadData } from './db';
 import { TRANSACTION_KEYS, CONFIG_KEYS } from './syncKeys';
 
 const deviceId = getDeviceId();
-let isInitialPullComplete = false;
+
+// FIX BUG 1 & 2: isInitialPullComplete dipindah ke dalam factory function
+// supaya tiap pemanggilan initRealtimeSync punya state sendiri (tidak shared
+// antar instance), dan flag BENAR-BENAR diset true di akhir initial pull.
 
 // ── PUSH: kirim 1 record transaksi (insert/update) ─────────────────────────
+
 /**
  * Upsert satu record transaksi ke Supabase.
  * Dipanggil saat 1 item ditambah/diubah di array (BUKAN saat seluruh array berubah).
+ *
+ * FIX: Terima readyPromise dari luar supaya push tidak pernah kena block
+ * akibat flag module-level yang salah.
  */
-export async function pushTransactionUpsert(tableKey, item) {
+export async function pushTransactionUpsert(tableKey, item, readyPromise) {
   if (!isSupabaseConfigured() || !item?.id) return;
 
-  if (!isInitialPullComplete) {
-    console.log(`[sync] Menahan push ${tableKey} karena initial pull belum selesai`);
-    return;
-  }
+  // Tunggu initial pull selesai sebelum boleh push (supaya tidak overwrite
+  // data Supabase dengan data lokal yang belum ter-merge)
+  if (readyPromise) await readyPromise;
 
   try {
     const supabase = await getSupabaseClient();
@@ -57,8 +63,11 @@ export async function pushTransactionUpsert(tableKey, item) {
 /**
  * Hapus satu record transaksi dari Supabase.
  */
-export async function pushTransactionDelete(tableKey, id) {
+export async function pushTransactionDelete(tableKey, id, readyPromise) {
   if (!isSupabaseConfigured() || !id) return;
+
+  if (readyPromise) await readyPromise;
+
   try {
     const supabase = await getSupabaseClient();
     if (!supabase) return;
@@ -77,14 +86,12 @@ const configPushTimers = {};
  * supaya kalau owner ngetik cepat (misal ubah storeSettings berkali-kali),
  * tidak spam request ke Supabase.
  */
-export function pushConfig(key, value, delay = 1500) {
+export function pushConfig(key, value, readyPromise, delay = 1500) {
   if (!isSupabaseConfigured()) return;
-  if (!isInitialPullComplete) {
-    console.log(`[sync] Menahan push config ${key} karena initial pull belum selesai`);
-    return;
-  }
   clearTimeout(configPushTimers[key]);
   configPushTimers[key] = setTimeout(async () => {
+    // Tunggu initial pull selesai sebelum push config
+    if (readyPromise) await readyPromise;
     try {
       const supabase = await getSupabaseClient();
       if (!supabase) return;
@@ -135,30 +142,52 @@ export function diffArrays(prevArr, nextArr) {
  * Tarik semua data dari Supabase yang berbeda dari local, merge ke Dexie,
  * lalu subscribe ke perubahan realtime untuk semua tabel transaksi + app_config.
  *
+ * FIX UTAMA:
+ *  - isInitialPullComplete sekarang per-instance (bukan module-level) → tidak ada
+ *    shared state antar pemanggilan (React StrictMode, HMR, dll).
+ *  - Flag SELALU diset true setelah initial pull, termasuk saat error per-tabel.
+ *  - Expose `syncReadyPromise` supaya push functions bisa await tanpa perlu akses
+ *    ke module-level variable.
+ *
  * @param {object} callbacks
  * @param {(key:string, item:object|null, fullArray?:array) => void} callbacks.onTransactionUpsert
  *        item === null  => fullArray adalah hasil merge initial pull (replace state)
  *        item !== null  => 1 record baru/berubah dari device lain (realtime)
  * @param {(key:string, id:string) => void}   callbacks.onTransactionDelete
  * @param {(key:string, value:any) => void}   callbacks.onConfigUpdate
- * @returns {() => void} unsubscribe function
+ * @returns {{ unsubscribe: () => void, syncReadyPromise: Promise<void> }}
  */
 export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onConfigUpdate }) {
-  if (!isSupabaseConfigured()) return () => { };
+  // FIX BUG 1: Promise per-instance. Push functions await ini sebelum kirim data.
+  let _resolveReady;
+  const syncReadyPromise = new Promise(resolve => { _resolveReady = resolve; });
+
+  if (!isSupabaseConfigured()) {
+    // Kalau Supabase tidak dikonfigurasi, langsung resolve supaya push tidak nge-hang
+    _resolveReady();
+    return { unsubscribe: () => { }, syncReadyPromise };
+  }
 
   let channel = null;
   let cancelled = false;
 
   (async () => {
-    const supabase = await getSupabaseClient();
+    let supabase;
+    try {
+      supabase = await getSupabaseClient();
+    } catch (_) {
+      supabase = null;
+    }
+
     if (!supabase || cancelled) {
-      isInitialPullComplete = true; // <--- TAMBAHKAN INI: Fallback buka kunci jika offline/gagal konek
+      // Offline / gagal konek → langsung resolve supaya push tidak nge-hang selamanya
+      _resolveReady();
       return;
     }
 
     // 1. Initial pull — ambil semua row dari tiap tabel transaksi, merge ke Dexie
-    //    (gabung berdasarkan id, data Supabase mengisi yang belum ada di local).
     for (const tableKey of TRANSACTION_KEYS) {
+      if (cancelled) break;
       try {
         const { data: rows, error } = await supabase
           .from(tableKey)
@@ -180,7 +209,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
         if (changed) {
           const merged = Array.from(localMap.values());
           await saveData(tableKey, merged);
-          onTransactionUpsert?.(tableKey, null, merged); // null item = "replace seluruh array" (initial sync)
+          onTransactionUpsert?.(tableKey, null, merged);
         }
       } catch (err) {
         console.warn(`[sync] initial pull ${tableKey} error:`, err.message);
@@ -188,36 +217,40 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
     }
 
     // 2. Initial pull config
-    try {
-      const { data: rows, error } = await supabase
-        .from('app_config')
-        .select('key, value, updated_at, updated_by')
-        .in('key', CONFIG_KEYS);
-      if (error) {
-        console.warn('[sync] initial pull config gagal:', error.message);
-      } else {
-        for (const row of rows || []) {
-          const local = await loadData(row.key, undefined);
-          if (JSON.stringify(local) !== JSON.stringify(row.value)) {
-            await saveData(row.key, row.value);
-            onConfigUpdate?.(row.key, row.value);
+    if (!cancelled) {
+      try {
+        const { data: rows, error } = await supabase
+          .from('app_config')
+          .select('key, value, updated_at, updated_by')
+          .in('key', CONFIG_KEYS);
+        if (error) {
+          console.warn('[sync] initial pull config gagal:', error.message);
+        } else {
+          for (const row of rows || []) {
+            const local = await loadData(row.key, undefined);
+            if (JSON.stringify(local) !== JSON.stringify(row.value)) {
+              await saveData(row.key, row.value);
+              onConfigUpdate?.(row.key, row.value);
+            }
           }
         }
+      } catch (err) {
+        console.warn('[sync] initial pull config error:', err.message);
       }
-    } catch (err) {
-      console.warn('[sync] initial pull config error:', err.message);
     }
+
+    // FIX BUG 2: Resolve SETELAH semua initial pull selesai (atau error)
+    // Sebelumnya flag tidak pernah diset true di happy path → semua push ke-block
+    _resolveReady();
+    console.log('[sync] initial pull selesai ✅ — push diizinkan');
 
     if (cancelled) return;
 
-    // 3. Realtime subscription — semua tabel transaksi + app_config dalam 1 channel
-    //    Nama channel unik per pemanggilan supaya tidak konflik kalau ada
-    //    lebih dari satu komponen yang subscribe (misal App.jsx & HppView.jsx).
+    // 3. Realtime subscription
     channel = supabase.channel(`mamam-realtime-sync-${Math.random().toString(36).slice(2)}`);
 
     for (const tableKey of TRANSACTION_KEYS) {
       channel.on('postgres_changes', { event: '*', schema: 'public', table: tableKey }, (payload) => {
-        // Abaikan event dari device sendiri (sudah diterapkan secara optimis di local)
         const updatedBy = payload.new?.updated_by ?? payload.old?.updated_by;
         if (updatedBy === deviceId) return;
 
@@ -245,10 +278,13 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
     });
   })();
 
-  return () => {
-    cancelled = true;
-    if (channel) {
-      getSupabaseClient().then(supabase => supabase?.removeChannel(channel));
-    }
+  return {
+    unsubscribe: () => {
+      cancelled = true;
+      if (channel) {
+        getSupabaseClient().then(supabase => supabase?.removeChannel(channel));
+      }
+    },
+    syncReadyPromise,
   };
 }

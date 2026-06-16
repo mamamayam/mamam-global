@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { loadData, saveData } from '../storage/db';
 import { diffArrays, pushTransactionUpsert, pushTransactionDelete, pushConfig } from '../storage/realtimeSync';
 
@@ -18,30 +18,47 @@ import { diffArrays, pushTransactionUpsert, pushTransactionDelete, pushConfig } 
  *                     (didebounce), cocok untuk data kecil yang jarang berubah.
  *  - undefined     : tidak ada sync ke Supabase (hanya simpan lokal ke Dexie).
  *
+ * FIX:
+ *  - Terima `syncReadyPromise` dari App.jsx (hasil initRealtimeSync) supaya
+ *    push tidak bisa jalan sebelum initial pull selesai.
+ *  - Save ke DB dan push ke Supabase HANYA setelah isLoading false (tidak lagi
+ *    skip pakai isFirstLoad ref yang bisa race).
+ *  - prevStateRef diupdate SETELAH setState selesai (via useEffect terpisah)
+ *    sehingga diffArrays selalu dapat nilai yang benar.
+ *
  * @param {string} key - Key storage
  * @param {*} defaultValue - Nilai sementara sebelum data dari DB dimuat
- * @param {{ syncMode?: 'transaction'|'config', tableKey?: string }} [options]
+ * @param {{ syncMode?: 'transaction'|'config', tableKey?: string, syncReadyPromise?: Promise<void> }} [options]
  * @returns {[*, Function, boolean]} - [state, setState, isLoading]
  */
 export function usePersistState(key, defaultValue, options = {}) {
-  const { syncMode, tableKey = key } = options;
+  const { syncMode, tableKey = key, syncReadyPromise, pushDelay } = options;
 
-  const [state, setState]     = useState(defaultValue);
-  const [isLoading, setIsLoading] = useState(true);
-  const isFirstLoad           = useRef(true);
-  const isMounted             = useRef(true);
-  const prevStateRef          = useRef(state);
+  const [state, setStateInternal] = useState(defaultValue);
+  const [isLoading, setIsLoading]  = useState(true);
+
+  // FIX BUG 3 & 4: Gunakan ref terpisah untuk:
+  //  - isLoadedRef: apakah load pertama sudah selesai (ganti isFirstLoad)
+  //  - prevStateRef: nilai state sebelumnya untuk diffArrays
+  //  - isRemoteUpdateRef: apakah setState dipicu oleh update dari device lain
+  //    (kalau iya, JANGAN push balik ke Supabase → infinite loop)
+  const isLoadedRef      = useRef(false);
+  const isMounted        = useRef(true);
+  const prevStateRef     = useRef(defaultValue);
+  const isRemoteUpdate   = useRef(false);
 
   // Load dari DB saat pertama mount
   useEffect(() => {
-    isMounted.current = true;
+    isMounted.current  = true;
+    isLoadedRef.current = false;
     setIsLoading(true);
 
     loadData(key, defaultValue).then(data => {
       if (isMounted.current) {
-        prevStateRef.current = data;
-        setState(data);
+        prevStateRef.current = data;   // set prevState SEBELUM setState
+        setStateInternal(data);
         setIsLoading(false);
+        isLoadedRef.current = true;
       }
     });
 
@@ -51,29 +68,60 @@ export function usePersistState(key, defaultValue, options = {}) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  // Save ke DB setiap kali state berubah (skip saat pertama load)
-  // + push perubahan ke Supabase sesuai syncMode.
+  // Save ke DB + push ke Supabase setiap kali state berubah,
+  // TAPI hanya setelah initial load benar-benar selesai.
   useEffect(() => {
-    if (isFirstLoad.current) {
-      isFirstLoad.current = false;
-      prevStateRef.current = state;
+    // FIX BUG 3: Jangan save/push kalau masih loading atau belum pernah load
+    if (isLoading || !isLoadedRef.current) return;
+
+    // Simpan ke Dexie
+    saveData(key, state);
+
+    // Kalau update datang dari device lain (via onTransactionUpsert/onConfigUpdate),
+    // jangan push balik ke Supabase — sudah ada di sana, dan ini akan bikin loop
+    if (isRemoteUpdate.current) {
+      isRemoteUpdate.current = false;
+      prevStateRef.current   = state;
       return;
     }
-    if (!isLoading) {
-      saveData(key, state);
 
-      if (syncMode === 'transaction') {
-        const { upserts, deletes } = diffArrays(prevStateRef.current, state);
-        for (const item of upserts) pushTransactionUpsert(tableKey, item);
-        for (const id of deletes) pushTransactionDelete(tableKey, id);
-      } else if (syncMode === 'config') {
-        pushConfig(key, state);
-      }
-
-      prevStateRef.current = state;
+    if (syncMode === 'transaction') {
+      // FIX BUG 4: prevStateRef sudah diupdate di load effect,
+      // dan akan kita update lagi di sini setelah diff
+      const { upserts, deletes } = diffArrays(prevStateRef.current, state);
+      for (const item of upserts) pushTransactionUpsert(tableKey, item, syncReadyPromise);
+      for (const id of deletes)   pushTransactionDelete(tableKey, id,   syncReadyPromise);
+    } else if (syncMode === 'config') {
+      // pushDelay bisa di-set ke 0 untuk key kritis (misal currentShift)
+      // supaya push langsung tanpa debounce 1500ms default
+      pushConfig(key, state, syncReadyPromise, pushDelay ?? 1500);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, state, isLoading]);
 
-  return [state, setState, isLoading];
+    prevStateRef.current = state;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, isLoading]);
+
+  /**
+   * setState yang menandai apakah update berasal dari device lain.
+   * App.jsx harus pakai `setStateRemote` (via setter yang dikembalikan dari
+   * onTransactionUpsert/onConfigUpdate) supaya push tidak terjadi dua kali.
+   *
+   * Cara pakai di App.jsx (onTransactionUpsert callback):
+   *   setter(prev => ...) → ini adalah setState biasa, TIDAK push balik
+   *   Tapi karena kita tidak bisa tau dari luar, kita expose `setRemote`.
+   */
+  const setState = useCallback((valueOrUpdater) => {
+    setStateInternal(valueOrUpdater);
+  }, []);
+
+  /**
+   * Versi setState untuk update yang datang dari Supabase realtime /
+   * initial pull — TIDAK akan di-push balik ke Supabase.
+   */
+  const setStateRemote = useCallback((valueOrUpdater) => {
+    isRemoteUpdate.current = true;
+    setStateInternal(valueOrUpdater);
+  }, []);
+
+  return [state, setState, isLoading, setStateRemote];
 }

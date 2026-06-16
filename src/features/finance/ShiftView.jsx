@@ -136,9 +136,17 @@ const ShiftView = () => {
     };
 
     triggerConfirm(`Apakah Anda yakin ingin menutup dompet ini? Semua transaksi selanjutnya tidak akan terekap di dompet ini.`, () => {
-      setShiftHistory([shiftData, ...shiftHistory]);
-      setClosedShiftData(shiftData);
+      // currentShift di-null-kan langsung (tidak perlu delay) karena
+      // usePersistState untuk currentShift sudah di-set pushDelay: 0 di App.jsx
+      // — push ke Supabase terjadi segera tanpa debounce.
+      //
+      // FIX: filter dulu entri dengan ID yang sama sebelum prepend.
+      // Ini mencegah duplikat kalau user nutup dompet yang sama berkali-kali
+      // (misal karena dompet terbuka ulang dari Supabase sebelum fix schema).
+      const filteredHistory = shiftHistory.filter(s => s.id !== shiftData.id);
+      setShiftHistory([shiftData, ...filteredHistory]);
       setCurrentShift(null);
+      setClosedShiftData(shiftData);
       setActualCashInput('');
       setShowXReading(true);
     });

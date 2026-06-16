@@ -66,9 +66,13 @@ create table if not exists public.savedBills (
 );
 
 -- ── Tabel config (1 baris per key, JSON blob) ────────────────────────────
+-- CATATAN: value sengaja nullable karena beberapa config bisa di-set null
+-- (misal: currentShift = null saat dompet ditutup). Constraint NOT NULL
+-- yang lama menyebabkan push null gagal silent dan dompet terus terbuka
+-- ulang dari nilai lama di Supabase setiap kali app dimuat.
 create table if not exists public.app_config (
   key text primary key,
-  value jsonb not null,
+  value jsonb,
   updated_at timestamptz not null default now(),
   updated_by text
 );
