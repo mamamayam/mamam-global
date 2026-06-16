@@ -1028,11 +1028,24 @@ const LibraryHppView = () => {
 export default function App() {
     const [activeTab, setActiveTab] = useState('materials');
 
-    // Database States
+    // Ambil categories dari outer AppContext (App.jsx) agar tidak duplikat state
+    // dan perubahan dari MenuMgmt langsung sinkron di sini juga
+    const {
+        categories,
+        setCategories,
+        menus,
+        setMenus,
+        hppLibrary: outerHppLibrary,
+        setHppLibrary: setOuterHppLibrary,
+    } = useAppContext();
+
+    // Database States yang masih dikelola lokal (rawMaterials & semiFinished
+    // dipakai untuk kalkulasi live di dalam HppView)
     const [rawMaterials, setRawMaterials] = usePersistState('rawMaterials', INITIAL_RAW_MATERIALS, { syncMode: 'config' });
     const [semiFinished, setSemiFinished] = usePersistState('semiFinished', [], { syncMode: 'config' });
-    const [hppLibrary, setHppLibrary] = usePersistState('hppLibrary', [], { syncMode: 'config' });
-    const [categories, setCategories] = usePersistState('categories', INITIAL_CATEGORIES, { syncMode: 'config' });
+    // hppLibrary: gunakan yang dari outer context agar sinkron dengan fitur lain
+    const hppLibrary = outerHppLibrary;
+    const setHppLibrary = setOuterHppLibrary;
     const [editingRecipe, setEditingRecipe] = useState(null);
 
     // Modals
@@ -1151,8 +1164,22 @@ export default function App() {
                     triggerAlert={triggerAlert}
                     triggerConfirm={triggerConfirm}
                     onRename={(oldCat, newCat) => {
+                        // Update hppLibrary
                         const updatedLibrary = hppLibrary.map(recipe => recipe.category === oldCat ? { ...recipe, category: newCat } : recipe);
                         if (JSON.stringify(updatedLibrary) !== JSON.stringify(hppLibrary)) setHppLibrary(updatedLibrary);
+                        // Update menus (sinkron dengan MenuMgmt)
+                        if (menus && setMenus) {
+                            const updatedMenus = menus.map(m => m.category === oldCat ? { ...m, category: newCat } : m);
+                            if (JSON.stringify(updatedMenus) !== JSON.stringify(menus)) setMenus(updatedMenus);
+                        }
+                    }}
+                    onDelete={(deletedCat) => {
+                        const updatedLibrary = hppLibrary.map(recipe => recipe.category === deletedCat ? { ...recipe, category: 'Umum' } : recipe);
+                        if (JSON.stringify(updatedLibrary) !== JSON.stringify(hppLibrary)) setHppLibrary(updatedLibrary);
+                        if (menus && setMenus) {
+                            const updatedMenus = menus.map(m => m.category === deletedCat ? { ...m, category: 'Umum' } : m);
+                            if (JSON.stringify(updatedMenus) !== JSON.stringify(menus)) setMenus(updatedMenus);
+                        }
                     }}
                 />
             </div>

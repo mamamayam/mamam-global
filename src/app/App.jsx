@@ -669,7 +669,11 @@ export default function App() {
         else if (paymentModal.isOpen) {
           setPaymentModal(p => ({ ...p, isOpen: false }));
         }
-        // PRIORITAS 3: Tutup keranjang belanja
+        // PRIORITAS 3: Tutup modal pilih varian
+        else if (selectedMenuForVariant) {
+          setSelectedMenuForVariant(null);
+        }
+        // PRIORITAS 4: Tutup keranjang belanja
         else if (isCartOpen) {
           setIsCartOpen(false);
         }
@@ -695,6 +699,7 @@ export default function App() {
   }, [
     receiptModal.isOpen,
     paymentModal.isOpen,
+    selectedMenuForVariant,
     isCartOpen,
     isSidebarOpen,
     navigateBack,
@@ -722,7 +727,7 @@ export default function App() {
       }} />
 
       <AppLayout
-        isSidebarOpen={isSidebarOpen}
+      isSidebarOpen={isSidebarOpen}
         onSwipeOpen={() => setIsSidebarOpen(true)}
         onSwipeClose={() => setIsSidebarOpen(false)}
         sidebar={

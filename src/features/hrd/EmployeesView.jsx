@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, createContext, useContext, useRef 
 import { formatRupiah, toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import {useAppContext} from '../../context/AppContext';
 import PayslipModal from '../hrd/modals/PayslipModal';
+import CategoryModal from '../../components/CategoryModal';
 import { 
   Calendar, 
   ChevronDown, 
@@ -19,7 +20,8 @@ import {
   Printer, 
   ChevronRight, 
   ChevronLeft, 
-  Briefcase 
+  Briefcase,
+  Settings2
 } from 'lucide-react';
 
 
@@ -50,6 +52,7 @@ const EmployeesView = () => {
   const [isEditRecordMode, setIsEditRecordMode] = useState(false);
   const [currentRecordId, setCurrentRecordId] = useState(null);
   const [showEmpDropdown, setShowEmpDropdown] = useState(false);
+  const [catModalType, setCatModalType] = useState(null); // null | 'addition' | 'deduction'
   
   const [adjType, setAdjType] = useState('addition');
   const [adjCategory, setAdjCategory] = useState('');
@@ -324,7 +327,12 @@ const EmployeesView = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Kategori</label>
+                <label className="flex justify-between items-center text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+                  Kategori
+                  <button type="button" onClick={() => setCatModalType(adjType)} className="text-[10px] text-orange-600 dark:text-orange-400 font-bold hover:underline flex items-center gap-1 transition-colors">
+                    <Settings2 className="w-3 h-3" /> Kelola
+                  </button>
+                </label>
                 <select 
                   className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
                   value={adjCategory}
@@ -679,6 +687,33 @@ const EmployeesView = () => {
          {activeTab === 'manage' && renderManageTab()}
       </div>
       <PayslipModal />
+
+      <CategoryModal
+        isOpen={catModalType === 'addition'}
+        onClose={() => setCatModalType(null)}
+        title="Kelola Kategori Penghasilan Tambahan"
+        categories={additionCategories}
+        setCategories={setAdditionCategories}
+        triggerAlert={triggerAlert}
+        triggerConfirm={triggerConfirm}
+        onDeleteFallback={additionCategories[0] || 'Lainnya'}
+        onDelete={(deletedCat) => {
+          if (adjCategory === deletedCat) setAdjCategory('');
+        }}
+      />
+      <CategoryModal
+        isOpen={catModalType === 'deduction'}
+        onClose={() => setCatModalType(null)}
+        title="Kelola Kategori Potongan"
+        categories={deductionCategories}
+        setCategories={setDeductionCategories}
+        triggerAlert={triggerAlert}
+        triggerConfirm={triggerConfirm}
+        onDeleteFallback={deductionCategories[0] || 'Lainnya'}
+        onDelete={(deletedCat) => {
+          if (adjCategory === deletedCat) setAdjCategory('');
+        }}
+      />
     </div>
   );
 };

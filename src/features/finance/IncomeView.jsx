@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { TrendingUp, History, Save, Trash2, Pencil, X } from 'lucide-react';
+import { TrendingUp, History, Save, Trash2, Pencil, X, Settings2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
+import CategoryModal from '../../components/CategoryModal';
 
 const IncomeView = () => {
   const { incomes, setIncomes, incomeCategories, setIncomeCategories, triggerAlert, triggerConfirm, formatRupiah, currentShift, isAdminMode } = useAppContext();
@@ -10,6 +11,7 @@ const IncomeView = () => {
   const [note, setNote] = useState('');
   const [dateInput, setDateInput] = useState(toLocalDateString());
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString()); 
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   
   // State pelacak data edit
   const [editingId, setEditingId] = useState(null);
@@ -70,19 +72,6 @@ const IncomeView = () => {
     setDateInput(toLocalDateString());
   };
 
-  const handleDeleteCategory = (cat) => {
-    if (cat === 'Modal Tambahan') {
-      return triggerAlert(`Kategori "${cat}" adalah wajib dan tidak bisa dihapus!`);
-    }
-    if (incomeCategories.length <= 1) return triggerAlert('Harus ada minimal 1 kategori!');
-
-    triggerConfirm(`Apakah Anda yakin ingin menghapus kategori "${cat}"?`, () => {
-      setIncomeCategories(incomeCategories.filter(c => c !== cat));
-      if (category === cat) setCategory(incomeCategories[0]);
-      triggerAlert('Kategori pemasukan berhasil dihapus.');
-    });
-  };
-
   // Konversi ink.date ke bentuk Date Object untuk menghindari crash string saat pembacaan localStorage
   const filteredIncomes = incomes.filter(inc => filterMonth === '' || toLocalMonthString(inc.date) === filterMonth);
 
@@ -108,16 +97,15 @@ const IncomeView = () => {
             <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-bold outline-none focus:border-slate-800 dark:focus:border-slate-100 transition-colors" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between items-center">
               Kategori
-              <span className="text-[10px] text-green-600 dark:text-green-400 font-bold cursor-pointer hover:underline transition-all" onClick={() => { const c = prompt('Masukkan Nama Kategori Baru:'); if (c && c.trim()) { setIncomeCategories([...incomeCategories, c.trim()]); setCategory(c.trim()); } }}>+ Kategori Baru</span>
+              <button type="button" onClick={() => setIsCategoryModalOpen(true)} className="text-[10px] text-green-600 dark:text-green-400 font-bold hover:underline flex items-center gap-1 transition-colors">
+                <Settings2 className="w-3 h-3" /> Kelola Kategori
+              </button>
             </label>
-            <div className="flex gap-2 items-center">
-              <select className="flex-1 p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl outline-none font-semibold text-sm transition-colors focus:border-slate-800 dark:focus:border-slate-100" value={category} onChange={e => setCategory(e.target.value)}>
-                {incomeCategories.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <button onClick={() => handleDeleteCategory(category)} className="p-3 bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-500/15 transition-colors" title="Hapus Kategori Aktif"><Trash2 className="w-5 h-5" /></button>
-            </div>
+            <select className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl outline-none font-semibold text-sm transition-colors focus:border-slate-800 dark:focus:border-slate-100" value={category} onChange={e => setCategory(e.target.value)}>
+              {incomeCategories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Catatan Tambahan</label>
@@ -179,6 +167,20 @@ const IncomeView = () => {
           </div>
         </div>
       </div>
+
+      <CategoryModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        title="Kelola Kategori Pemasukan"
+        categories={incomeCategories}
+        setCategories={setIncomeCategories}
+        triggerAlert={triggerAlert}
+        triggerConfirm={triggerConfirm}
+        onDeleteFallback={incomeCategories[0] || 'Lainnya'}
+        onDelete={(deletedCat) => {
+          if (category === deletedCat) setCategory(incomeCategories.find(c => c !== deletedCat) || '');
+        }}
+      />
     </div>
   );
 };

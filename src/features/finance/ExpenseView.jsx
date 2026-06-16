@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { History, Save, Trash2, TrendingDown, Pencil, X } from 'lucide-react';
+import { History, Save, Trash2, TrendingDown, Pencil, X, Settings2 } from 'lucide-react';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
+import CategoryModal from '../../components/CategoryModal';
 
 const ExpenseView = () => {
   const { 
@@ -19,6 +20,7 @@ const ExpenseView = () => {
   const [paymentMethod, setPaymentMethod] = useState('Tunai');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString()); 
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   
   // State untuk melacak data yang sedang diedit
   const [editingId, setEditingId] = useState(null);
@@ -117,20 +119,6 @@ const ExpenseView = () => {
     setDateInput(toLocalDateString());
   };
 
-  const handleDeleteCategory = (cat) => {
-    const mandatoryCategories = ['Belanja', 'Biaya', 'Kasbon Karyawan'];
-    if (mandatoryCategories.includes(cat)) {
-       return triggerAlert(`Kategori "${cat}" adalah wajib dan tidak bisa dihapus!`);
-    }
-    if(expenseCategories.length <= 1) return triggerAlert('Harus ada minimal 1 kategori!');
-    
-    triggerConfirm(`Apakah Anda yakin ingin menghapus kategori "${cat}"?`, () => {
-      setExpenseCategories(expenseCategories.filter(c => c !== cat));
-      if(category === cat) setCategory(expenseCategories[0]);
-      triggerAlert('Kategori pengeluaran berhasil dihapus.');
-    });
-  };
-
   const filteredExpenses = expenses.filter(e => filterMonth === '' || toLocalMonthString(e.date) === filterMonth);
 
   return (
@@ -151,16 +139,15 @@ const ExpenseView = () => {
             <input type="date" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-bold outline-none focus:border-slate-800 dark:focus:border-slate-100 transition-colors" value={dateInput} onChange={e => setDateInput(e.target.value)} />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between">
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 flex justify-between items-center">
               Kategori
-              <span className="text-[10px] text-orange-600 dark:text-orange-400 font-bold cursor-pointer hover:underline transition-all" onClick={() => { const c = prompt('Masukkan Nama Kategori Baru:'); if(c && c.trim()) { setExpenseCategories([...expenseCategories, c.trim()]); setCategory(c.trim()); }}}>+ Kategori Baru</span>
+              <button type="button" onClick={() => setIsCategoryModalOpen(true)} className="text-[10px] text-orange-600 dark:text-orange-400 font-bold hover:underline flex items-center gap-1 transition-colors">
+                <Settings2 className="w-3 h-3" /> Kelola Kategori
+              </button>
             </label>
-            <div className="flex gap-2 items-center">
-              <select className="flex-1 p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl outline-none font-semibold text-sm transition-colors focus:border-slate-800 dark:focus:border-slate-100" value={category} onChange={e => {setCategory(e.target.value); setSelectedEmployeeId('');}}>
-                {expenseCategories.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <button onClick={() => handleDeleteCategory(category)} className="p-3 bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-500/15 transition-colors" title="Hapus Kategori Aktif"><Trash2 className="w-5 h-5" /></button>
-            </div>
+            <select className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl outline-none font-semibold text-sm transition-colors focus:border-slate-800 dark:focus:border-slate-100" value={category} onChange={e => {setCategory(e.target.value); setSelectedEmployeeId('');}}>
+              {expenseCategories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
           
           {category === 'Kasbon Karyawan' && (
@@ -250,6 +237,20 @@ const ExpenseView = () => {
           </div>
         </div>
       </div>
+
+      <CategoryModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        title="Kelola Kategori Pengeluaran"
+        categories={expenseCategories}
+        setCategories={setExpenseCategories}
+        triggerAlert={triggerAlert}
+        triggerConfirm={triggerConfirm}
+        onDeleteFallback={expenseCategories[0] || 'Belanja'}
+        onDelete={(deletedCat) => {
+          if (category === deletedCat) setCategory(expenseCategories.find(c => c !== deletedCat) || '');
+        }}
+      />
     </div>
   );
 };

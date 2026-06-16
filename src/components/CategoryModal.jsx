@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Edit3, Trash2, Save, Layers } from 'lucide-react';
+import { X, Plus, Edit3, Trash2, Save, Layers, ChevronUp, ChevronDown } from 'lucide-react';
 
 /**
  * Modal generic untuk kelola daftar kategori (tambah/edit/hapus).
@@ -55,6 +55,20 @@ const CategoryModal = ({
         setEditIndex(idx); setEditValue(cat);
     };
 
+    const moveUp = (idx) => {
+        if (idx === 0) return;
+        const next = [...categories];
+        [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+        setCategories(next);
+    };
+
+    const moveDown = (idx) => {
+        if (idx === categories.length - 1) return;
+        const next = [...categories];
+        [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+        setCategories(next);
+    };
+
     const saveEdit = (oldCat, idx) => {
         if (!editValue.trim() || editValue === oldCat) return setEditIndex(-1);
         if (categories.some((c, i) => i !== idx && c.toLowerCase() === editValue.trim().toLowerCase())) {
@@ -102,7 +116,9 @@ const CategoryModal = ({
                                     ) : (
                                         <>
                                             <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{cat}</span>
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-1.5">
+                                                <button onClick={() => moveUp(idx)} disabled={idx === 0} title="Pindah ke atas" className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><ChevronUp className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => moveDown(idx)} disabled={idx === categories.length - 1} title="Pindah ke bawah" className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><ChevronDown className="w-3.5 h-3.5" /></button>
                                                 <button onClick={() => startEdit(cat, idx)} className="p-2 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/15 transition-colors"><Edit3 className="w-4 h-4" /></button>
                                                 <button onClick={() => handleDelete(cat, idx)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-500/15 transition-colors"><Trash2 className="w-4 h-4" /></button>
                                             </div>
