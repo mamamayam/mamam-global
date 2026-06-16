@@ -47,10 +47,14 @@ export function usePersistState(key, defaultValue, options = {}) {
   const prevStateRef     = useRef(defaultValue);
   const isRemoteUpdate   = useRef(false);
 
+  // FIX ANTI OVERWRITE: Ref pelindung agar data lokal lama tidak langsung di-push saat pertama dibuka
+  const isFirstEffectPassAfterLoad = useRef(true);
+
   // Load dari DB saat pertama mount
   useEffect(() => {
     isMounted.current  = true;
     isLoadedRef.current = false;
+    isFirstEffectPassAfterLoad.current = true; // Reset flag setiap kali key di-load balik
     setIsLoading(true);
 
     loadData(key, defaultValue).then(data => {
@@ -73,6 +77,15 @@ export function usePersistState(key, defaultValue, options = {}) {
   useEffect(() => {
     // FIX BUG 3: Jangan save/push kalau masih loading atau belum pernah load
     if (isLoading || !isLoadedRef.current) return;
+
+    // FIX UTAMA ANTI OVERWRITE: 
+    // Jika effect berjalan pertama kali tepat setelah loading lokal selesai, LEWATI proses push.
+    // Kita hanya mau nge-push kalau ada aksi nyata dari user setelah aplikasi terbuka.
+    if (isFirstEffectPassAfterLoad.current) {
+      isFirstEffectPassAfterLoad.current = false;
+      prevStateRef.current = state;
+      return;
+    }
 
     // Simpan ke Dexie
     saveData(key, state);

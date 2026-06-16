@@ -1,49 +1,18 @@
-// --- Realtime Sync Engine (Supabase) ---
-//
-// Tujuan:
-//  - Owner & Kasir bisa pakai 2 device berbeda, datanya sinkron otomatis & realtime.
-//  - TIDAK re-upload seluruh array tiap ada perubahan (boros free tier Supabase).
-//    Transaksi (salesHistory, expenses, dll) di-push PER-RECORD (1 baris berubah
-//    = 1 upsert kecil). Config (menus, storeSettings, dll) di-push sebagai 1 blob
-//    per key tapi hanya saat key itu berubah, dan didebounce.
-//  - Tidak pakai Supabase Auth — akses dikontrol PIN modal di app, RLS dibuka publik.
-//
-// Cara pakai (lihat App.jsx):
-//   import { initRealtimeSync } from '../storage/realtimeSync';
-//   useEffect(() => {
-//     const unsub = initRealtimeSync({
-//       onTransactionUpsert: (key, item, fullArray) => { ...merge ke state... },
-//       onTransactionDelete: (key, id)   => { ...hapus dari state... },
-//       onConfigUpdate:      (key, value)=> { ...replace state... },
-//     });
-//     return unsub;
-//   }, []);
-
 import { getSupabaseClient, getDeviceId, isSupabaseConfigured } from './syncClient';
 import { saveData, loadData } from './db';
 import { TRANSACTION_KEYS, CONFIG_KEYS } from './syncKeys';
 
 const deviceId = getDeviceId();
 
-// FIX BUG 1 & 2: isInitialPullComplete dipindah ke dalam factory function
-// supaya tiap pemanggilan initRealtimeSync punya state sendiri (tidak shared
-// antar instance), dan flag BENAR-BENAR diset true di akhir initial pull.
-
 // ── PUSH: kirim 1 record transaksi (insert/update) ─────────────────────────
-
-/**
- * Upsert satu record transaksi ke Supabase.
- * Dipanggil saat 1 item ditambah/diubah di array (BUKAN saat seluruh array berubah).
- *
- * FIX: Terima readyPromise dari luar supaya push tidak pernah kena block
- * akibat flag module-level yang salah.
- */
 export async function pushTransactionUpsert(tableKey, item, readyPromise) {
   if (!isSupabaseConfigured() || !item?.id) return;
 
-  // Tunggu initial pull selesai sebelum boleh push (supaya tidak overwrite
-  // data Supabase dengan data lokal yang belum ter-merge)
   if (readyPromise) await readyPromise;
+
+  // FIX: Gunakan updated_at bawaan item jika ada. Jangan selalu buat new Date()
+  // Ini mencegah Supabase mengira data lama dari Device 2 adalah data paling baru.
+  const itemUpdatedAt = item.updated_at || new Date().toISOString();
 
   try {
     const supabase = await getSupabaseClient();
@@ -51,7 +20,7 @@ export async function pushTransactionUpsert(tableKey, item, readyPromise) {
     const { error } = await supabase.from(tableKey).upsert({
       id: String(item.id),
       payload: item,
-      updated_at: new Date().toISOString(),
+      updated_at: itemUpdatedAt,
       updated_by: deviceId,
     }, { onConflict: 'id' });
     if (error) console.warn(`[sync] gagal push ${tableKey}/${item.id}:`, error.message);
@@ -60,12 +29,8 @@ export async function pushTransactionUpsert(tableKey, item, readyPromise) {
   }
 }
 
-/**
- * Hapus satu record transaksi dari Supabase.
- */
 export async function pushTransactionDelete(tableKey, id, readyPromise) {
   if (!isSupabaseConfigured() || !id) return;
-
   if (readyPromise) await readyPromise;
 
   try {
@@ -81,24 +46,25 @@ export async function pushTransactionDelete(tableKey, id, readyPromise) {
 // ── PUSH: config (1 blob per key, debounced) ────────────────────────────────
 const configPushTimers = {};
 
-/**
- * Upsert config (1 baris per key di tabel app_config). Didebounce 1.5s per key
- * supaya kalau owner ngetik cepat (misal ubah storeSettings berkali-kali),
- * tidak spam request ke Supabase.
- */
 export function pushConfig(key, value, readyPromise, delay = 1500) {
   if (!isSupabaseConfigured()) return;
   clearTimeout(configPushTimers[key]);
+  
   configPushTimers[key] = setTimeout(async () => {
-    // Tunggu initial pull selesai sebelum push config
     if (readyPromise) await readyPromise;
+
+    // FIX: Cek apakah value (jika object) punya updated_at sendiri
+    const configUpdatedAt = (value && typeof value === 'object' && value.updated_at)
+      ? value.updated_at 
+      : new Date().toISOString();
+
     try {
       const supabase = await getSupabaseClient();
       if (!supabase) return;
       const { error } = await supabase.from('app_config').upsert({
         key,
         value,
-        updated_at: new Date().toISOString(),
+        updated_at: configUpdatedAt,
         updated_by: deviceId,
       }, { onConflict: 'key' });
       if (error) console.warn(`[sync] gagal push config ${key}:`, error.message);
@@ -109,10 +75,6 @@ export function pushConfig(key, value, readyPromise, delay = 1500) {
 }
 
 // ── DIFF HELPER ──────────────────────────────────────────────────────────
-/**
- * Bandingkan array lama vs baru, return { upserts, deletes }.
- * Dipakai usePersistState untuk tahu record mana yang perlu di-push.
- */
 export function diffArrays(prevArr, nextArr) {
   const prev = Array.isArray(prevArr) ? prevArr : [];
   const next = Array.isArray(nextArr) ? nextArr : [];
@@ -137,33 +99,11 @@ export function diffArrays(prevArr, nextArr) {
 }
 
 // ── PULL & REALTIME SUBSCRIBE ───────────────────────────────────────────────
-
-/**
- * Tarik semua data dari Supabase yang berbeda dari local, merge ke Dexie,
- * lalu subscribe ke perubahan realtime untuk semua tabel transaksi + app_config.
- *
- * FIX UTAMA:
- *  - isInitialPullComplete sekarang per-instance (bukan module-level) → tidak ada
- *    shared state antar pemanggilan (React StrictMode, HMR, dll).
- *  - Flag SELALU diset true setelah initial pull, termasuk saat error per-tabel.
- *  - Expose `syncReadyPromise` supaya push functions bisa await tanpa perlu akses
- *    ke module-level variable.
- *
- * @param {object} callbacks
- * @param {(key:string, item:object|null, fullArray?:array) => void} callbacks.onTransactionUpsert
- *        item === null  => fullArray adalah hasil merge initial pull (replace state)
- *        item !== null  => 1 record baru/berubah dari device lain (realtime)
- * @param {(key:string, id:string) => void}   callbacks.onTransactionDelete
- * @param {(key:string, value:any) => void}   callbacks.onConfigUpdate
- * @returns {{ unsubscribe: () => void, syncReadyPromise: Promise<void> }}
- */
 export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onConfigUpdate }) {
-  // FIX BUG 1: Promise per-instance. Push functions await ini sebelum kirim data.
   let _resolveReady;
   const syncReadyPromise = new Promise(resolve => { _resolveReady = resolve; });
 
   if (!isSupabaseConfigured()) {
-    // Kalau Supabase tidak dikonfigurasi, langsung resolve supaya push tidak nge-hang
     _resolveReady();
     return { unsubscribe: () => { }, syncReadyPromise };
   }
@@ -180,12 +120,11 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
     }
 
     if (!supabase || cancelled) {
-      // Offline / gagal konek → langsung resolve supaya push tidak nge-hang selamanya
       _resolveReady();
       return;
     }
 
-    // 1. Initial pull — ambil semua row dari tiap tabel transaksi, merge ke Dexie
+    // 1. Initial pull — ambil semua row dari tiap tabel transaksi
     for (const tableKey of TRANSACTION_KEYS) {
       if (cancelled) break;
       try {
@@ -200,6 +139,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
 
         for (const row of rows || []) {
           const existing = localMap.get(row.id);
+          // Prioritaskan data Supabase jika beda
           if (!existing || JSON.stringify(existing) !== JSON.stringify(row.payload)) {
             localMap.set(row.id, row.payload);
             changed = true;
@@ -239,8 +179,6 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
       }
     }
 
-    // FIX BUG 2: Resolve SETELAH semua initial pull selesai (atau error)
-    // Sebelumnya flag tidak pernah diset true di happy path → semua push ke-block
     _resolveReady();
     console.log('[sync] initial pull selesai ✅ — push diizinkan');
 
