@@ -8,9 +8,9 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { exportAllData, loadData, saveData } from '../../storage/db';
-import { ALL_KEYS, TRANSACTION_KEYS, CONFIG_KEYS, DATE_FILTERABLE_KEYS } from '../../storage/syncKeys';
-import { getSupabaseClient, isSupabaseConfigured } from '../../storage/syncClient';
+import { exportAllData, loadData, saveData } from '../storage/db';
+import { ALL_KEYS, TRANSACTION_KEYS, CONFIG_KEYS, DATE_FILTERABLE_KEYS } from '../storage/syncKeys';
+import { getSupabaseClient, isSupabaseConfigured } from '../storage/syncClient';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

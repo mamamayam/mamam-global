@@ -14,7 +14,7 @@ const CustomerView      = lazy(() => import('../features/customer/CustomerView')
 const ReportsView       = lazy(() => import('../features/reports/ReportsView'));
 const EmployeesView     = lazy(() => import('../features/hrd/EmployeesView'));
 const SettingsView      = lazy(() => import('../features/settings/SettingsView'));
-const BackupView        = lazy(() => import('../features/settings/BackupView'));
+const BackupView        = lazy(() => import('../storage/BackupView'));
 const StockView         = lazy(() => import('../features/stock/StockView'));
 const AccountView       = lazy(() => import('../auth/AccountView'));
 

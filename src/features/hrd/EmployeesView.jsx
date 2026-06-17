@@ -41,7 +41,7 @@ const EmployeesView = () => {
 
   // --- STATE UNTUK TAB: KELOLA KARYAWAN ---
   const [isEditingEmp, setIsEditingEmp] = useState(false);
-  const [empFormData, setEmpFormData] = useState({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: toLocalDateString() });
+  const [empFormData, setEmpFormData] = useState({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString() });
 
   // --- STATE UNTUK TAB: INPUT HARIAN ---
   const [clockIn, setClockIn] = useState('09:00');
@@ -61,6 +61,7 @@ const EmployeesView = () => {
   const [adjCategory, setAdjCategory] = useState('');
   const [adjAmount, setAdjAmount] = useState('');
   const [adjNote, setAdjNote] = useState('');
+  const [overtimeHours, setOvertimeHours] = useState('');
   const [adjPaymentMethod, setAdjPaymentMethod] = useState('Tunai');
 
   const empDropdownRef = useRef(null);
@@ -88,6 +89,50 @@ const EmployeesView = () => {
     }
   }, [clockIn, clockOut, isDayOff]); // <-- Tambahkan isDayOff di sini
 
+  // 1. AUTO BONUS FULL TIME (Jika jam kerja >= 10)
+  useEffect(() => {
+    if (!dailyEmpId) return;
+    const emp = employees.find(e => e.id === dailyEmpId);
+    if (!emp) return;
+
+    const bonusAmount = emp.fullTimeBonus || 0;
+
+    // Jika kerja 10 jam atau lebih, dan upah bonusnya ada
+    if (Number(hoursWorked) >= 10 && bonusAmount > 0) {
+      setAdditions(prev => {
+        // Cek apakah bonus sudah masuk biar tidak duplikat
+        const hasBonus = prev.some(a => a.category === 'Bonus Full Time');
+        if (!hasBonus) {
+          return [...prev, {
+            id: Date.now() + Math.random(),
+            category: 'Bonus Full Time',
+            amount: Number(bonusAmount),
+            note: 'Otomatis (Kerja 10 Jam)',
+            expenseRecorded: false
+          }];
+        }
+        return prev;
+      });
+    } else if (Number(hoursWorked) < 10) {
+      // Jika jam diedit menjadi di bawah 10 jam, tarik kembali bonusnya
+      setAdditions(prev => prev.filter(a => a.category !== 'Bonus Full Time'));
+    }
+  }, [hoursWorked, dailyEmpId, employees]);
+
+  // 2. AUTO HITUNG UANG LEMBUR
+  useEffect(() => {
+    // Mengecek apakah kategori yang dipilih bernama "Lembur"
+    if (adjCategory.toLowerCase() === 'lembur') {
+      const emp = employees.find(e => e.id === dailyEmpId);
+      if (emp && overtimeHours) {
+        // Otomatis ubah Nominal = Jam Lembur * Upah per Jam
+        setAdjAmount(Number(overtimeHours) * (emp.hourlyRate || 0));
+      } else {
+        setAdjAmount('');
+      }
+    }
+  }, [overtimeHours, adjCategory, dailyEmpId, employees]);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (empDropdownRef.current && !empDropdownRef.current.contains(event.target)) {
@@ -113,7 +158,7 @@ const EmployeesView = () => {
       triggerAlert('Karyawan baru berhasil ditambahkan.');
     }
     setIsEditingEmp(false);
-    setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: toLocalDateString() });
+    setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString() });
   };
 
   const handleDeleteEmployee = (id) => {
@@ -131,10 +176,11 @@ const EmployeesView = () => {
         setIsEditRecordMode(true);
         setCurrentRecordId(existingRecord.id);
         // Pastikan format jam valid untuk input type="time"
-        setClockIn(existingRecord.clockIn && existingRecord.clockIn !== '-' ? existingRecord.clockIn : '09:00');
-        setClockOut(existingRecord.clockOut && existingRecord.clockOut !== '-' ? existingRecord.clockOut : '19:00');
+        const wasOff = existingRecord.isDayOff || false;
+        setClockIn(wasOff ? '00:00' : (existingRecord.clockIn && existingRecord.clockIn !== '-' ? existingRecord.clockIn : '09:00'));
+        setClockOut(wasOff ? '00:00' : (existingRecord.clockOut && existingRecord.clockOut !== '-' ? existingRecord.clockOut : '19:00'));
         setHoursWorked(existingRecord.hoursWorked || '');
-        setIsDayOff(existingRecord.isDayOff || false); // <-- Tarik data libur
+        setIsDayOff(wasOff); // <-- Tarik data libur
         setAdditions(existingRecord.additions || []);
         setDeductions(existingRecord.deductions || []);
       } else {
@@ -171,6 +217,7 @@ const EmployeesView = () => {
 
     setAdjAmount('');
     setAdjNote('');
+    setOvertimeHours('');
   };
 
   const handleSaveDailyRecord = () => {
@@ -327,28 +374,33 @@ const EmployeesView = () => {
             </div>
           )}
 
-          {/* Checkbox Libur */}
-          <div className="flex items-center gap-2 mb-2 p-3 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-xl">
-            <input
-              type="checkbox"
-              id="isDayOffToggle"
-              checked={isDayOff}
-              onChange={(e) => setIsDayOff(e.target.checked)}
-              className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500 cursor-pointer accent-orange-600"
-            />
-            <label htmlFor="isDayOffToggle" className="text-sm font-bold text-slate-700 dark:text-slate-200 cursor-pointer select-none">
-              Tandai sebagai Hari Libur / Off (Jam Kerja = 0)
-            </label>
+          {/* Toggle Masuk / Libur */}
+          <div>
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">Status Kehadiran</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { setIsDayOff(false); setClockIn('09:00'); setClockOut('19:00'); }}
+                className={`py-2.5 rounded-xl text-sm font-bold transition-all duration-200 border ${!isDayOff ? 'bg-green-600 dark:bg-green-500 text-white border-green-600 dark:border-green-500 shadow-sm' : 'bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+              >
+                Masuk
+              </button>
+              <button
+                onClick={() => { setIsDayOff(true); setClockIn('00:00'); setClockOut('00:00'); }}
+                className={`py-2.5 rounded-xl text-sm font-bold transition-all duration-200 border ${isDayOff ? 'bg-red-500 dark:bg-red-600 text-white border-red-500 dark:border-red-600 shadow-sm' : 'bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+              >
+                Libur
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Jam Masuk</label>
-              <input type="time" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={clockIn} onChange={e => setClockIn(e.target.value)} disabled={isDayOff} />
+              <input type="time" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" value={clockIn} onChange={e => setClockIn(e.target.value)} disabled={isDayOff} />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Jam Keluar</label>
-              <input type="time" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={clockOut} onChange={e => setClockOut(e.target.value)} disabled={isDayOff} />
+              <input type="time" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" value={clockOut} onChange={e => setClockOut(e.target.value)} disabled={isDayOff} />
             </div>
           </div>
 
@@ -407,20 +459,39 @@ const EmployeesView = () => {
                 >
                   <option value="">-- Pilih Kategori --</option>
                   {adjType === 'addition'
-                    ? additionCategories.map(c => <option key={c} value={c}>{c}</option>)
-                    : deductionCategories.map(c => <option key={c} value={c}>{c}</option>)
+                    ? [...new Set(additionCategories)].map(c => <option key={c} value={c}>{c}</option>)
+                    : [...new Set(deductionCategories)].map(c => <option key={c} value={c}>{c}</option>)
                   }
                 </select>
               </div>
 
+              {/* --- TAMBAHKAN KODE INI TEPAT DI BAWAH KATEGORI --- */}
+              {adjCategory.toLowerCase() === 'lembur' && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-200 mt-2">
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Total Jam Lembur</label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
+                    placeholder="Contoh: 2.5"
+                    value={overtimeHours}
+                    onChange={(e) => setOvertimeHours(e.target.value)}
+                  />
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Nominal (Rp)</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+                  {adjCategory.toLowerCase() === 'lembur' ? 'Nominal Lembur (Otomatis)' : 'Nominal (Rp)'}
+                </label>
                 <input
                   type="number"
-                  className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
+                  className={`w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none transition-colors ${adjCategory.toLowerCase() === 'lembur' ? 'bg-slate-100 dark:bg-slate-900 cursor-not-allowed opacity-80' : 'bg-slate-50 dark:bg-slate-950 focus:border-orange-500 dark:focus:border-orange-500'}`}
                   placeholder="0"
                   value={adjAmount}
                   onChange={(e) => setAdjAmount(e.target.value)}
+                  readOnly={adjCategory.toLowerCase() === 'lembur'}
                 />
               </div>
 
@@ -669,7 +740,7 @@ const EmployeesView = () => {
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">No. Handphone (WA)</label>
-              <input type="text" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.phone} onChange={e => setEmpFormData({ ...empFormData, phone: e.target.value })} placeholder="Misal: 0812345678" />
+              <input type="text" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.phone} onChange={e => setEmpFormData({ ...empFormData, phone: e.target.value })} placeholder="Misal: 081234567890" />
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Alamat</label>
@@ -678,6 +749,10 @@ const EmployeesView = () => {
             <div>
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Upah per Jam (Rp)</label>
               <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.hourlyRate} onChange={e => setEmpFormData({ ...empFormData, hourlyRate: Number(e.target.value) })} placeholder="0" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">Bonus Full Time &gt;= 10 Jam (Rp)</label>
+              <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={empFormData.fullTimeBonus || ''} onChange={e => setEmpFormData({ ...empFormData, fullTimeBonus: Number(e.target.value) })} />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Mulai Kerja</label>

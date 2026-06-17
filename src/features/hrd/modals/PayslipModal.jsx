@@ -15,6 +15,9 @@ const PayslipModal = () => {
   // Urutkan records berdasarkan tanggal
   const sortedRecords = [...data.records].sort((a, b) => new Date(a.date) - new Date(b.date));
 
+  // HITUNG HARI KERJA MASUK
+  const totalHariKerja = sortedRecords.filter(rec => rec.hoursWorked > 0).length;
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity duration-300 print:bg-white print:p-0 overflow-y-auto">
       <style dangerouslySetInnerHTML={{
@@ -48,12 +51,14 @@ const PayslipModal = () => {
 
           <div className="flex justify-between mb-8 text-sm text-slate-700 dark:text-slate-200 print:text-black">
             <div>
-              <div className="mb-2"><span className="inline-block w-24 text-slate-500 print:text-gray-600">Nama</span> <span className="font-bold">: {data.employee.name}</span></div>
-              <div className="mb-2"><span className="inline-block w-24 text-slate-500 print:text-gray-600">Posisi</span> <span className="font-bold">: Karyawan</span></div>
+              <div className="mb-2"><span className="inline-block w-32 text-slate-500 print:text-gray-600">Nama</span> <span className="font-bold">: {data.employee.name}</span></div>
+              <div className="mb-2"><span className="inline-block w-32 text-slate-500 print:text-gray-600">Posisi</span> <span className="font-bold">: Karyawan</span></div>
+              <div className="mb-2"><span className="inline-block w-32 text-slate-500 print:text-gray-600">Hari Kerja Masuk</span> <span className="font-bold">: {totalHariKerja} Hari</span></div>
             </div>
             <div className="text-right">
-              <div className="mb-2"><span className="inline-block w-32 text-slate-500 print:text-gray-600">Total Jam Kerja</span> <span className="font-bold">: {data.totalHours} Jam</span></div>
-              <div className="mb-2"><span className="inline-block w-32 text-slate-500 print:text-gray-600">Upah per Jam</span> <span className="font-bold">: {formatRupiah(data.employee.hourlyRate)}</span></div>
+              <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Total Jam Kerja</span> <span className="font-bold">: {data.totalHours} Jam</span></div>
+              <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Upah per Jam</span> <span className="font-bold">: {formatRupiah(data.employee.hourlyRate)}</span></div>
+              <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Bonus Full Time</span> <span className="font-bold">: {formatRupiah(data.employee.fullTimeBonus || 0)}</span></div>
             </div>
           </div>
 

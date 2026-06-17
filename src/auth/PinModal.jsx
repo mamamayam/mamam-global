@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'; // 💡 Ditambahkan useEffec
 import { X, Lock, Key, ShieldAlert } from 'lucide-react';
 
 const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
+
+  
   // 💡 Konstanta Super Master PIN
   const SUPER_MASTER_PIN = '999999';
 

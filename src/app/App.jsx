@@ -70,9 +70,9 @@ export default function App() {
 
 
   // --- BACK NAVIGATION ---
-  const [viewHistory, setViewHistory]     = useState([]);
+  const [viewHistory, setViewHistory] = useState([]);
   const [showExitToast, setShowExitToast] = useState(false);
-  const lastBackPressRef  = useRef(null);
+  const lastBackPressRef = useRef(null);
   const exitToastTimerRef = useRef(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
@@ -160,27 +160,27 @@ export default function App() {
   // bisa berjalan setelah initial pull dari Supabase selesai (step 1-4).
   const syncReadyPromise = useRef(new Promise(r => { syncReadyRef.current = r; })).current;
 
-  const [variantGroups, setVariantGroups, l1, setVariantGroupsRemote]       = usePersistState('variantGroups', INITIAL_VARIANT_GROUPS, { syncMode: 'config', syncReadyPromise });
-  const [menus, setMenus, l2, setMenusRemote]                               = usePersistState('menus', INITIAL_MENUS,                   { syncMode: 'config', syncReadyPromise });
-  const [salesHistory, setSalesHistory, l3, setSalesHistoryRemote]           = usePersistState('salesHistory', [],                      { syncMode: 'transaction', syncReadyPromise });
-  const [hppLibrary, setHppLibrary, l4, setHppLibraryRemote]                = usePersistState('hppLibrary', [],                         { syncMode: 'config', syncReadyPromise });
-  const [savedBills, setSavedBills, l5, setSavedBillsRemote]                = usePersistState('savedBills', [],                         { syncMode: 'transaction', syncReadyPromise });
+  const [variantGroups, setVariantGroups, l1, setVariantGroupsRemote] = usePersistState('variantGroups', INITIAL_VARIANT_GROUPS, { syncMode: 'config', syncReadyPromise });
+  const [menus, setMenus, l2, setMenusRemote] = usePersistState('menus', INITIAL_MENUS, { syncMode: 'config', syncReadyPromise });
+  const [salesHistory, setSalesHistory, l3, setSalesHistoryRemote] = usePersistState('salesHistory', [], { syncMode: 'transaction', syncReadyPromise });
+  const [hppLibrary, setHppLibrary, l4, setHppLibraryRemote] = usePersistState('hppLibrary', [], { syncMode: 'config', syncReadyPromise });
+  const [savedBills, setSavedBills, l5, setSavedBillsRemote] = usePersistState('savedBills', [], { syncMode: 'transaction', syncReadyPromise });
 
   // --- HPP & BAHAN BAKU ---
-  const [rawMaterials, setRawMaterials, l6, setRawMaterialsRemote]          = usePersistState('rawMaterials', INITIAL_RAW_MATERIALS,    { syncMode: 'config', syncReadyPromise });
-  const [semiFinished, setSemiFinished, l7, setSemiFinishedRemote]          = usePersistState('semiFinished', [],                       { syncMode: 'config', syncReadyPromise });
-  const [categories, setCategories, l8, setCategoriesRemote]                = usePersistState('categories', INITIAL_CATEGORIES,         { syncMode: 'config', syncReadyPromise });
+  const [rawMaterials, setRawMaterials, l6, setRawMaterialsRemote] = usePersistState('rawMaterials', INITIAL_RAW_MATERIALS, { syncMode: 'config', syncReadyPromise });
+  const [semiFinished, setSemiFinished, l7, setSemiFinishedRemote] = usePersistState('semiFinished', [], { syncMode: 'config', syncReadyPromise });
+  const [categories, setCategories, l8, setCategoriesRemote] = usePersistState('categories', INITIAL_CATEGORIES, { syncMode: 'config', syncReadyPromise });
   const [editingRecipe, setEditingRecipe] = useState(null);
 
   // --- KEUANGAN ---
-  const [expenseCategories, setExpenseCategories, l9, setExpenseCategoriesRemote]   = usePersistState('expenseCategories', ['Belanja', 'Biaya', 'Kasbon Karyawan', 'Lain-lain'], { syncMode: 'config', syncReadyPromise });
-  const [expenses, setExpenses, l10, setExpensesRemote]                             = usePersistState('expenses', [],                                                            { syncMode: 'transaction', syncReadyPromise });
-  const [incomeCategories, setIncomeCategories, l11, setIncomeCategoriesRemote]     = usePersistState('incomeCategories', ['Modal Tambahan', 'Pendapatan Lain', 'Titipan Uang'], { syncMode: 'config', syncReadyPromise });
-  const [incomes, setIncomes, l12, setIncomesRemote]                               = usePersistState('incomes', [],                                                             { syncMode: 'transaction', syncReadyPromise });
+  const [expenseCategories, setExpenseCategories, l9, setExpenseCategoriesRemote] = usePersistState('expenseCategories', ['Belanja', 'Biaya', 'Kasbon Karyawan', 'Lain-lain'], { syncMode: 'config', syncReadyPromise });
+  const [expenses, setExpenses, l10, setExpensesRemote] = usePersistState('expenses', [], { syncMode: 'transaction', syncReadyPromise });
+  const [incomeCategories, setIncomeCategories, l11, setIncomeCategoriesRemote] = usePersistState('incomeCategories', ['Modal Tambahan', 'Pendapatan Lain', 'Titipan Uang'], { syncMode: 'config', syncReadyPromise });
+  const [incomes, setIncomes, l12, setIncomesRemote] = usePersistState('incomes', [], { syncMode: 'transaction', syncReadyPromise });
 
   // --- SHIFT ---
-  const [currentShift, setCurrentShift, l13, setCurrentShiftRemote]         = usePersistState('currentShift', null,                    { syncMode: 'config', pushDelay: 0, syncReadyPromise });
-  const [shiftHistory, setShiftHistory, l14, setShiftHistoryRemote]         = usePersistState('shiftHistory', [],                      { syncMode: 'transaction', syncReadyPromise });
+  const [currentShift, setCurrentShift, l13, setCurrentShiftRemote] = usePersistState('currentShift', null, { syncMode: 'config', pushDelay: 0, syncReadyPromise });
+  const [shiftHistory, setShiftHistory, l14, setShiftHistoryRemote] = usePersistState('shiftHistory', [], { syncMode: 'transaction', syncReadyPromise });
 
   // --- PELANGGAN ----
   const [customers, setCustomers, l15, setCustomersRemote] = usePersistState('customers', [
@@ -191,18 +191,18 @@ export default function App() {
   const [vouchers, setVouchers, l16, setVouchersRemote] = usePersistState('vouchers', [
     { id: 'v1', code: 'MAMAMKENYANG', discountType: 'fixed', discountValue: 5000, minPurchase: 30000 }
   ], { syncMode: 'config', syncReadyPromise });
-  const [claimsHistory, setClaimsHistory, l17, setClaimsHistoryRemote]       = usePersistState('claimsHistory', [],                    { syncMode: 'transaction', syncReadyPromise });
+  const [claimsHistory, setClaimsHistory, l17, setClaimsHistoryRemote] = usePersistState('claimsHistory', [], { syncMode: 'transaction', syncReadyPromise });
 
   // --- PAYROLL STATES ---
   const [employees, setEmployees, l18, setEmployeesRemote] = usePersistState('employees', [
     { id: 'EMP-001', name: 'Budi Pekerja', phone: '0812345678', address: 'Jl. Melati', hourlyRate: 15000, startDate: '2023-01-10' }
   ], { syncMode: 'config', syncReadyPromise });
   const [employeeDailyRecords, setEmployeeDailyRecords, l19, setEmployeeDailyRecordsRemote] = usePersistState('employeeDailyRecords', [], { syncMode: 'transaction', syncReadyPromise });
-  const [additionCategories, setAdditionCategories, l20, setAdditionCategoriesRemote]       = usePersistState('additionCategories', ['Ongkir', 'Lembur', 'Bonus', 'Potongin Ayam'], { syncMode: 'config', syncReadyPromise });
-  const [deductionCategories, setDeductionCategories, l21, setDeductionCategoriesRemote]   = usePersistState('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi'],             { syncMode: 'config', syncReadyPromise });
+  const [additionCategories, setAdditionCategories, l20, setAdditionCategoriesRemote] = usePersistState('additionCategories', ['Ongkir', 'Lembur', 'Bonus', 'Potongin Ayam'], { syncMode: 'config', syncReadyPromise });
+  const [deductionCategories, setDeductionCategories, l21, setDeductionCategoriesRemote] = usePersistState('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi'], { syncMode: 'config', syncReadyPromise });
 
   // --- SETTINGS ---
-  const [storeSettings, setStoreSettings, l22, setStoreSettingsRemote]       = usePersistState('storeSettings', {
+  const [storeSettings, setStoreSettings, l22, setStoreSettingsRemote] = usePersistState('storeSettings', {
     autoPrint: false, paperSize: '58mm', printLogo: true, taxRate: 0, serviceCharge: 0
   }, { syncMode: 'config', syncReadyPromise });
 
@@ -217,7 +217,7 @@ export default function App() {
       root.classList.remove('dark');
     }
   }, [theme]);
-  
+
   // Semua data dari Dexie sudah selesai dimuat?
   const allDataLoaded = ![l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22].some(Boolean);
 
@@ -225,28 +225,28 @@ export default function App() {
   const remoteSetterMap = useRef({});
   useEffect(() => {
     remoteSetterMap.current = {
-      variantGroups:        setVariantGroupsRemote,
-      menus:                setMenusRemote,
-      salesHistory:         setSalesHistoryRemote,
-      hppLibrary:           setHppLibraryRemote,
-      savedBills:           setSavedBillsRemote,
-      rawMaterials:         setRawMaterialsRemote,
-      semiFinished:         setSemiFinishedRemote,
-      categories:           setCategoriesRemote,
-      expenseCategories:    setExpenseCategoriesRemote,
-      expenses:             setExpensesRemote,
-      incomeCategories:     setIncomeCategoriesRemote,
-      incomes:              setIncomesRemote,
-      currentShift:         setCurrentShiftRemote,
-      shiftHistory:         setShiftHistoryRemote,
-      customers:            setCustomersRemote,
-      vouchers:             setVouchersRemote,
-      claimsHistory:        setClaimsHistoryRemote,
-      employees:            setEmployeesRemote,
+      variantGroups: setVariantGroupsRemote,
+      menus: setMenusRemote,
+      salesHistory: setSalesHistoryRemote,
+      hppLibrary: setHppLibraryRemote,
+      savedBills: setSavedBillsRemote,
+      rawMaterials: setRawMaterialsRemote,
+      semiFinished: setSemiFinishedRemote,
+      categories: setCategoriesRemote,
+      expenseCategories: setExpenseCategoriesRemote,
+      expenses: setExpensesRemote,
+      incomeCategories: setIncomeCategoriesRemote,
+      incomes: setIncomesRemote,
+      currentShift: setCurrentShiftRemote,
+      shiftHistory: setShiftHistoryRemote,
+      customers: setCustomersRemote,
+      vouchers: setVouchersRemote,
+      claimsHistory: setClaimsHistoryRemote,
+      employees: setEmployeesRemote,
       employeeDailyRecords: setEmployeeDailyRecordsRemote,
-      additionCategories:   setAdditionCategoriesRemote,
-      deductionCategories:  setDeductionCategoriesRemote,
-      storeSettings:        setStoreSettingsRemote,
+      additionCategories: setAdditionCategoriesRemote,
+      deductionCategories: setDeductionCategoriesRemote,
+      storeSettings: setStoreSettingsRemote,
     };
   });
 
@@ -272,7 +272,7 @@ export default function App() {
       let isSupabaseConfigured, initRealtimeSync;
       try {
         ({ isSupabaseConfigured } = await import('../storage/syncClient'));
-        ({ initRealtimeSync }    = await import('../storage/realtimeSync'));
+        ({ initRealtimeSync } = await import('../storage/realtimeSync'));
       } catch (e) {
         syncReadyRef.current?.();
         return;
@@ -343,7 +343,7 @@ export default function App() {
       clearTimeout(timeoutId);
       cleanupRef.current?.();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDataLoaded]);
 
   // --- STATES APLIKASI ---
@@ -488,54 +488,54 @@ export default function App() {
 
   const handleOpenBill = () => {
     if (cart.length === 0) return;
-    
+
     // Buat ID Transaksi
     const idTransaksi = `BILL-${Date.now().toString().slice(-4)}`;
-    
+
     // 1. Format untuk disimpan ke "Saved Bills" (Draft)
-    const bill = { 
-        id: idTransaksi, 
-        customerName: customerName || 'Tanpa Nama', 
-        cart, 
-        orderType, 
-        date: new Date() 
+    const bill = {
+      id: idTransaksi,
+      customerName: customerName || 'Tanpa Nama',
+      cart,
+      orderType,
+      date: new Date()
     };
     setSavedBills([...savedBills, bill]);
 
     // 2. Format untuk dilempar ke Struk (Receipt Modal)
     const openBillData = {
-        id: idTransaksi,
-        date: new Date().toISOString(),
-        orderType,
-        customerName: customerName || 'Tanpa Nama',
-        items: cart,
-        subtotal: getSubtotal(),
-        discount: getDiscount(),
-        pointDiscount: getPointDiscount(),
-        manualDiscountAmount: getManualDiscountAmount(),
-        taxAmount: getTaxAmount(),
-        serviceAmount: getServiceChargeAmount(),
-        deliveryFee: orderType === 'Delivery' ? deliveryFee : 0,
-        total: getTotal(),
-        
-        // --- KUNCI PENANDA BELUM LUNAS ---
-        status: 'OPEN', 
-        paymentMethod: 'Belum Bayar' 
+      id: idTransaksi,
+      date: new Date().toISOString(),
+      orderType,
+      customerName: customerName || 'Tanpa Nama',
+      items: cart,
+      subtotal: getSubtotal(),
+      discount: getDiscount(),
+      pointDiscount: getPointDiscount(),
+      manualDiscountAmount: getManualDiscountAmount(),
+      taxAmount: getTaxAmount(),
+      serviceAmount: getServiceChargeAmount(),
+      deliveryFee: orderType === 'Delivery' ? deliveryFee : 0,
+      total: getTotal(),
+
+      // --- KUNCI PENANDA BELUM LUNAS ---
+      status: 'OPEN',
+      paymentMethod: 'Belum Bayar'
     };
 
     // 3. Tampilkan Pop-up Struk!
-    setReceiptModal({ 
-        isOpen: true, 
-        data: openBillData, 
-        kembalian: 0 
+    setReceiptModal({
+      isOpen: true,
+      data: openBillData,
+      kembalian: 0
     });
 
     // 4. Reset Cart dan tutup sidebar/modal keranjang
-    setCart([]); 
-    setCustomerName(''); 
-    setAppliedVoucher(null); 
-    setPointsToRedeem(0); 
-    setManualDiscount({ type: 'fixed', value: 0 }); 
+    setCart([]);
+    setCustomerName('');
+    setAppliedVoucher(null);
+    setPointsToRedeem(0);
+    setManualDiscount({ type: 'fixed', value: 0 });
     setIsCartOpen(false);
   };
 
@@ -811,7 +811,7 @@ export default function App() {
         {/* Info hemat kuota */}
         {isSyncing && (
           <p className="font-body text-[11px] text-slate-300 text-center mt-2 max-w-[240px]">
-            Mengambil data terbaru dari server.<br/>Push akan aktif setelah sinkronisasi selesai.
+            Mengambil data terbaru dari server.<br />Push akan aktif setelah sinkronisasi selesai.
           </p>
         )}
       </div>
@@ -834,6 +834,9 @@ export default function App() {
       }} />
 
       <AppLayout
+        isSidebarOpen={isSidebarOpen}
+        onSwipeOpen={() => setIsSidebarOpen(true)}
+        onSwipeClose={() => setIsSidebarOpen(false)}
         sidebar={
           <Sidebar
             currentView={currentView}
@@ -987,7 +990,7 @@ function SyncStatusBadge({ status }) {
 
   const cfg = status === 'ready'
     ? { bg: 'bg-emerald-500', text: 'Tersinkronisasi ✓' }
-    : { bg: 'bg-red-500',     text: 'Sync gagal — data lokal' };
+    : { bg: 'bg-red-500', text: 'Sync gagal — data lokal' };
 
   return (
     <div
