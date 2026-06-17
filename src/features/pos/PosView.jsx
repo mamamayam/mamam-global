@@ -9,8 +9,8 @@ const PosView = () => {
     const {
         menus, searchQuery, setSearchQuery, selectedCategory, setSelectedCategory,
         setSelectedMenuForVariant, setVariantSelectedOptions, addToCart, formatRupiah,
-        setIsCartOpen, cart, getTotal, currentShift, triggerAlert, setActiveTab, navigate,
-        salesHistory
+        setIsCartOpen, cart, getTotal, currentShift, triggerAlert,
+        salesHistory, setCurrentView
     } = useAppContext();
 
     const categoryTabsRef = useRef(null);
@@ -91,7 +91,7 @@ const PosView = () => {
     const handleMenuClick = useCallback((menu) => {
         if (!currentShift) {
             triggerAlert('Peringatan: Dompet belum dibuka. Harap buka dompet terlebih dahulu di menu "Dompet Kasir".');
-            navigate('dompet');
+            setCurrentView('dompet');
             return;
         }
         if (menu.variantGroupIds.length > 0) {
@@ -100,7 +100,7 @@ const PosView = () => {
         } else {
             addToCart(menu);
         }
-    }, [currentShift, triggerAlert, navigate, setSelectedMenuForVariant, setVariantSelectedOptions, addToCart]);
+    }, [currentShift, triggerAlert, setCurrentView, setSelectedMenuForVariant, setVariantSelectedOptions, addToCart]);
 
     return (
         <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 relative animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">

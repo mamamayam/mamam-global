@@ -1,10 +1,7 @@
 import React, { useState, useMemo, useEffect, createContext, useContext, useRef, useCallback } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { usePersistState } from '../hook/usePersistState';
-import { initRealtimeSync } from '../storage/realtimeSync';
-import { reviveDates as reviveDatesForKey } from '../storage/db';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
-import { toLocalDateString } from '../utils/formatters';
 import { AppContext, useAppContext } from '../context/AppContext';
 import PinModal from '../auth/PinModal';
 import AppRoutes from '../app/AppRoutes';
@@ -77,6 +74,7 @@ export default function App() {
   const [showExitToast, setShowExitToast] = useState(false);
   const lastBackPressRef  = useRef(null);
   const exitToastTimerRef = useRef(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
 
   const { isAdminMode, setIsAdminMode } = useAppContext();
@@ -141,62 +139,73 @@ export default function App() {
     }
   }, [viewHistory, currentView, handleExitAttempt]);
 
-  // --- SYNC READY REF ---
-  // Promise ini di-resolve setelah initial pull Supabase selesai.
-  // Semua usePersistState dengan syncMode menerima ref ini supaya push
-  // tidak jalan sebelum data dari Supabase selesai di-merge ke lokal.
-  const syncReadyRef = useRef(Promise.resolve());
+  // ── Sync status (dipakai untuk UI blocking saat startup) ────────────────
+  // 'idle'     = Supabase tidak dikonfigurasi, langsung masuk app
+  // 'syncing'  = sedang initial pull dari Supabase (semua push diblok)
+  // 'ready'    = pull selesai, push diizinkan, realtime aktif
+  // 'error'    = pull gagal, masuk app dengan data lokal
+  // Kalau Supabase dikonfigurasi, langsung mulai dengan 'syncing' supaya
+  // overlay muncul SEGERA tanpa gap antara allDataLoaded dan async IIFE
+  const [syncStatus, setSyncStatus] = useState(() => {
+    const url = import.meta.env?.VITE_SUPABASE_URL;
+    const key = import.meta.env?.VITE_SUPABASE_ANON_KEY;
+    return (url && key) ? 'syncing' : 'idle';
+  });
+  const [syncStep, setSyncStep] = useState('Menghubungkan ke server...');
+  const syncReadyRef = useRef(null); // Promise resolve untuk unblock push
+  const cleanupRef = useRef(null);   // unsubscribe realtime
 
   // --- DATABASE STATES ---
-  const [variantGroups, setVariantGroups, l1, setVariantGroupsRemote] = usePersistState('variantGroups', INITIAL_VARIANT_GROUPS, { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-  const [variantCategories, setVariantCategories, l24, setVariantCategoriesRemote] = usePersistState('variantCategories', ['Topping', 'Level Pedas', 'Ukuran'], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-  const [menus, setMenus, l2, setMenusRemote] = usePersistState('menus', INITIAL_MENUS, { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-  const [salesHistory, setSalesHistory, l3, setSalesHistoryRemote] = usePersistState('salesHistory', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
-  const [hppLibrary, setHppLibrary, l4, setHppLibraryRemote] = usePersistState('hppLibrary', [], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-  const [savedBills, setSavedBills, l5, setSavedBillsRemote] = usePersistState('savedBills', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
+  // usePersistState sekarang menerima syncReadyPromise supaya push hanya
+  // bisa berjalan setelah initial pull dari Supabase selesai (step 1-4).
+  const syncReadyPromise = useRef(new Promise(r => { syncReadyRef.current = r; })).current;
+
+  const [variantGroups, setVariantGroups, l1, setVariantGroupsRemote]       = usePersistState('variantGroups', INITIAL_VARIANT_GROUPS, { syncMode: 'config', syncReadyPromise });
+  const [menus, setMenus, l2, setMenusRemote]                               = usePersistState('menus', INITIAL_MENUS,                   { syncMode: 'config', syncReadyPromise });
+  const [salesHistory, setSalesHistory, l3, setSalesHistoryRemote]           = usePersistState('salesHistory', [],                      { syncMode: 'transaction', syncReadyPromise });
+  const [hppLibrary, setHppLibrary, l4, setHppLibraryRemote]                = usePersistState('hppLibrary', [],                         { syncMode: 'config', syncReadyPromise });
+  const [savedBills, setSavedBills, l5, setSavedBillsRemote]                = usePersistState('savedBills', [],                         { syncMode: 'transaction', syncReadyPromise });
 
   // --- HPP & BAHAN BAKU ---
-  const [rawMaterials, setRawMaterials, l6, setRawMaterialsRemote] = usePersistState('rawMaterials', INITIAL_RAW_MATERIALS, { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-  const [semiFinished, setSemiFinished, l7, setSemiFinishedRemote] = usePersistState('semiFinished', [], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-  const [categories, setCategories, l8, setCategoriesRemote] = usePersistState('categories', INITIAL_CATEGORIES, { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  const [rawMaterials, setRawMaterials, l6, setRawMaterialsRemote]          = usePersistState('rawMaterials', INITIAL_RAW_MATERIALS,    { syncMode: 'config', syncReadyPromise });
+  const [semiFinished, setSemiFinished, l7, setSemiFinishedRemote]          = usePersistState('semiFinished', [],                       { syncMode: 'config', syncReadyPromise });
+  const [categories, setCategories, l8, setCategoriesRemote]                = usePersistState('categories', INITIAL_CATEGORIES,         { syncMode: 'config', syncReadyPromise });
   const [editingRecipe, setEditingRecipe] = useState(null);
 
   // --- KEUANGAN ---
-  const [expenseCategories, setExpenseCategories, l9, setExpenseCategoriesRemote] = usePersistState('expenseCategories', ['Belanja', 'Biaya', 'Kasbon Karyawan', 'Lain-lain'], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-  const [expenses, setExpenses, l10, setExpensesRemote] = usePersistState('expenses', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
-  const [incomeCategories, setIncomeCategories, l11, setIncomeCategoriesRemote] = usePersistState('incomeCategories', ['Modal Tambahan', 'Pendapatan Lain', 'Titipan Uang'], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-  const [incomes, setIncomes, l12, setIncomesRemote] = usePersistState('incomes', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
+  const [expenseCategories, setExpenseCategories, l9, setExpenseCategoriesRemote]   = usePersistState('expenseCategories', ['Belanja', 'Biaya', 'Kasbon Karyawan', 'Lain-lain'], { syncMode: 'config', syncReadyPromise });
+  const [expenses, setExpenses, l10, setExpensesRemote]                             = usePersistState('expenses', [],                                                            { syncMode: 'transaction', syncReadyPromise });
+  const [incomeCategories, setIncomeCategories, l11, setIncomeCategoriesRemote]     = usePersistState('incomeCategories', ['Modal Tambahan', 'Pendapatan Lain', 'Titipan Uang'], { syncMode: 'config', syncReadyPromise });
+  const [incomes, setIncomes, l12, setIncomesRemote]                               = usePersistState('incomes', [],                                                             { syncMode: 'transaction', syncReadyPromise });
 
   // --- SHIFT ---
-  const [currentShift, setCurrentShift, l13, setCurrentShiftRemote] = usePersistState('currentShift', null, { syncMode: 'config', syncReadyPromise: syncReadyRef.current, pushDelay: 0 }); // pushDelay:0 = langsung push tanpa debounce, kritis untuk tutup shift
-  const [shiftHistory, setShiftHistory, l14, setShiftHistoryRemote] = usePersistState('shiftHistory', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
+  const [currentShift, setCurrentShift, l13, setCurrentShiftRemote]         = usePersistState('currentShift', null,                    { syncMode: 'config', pushDelay: 0, syncReadyPromise });
+  const [shiftHistory, setShiftHistory, l14, setShiftHistoryRemote]         = usePersistState('shiftHistory', [],                      { syncMode: 'transaction', syncReadyPromise });
 
   // --- PELANGGAN ----
   const [customers, setCustomers, l15, setCustomersRemote] = usePersistState('customers', [
     { id: 'c1', name: 'Budi Santoso', phone: '08123456789', points: 120 },
     { id: 'c2', name: 'Siti Rahma', phone: '08571234567', points: 250 },
     { id: 'c3', name: 'Andi Wijaya', phone: '08998765432', points: 45 }
-  ], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  ], { syncMode: 'config', syncReadyPromise });
   const [vouchers, setVouchers, l16, setVouchersRemote] = usePersistState('vouchers', [
     { id: 'v1', code: 'MAMAMKENYANG', discountType: 'fixed', discountValue: 5000, minPurchase: 30000 }
-  ], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-  const [claimsHistory, setClaimsHistory, l17, setClaimsHistoryRemote] = usePersistState('claimsHistory', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
+  ], { syncMode: 'config', syncReadyPromise });
+  const [claimsHistory, setClaimsHistory, l17, setClaimsHistoryRemote]       = usePersistState('claimsHistory', [],                    { syncMode: 'transaction', syncReadyPromise });
 
   // --- PAYROLL STATES ---
   const [employees, setEmployees, l18, setEmployeesRemote] = usePersistState('employees', [
     { id: 'EMP-001', name: 'Budi Pekerja', phone: '0812345678', address: 'Jl. Melati', hourlyRate: 15000, startDate: '2023-01-10' }
-  ], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-  const [employeeDailyRecords, setEmployeeDailyRecords, l19, setEmployeeDailyRecordsRemote] = usePersistState('employeeDailyRecords', [], { syncMode: 'transaction', syncReadyPromise: syncReadyRef.current });
-  const [additionCategories, setAdditionCategories, l20, setAdditionCategoriesRemote] = usePersistState('additionCategories', ['Ongkir', 'Lembur', 'Bonus', 'Potongin Ayam'], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-  const [deductionCategories, setDeductionCategories, l21, setDeductionCategoriesRemote] = usePersistState('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi'], { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
-
+  ], { syncMode: 'config', syncReadyPromise });
+  const [employeeDailyRecords, setEmployeeDailyRecords, l19, setEmployeeDailyRecordsRemote] = usePersistState('employeeDailyRecords', [], { syncMode: 'transaction', syncReadyPromise });
+  const [additionCategories, setAdditionCategories, l20, setAdditionCategoriesRemote]       = usePersistState('additionCategories', ['Ongkir', 'Lembur', 'Bonus', 'Potongin Ayam'], { syncMode: 'config', syncReadyPromise });
+  const [deductionCategories, setDeductionCategories, l21, setDeductionCategoriesRemote]   = usePersistState('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi'],             { syncMode: 'config', syncReadyPromise });
 
   // --- SETTINGS ---
-  const [storeSettings, setStoreSettings, l22, setStoreSettingsRemote] = usePersistState('storeSettings', {
+  const [storeSettings, setStoreSettings, l22, setStoreSettingsRemote]       = usePersistState('storeSettings', {
     autoPrint: false, paperSize: '58mm', printLogo: true, taxRate: 0, serviceCharge: 0
-  }, { syncMode: 'config', syncReadyPromise: syncReadyRef.current });
+  }, { syncMode: 'config', syncReadyPromise });
 
-  // --- TEMA (LIGHT / DARK) — preferensi per-device, tidak disinkron ke device lain
   const [theme, setTheme, l23] = usePersistState('theme', 'light');
 
   // Terapkan class .dark ke <html> setiap kali tema berubah
@@ -208,88 +217,132 @@ export default function App() {
       root.classList.remove('dark');
     }
   }, [theme]);
-
+  
   // Semua data dari Dexie sudah selesai dimuat?
-  const allDataLoaded = ![l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24].some(Boolean);
+  const allDataLoaded = ![l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22].some(Boolean);
 
-  // ── REALTIME SYNC (Supabase) ────────────────────────────────────────────
-  // Push per-record sudah dihandle otomatis oleh usePersistState (syncMode).
-  // Di sini kita hanya tangani arah sebaliknya: terima perubahan dari device
-  // lain (realtime) dan terapkan ke state lokal supaya UI langsung update.
-  // Pakai setter *Remote* supaya update yang datang dari Supabase (device lain)
-  // tidak di-push balik ke Supabase → mencegah loop & konflik data.
-  const transactionSetters = useRef({});
-  transactionSetters.current = {
-    salesHistory: setSalesHistoryRemote,
-    expenses: setExpensesRemote,
-    incomes: setIncomesRemote,
-    shiftHistory: setShiftHistoryRemote,
-    employeeDailyRecords: setEmployeeDailyRecordsRemote,
-    claimsHistory: setClaimsHistoryRemote,
-    savedBills: setSavedBillsRemote,
-  };
+  // ── Map setter remote — dipakai oleh realtime callback ──────────────────
+  const remoteSetterMap = useRef({});
+  useEffect(() => {
+    remoteSetterMap.current = {
+      variantGroups:        setVariantGroupsRemote,
+      menus:                setMenusRemote,
+      salesHistory:         setSalesHistoryRemote,
+      hppLibrary:           setHppLibraryRemote,
+      savedBills:           setSavedBillsRemote,
+      rawMaterials:         setRawMaterialsRemote,
+      semiFinished:         setSemiFinishedRemote,
+      categories:           setCategoriesRemote,
+      expenseCategories:    setExpenseCategoriesRemote,
+      expenses:             setExpensesRemote,
+      incomeCategories:     setIncomeCategoriesRemote,
+      incomes:              setIncomesRemote,
+      currentShift:         setCurrentShiftRemote,
+      shiftHistory:         setShiftHistoryRemote,
+      customers:            setCustomersRemote,
+      vouchers:             setVouchersRemote,
+      claimsHistory:        setClaimsHistoryRemote,
+      employees:            setEmployeesRemote,
+      employeeDailyRecords: setEmployeeDailyRecordsRemote,
+      additionCategories:   setAdditionCategoriesRemote,
+      deductionCategories:  setDeductionCategoriesRemote,
+      storeSettings:        setStoreSettingsRemote,
+    };
+  });
 
-  const configSetters = useRef({});
-  configSetters.current = {
-    menus: setMenusRemote,
-    variantGroups: setVariantGroupsRemote,
-    variantCategories: setVariantCategoriesRemote,
-    categories: setCategoriesRemote,
-    hppLibrary: setHppLibraryRemote,
-    customers: setCustomersRemote,
-    vouchers: setVouchersRemote,
-    employees: setEmployeesRemote,
-    expenseCategories: setExpenseCategoriesRemote,
-    incomeCategories: setIncomeCategoriesRemote,
-    additionCategories: setAdditionCategoriesRemote,
-    deductionCategories: setDeductionCategoriesRemote,
-    rawMaterials: setRawMaterialsRemote,
-    semiFinished: setSemiFinishedRemote,
-    storeSettings: setStoreSettingsRemote,
-    currentShift: setCurrentShiftRemote,
-  };
-
+  // ── Inisialisasi Realtime Sync — jalankan SETELAH Dexie selesai dimuat ──
+  // Urutan wajib: (1) connect → (2) initial pull server → (3) merge lokal
+  // → (4) simpan → (5) resolve syncReadyPromise → (6) push diizinkan
   useEffect(() => {
     if (!allDataLoaded) return;
 
-    // initRealtimeSync sekarang return { unsubscribe, syncReadyPromise }
-    const { unsubscribe, syncReadyPromise } = initRealtimeSync({
-      // item === null -> hasil initial pull (fullArray = array hasil merge, replace state)
-      // item !== null -> 1 record baru/berubah dari device lain (realtime), upsert ke array
-      onTransactionUpsert: (tableKey, item, fullArray) => {
-        const setter = transactionSetters.current[tableKey];
-        if (!setter) return;
-        if (item === null && fullArray) {
-          setter(reviveDatesForKey(tableKey, fullArray));
-          return;
-        }
-        const revived = reviveDatesForKey(tableKey, [item])[0];
-        setter(prev => {
-          const arr = Array.isArray(prev) ? prev : [];
-          const idx = arr.findIndex(p => String(p?.id) === String(revived?.id));
-          if (idx === -1) return [...arr, revived];
-          const next = [...arr];
-          next[idx] = revived;
-          return next;
-        });
-      },
-      onTransactionDelete: (tableKey, id) => {
-        const setter = transactionSetters.current[tableKey];
-        if (!setter) return;
-        setter(prev => (Array.isArray(prev) ? prev.filter(p => String(p?.id) !== String(id)) : prev));
-      },
-      onConfigUpdate: (key, value) => {
-        const setter = configSetters.current[key];
-        if (!setter) return;
-        setter(reviveDatesForKey(key, value));
-      },
-    });
+    let cancelled = false;
 
-    // Simpan syncReadyPromise ke ref supaya push dari usePersistState
-    // bisa await sampai initial pull benar-benar selesai.
-    syncReadyRef.current = syncReadyPromise;
+    // Fallback timeout 15 detik — kalau Supabase stuck, buka app dengan data lokal
+    const timeoutId = setTimeout(() => {
+      if (cancelled) return;
+      console.warn('[App] Sync timeout 15s — masuk dengan data lokal');
+      syncReadyRef.current?.();
+      setSyncStatus('error');
+      setSyncStep('');
+    }, 15000);
 
-    return unsubscribe;
+    (async () => {
+      // Dynamic import agar tidak error saat modul tidak tersedia
+      let isSupabaseConfigured, initRealtimeSync;
+      try {
+        ({ isSupabaseConfigured } = await import('../storage/syncClient'));
+        ({ initRealtimeSync }    = await import('../storage/realtimeSync'));
+      } catch (e) {
+        syncReadyRef.current?.();
+        return;
+      }
+
+      // Jika Supabase tidak dikonfigurasi, langsung resolve supaya push tidak diblok
+      if (!isSupabaseConfigured()) {
+        syncReadyRef.current?.();
+        return;
+      }
+
+      if (cancelled) return;
+
+      // syncStatus sudah 'syncing' dari initial state — tidak perlu set ulang
+      setSyncStep('Mengambil data dari server...');
+
+      const { unsubscribe, syncReadyPromise: enginePromise } = initRealtimeSync({
+        // Dipanggil saat initial pull SELESAI untuk satu tableKey (transaksi)
+        // atau saat realtime event datang dari device lain.
+        // `fullArray` = array penuh hasil merge (initial pull); `item` = satu record (realtime)
+        onTransactionUpsert: (tableKey, item, fullArray) => {
+          const setter = remoteSetterMap.current[tableKey];
+          if (!setter) return;
+          if (fullArray) {
+            // Initial pull → set langsung array penuh hasil merge
+            setter(fullArray);
+          } else if (item) {
+            // Realtime event → upsert satu item ke dalam state
+            setter(prev => {
+              const arr = Array.isArray(prev) ? prev : [];
+              const idx = arr.findIndex(e => String(e.id) === String(item.id));
+              return idx >= 0 ? arr.map((e, i) => i === idx ? item : e) : [...arr, item];
+            });
+          }
+        },
+        onTransactionDelete: (tableKey, id) => {
+          const setter = remoteSetterMap.current[tableKey];
+          if (!setter) return;
+          setter(prev => (Array.isArray(prev) ? prev : []).filter(e => String(e.id) !== String(id)));
+        },
+        onConfigUpdate: (key, value) => {
+          const setter = remoteSetterMap.current[key];
+          if (setter) setter(value);
+        },
+      });
+
+      enginePromise.then(() => {
+        if (cancelled) return;
+        clearTimeout(timeoutId);
+        syncReadyRef.current?.();
+        setSyncStatus('ready');
+        setSyncStep('');
+        console.log('[App] Sinkronisasi awal selesai ✅ — push diizinkan');
+      }).catch((err) => {
+        if (cancelled) return;
+        clearTimeout(timeoutId);
+        console.warn('[App] Sync awal gagal, masuk dengan data lokal:', err?.message);
+        syncReadyRef.current?.();
+        setSyncStatus('error');
+        setSyncStep('');
+      });
+
+      // Simpan unsubscribe ke ref agar bisa dipanggil saat cleanup
+      cleanupRef.current = unsubscribe;
+    })();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      cleanupRef.current?.();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDataLoaded]);
 
@@ -302,13 +355,13 @@ export default function App() {
 
   const getBulanIniStart = () => {
     const d = new Date();
-    return toLocalDateString(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29));
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29).toISOString().split('T')[0];
   };
-  const [reportDateRange, setReportDateRange] = useState({ start: getBulanIniStart(), end: toLocalDateString() });
+  const [reportDateRange, setReportDateRange] = useState({ start: getBulanIniStart(), end: new Date().toISOString().split('T')[0] });
   const [activePreset, setActivePreset] = useState('bulan_ini');
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Favorit');
+  const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -385,14 +438,14 @@ export default function App() {
   const triggerConfirm = (message, onConfirm) => setConfirmModal({ isOpen: true, message, onConfirm });
 
   const applyDatePreset = (preset) => {
-    const todayStr = toLocalDateString();
+    const todayStr = new Date().toISOString().split('T')[0];
     const d = new Date();
     setActivePreset(preset);
 
     if (preset === 'hari_ini') setReportDateRange({ start: todayStr, end: todayStr });
-    else if (preset === 'minggu_ini') setReportDateRange({ start: toLocalDateString(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 6)), end: todayStr });
-    else if (preset === 'bulan_ini') setReportDateRange({ start: toLocalDateString(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29)), end: todayStr });
-    else if (preset === 'bulan_berjalan') setReportDateRange({ start: toLocalDateString(new Date(d.getFullYear(), d.getMonth(), 1)), end: todayStr });
+    else if (preset === 'minggu_ini') setReportDateRange({ start: new Date(d.getFullYear(), d.getMonth(), d.getDate() - 6).toISOString().split('T')[0], end: todayStr });
+    else if (preset === 'bulan_ini') setReportDateRange({ start: new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29).toISOString().split('T')[0], end: todayStr });
+    else if (preset === 'bulan_berjalan') setReportDateRange({ start: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0], end: todayStr });
   };
 
   const addToCart = (menu, selectedOptions = {}) => {
@@ -538,7 +591,6 @@ export default function App() {
     menus, setMenus,
     selectedMenuForVariant, setSelectedMenuForVariant,
     variantGroups, setVariantGroups,
-    variantCategories, setVariantCategories,
     variantSelectedOptions, setVariantSelectedOptions,
     isSidebarOpen,
 
@@ -625,6 +677,9 @@ export default function App() {
     printReceipt,
     triggerAlert,
     triggerConfirm,
+
+    // Sync
+    syncStatus, // 'idle' | 'syncing' | 'ready' | 'error'
   };
 
   const menuItems = [
@@ -669,11 +724,7 @@ export default function App() {
         else if (paymentModal.isOpen) {
           setPaymentModal(p => ({ ...p, isOpen: false }));
         }
-        // PRIORITAS 3: Tutup modal pilih varian
-        else if (selectedMenuForVariant) {
-          setSelectedMenuForVariant(null);
-        }
-        // PRIORITAS 4: Tutup keranjang belanja
+        // PRIORITAS 3: Tutup keranjang belanja
         else if (isCartOpen) {
           setIsCartOpen(false);
         }
@@ -699,12 +750,73 @@ export default function App() {
   }, [
     receiptModal.isOpen,
     paymentModal.isOpen,
-    selectedMenuForVariant,
     isCartOpen,
     isSidebarOpen,
     navigateBack,
   ]);
 
+
+  // ── Tampilan saat Supabase belum siap (blocking overlay) ────────────────
+  if (!allDataLoaded || syncStatus === 'syncing') {
+    const isSyncing = syncStatus === 'syncing';
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-white z-[9999] gap-4 p-8">
+        <style dangerouslySetInnerHTML={{
+          __html: `
+          @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500&display=swap');
+          .font-heading { font-family: 'Plus Jakarta Sans', sans-serif; }
+          .font-body    { font-family: 'Inter', sans-serif; }
+          @keyframes spin-slow { to { transform: rotate(360deg); } }
+          .spin-slow { animation: spin-slow 1.4s linear infinite; }
+          @keyframes pulse-dot { 0%,100% { opacity:.3 } 50% { opacity:1 } }
+          .dot1 { animation: pulse-dot 1.2s ease-in-out infinite; }
+          .dot2 { animation: pulse-dot 1.2s ease-in-out .2s infinite; }
+          .dot3 { animation: pulse-dot 1.2s ease-in-out .4s infinite; }
+        `
+        }} />
+
+        {/* Logo / ikon app */}
+        <div className="w-16 h-16 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 11l19-9-9 19-2-8-8-2z" />
+          </svg>
+        </div>
+
+        <div className="text-center">
+          <h1 className="font-heading font-extrabold text-2xl text-slate-900">Mamam Kasir</h1>
+          <p className="font-body text-sm text-slate-400 mt-1">
+            {isSyncing ? 'Sinkronisasi data...' : 'Memuat data lokal...'}
+          </p>
+        </div>
+
+        {/* Spinner */}
+        <div className="relative w-12 h-12">
+          <div className="spin-slow absolute inset-0 rounded-full border-4 border-orange-100 border-t-orange-500" />
+        </div>
+
+        {/* Step label */}
+        {syncStep ? (
+          <p className="font-body text-xs text-slate-500 text-center max-w-[240px] leading-relaxed">
+            {syncStep}
+          </p>
+        ) : null}
+
+        {/* Titik animasi */}
+        <div className="flex gap-1.5 mt-1">
+          <span className="dot1 w-2 h-2 rounded-full bg-orange-400 inline-block" />
+          <span className="dot2 w-2 h-2 rounded-full bg-orange-400 inline-block" />
+          <span className="dot3 w-2 h-2 rounded-full bg-orange-400 inline-block" />
+        </div>
+
+        {/* Info hemat kuota */}
+        {isSyncing && (
+          <p className="font-body text-[11px] text-slate-300 text-center mt-2 max-w-[240px]">
+            Mengambil data terbaru dari server.<br/>Push akan aktif setelah sinkronisasi selesai.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <AppContext.Provider value={contextValue}>
@@ -718,22 +830,14 @@ export default function App() {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: #94a3b8; }
-        @keyframes exitToastIn {
-          from { opacity: 0; transform: translate(-50%, 12px) scale(0.95); }
-          to   { opacity: 1; transform: translate(-50%, 0)    scale(1); }
-        }
-        .exit-toast { animation: exitToastIn 0.2s cubic-bezier(0.34,1.56,0.64,1) forwards; }
       `
       }} />
 
       <AppLayout
-      isSidebarOpen={isSidebarOpen}
-        onSwipeOpen={() => setIsSidebarOpen(true)}
-        onSwipeClose={() => setIsSidebarOpen(false)}
         sidebar={
           <Sidebar
             currentView={currentView}
-            navigate={navigate}
+            setCurrentView={setCurrentView}
             isSidebarOpen={isSidebarOpen}
             setIsSidebarOpen={setIsSidebarOpen}
             visibleMenus={visibleMenus}
@@ -856,5 +960,41 @@ function Layers(props) {
       <polyline points="2 12 12 17 22 12"></polyline>
       <polyline points="2 17 12 22 22 17"></polyline>
     </svg>
+  );
+}
+
+/**
+ * Badge kecil di pojok kanan bawah layar.
+ * - Tidak muncul jika Supabase tidak dikonfigurasi (status 'idle')
+ * - Muncul sebentar saat 'ready' lalu fade out
+ * - Tetap muncul merah saat 'error'
+ */
+function SyncStatusBadge({ status }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (status === 'ready') {
+      setVisible(true);
+      const t = setTimeout(() => setVisible(false), 3000);
+      return () => clearTimeout(t);
+    }
+    if (status === 'error') {
+      setVisible(true);
+    }
+  }, [status]);
+
+  if (status === 'idle' || !visible) return null;
+
+  const cfg = status === 'ready'
+    ? { bg: 'bg-emerald-500', text: 'Tersinkronisasi ✓' }
+    : { bg: 'bg-red-500',     text: 'Sync gagal — data lokal' };
+
+  return (
+    <div
+      className={`fixed bottom-4 right-4 z-50 px-3 py-1.5 rounded-full text-white text-xs font-medium shadow-lg transition-opacity duration-500 ${cfg.bg}`}
+      style={{ fontFamily: 'Inter, sans-serif' }}
+    >
+      {cfg.text}
+    </div>
   );
 }
