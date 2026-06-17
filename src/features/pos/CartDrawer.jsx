@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { 
   ShoppingCart, 
@@ -16,7 +16,11 @@ import {
 } from 'lucide-react';
 
 const CartDrawer = () => {
-  const { setCurrentView, isCartOpen, setIsCartOpen, cart, setCart, savedBills, triggerConfirm, formatRupiah, activeCustomer, customerName, setCustomerName, isCustomerDropdownMode, setIsCustomerDropdownMode, customers, orderType, setOrderType, deliveryFee, setDeliveryFee, customDeliveryFee, setCustomDeliveryFee, updateCartQty, updateCartItemNote, voucherInputCode, setVoucherInputCode, vouchers, appliedVoucher, setAppliedVoucher, getSubtotal, triggerAlert, pointsToRedeem, setPointsToRedeem, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, storeSettings, getDiscount, getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill } = useAppContext();
+  // Tambahan: Destructure 'setCustomers' dari appContext
+  const { setCurrentView, isCartOpen, setIsCartOpen, cart, setCart, savedBills, triggerConfirm, formatRupiah, activeCustomer, customerName, setCustomerName, isCustomerDropdownMode, setIsCustomerDropdownMode, customers, setCustomers, orderType, setOrderType, deliveryFee, setDeliveryFee, customDeliveryFee, setCustomDeliveryFee, updateCartQty, updateCartItemNote, voucherInputCode, setVoucherInputCode, vouchers, appliedVoucher, setAppliedVoucher, getSubtotal, triggerAlert, pointsToRedeem, setPointsToRedeem, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, storeSettings, getDiscount, getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill } = useAppContext();
+
+  // Tambahan: Local state untuk input nomor HP pelanggan baru via Kasir
+  const [newCustomerPhone, setNewCustomerPhone] = useState('');
 
   if (!isCartOpen) return null;
 
@@ -131,6 +135,40 @@ const CartDrawer = () => {
                     </div>
                   </div>
                 )}
+
+                {/* --- TAMBAH PELANGGAN BARU JIKA TIDAK DITEMUKAN --- */}
+                {!isCustomerDropdownMode && customerName.trim() !== '' && !activeCustomer && customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).length === 0 && (
+                  <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-300 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 p-3 rounded-xl">
+                    <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1">
+                      <Info className="w-3.5 h-3.5" /> Pelanggan belum terdaftar
+                    </p>
+                    <div className="space-y-2">
+                      <input 
+                        type="text" 
+                        placeholder="No. Whatsapp (Opsional)" 
+                        value={newCustomerPhone} 
+                        onChange={(e) => setNewCustomerPhone(e.target.value)}
+                        className="w-full text-xs p-2 rounded-lg border border-blue-200 dark:border-blue-500/30 bg-white dark:bg-slate-900 outline-none focus:border-blue-500 transition-colors"
+                      />
+                      <button 
+                        onClick={() => {
+                          const newCustomer = {
+                            id: `CUST-${Date.now()}`,
+                            name: customerName,
+                            phone: newCustomerPhone,
+                            points: 0
+                          };
+                          setCustomers([...customers, newCustomer]);
+                          setNewCustomerPhone('');
+                          triggerAlert('Pelanggan berhasil ditambahkan & langsung aktif!');
+                        }}
+                        className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg transition-colors flex justify-center items-center gap-1 shadow-sm"
+                      >
+                        <Plus className="w-3 h-3" /> Tambahkan ke Database
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* --- ORDER TYPE --- */}
@@ -199,10 +237,29 @@ const CartDrawer = () => {
                         />
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-950 rounded-lg p-1 border border-slate-100 dark:border-slate-800">
-                      <button onClick={() => updateCartQty(item.cartItemId, -1)} className="w-7 h-7 flex items-center justify-center bg-white dark:bg-slate-900 rounded shadow-sm text-slate-600 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"><Minus className="w-3 h-3" /></button>
-                      <span className="font-bold w-4 text-center text-sm">{item.qty}</span>
-                      <button onClick={() => updateCartQty(item.cartItemId, 1)} className="w-7 h-7 flex items-center justify-center bg-white dark:bg-slate-900 rounded shadow-sm text-slate-600 dark:text-slate-300 hover:text-green-500 dark:hover:text-green-400 transition-colors"><Plus className="w-3 h-3" /></button>
+                    {/* --- REVISI INPUT KUANTITAS CUSTOM --- */}
+                    <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-950 rounded-lg p-1 border border-slate-100 dark:border-slate-800">
+                      <button onClick={() => updateCartQty(item.cartItemId, -1)} className="w-7 h-7 flex items-center justify-center bg-white dark:bg-slate-900 rounded shadow-sm text-slate-600 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors shrink-0"><Minus className="w-3 h-3" /></button>
+                      
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={item.qty}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, ''); // Cuma menerima angka
+                          if (val === '') {
+                            // Menahan nilai ke 1 jika input dihapus kosong, agar item tidak sengaja terhapus.
+                            updateCartQty(item.cartItemId, 1 - item.qty);
+                          } else {
+                            const newQty = parseInt(val, 10);
+                            // Logika ini mengirimkan selisih angkanya yang membuat fungsinya langsung presisi
+                            updateCartQty(item.cartItemId, newQty - item.qty);
+                          }
+                        }}
+                        className="w-8 text-center font-bold text-sm bg-transparent outline-none focus:ring-2 focus:ring-orange-500/20 rounded transition-colors"
+                      />
+
+                      <button onClick={() => updateCartQty(item.cartItemId, 1)} className="w-7 h-7 flex items-center justify-center bg-white dark:bg-slate-900 rounded shadow-sm text-slate-600 dark:text-slate-300 hover:text-green-500 dark:hover:text-green-400 transition-colors shrink-0"><Plus className="w-3 h-3" /></button>
                     </div>
                   </div>
                 ))}

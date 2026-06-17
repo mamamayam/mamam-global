@@ -98,6 +98,108 @@ export function diffArrays(prevArr, nextArr) {
   return { upserts, deletes };
 }
 
+// ── AUTO SYNC BERKALA (setiap 30 menit) ─────────────────────────────────────
+// Jaring pengaman tambahan di atas push real-time per-record di atas: secara
+// berkala bandingkan data lokal dengan snapshot hasil sync terakhir, lalu HANYA
+// kirim yang benar-benar berubah (pakai diffArrays + fungsi push yang sama
+// seperti di atas) — BUKAN re-upload seluruh data tiap kali. Tujuannya supaya
+// sync tidak "sekaligus" membebani & menghabiskan kuota Supabase free tier
+// walau data sudah menumpuk ribuan baris. Berguna juga utk menangkap
+// perubahan yang gagal terkirim sebelumnya (misal device sempat offline saat
+// ada transaksi baru).
+const AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 menit
+const AUTO_SYNC_ITEM_GAP_MS = 250;            // jeda antar item yang dikirim, biar tidak sekaligus
+const AUTO_SYNC_SNAPSHOT_KEY = 'mamam_auto_sync_snapshot';
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+function loadAutoSyncSnapshot() {
+  try {
+    const raw = localStorage.getItem(AUTO_SYNC_SNAPSHOT_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveAutoSyncSnapshot(snapshot) {
+  try {
+    localStorage.setItem(AUTO_SYNC_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch (err) {
+    console.warn('[sync] gagal simpan snapshot auto-sync:', err.message);
+  }
+}
+
+let autoSyncInFlight = false;
+
+/**
+ * Dipanggil otomatis tiap 30 menit oleh initRealtimeSync di bawah.
+ * Bandingkan data lokal vs snapshot terakhir per key, kirim satu-satu HANYA
+ * yang beda (dengan jeda kecil antar item — tidak sekaligus), baru update
+ * snapshot setelah selesai.
+ */
+export async function runAutoSync() {
+  if (!isSupabaseConfigured() || autoSyncInFlight) return;
+  autoSyncInFlight = true;
+
+  try {
+    const snapshot = loadAutoSyncSnapshot();
+    let sentCount = 0;
+
+    for (const tableKey of TRANSACTION_KEYS) {
+      const current = await loadData(tableKey, []);
+
+      // Key belum pernah punya snapshot (pertama kali fitur ini aktif) →
+      // jadikan baseline dulu, jangan kirim apa-apa supaya tidak dobel
+      // dengan data yang sudah tersinkron lewat push real-time/manual sync.
+      if (!(tableKey in snapshot)) {
+        snapshot[tableKey] = current;
+        continue;
+      }
+
+      const { upserts, deletes } = diffArrays(snapshot[tableKey], current);
+
+      for (const item of upserts) {
+        await pushTransactionUpsert(tableKey, item);
+        sentCount++;
+        await sleep(AUTO_SYNC_ITEM_GAP_MS);
+      }
+      for (const id of deletes) {
+        await pushTransactionDelete(tableKey, id);
+        sentCount++;
+        await sleep(AUTO_SYNC_ITEM_GAP_MS);
+      }
+
+      snapshot[tableKey] = current;
+    }
+
+    for (const key of CONFIG_KEYS) {
+      const current = await loadData(key, undefined);
+
+      if (!(key in snapshot)) {
+        snapshot[key] = current;
+        continue;
+      }
+
+      if (JSON.stringify(current) !== JSON.stringify(snapshot[key])) {
+        pushConfig(key, current);
+        sentCount++;
+        await sleep(AUTO_SYNC_ITEM_GAP_MS);
+      }
+
+      snapshot[key] = current;
+    }
+
+    saveAutoSyncSnapshot(snapshot);
+    localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
+    if (sentCount > 0) console.log(`[sync] auto-sync 30 menit: ${sentCount} perubahan terkirim ✅`);
+  } catch (err) {
+    console.warn('[sync] auto-sync 30 menit gagal:', err.message);
+  } finally {
+    autoSyncInFlight = false;
+  }
+}
+
 // ── PULL & REALTIME SUBSCRIBE ───────────────────────────────────────────────
 export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onConfigUpdate }) {
   let _resolveReady;
@@ -110,6 +212,9 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
 
   let channel = null;
   let cancelled = false;
+
+  // Auto-sync berkala tiap 30 menit (lihat runAutoSync di atas)
+  const autoSyncTimer = setInterval(runAutoSync, AUTO_SYNC_INTERVAL_MS);
 
   (async () => {
     let supabase;
@@ -219,6 +324,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
   return {
     unsubscribe: () => {
       cancelled = true;
+      clearInterval(autoSyncTimer);
       if (channel) {
         getSupabaseClient().then(supabase => supabase?.removeChannel(channel));
       }

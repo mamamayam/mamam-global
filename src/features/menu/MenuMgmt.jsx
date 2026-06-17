@@ -1,13 +1,34 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { ChevronLeft, Plus, Edit3, Trash2, Settings2 } from "lucide-react";
 import CategoryModal from "../../components/CategoryModal";
 
 const MenuManagement = () => {
-  const { menus, setMenus, variantGroups, formatRupiah, triggerAlert, triggerConfirm, categories, setCategories, hppLibrary, setHppLibrary } = useAppContext();
+  const { 
+    menus, setMenus, variantGroups, formatRupiah, triggerAlert, 
+    triggerConfirm, categories, setCategories, hppLibrary, setHppLibrary 
+  } = useAppContext();
+  
   const [isEditing, setIsEditing] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ id: '', name: '', price: '', hpp: '', category: categories[0] || 'Lainnya', variantGroupIds: [] });
+  const [formData, setFormData] = useState({ 
+    id: '', name: '', price: '', hpp: '', category: categories[0] || 'Lainnya', variantGroupIds: [] 
+  });
+
+  // ✨ REVISI: SINKRONISASI KATEGORI OTOMATIS (FIX DOUBLE)
+  useEffect(() => {
+    if (!menus || menus.length === 0) return;
+
+    const externalCategories = [...new Set(menus.map(item => item.category).filter(Boolean))];
+
+    setCategories(prevCategories => {
+      const missingCategories = externalCategories.filter(cat => !prevCategories.includes(cat));
+      if (missingCategories.length > 0) {
+        return [...prevCategories, ...missingCategories];
+      }
+      return prevCategories;
+    });
+  }, [menus, setCategories]);
 
   const handleSave = () => {
     if (!formData.name || formData.price === '' || formData.price < 0) {
@@ -61,7 +82,6 @@ const MenuManagement = () => {
           {formData.id ? 'Edit Menu' : 'Tambah Menu Baru'}
         </h2>
 
-        {/* Hapus pb-20 karena tombol fix di bawah sudah dihilangkan */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
           <div className="space-y-4">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Informasi Dasar</h3>
@@ -114,10 +134,8 @@ const MenuManagement = () => {
           </div>
         </div>
 
-        {/* PERBAIKAN TOMBOL: Diletakkan di dalam flow normal (bukan fixed) agar pasti terlihat */}
         <div className="max-w-4xl mt-8 pt-6 border-t border-slate-200 dark:border-slate-700 flex justify-end">
           <button onClick={handleSave} className="w-full md:w-auto px-8 py-3 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
-            {/* Teks otomatis menyesuaikan aksi */}
             {formData.id ? 'Simpan Perubahan' : 'Tambah Menu'}
           </button>
         </div>
@@ -131,18 +149,14 @@ const MenuManagement = () => {
           triggerAlert={triggerAlert}
           triggerConfirm={triggerConfirm}
           onRename={(oldCat, newCat) => {
-            // Update kategori di semua menu yang memakainya
             const updatedMenus = menus.map(m => m.category === oldCat ? { ...m, category: newCat } : m);
             if (JSON.stringify(updatedMenus) !== JSON.stringify(menus)) setMenus(updatedMenus);
-            // Form yang sedang dibuka juga ikut diupdate
             if (formData.category === oldCat) setFormData(prev => ({ ...prev, category: newCat }));
 
-            // Kategori ini dipakai bersama HPP Library juga
             const updatedLibrary = hppLibrary.map(recipe => recipe.category === oldCat ? { ...recipe, category: newCat } : recipe);
             if (JSON.stringify(updatedLibrary) !== JSON.stringify(hppLibrary)) setHppLibrary(updatedLibrary);
           }}
           onDelete={(deletedCat) => {
-            // Menu yang pakai kategori terhapus dipindah ke "Umum"
             const updatedMenus = menus.map(m => m.category === deletedCat ? { ...m, category: 'Umum' } : m);
             if (JSON.stringify(updatedMenus) !== JSON.stringify(menus)) setMenus(updatedMenus);
             if (formData.category === deletedCat) setFormData(prev => ({ ...prev, category: 'Umum' }));
@@ -164,37 +178,65 @@ const MenuManagement = () => {
       <div className="space-y-8 pb-10">
         {Object.keys(groupedMenus).map(category => (
           <div key={category} className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            
+            {/* --- Header Kategori --- */}
             <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
               <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
               <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold px-2 py-0.5 rounded-full">{groupedMenus[category].length} Item</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {groupedMenus[category].map((menu) => (
-                <div key={menu.id} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-4 flex flex-col relative group hover:shadow-md transition-all duration-300 hover:-translate-y-1">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300 uppercase">{menu.category}</span>
-                    <div className="flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <button onClick={() => { setFormData(menu); setIsEditing(true); }} className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"><Edit3 className="w-4 h-4" /></button>
-                      <button onClick={() => handleDelete(menu.id)} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  </div>
-                  <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base leading-tight mb-1 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">{menu.name}</h3>
-                  <p className="text-orange-600 dark:text-orange-400 font-bold mb-3">{formatRupiah(menu.price)}</p>
 
-                  <div className="mt-auto pt-3 border-t border-slate-50 dark:border-slate-900">
-                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">VARIAN TERKAIT:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {menu.variantGroupIds.length === 0 ? <span className="text-[10px] text-gray-400 dark:text-slate-500 italic">Tidak ada varian</span> : (
-                        menu.variantGroupIds.map(vid => {
-                          const vg = variantGroups.find(v => v.id === vid);
-                          return vg ? <span key={vid} className="text-[10px] bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded border border-orange-100 dark:border-orange-500/20 transition-colors hover:bg-orange-100 dark:hover:bg-orange-500/15">{vg.name}</span> : null;
-                        })
+            {/* --- DAFTAR MENU RINGKAS (1 BARIS) --- */}
+            <div className="flex flex-col gap-2">
+              {groupedMenus[category].map((menu) => (
+                <div key={menu.id} className="group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:border-orange-200 dark:hover:border-orange-500/30 transition-all gap-3 sm:gap-4">
+                  
+                  {/* --- Info Kiri: Nama, HPP, Varian --- */}
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate mb-0.5">
+                      {menu.name}
+                    </h3>
+                    
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span className="font-medium">HPP: {formatRupiah(menu.hpp || 0)}</span>
+                      {menu.variantGroupIds?.length > 0 && (
+                        <>
+                          <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0"></span>
+                          <span className="truncate">
+                            Varian: {menu.variantGroupIds.map(vid => variantGroups.find(v => v.id === vid)?.name).filter(Boolean).join(', ')}
+                          </span>
+                        </>
                       )}
                     </div>
                   </div>
+
+                  {/* --- Info Kanan: Harga & Tombol Aksi --- */}
+                  <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 border-t border-slate-50 dark:border-slate-800/50 sm:border-0 pt-2 sm:pt-0">
+                    <span className="font-bold text-orange-600 dark:text-orange-400 text-sm">
+                      {formatRupiah(menu.price)}
+                    </span>
+                    
+                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <button 
+                        onClick={() => { setFormData(menu); setIsEditing(true); }} 
+                        className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+                        title="Edit Menu"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(menu.id)} 
+                        className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                        title="Hapus Menu"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
                 </div>
               ))}
             </div>
+
           </div>
         ))}
         {menus.length === 0 && <div className="p-8 text-center text-slate-400 dark:text-slate-500 animate-in fade-in">Belum ada data menu</div>}

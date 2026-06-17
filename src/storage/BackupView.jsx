@@ -100,9 +100,15 @@ function calcRecordCount(allData) {
   return count;
 }
 
+// Jeda antar batch upload, supaya request tidak ditembak sekaligus/bersamaan
+// ke Supabase — lebih ramah ke rate limit & kuota free tier saat data sudah banyak.
+const SYNC_BATCH_DELAY_MS = 400;
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
  * Upload SEMUA data ke Supabase secara manual (full sync).
- * Transaksi: upsert per-row ke tabel masing-masing (batch 100).
+ * Transaksi: upsert per-row ke tabel masing-masing (batch 100, dengan jeda
+ * SYNC_BATCH_DELAY_MS antar batch supaya tidak sekaligus).
  * Config: upsert ke tabel app_config sebagai JSON blob per key.
  */
 async function syncAllToSupabase() {
@@ -123,6 +129,7 @@ async function syncAllToSupabase() {
       const { error } = await supabase.from(key).upsert(batch, { onConflict: 'id' });
       if (error) throw new Error(`Gagal sync [${key}]: ${error.message}`);
       totalUpserted += batch.length;
+      await sleep(SYNC_BATCH_DELAY_MS); // jeda sebelum batch berikutnya — jangan sekaligus
     }
   }
 
@@ -131,6 +138,7 @@ async function syncAllToSupabase() {
     .map(k => ({ key: k, value: data[k], updated_at: new Date().toISOString() }));
 
   if (configBatch.length) {
+    await sleep(SYNC_BATCH_DELAY_MS);
     const { error } = await supabase.from('app_config').upsert(configBatch, { onConflict: 'key' });
     if (error) throw new Error(`Gagal sync config: ${error.message}`);
     totalUpserted += configBatch.length;
