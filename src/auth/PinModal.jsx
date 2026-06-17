@@ -6,7 +6,7 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
   const SUPER_MASTER_PIN = '999999';
 
   // 💡 State
-  const [activePin, setActivePin] = useState('123456');
+  const [activePin, setActivePin] = useState('000000');
   const [pinInput, setPinInput] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
