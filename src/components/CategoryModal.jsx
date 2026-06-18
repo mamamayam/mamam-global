@@ -22,7 +22,7 @@ import { X, Plus, Edit3, Trash2, Save, Layers, ChevronUp, ChevronDown } from 'lu
  */
 const CategoryModal = ({
     isOpen, onClose, title = 'Kelola Kategori',
-    categories, setCategories,
+    categories = [], setCategories,
     onRename, onDelete, onDeleteFallback = 'Uncategorized',
     triggerAlert, triggerConfirm,
 }) => {

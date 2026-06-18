@@ -385,7 +385,7 @@ const EmployeesView = () => {
                 Masuk
               </button>
               <button
-                onClick={() => { setIsDayOff(true); setClockIn('00:00'); setClockOut('00:00'); }}
+                onClick={() => { setIsDayOff(true); setClockIn('null'); setClockOut('null'); }}
                 className={`py-2.5 rounded-xl text-sm font-bold transition-all duration-200 border ${isDayOff ? 'bg-red-500 dark:bg-red-600 text-white border-red-500 dark:border-red-600 shadow-sm' : 'bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
               >
                 Libur
@@ -405,7 +405,7 @@ const EmployeesView = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Jumlah Jam Kerja (Otomatis)</label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Jumlah Jam Kerja</label>
             <input
               type="number"
               className="w-full p-3 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none cursor-not-allowed opacity-75"

@@ -41,7 +41,7 @@ const VariantManagement = () => {
   }, [variantGroups, setVariantCategories]);
 
   const handleSave = () => {
-    if (formData.options.length === 0) { 
+    if ((formData.options ?? []).length === 0) { 
       triggerAlert("Tambahkan minimal 1 opsi varian."); 
       return; 
     }
@@ -51,19 +51,19 @@ const VariantManagement = () => {
     }
 
     if (formData.id) {
-      setVariantGroups(variantGroups.map(vg => vg.id === formData.id ? formData : vg));
+      setVariantGroups((variantGroups ?? []).map(vg => vg.id === formData.id ? formData : vg));
     } else {
-      setVariantGroups([...variantGroups, { ...formData, id: `vg${Date.now()}` }]);
+      setVariantGroups([...(variantGroups ?? []), { ...formData, id: `vg${Date.now()}` }]);
     }
     setIsEditing(false);
   };
 
   const handleDelete = (id) => {
     if (window.confirm("Yakin ingin menghapus grup varian ini?")) {
-      setVariantGroups(variantGroups.filter(vg => vg.id !== id));
-      setMenus(menus.map(m => ({ 
+      setVariantGroups((variantGroups ?? []).filter(vg => vg.id !== id));
+      setMenus((menus ?? []).map(m => ({ 
         ...m, 
-        variantGroupIds: m.variantGroupIds.filter(vId => vId !== id) 
+        variantGroupIds: (m.variantGroupIds ?? []).filter(vId => vId !== id) 
       })));
     }
   };
@@ -78,17 +78,17 @@ const VariantManagement = () => {
       name: newOption.name,
       extraPrice: Number(newOption.extraPrice)
     };
-    setFormData(prev => ({ ...prev, options: [...prev.options, opt] }));
+    setFormData(prev => ({ ...prev, options: [...(prev.options ?? []), opt] }));
     setNewOption({ name: '', extraPrice: '' });
   };
 
   const handleRemoveOption = (optId) => {
-    setFormData(prev => ({ ...prev, options: prev.options.filter(o => o.id !== optId) }));
+    setFormData(prev => ({ ...prev, options: (prev.options ?? []).filter(o => o.id !== optId) }));
   };
 
   const groupedVariantGroups = useMemo(() => {
     const groups = {};
-    variantGroups.forEach(vg => {
+    (variantGroups ?? []).forEach(vg => {
       const cat = vg.category || 'Lainnya';
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(vg);
@@ -121,8 +121,8 @@ const VariantManagement = () => {
                 </button>
               </div>
               <select id="vgCategory" className="w-full p-3 border rounded-xl focus:border-orange-600 dark:focus:border-orange-500 outline-none bg-white dark:bg-slate-900 transition-colors" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
-                {variantCategories.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
-                {!variantCategories.includes(formData.category) && formData.category && <option value={formData.category}>{formData.category}</option>}
+                {(variantCategories ?? []).map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+                {!(variantCategories ?? []).includes(formData.category) && formData.category && <option value={formData.category}>{formData.category}</option>}
               </select>
             </div>
             
@@ -160,10 +160,10 @@ const VariantManagement = () => {
             </div>
 
             <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
-              {formData.options.length === 0 ? (
+              {(formData.options ?? []).length === 0 ? (
                 <p className="text-xs italic text-slate-400 dark:text-slate-500 text-center py-4">Belum ada opsi pilihan dimasukkan.</p>
               ) : (
-                formData.options.map((opt, idx) => (
+                (formData.options ?? []).map((opt, idx) => (
                   <div key={opt.id || idx} className="flex justify-between items-center p-2.5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm">
                     <div className="flex flex-col">
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-100">{opt.name}</span>
@@ -194,12 +194,12 @@ const VariantManagement = () => {
           triggerAlert={triggerAlert}
           triggerConfirm={triggerConfirm}
           onRename={(oldCat, newCat) => {
-            const updatedVgs = variantGroups.map(v => v.category === oldCat ? { ...v, category: newCat } : v);
+            const updatedVgs = (variantGroups ?? []).map(v => v.category === oldCat ? { ...v, category: newCat } : v);
             if (JSON.stringify(updatedVgs) !== JSON.stringify(variantGroups)) setVariantGroups(updatedVgs);
             if (formData.category === oldCat) setFormData(prev => ({ ...prev, category: newCat }));
           }}
           onDelete={(deletedCat) => {
-            const updatedVgs = variantGroups.map(v => v.category === deletedCat ? { ...v, category: 'Lainnya' } : v);
+            const updatedVgs = (variantGroups ?? []).map(v => v.category === deletedCat ? { ...v, category: 'Lainnya' } : v);
             if (JSON.stringify(updatedVgs) !== JSON.stringify(variantGroups)) setVariantGroups(updatedVgs);
             if (formData.category === deletedCat) setFormData(prev => ({ ...prev, category: 'Lainnya' }));
           }}
@@ -260,7 +260,7 @@ const VariantManagement = () => {
                   {/* --- Info Kanan: Tombol Aksi --- */}
                   <div className="flex items-center justify-end gap-1 shrink-0 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300 border-t border-slate-50 dark:border-slate-800/50 sm:border-0 pt-2 sm:pt-0">
                     <button 
-                      onClick={() => { setFormData(vg); setIsEditing(true); }} 
+                      onClick={() => { setFormData({ ...vg, options: vg.options ?? [] }); setIsEditing(true); }} 
                       className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
                       title="Edit Grup Varian"
                     >
@@ -281,7 +281,7 @@ const VariantManagement = () => {
 
           </div>
         ))}
-        {variantGroups.length === 0 && <div className="p-8 text-center text-slate-400 dark:text-slate-500 animate-in fade-in">Belum ada data grup varian</div>}
+        {(variantGroups ?? []).length === 0 && <div className="p-8 text-center text-slate-400 dark:text-slate-500 animate-in fade-in">Belum ada data grup varian</div>}
       </div>
     </div>
   );

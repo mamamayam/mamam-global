@@ -98,7 +98,7 @@ export function diffArrays(prevArr, nextArr) {
   return { upserts, deletes };
 }
 
-// ── AUTO SYNC BERKALA (setiap 30 menit) ─────────────────────────────────────
+// ── AUTO SYNC BERKALA (interval bisa diatur lewat toggle di UI) ────────────
 // Jaring pengaman tambahan di atas push real-time per-record di atas: secara
 // berkala bandingkan data lokal dengan snapshot hasil sync terakhir, lalu HANYA
 // kirim yang benar-benar berubah (pakai diffArrays + fungsi push yang sama
@@ -107,11 +107,29 @@ export function diffArrays(prevArr, nextArr) {
 // walau data sudah menumpuk ribuan baris. Berguna juga utk menangkap
 // perubahan yang gagal terkirim sebelumnya (misal device sempat offline saat
 // ada transaksi baru).
-const AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 menit
+//
+// User bisa pilih lewat toggle di BackupView: "Auto-sync tiap 15 menit" atau
+// "Manual saja" (lihat isAutoSyncEnabled/setAutoSyncEnabled). Default: aktif.
+const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 menit
 const AUTO_SYNC_ITEM_GAP_MS = 250;            // jeda antar item yang dikirim, biar tidak sekaligus
 const AUTO_SYNC_SNAPSHOT_KEY = 'mamam_auto_sync_snapshot';
+const AUTO_SYNC_ENABLED_KEY = 'mamam_auto_sync_enabled';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Status toggle auto-sync (true = tiap 15 menit, false = manual saja).
+ * Default true kalau belum pernah diset (belum pernah dipencet togglenya).
+ */
+export function isAutoSyncEnabled() {
+  const raw = localStorage.getItem(AUTO_SYNC_ENABLED_KEY);
+  return raw === null ? true : raw === 'true';
+}
+
+/** Dipanggil dari toggle di BackupView untuk menyalakan/mematikan auto-sync. */
+export function setAutoSyncEnabled(enabled) {
+  localStorage.setItem(AUTO_SYNC_ENABLED_KEY, enabled ? 'true' : 'false');
+}
 
 function loadAutoSyncSnapshot() {
   try {
@@ -133,13 +151,16 @@ function saveAutoSyncSnapshot(snapshot) {
 let autoSyncInFlight = false;
 
 /**
- * Dipanggil otomatis tiap 30 menit oleh initRealtimeSync di bawah.
+ * Dipanggil otomatis tiap 15 menit oleh initRealtimeSync di bawah — TAPI cuma
+ * benar-benar jalan kalau toggle "Auto-sync" di BackupView sedang aktif
+ * (isAutoSyncEnabled() === true). Kalau user pilih "Manual saja", fungsi ini
+ * langsung return tanpa request apa pun ke Supabase.
  * Bandingkan data lokal vs snapshot terakhir per key, kirim satu-satu HANYA
  * yang beda (dengan jeda kecil antar item — tidak sekaligus), baru update
  * snapshot setelah selesai.
  */
 export async function runAutoSync() {
-  if (!isSupabaseConfigured() || autoSyncInFlight) return;
+  if (!isAutoSyncEnabled() || !isSupabaseConfigured() || autoSyncInFlight) return;
   autoSyncInFlight = true;
 
   try {
@@ -192,9 +213,9 @@ export async function runAutoSync() {
 
     saveAutoSyncSnapshot(snapshot);
     localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
-    if (sentCount > 0) console.log(`[sync] auto-sync 30 menit: ${sentCount} perubahan terkirim ✅`);
+    if (sentCount > 0) console.log(`[sync] auto-sync 15 menit: ${sentCount} perubahan terkirim ✅`);
   } catch (err) {
-    console.warn('[sync] auto-sync 30 menit gagal:', err.message);
+    console.warn('[sync] auto-sync 15 menit gagal:', err.message);
   } finally {
     autoSyncInFlight = false;
   }
@@ -213,7 +234,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
   let channel = null;
   let cancelled = false;
 
-  // Auto-sync berkala tiap 30 menit (lihat runAutoSync di atas)
+  // Auto-sync berkala tiap 15 menit, hanya jalan kalau toggle-nya aktif (lihat runAutoSync di atas)
   const autoSyncTimer = setInterval(runAutoSync, AUTO_SYNC_INTERVAL_MS);
 
   (async () => {

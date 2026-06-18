@@ -3,7 +3,7 @@ import {
   FileJson, Sheet, CloudUpload,
   Upload, FileUp, AlertTriangle, CheckCircle,
   Database, RefreshCw, X, ArrowLeft,
-  Calendar, Info, Wifi, WifiOff,
+  Calendar, Info, Wifi, WifiOff, Clock,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -11,6 +11,7 @@ import { Share } from '@capacitor/share';
 import { exportAllData, loadData, saveData } from '../storage/db';
 import { ALL_KEYS, TRANSACTION_KEYS, CONFIG_KEYS, DATE_FILTERABLE_KEYS } from '../storage/syncKeys';
 import { getSupabaseClient, isSupabaseConfigured } from '../storage/syncClient';
+import { isAutoSyncEnabled, setAutoSyncEnabled } from '../storage/realtimeSync';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -447,12 +448,46 @@ const BackupView = ({ onBack }) => {
     const raw = localStorage.getItem('mamam_last_supabase_sync');
     return raw ? new Date(raw).toLocaleString('id-ID') : null;
   });
+  const [autoSyncOn, setAutoSyncOn] = useState(() => isAutoSyncEnabled());
+
+  // Untuk countdown "sinkron berikutnya" — raw ISO dari localStorage
+  const [lastSyncIso, setLastSyncIso] = useState(
+    () => localStorage.getItem('mamam_last_supabase_sync')
+  );
+  const [now, setNow] = useState(() => new Date());
+
+  // Hitung menit hingga sync berikutnya (null = belum pernah sync)
+  const minutesUntilSync = (() => {
+    if (!autoSyncOn || !lastSyncIso) return null;
+    const diff = Math.ceil(
+      (new Date(lastSyncIso).getTime() + 15 * 60 * 1000 - now.getTime()) / 60_000
+    );
+    return Math.max(0, diff);
+  })();
+
+  function handleToggleAutoSync() {
+    const next = !autoSyncOn;
+    setAutoSyncEnabled(next);
+    setAutoSyncOn(next);
+  }
 
   useEffect(() => {
     exportAllData().then(allData => {
       setStorageSize(calcStorageSize(allData));
       setRecordCount(calcRecordCount(allData));
     });
+  }, []);
+
+  // Refresh tiap menit — menangkap auto-sync yang jalan di background
+  // dan menurunkan countdown "sinkron berikutnya"
+  useEffect(() => {
+    const id = setInterval(() => {
+      const raw = localStorage.getItem('mamam_last_supabase_sync');
+      setLastSyncIso(raw);
+      if (raw) setLastSyncTime(new Date(raw).toLocaleString('id-ID'));
+      setNow(new Date());
+    }, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   function showToast(msg, type = 'success') {
@@ -554,8 +589,11 @@ const BackupView = ({ onBack }) => {
     setIsSyncing(true);
     try {
       const count = await syncAllToSupabase();
+      const raw = localStorage.getItem('mamam_last_supabase_sync');
       const ts = new Date().toLocaleString('id-ID');
+      setLastSyncIso(raw);
       setLastSyncTime(ts);
+      setNow(new Date());
       showToast(`Sync selesai — ${count} record diupload`);
     } catch (err) {
       showToast('Gagal: ' + err.message, 'error');
@@ -680,6 +718,59 @@ const BackupView = ({ onBack }) => {
                     Push diblok selama initial pull saat startup.
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* Toggle: auto-sync berkala vs manual saja */}
+            {supabaseReady && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 space-y-2.5">
+
+                {/* Baris toggle */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <Clock className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-700">Auto-sync tiap 15 menit</p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {autoSyncOn
+                          ? 'Perubahan terkirim otomatis tiap 15 menit (hanya yang berubah, hemat kuota).'
+                          : 'Nonaktif — sync hanya saat tekan "Sync Sekarang" di bawah.'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={autoSyncOn}
+                    onClick={handleToggleAutoSync}
+                    className={`relative w-12 h-7 rounded-full shrink-0 transition-colors
+                      ${autoSyncOn ? 'bg-blue-500' : 'bg-slate-300'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-sm transition-transform
+                      ${autoSyncOn ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+
+                {/* Baris timestamp — hanya tampil saat auto-sync aktif */}
+                {autoSyncOn && (
+                  <div className="flex items-center justify-between border-t border-slate-200 pt-2">
+                    <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                      <RefreshCw className="w-3 h-3" />
+                      {lastSyncTime
+                        ? <span>Terakhir: <span className="font-semibold text-slate-500">{lastSyncTime}</span></span>
+                        : <span>Belum pernah sync</span>}
+                    </span>
+                    <span className={`text-xs font-bold tabular-nums
+                      ${minutesUntilSync === 0 ? 'text-orange-500 animate-pulse' : 'text-blue-500'}`}>
+                      {minutesUntilSync === null
+                        ? 'sync manual dulu'
+                        : minutesUntilSync === 0
+                        ? '⟳ Sebentar lagi...'
+                        : `dalam ${minutesUntilSync} mnt`}
+                    </span>
+                  </div>
+                )}
+
               </div>
             )}
 
