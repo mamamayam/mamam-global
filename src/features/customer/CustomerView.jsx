@@ -145,7 +145,7 @@ const CustomerView = () => {
       <div className="shrink-0">
         <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2"><Users className="w-6 h-6 text-orange-600 dark:text-orange-400" /> Pelanggan & Reward</h2>
 
-        <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-3 mb-6 overflow-x-auto hide-scrollbar">
+        <div className="p-2 flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-3 mb-6 overflow-x-auto hide-scrollbar">
           <button onClick={() => setCustomerSubTab('manage')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${customerSubTab === 'manage' ? 'bg-slate-800 text-white shadow-sm -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Kelola Pelanggan & Voucher</button>
           <button onClick={() => setCustomerSubTab('loyal')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${customerSubTab === 'loyal' ? 'bg-slate-800 text-white shadow-sm -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Loyal Customers</button>
           <button onClick={() => setCustomerSubTab('claims')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${customerSubTab === 'claims' ? 'bg-slate-800 text-white shadow-sm -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Riwayat Klaim</button>

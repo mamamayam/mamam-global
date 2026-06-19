@@ -1,15 +1,28 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Clock, FileText, History, Printer, Edit, X, Trash2, Share2 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { Clock, FileText, History, Printer, Edit, Trash2, Share2 } from 'lucide-react';
 import { isNativePlatform, printShiftNativeBluetooth } from '../../library/printer';
 import { toPng, toBlob } from 'html-to-image';
 import { generateUUID, toLocalMonthString } from '../../utils/formatters';
 
+// Import komponen UI Design System
+import { 
+  Button, 
+  Card, 
+  Input, 
+  Modal, 
+  PageHeader, 
+  EmptyState, 
+  Badge, 
+  IconButton 
+} from '../../components/ui';
+
 const ShiftView = () => {
-  const { currentShift, setCurrentShift, shiftHistory, setShiftHistory,
+  const { 
+    currentShift, setCurrentShift, shiftHistory, setShiftHistory,
     salesHistory, expenses, incomes, formatRupiah, triggerAlert, triggerConfirm,
-    storeSettings, isAdminMode, setIsAdminMode } = useAppContext();
+    storeSettings, isAdminMode
+  } = useAppContext();
 
   const [initialCashInput, setInitialCashInput] = useState('');
   const [actualCashInput, setActualCashInput] = useState('');
@@ -31,7 +44,7 @@ const ShiftView = () => {
     }
 
     try {
-      if (Capacitor.isNativePlatform()) {
+      if (isNativePlatform()) {
         const dataUrl = await toPng(reportElement, {
           backgroundColor: '#ffffff',
           pixelRatio: 3,
@@ -136,13 +149,6 @@ const ShiftView = () => {
     };
 
     triggerConfirm(`Apakah Anda yakin ingin menutup dompet ini? Semua transaksi selanjutnya tidak akan terekap di dompet ini.`, () => {
-      // currentShift di-null-kan langsung (tidak perlu delay) karena
-      // usePersistState untuk currentShift sudah di-set pushDelay: 0 di App.jsx
-      // — push ke Supabase terjadi segera tanpa debounce.
-      //
-      // FIX: filter dulu entri dengan ID yang sama sebelum prepend.
-      // Ini mencegah duplikat kalau user nutup dompet yang sama berkali-kali
-      // (misal karena dompet terbuka ulang dari Supabase sebelum fix schema).
       const filteredHistory = shiftHistory.filter(s => s.id !== shiftData.id);
       setShiftHistory([shiftData, ...filteredHistory]);
       setCurrentShift(null);
@@ -152,7 +158,6 @@ const ShiftView = () => {
     });
   };
 
-  // --- Fungsi Handle Edit Shift (Admin Only) ---
   const handleOpenEditModal = (shift) => {
     setEditingShift(shift);
     setEditActualCashInput(shift.actualCash.toString());
@@ -163,7 +168,6 @@ const ShiftView = () => {
       return triggerAlert('Masukkan nominal uang aktual yang valid.');
     }
 
-    // Bungkus dengan triggerConfirm
     triggerConfirm(`Apakah Anda yakin ingin menyimpan perubahan pada laporan ${editingShift.id}?`, () => {
       const newActualCash = Number(editActualCashInput);
       const newDifference = newActualCash - editingShift.stats.expectedCash;
@@ -189,7 +193,6 @@ const ShiftView = () => {
     });
   };
 
-  // Filter riwayat shift berdasarkan bulan yang dipilih
   const filteredShiftHistory = useMemo(() => {
     return shiftHistory.filter(shift => {
       if (!filterMonth) return true;
@@ -198,7 +201,6 @@ const ShiftView = () => {
     });
   }, [shiftHistory, filterMonth]);
 
-  // Statistik rekapitulasi shift pada periode terpilih
   const rekapShiftStats = useMemo(() => {
     let totalInitial = 0;
     let totalSales = 0;
@@ -219,13 +221,7 @@ const ShiftView = () => {
     });
 
     return {
-      totalInitial,
-      totalSales,
-      totalIncomes,
-      totalExpenses,
-      totalExpected,
-      totalActual,
-      totalDifference
+      totalInitial, totalSales, totalIncomes, totalExpenses, totalExpected, totalActual, totalDifference
     };
   }, [filteredShiftHistory]);
 
@@ -278,32 +274,36 @@ const ShiftView = () => {
         {/* AREA TOMBOL CETAK & BAGIKAN */}
         <div className="flex flex-col gap-2 mt-6 print:hidden w-full max-w-sm">
           <div className="flex gap-2">
-            <button 
+            <Button
+              variant="secondary"
+              className="flex-1"
+              icon={<Printer className="w-4 h-4" />}
               onClick={async () => {
-                  if (isNativePlatform()) {
-                      await printShiftNativeBluetooth(closedShiftData, storeSettings);
-                  } else {
-                      window.print();
-                  }
-              }} 
-              className="flex-1 py-3 bg-slate-800 text-white font-bold rounded-xl shadow-lg hover:bg-slate-900 transition-colors flex items-center justify-center gap-2"
+                if (isNativePlatform()) {
+                  await printShiftNativeBluetooth(closedShiftData, storeSettings);
+                } else {
+                  window.print();
+                }
+              }}
             >
-              <Printer className="w-4 h-4" /> Cetak
-            </button>
+              Cetak
+            </Button>
             
-            <button 
-              onClick={handleShareImage} 
-              className="flex-1 py-3 bg-green-600 dark:bg-green-500 text-white font-bold rounded-xl shadow-lg hover:bg-green-700 dark:hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+            <Button
+              className="flex-1 !bg-green-600 hover:!bg-green-700 !text-white !border-green-600"
+              icon={<Share2 className="w-4 h-4" />}
+              onClick={handleShareImage}
             >
-              <Share2 className="w-4 h-4" /> Bagikan
-            </button>
+              Bagikan
+            </Button>
           </div>
-          <button 
-            onClick={() => setShowXReading(false)} 
-            className="w-full py-3 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 font-bold rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors"
+          <Button
+            variant="ghost"
+            size="full"
+            onClick={() => setShowXReading(false)}
           >
             Tutup
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -311,71 +311,100 @@ const ShiftView = () => {
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar relative">
-      <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-        <Clock className="w-6 h-6 text-slate-800 dark:text-slate-100" /> Manajemen Dompet
-      </h2>
+      
+      {/* Menggunakan komponen PageHeader */}
+      <PageHeader 
+        title="Manajemen Dompet" 
+        icon={<Clock className="w-6 h-6" />} 
+      />
 
       {!currentShift ? (
-        <div className="max-w-md mx-auto bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-lg border border-slate-100 dark:border-slate-800 text-center animate-in zoom-in-95 duration-500 mt-10 mb-8 shrink-0">
-          <div className="w-16 h-16 bg-blue-50 dark:bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4"><Clock className="w-8 h-8" /></div>
+        <Card variant="elevated" className="max-w-md mx-auto text-center mt-10 mb-8 shrink-0">
+          <div className="w-16 h-16 bg-blue-50 dark:bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Clock className="w-8 h-8" />
+          </div>
           <h3 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100 mb-2">Dompet Belom Dibuka</h3>
           <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">Masukkan jumlah uang tunai yang ada di dalam dompet saat ini sebagai modal harian.</p>
 
           <div className="text-left mb-6">
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">Saldo Awal</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400 dark:text-slate-500">Rp</span>
-              <input type="number" className="w-full pl-12 pr-4 py-3 text-lg font-bold rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-slate-800 dark:focus:border-slate-100 bg-slate-50 dark:bg-slate-950 transition-colors" value={initialCashInput} onChange={e => setInitialCashInput(e.target.value)} placeholder="0" />
-            </div>
+            <Input 
+              type="number"
+              label="Saldo Awal"
+              icon={<span className="font-bold">Rp</span>}
+              value={initialCashInput}
+              onChange={e => setInitialCashInput(e.target.value)}
+              placeholder="0"
+              className="text-lg font-bold"
+            />
           </div>
 
-          <button onClick={handleOpenShift} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl text-lg shadow-lg hover:bg-slate-900 hover:-translate-y-0.5 transition-all">Buka Dompet</button>
-        </div>
+          <Button size="full" onClick={handleOpenShift}>
+            Buka Dompet
+          </Button>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl mb-8 shrink-0">
-          <div className="bg-slate-800 rounded-3xl shadow-lg p-6 text-white flex flex-col justify-between relative overflow-hidden animate-in slide-in-from-left-4 duration-500">
-            <div className="absolute top-0 right-0 p-8 opacity-10"><FileText className="w-32 h-32" /></div>
-            <div>
-              <span className="bg-blue-500 dark:bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Dompet Terbuka</span>
-              <h3 className="font-heading text-2xl font-black mt-4 mb-1">{currentShift.id}</h3>
-              <p className="text-sm text-slate-300 dark:text-slate-600">Waktu Buka: {currentShift.startTime.toLocaleString('id-ID')}</p>
+          {/* Card Info Shift Aktif */}
+          <Card variant="elevated" className="flex flex-col justify-between relative overflow-hidden animate-in slide-in-from-left-4 duration-500">
+            <div className="absolute top-0 right-0 p-8 opacity-5 dark:opacity-10">
+              <FileText className="w-32 h-32" />
+            </div>
+            
+            <div className="relative z-10">
+              <Badge variant="info" className="uppercase tracking-wider">Dompet Terbuka</Badge>
+              <h3 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100 mt-4 mb-1">{currentShift.id}</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Waktu Buka: {currentShift.startTime.toLocaleString('id-ID')}</p>
             </div>
 
             <div className="mt-8 space-y-4 relative z-10">
-              <div className="flex justify-between items-center border-b border-slate-700 dark:border-slate-300 pb-2">
-                <span className="text-sm text-slate-300 dark:text-slate-600">Saldo Awal</span><span className="font-bold">{formatRupiah(shiftStats?.initialCash)}</span>
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Saldo Awal</span>
+                <span className="font-bold text-slate-800 dark:text-slate-100">{formatRupiah(shiftStats?.initialCash)}</span>
               </div>
-              <div className="flex justify-between items-center border-b border-slate-700 dark:border-slate-300 pb-2">
-                <span className="text-sm text-slate-300 dark:text-slate-600">Penjualan (Khusus Tunai)</span><span className="font-bold text-green-400 dark:text-green-400">+{formatRupiah(shiftStats?.cashSales)}</span>
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Penjualan (Khusus Tunai)</span>
+                <span className="font-bold text-green-600 dark:text-green-400">+{formatRupiah(shiftStats?.cashSales)}</span>
               </div>
-              <div className="flex justify-between items-center border-b border-slate-700 dark:border-slate-300 pb-2">
-                <span className="text-sm text-slate-300 dark:text-slate-600">Pemasukan Lain (Tunai)</span><span className="font-bold text-green-400 dark:text-green-400">+{formatRupiah(shiftStats?.cashIncomes)}</span>
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Pemasukan Lain (Tunai)</span>
+                <span className="font-bold text-green-600 dark:text-green-400">+{formatRupiah(shiftStats?.cashIncomes)}</span>
               </div>
-              <div className="flex justify-between items-center border-b border-slate-700 dark:border-slate-300 pb-2">
-                <span className="text-sm text-slate-300 dark:text-slate-600">Pengeluaran Kasir</span><span className="font-bold text-red-400 dark:text-red-400">-{formatRupiah(shiftStats?.cashExpenses)}</span>
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Pengeluaran Kasir</span>
+                <span className="font-bold text-red-600 dark:text-red-400">-{formatRupiah(shiftStats?.cashExpenses)}</span>
               </div>
               <div className="flex justify-between items-center pt-2">
-                <span className="text-sm font-bold text-slate-300 dark:text-slate-600">Saldo Akhir</span><span className="font-black text-2xl">{formatRupiah(shiftStats?.expectedCash)}</span>
+                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Saldo Akhir</span>
+                <span className="font-black text-2xl text-slate-800 dark:text-slate-100">{formatRupiah(shiftStats?.expectedCash)}</span>
               </div>
             </div>
-          </div>
+          </Card>
 
-          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 flex flex-col justify-center animate-in slide-in-from-right-4 duration-500">
+          {/* Card Penutupan Shift */}
+          <Card variant="elevated" className="flex flex-col justify-center animate-in slide-in-from-right-4 duration-500">
             <h3 className="font-heading text-xl font-bold text-slate-800 dark:text-slate-100 mb-2 text-center">Saldo Aktual</h3>
             <p className="text-slate-500 dark:text-slate-400 text-sm mb-8 text-center">Hitung dan masukkan total uang tunai yang ada di dalam dompet sekarang untuk dicocokkan dengan sistem.</p>
 
             <div className="mb-6">
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">Saldo aktual yang ada di dompet</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400 dark:text-slate-500">Rp</span>
-                <input type="number" className="w-full pl-12 pr-4 py-4 text-xl font-black rounded-xl border-2 border-slate-200 dark:border-slate-700 focus:outline-none focus:border-orange-600 dark:focus:border-orange-500 bg-slate-50 dark:bg-slate-950 transition-colors" value={actualCashInput} onChange={e => setActualCashInput(e.target.value)} placeholder="0" />
-              </div>
+              <Input 
+                type="number"
+                label="Saldo aktual yang ada di dompet"
+                icon={<span className="font-bold">Rp</span>}
+                value={actualCashInput}
+                onChange={e => setActualCashInput(e.target.value)}
+                placeholder="0"
+                className="text-xl font-black py-4 border-2 focus:border-orange-600"
+              />
             </div>
 
-            <button onClick={handleCloseShift} className="w-full py-4 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl text-lg shadow-lg hover:bg-orange-700 dark:hover:bg-orange-600 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
-              Tutup Dompet & Cetak Laporan <Printer className="w-5 h-5" />
-            </button>
-          </div>
+            <Button 
+              size="full" 
+              iconRight={<Printer className="w-5 h-5" />} 
+              onClick={handleCloseShift}
+            >
+              Tutup Dompet & Cetak Laporan
+            </Button>
+          </Card>
         </div>
       )}
 
@@ -388,14 +417,14 @@ const ShiftView = () => {
             <h3 className="font-heading text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
               <History className="w-5 h-5 text-orange-600 dark:text-orange-400" /> Riwayat
             </h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500">Laporan performa dan akurasi kas di dompet.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Laporan performa dan akurasi kas di dompet.</p>
           </div>
           <div className="flex items-center gap-2">
-            <input
+            <Input
               type="month"
               value={filterMonth}
               onChange={e => setFilterMonth(e.target.value)}
-              className="p-2 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
+              className="py-1.5 px-3 text-xs font-bold"
             />
             {filterMonth && (
               <button onClick={() => setFilterMonth('')} className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 underline">Semua</button>
@@ -405,56 +434,49 @@ const ShiftView = () => {
 
         {/* --- METRIC SUMMARY REKAPITULASI SHIFT --- */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-center">
+          <Card padding="sm" className="flex flex-col justify-center">
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-1">Total Dompet Dibuka</p>
             <h4 className="font-heading text-base md:text-lg font-black text-slate-800 dark:text-slate-100">{filteredShiftHistory.length} Kali</h4>
-          </div>
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-center">
+          </Card>
+          <Card padding="sm" className="flex flex-col justify-center">
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-1">Total Pendapatan Tunai</p>
             <h4 className="font-heading text-base md:text-lg font-black text-green-600 dark:text-green-400">{formatRupiah(rekapShiftStats.totalSales)}</h4>
-          </div>
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-center">
+          </Card>
+          <Card padding="sm" className="flex flex-col justify-center">
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-1">Total Kas Seharusnya</p>
             <h4 className="font-heading text-base md:text-lg font-black text-slate-800 dark:text-slate-100">{formatRupiah(rekapShiftStats.totalExpected)}</h4>
-          </div>
-          <div className={`p-4 rounded-2xl shadow-sm border flex flex-col justify-center ${rekapShiftStats.totalDifference < 0 ? 'bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/20' : rekapShiftStats.totalDifference > 0 ? 'bg-green-50 dark:bg-green-500/10 border-green-100 dark:border-green-500/20' : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800'}`}>
+          </Card>
+          <Card padding="sm" className={`flex flex-col justify-center ${rekapShiftStats.totalDifference < 0 ? 'bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/20' : rekapShiftStats.totalDifference > 0 ? 'bg-green-50 dark:bg-green-500/10 border-green-100 dark:border-green-500/20' : ''}`}>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-1">Total Selisih (Short/Over)</p>
             <h4 className={`font-heading text-base md:text-lg font-black ${rekapShiftStats.totalDifference < 0 ? 'text-red-600 dark:text-red-400' : rekapShiftStats.totalDifference > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'}`}>{formatRupiah(rekapShiftStats.totalDifference)}</h4>
-          </div>
+          </Card>
         </div>
 
         {/* --- DAFTAR RIWAYAT HARIAN SHIFT --- */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col">
+        <Card padding="none" className="overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
             <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Daftar Penutupan Dompet</h4>
             <span className="text-slate-400 dark:text-slate-500 text-xs font-semibold">{filteredShiftHistory.length} data ditemukan</span>
           </div>
+          
           <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[400px] overflow-y-auto custom-scrollbar">
             {filteredShiftHistory.length === 0 ? (
-              <div className="p-12 text-center text-slate-400 dark:text-slate-500 italic text-sm">
-                <Clock className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                Tidak ada riwayat penutupan dompet pada periode ini
-              </div>
+              <EmptyState 
+                size="sm"
+                icon={<Clock className="w-10 h-10 opacity-30" />} 
+                title="Tidak ada riwayat penutupan dompet pada periode ini" 
+              />
             ) : (
-              filteredShiftHistory.map((shift, idx) => {
-                const statusColor = shift.difference < 0
-                  ? 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-500/20'
-                  : shift.difference > 0
-                    ? 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border border-green-100 dark:border-green-500/20'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
-
-                const statusLabel = shift.difference < 0
-                  ? 'Minus'
-                  : shift.difference > 0
-                    ? 'Lebih'
-                    : 'Pas (Balance)';
+              filteredShiftHistory.map((shift) => {
+                const badgeVariant = shift.difference < 0 ? 'danger' : shift.difference > 0 ? 'success' : 'neutral';
+                const statusLabel = shift.difference < 0 ? 'Minus' : shift.difference > 0 ? 'Lebih' : 'Pas (Balance)';
 
                 return (
                   <div key={shift.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-950/50 transition-colors animate-in fade-in slide-in-from-left-2 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                     <div className="space-y-1 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 mb-1">
                         <span className="font-black text-sm text-slate-800 dark:text-slate-100">{shift.id}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${statusColor}`}>{statusLabel}</span>
+                        <Badge variant={badgeVariant}><span className="uppercase tracking-wider text-[10px]">{statusLabel}</span></Badge>
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                         Buka: {new Date(shift.startTime).toLocaleString('id-ID')} | Tutup: {new Date(shift.endTime).toLocaleString('id-ID')}
@@ -466,48 +488,36 @@ const ShiftView = () => {
 
                     <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-0 pt-2 md:pt-0">
                       <div className="text-left md:text-right">
-                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">Uang Aktual</p>
+                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mb-1">Uang Aktual</p>
                         <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{formatRupiah(shift.actualCash)}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">Selisih</p>
+                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mb-1">Selisih</p>
                         <p className={`font-black text-sm ${shift.difference < 0 ? 'text-red-500 dark:text-red-400' : shift.difference > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'}`}>
                           {shift.difference > 0 ? '+' : ''}{formatRupiah(shift.difference)}
                         </p>
                       </div>
 
-                      <div className="flex gap-1 border-l border-slate-200 dark:border-slate-700 pl-4">
-                        {/* Tombol Edit (Hanya tampil jika user adalah admin) */}
-                        {/* Tombol Edit & Hapus (Hanya tampil jika user adalah admin) */}
+                      <div className="flex gap-1 border-l border-slate-200 dark:border-slate-700 pl-4 ml-2">
                         {isAdminMode && (
                           <>
-                            <button
-                              onClick={() => handleOpenEditModal(shift)}
-                              className="p-2 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/15 rounded-lg transition-colors border border-blue-100 dark:border-blue-500/20"
-                              title="Edit Laporan"
-                            >
+                            <IconButton variant="edit" onClick={() => handleOpenEditModal(shift)}>
                               <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteShift(shift.id)}
-                              className="p-2 bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/15 rounded-lg transition-colors border border-red-100 dark:border-red-500/20"
-                              title="Hapus Laporan"
-                            >
+                            </IconButton>
+                            <IconButton variant="delete" onClick={() => handleDeleteShift(shift.id)}>
                               <Trash2 className="w-4 h-4" />
-                            </button>
+                            </IconButton>
                           </>
                         )}
-
-                        <button
+                        <IconButton 
+                          variant="neutral" 
                           onClick={() => {
                             setClosedShiftData(shift);
                             setShowXReading(true);
                           }}
-                          className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 bg-white dark:bg-slate-900"
-                          title="Cetak/Lihat Detail"
                         >
                           <Printer className="w-4 h-4" />
-                        </button>
+                        </IconButton>
                       </div>
                     </div>
                   </div>
@@ -515,26 +525,22 @@ const ShiftView = () => {
               })
             )}
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* =========================================================================
           MODAL EDIT SHIFT (Tampil jika ada shift yang diedit)
           ========================================================================= */}
-      {editingShift && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200 overflow-hidden">
-            <div className="flex justify-between items-center p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-              <div>
-                <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg">Edit Laporan Shift</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">ID: {editingShift.id}</p>
-              </div>
-              <button onClick={() => setEditingShift(null)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 bg-white dark:bg-slate-900 rounded-full p-1 shadow-sm border border-slate-200 dark:border-slate-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
+      <Modal 
+        isOpen={!!editingShift} 
+        onClose={() => setEditingShift(null)} 
+        title="Edit Laporan Shift"
+      >
+        {editingShift && (
+          <>
             <div className="p-4 md:p-6 space-y-4">
+              <p className="text-xs text-slate-500 dark:text-slate-400 -mt-2">ID: {editingShift.id}</p>
+
               <div className="bg-blue-50 dark:bg-blue-500/10 text-blue-800 dark:text-blue-300 p-3 rounded-xl text-xs flex items-start gap-2 border border-blue-100 dark:border-blue-500/20">
                 <FileText className="w-4 h-4 mt-0.5 shrink-0" />
                 <p>Sebagai Admin, Anda dapat mengoreksi <b>Saldo Aktual</b> jika terjadi kesalahan input kasir. Selisih kas akan dihitung ulang secara otomatis.</p>
@@ -546,22 +552,20 @@ const ShiftView = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">Koreksi Saldo Aktual di Dompet</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400 dark:text-slate-500">Rp</span>
-                  <input
-                    type="number"
-                    className="w-full pl-12 pr-4 py-3 text-lg font-bold rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-blue-600 dark:focus:border-blue-500 bg-white dark:bg-slate-900 transition-colors"
-                    value={editActualCashInput}
-                    onChange={e => setEditActualCashInput(e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
+                <Input
+                  type="number"
+                  label="Koreksi Saldo Aktual di Dompet"
+                  icon={<span className="font-bold">Rp</span>}
+                  value={editActualCashInput}
+                  onChange={e => setEditActualCashInput(e.target.value)}
+                  placeholder="0"
+                  className="text-lg font-bold py-3"
+                />
               </div>
 
               {/* Preview Perubahan Selisih */}
               {editActualCashInput && (
-                <div className="pt-2">
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
                   <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Preview Selisih Baru:</p>
                   <p className={`font-black text-lg ${(Number(editActualCashInput) - editingShift.stats.expectedCash) < 0 ? 'text-red-500 dark:text-red-400' :
                     (Number(editActualCashInput) - editingShift.stats.expectedCash) > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'
@@ -573,22 +577,24 @@ const ShiftView = () => {
             </div>
 
             <div className="p-4 md:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex gap-3">
-              <button
+              <Button 
+                variant="secondary" 
+                className="flex-1" 
                 onClick={() => setEditingShift(null)}
-                className="flex-1 py-3 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-bold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors"
               >
                 Batal
-              </button>
-              <button
+              </Button>
+              <Button 
+                variant="primary" 
+                className="flex-1" 
                 onClick={handleSaveEdit}
-                className="flex-1 py-3 bg-blue-600 dark:bg-blue-500 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 dark:hover:bg-blue-600 hover:-translate-y-0.5 transition-all"
               >
                 Simpan Koreksi
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
     </div>
   );

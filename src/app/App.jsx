@@ -29,6 +29,7 @@ import {
   History,
   Home,
   Info,
+  Layers,
   List,
   Menu as MenuIcon,
   Minus,
@@ -58,6 +59,7 @@ import {
   Wallet,
   X,
   Warehouse,
+  BarChart3,
 } from 'lucide-react';
 
 
@@ -77,7 +79,7 @@ export default function App() {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
 
-  const { isAdminMode, setIsAdminMode } = useAppContext();
+  const [isAdminMode, setIsAdminMode] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
 
   const handleAdminLogin = () => {
@@ -183,20 +185,12 @@ export default function App() {
   const [shiftHistory, setShiftHistory, l14, setShiftHistoryRemote] = usePersistState('shiftHistory', [], { syncMode: 'transaction', syncReadyPromise });
 
   // --- PELANGGAN ----
-  const [customers, setCustomers, l15, setCustomersRemote] = usePersistState('customers', [
-    { id: 'c1', name: 'Budi Santoso', phone: '08123456789', points: 120 },
-    { id: 'c2', name: 'Siti Rahma', phone: '08571234567', points: 250 },
-    { id: 'c3', name: 'Andi Wijaya', phone: '08998765432', points: 45 }
-  ], { syncMode: 'config', syncReadyPromise });
-  const [vouchers, setVouchers, l16, setVouchersRemote] = usePersistState('vouchers', [
-    { id: 'v1', code: 'MAMAMKENYANG', discountType: 'fixed', discountValue: 5000, minPurchase: 30000 }
-  ], { syncMode: 'config', syncReadyPromise });
+  const [customers, setCustomers, l15, setCustomersRemote] = usePersistState('customers', [], { syncMode: 'config', syncReadyPromise });
+  const [vouchers, setVouchers, l16, setVouchersRemote] = usePersistState('vouchers', [], { syncMode: 'config', syncReadyPromise });
   const [claimsHistory, setClaimsHistory, l17, setClaimsHistoryRemote] = usePersistState('claimsHistory', [], { syncMode: 'transaction', syncReadyPromise });
 
   // --- PAYROLL STATES ---
-  const [employees, setEmployees, l18, setEmployeesRemote] = usePersistState('employees', [
-    { id: 'EMP-001', name: 'Budi Pekerja', phone: '0812345678', address: 'Jl. Melati', hourlyRate: 15000, startDate: '2023-01-10' }
-  ], { syncMode: 'config', syncReadyPromise });
+  const [employees, setEmployees, l18, setEmployeesRemote] = usePersistState('employees', [], { syncMode: 'config', syncReadyPromise });
   const [employeeDailyRecords, setEmployeeDailyRecords, l19, setEmployeeDailyRecordsRemote] = usePersistState('employeeDailyRecords', [], { syncMode: 'transaction', syncReadyPromise });
   const [additionCategories, setAdditionCategories, l20, setAdditionCategoriesRemote] = usePersistState('additionCategories', ['Ongkir', 'Lembur', 'Bonus', 'Potongin Ayam'], { syncMode: 'config', syncReadyPromise });
   const [deductionCategories, setDeductionCategories, l21, setDeductionCategoriesRemote] = usePersistState('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi'], { syncMode: 'config', syncReadyPromise });
@@ -689,7 +683,7 @@ export default function App() {
     { id: 'riwayat', icon: History, label: 'Riwayat Pesanan' },
     { id: 'pemasukan', icon: TrendingUp, label: 'Pemasukan' },
     { id: 'pengeluaran', icon: TrendingDown, label: 'Pengeluaran' },
-    { id: 'laporan', icon: PieChart, label: 'Laporan & Profit' },
+    { id: 'laporan', icon: BarChart3, label: 'Laporan & Profit' },
     { id: 'karyawan', icon: Briefcase, label: 'Manajemen Pegawai' },
     { id: 'menu', icon: List, label: 'Manajemen Menu' },
     { id: 'varian', icon: Layers, label: 'Manajemen Varian' },
@@ -776,7 +770,7 @@ export default function App() {
         }} />
 
         {/* Logo / ikon app */}
-        <div className="w-16 h-16 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200">
+        <div className="w-16 h-16 rounded-3xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 11l19-9-9 19-2-8-8-2z" />
           </svg>
@@ -871,7 +865,7 @@ export default function App() {
           <>
             {/* Toast "Ketuk sekali lagi untuk keluar" */}
             {showExitToast && (
-              <div className="fixed bottom-24 left-1/2 z-[300] pointer-events-none exit-toast">
+              <div className="fixed bottom-24 left-1/2 z-[200] pointer-events-none exit-toast">
                 <div className="flex items-center gap-2 bg-slate-800/95 dark:bg-slate-700/95 text-white text-sm font-semibold px-5 py-3 rounded-full shadow-2xl backdrop-blur-sm border border-white/10 whitespace-nowrap">
                   <span>👋</span>
                   <span>Ketuk sekali lagi untuk keluar</span>
@@ -890,7 +884,7 @@ export default function App() {
             {/* Alert modal */}
             {customAlert.isOpen && (
               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black backdrop-blur-sm transition-opacity duration-300">
-                <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
+                <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
                   <div className="w-12 h-12 bg-green-50 dark:bg-green-500/10 text-green-500 dark:text-green-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
                     <CheckCircle2 className="w-6 h-6" />
                   </div>
@@ -915,7 +909,7 @@ export default function App() {
                   </div>
                   <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg mb-2">Konfirmasi Tindakan</h3>
                   <p className="text-slate-500 dark:text-slate-400 text-sm mb-6 leading-relaxed">{confirmModal.message}</p>
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     <button
                       onClick={() => setConfirmModal({ isOpen: false, message: '', onConfirm: null })}
                       className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
@@ -956,15 +950,6 @@ export default function App() {
   );
 }
 
-function Layers(props) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-      <polyline points="2 12 12 17 22 12"></polyline>
-      <polyline points="2 17 12 22 22 17"></polyline>
-    </svg>
-  );
-}
 
 /**
  * Badge kecil di pojok kanan bawah layar.

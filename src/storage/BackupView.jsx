@@ -213,16 +213,16 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
   const label     = exportType === 'json' ? 'JSON' : 'Excel';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="bg-white w-full max-w-md rounded-t-3xl p-5 pb-8" style={{ animation: 'slideUp 0.25s ease' }}>
-        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-3xl p-5 pb-8" style={{ animation: 'slideUp 0.25s ease' }}>
+        <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-5" />
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center text-xl">
+          <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-xl">
             {exportType === 'json' ? '📦' : '📊'}
           </div>
           <div>
-            <p className="font-black text-slate-900 text-base">Export {label} — Pilih Rentang</p>
-            <p className="text-xs text-slate-400">Filter berdasarkan tanggal transaksi</p>
+            <p className="font-black text-slate-900 dark:text-slate-100 text-base">Export {label} — Pilih Rentang</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Filter berdasarkan tanggal transaksi</p>
           </div>
         </div>
 
@@ -230,7 +230,7 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
           {PRESETS.map(p => (
             <button key={p.id} onClick={() => applyPreset(p)}
               className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all
-                ${preset === p.id ? 'border-orange-500 bg-orange-500 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-orange-300'}`}
+                ${preset === p.id ? 'border-orange-500 bg-orange-500 text-white' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-orange-300 dark:hover:border-orange-500/50'}`}
             >{p.label}</button>
           ))}
         </div>
@@ -239,29 +239,29 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
           <div className="grid grid-cols-2 gap-3 mb-4">
             {[['Dari Tanggal', startDate, setStartDate], ['Sampai Tanggal', endDate, setEndDate]].map(([lbl, val, set]) => (
               <div key={lbl}>
-                <p className="text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">{lbl}</p>
+                <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1.5 uppercase tracking-wider">{lbl}</p>
                 <input type="date" value={val} onChange={e => set(e.target.value)}
-                  className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 focus:outline-none focus:border-orange-400" />
+                  className="w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors" />
               </div>
             ))}
           </div>
         )}
 
         {hasRange && (
-          <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-orange-500 shrink-0" />
-            <p className="text-xs text-orange-700 font-semibold">{startDate || '∞'} — {endDate || '∞'}</p>
+          <div className="bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-orange-500 dark:text-orange-400 shrink-0" />
+            <p className="text-xs text-orange-700 dark:text-orange-300 font-semibold">{startDate || '∞'} — {endDate || '∞'}</p>
           </div>
         )}
         {isAllTime && (
-          <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
+          <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
             <Info className="w-4 h-4 text-slate-400 shrink-0" />
-            <p className="text-xs text-slate-500 font-semibold">Semua data tanpa filter tanggal</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">Semua data tanpa filter tanggal</p>
           </div>
         )}
 
         <button onClick={() => onConfirm(isAllTime ? '' : startDate, isAllTime ? '' : endDate)}
-          className="w-full py-4 rounded-xl font-black text-sm bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-200 transition-all">
+          className="w-full py-4 rounded-xl font-black text-sm bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600 text-white shadow-lg shadow-orange-200 dark:shadow-none transition-all">
           Download {label}
         </button>
       </div>
@@ -292,17 +292,17 @@ function ImportModal({ type, onClose, onConfirm }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="bg-white w-full max-w-md rounded-t-3xl p-5 pb-8" style={{ animation: 'slideUp 0.25s ease' }}>
-        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-3xl p-5 pb-8" style={{ animation: 'slideUp 0.25s ease' }}>
+        <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-5" />
 
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
-            <FileUp className="w-5 h-5 text-orange-500" />
+          <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
+            <FileUp className="w-5 h-5 text-orange-500 dark:text-orange-400" />
           </div>
           <div>
-            <p className="font-black text-slate-900 text-base">Import dari {label}</p>
-            <p className="text-xs text-slate-400">Data lokal aman — mode default: Gabungkan</p>
+            <p className="font-black text-slate-900 dark:text-slate-100 text-base">Import dari {label}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Data lokal aman — mode default: Gabungkan</p>
           </div>
         </div>
 
@@ -312,73 +312,73 @@ function ImportModal({ type, onClose, onConfirm }) {
           onDrop={e => { e.preventDefault(); setDragOver(false); setFile(e.dataTransfer.files[0]); }}
           onClick={() => !file && inputRef.current?.click()}
           className={`border-2 border-dashed rounded-2xl p-6 text-center mb-4 cursor-pointer transition-all
-            ${dragOver ? 'border-orange-400 bg-orange-50' : file ? 'border-green-400 bg-green-50' : 'border-slate-200 bg-slate-50 hover:border-orange-300'}`}
+            ${dragOver ? 'border-orange-400 bg-orange-50 dark:bg-orange-500/10' : file ? 'border-green-400 bg-green-50 dark:bg-green-500/10' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-orange-300 dark:hover:border-orange-500/50'}`}
         >
           {file ? (
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-                <CheckCircle className="w-5 h-5 text-green-600" />
+              <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-500/15 flex items-center justify-center shrink-0">
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div className="text-left flex-1 min-w-0">
-                <p className="font-bold text-sm text-slate-800 truncate">{file.name}</p>
-                <p className="text-xs text-slate-400">{fmtBytes(file.size)}</p>
+                <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{file.name}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">{fmtBytes(file.size)}</p>
               </div>
-              <button onClick={e => { e.stopPropagation(); setFile(null); }} className="text-slate-400 hover:text-slate-600 p-1">
+              <button onClick={e => { e.stopPropagation(); setFile(null); }} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <>
-              <Upload className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="font-semibold text-sm text-slate-600">{dragOver ? 'Lepaskan file di sini' : 'Ketuk untuk pilih file'}</p>
-              <p className="text-xs text-slate-400 mt-1">atau seret & lepas file {label}</p>
+              <Upload className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+              <p className="font-semibold text-sm text-slate-600 dark:text-slate-300">{dragOver ? 'Lepaskan file di sini' : 'Ketuk untuk pilih file'}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">atau seret & lepas file {label}</p>
             </>
           )}
         </div>
 
         <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={e => setFile(e.target.files[0])} />
 
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Mode Import</p>
+        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Mode Import</p>
         <div className="grid grid-cols-2 gap-2 mb-4">
           {/* Gabungkan — default, aman */}
           <button onClick={() => handleModeChange('merge')}
-            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'merge' ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'merge' ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
           >
             <p className="text-base mb-1">🔗</p>
-            <p className={`font-bold text-xs ${mode === 'merge' ? 'text-orange-600' : 'text-slate-700'}`}>Gabungkan</p>
-            <p className="text-xs text-slate-400">Tambah ke data ada</p>
-            {mode === 'merge' && <p className="text-xs text-orange-500 font-bold mt-1">✓ Aman — direkomendasikan</p>}
+            <p className={`font-bold text-xs ${mode === 'merge' ? 'text-orange-600 dark:text-orange-400' : 'text-slate-700 dark:text-slate-300'}`}>Gabungkan</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Tambah ke data ada</p>
+            {mode === 'merge' && <p className="text-xs text-orange-500 dark:text-orange-400 font-bold mt-1">✓ Aman — direkomendasikan</p>}
           </button>
           {/* Timpa Semua — muted, perlu konfirmasi */}
           <button onClick={() => handleModeChange('replace')}
-            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'replace' ? 'border-red-400 bg-red-50' : 'border-slate-100 bg-slate-50 hover:border-slate-300'}`}
+            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'replace' ? 'border-red-400 bg-red-50 dark:bg-red-500/10' : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
           >
             <p className="text-base mb-1">🔄</p>
-            <p className={`font-bold text-xs ${mode === 'replace' ? 'text-red-600' : 'text-slate-400'}`}>Timpa Semua</p>
-            <p className="text-xs text-slate-400">Hapus data lama</p>
+            <p className={`font-bold text-xs ${mode === 'replace' ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>Timpa Semua</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Hapus data lama</p>
           </button>
         </div>
 
         {/* Konfirmasi ekstra untuk replace — wajib ketik "TIMPA" */}
         {mode === 'replace' && (
-          <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 mb-4 space-y-3">
+          <div className="bg-red-50 dark:bg-red-500/10 border-2 border-red-200 dark:border-red-500/30 rounded-xl p-4 mb-4 space-y-3">
             <div className="flex gap-2 items-start">
-              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-red-700 leading-relaxed">
+              <AlertTriangle className="w-4 h-4 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed">
                 <strong>Peringatan!</strong> Mode ini akan menghapus SELURUH data lokal dan menggantinya dengan isi file import.
                 Tindakan ini tidak bisa dibatalkan.
               </p>
             </div>
             <div>
-              <p className="text-xs font-bold text-red-500 mb-1.5">
-                Ketik <span className="bg-red-100 px-1.5 py-0.5 rounded font-mono">TIMPA</span> untuk konfirmasi:
+              <p className="text-xs font-bold text-red-500 dark:text-red-400 mb-1.5">
+                Ketik <span className="bg-red-100 dark:bg-red-500/20 px-1.5 py-0.5 rounded font-mono">TIMPA</span> untuk konfirmasi:
               </p>
               <input
                 type="text"
                 value={replaceConfirm}
                 onChange={e => setReplaceConfirm(e.target.value)}
                 placeholder="Ketik TIMPA di sini..."
-                className="w-full border-2 border-red-200 rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-red-400 bg-white"
+                className="w-full border border-red-200 dark:border-red-500/30 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-red-400 dark:focus:border-red-400 transition-colors"
                 autoComplete="off"
               />
             </div>
@@ -389,9 +389,9 @@ function ImportModal({ type, onClose, onConfirm }) {
           className={`w-full py-4 rounded-xl font-black text-sm transition-all
             ${canSubmit
               ? mode === 'replace'
-                ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-200'
-                : 'bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-200'
-              : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                ? 'bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-500 text-white shadow-lg shadow-red-200 dark:shadow-none'
+                : 'bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600 text-white shadow-lg shadow-orange-200 dark:shadow-none'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'}`}
         >
           {file ? `Import ${label}` : 'Pilih file terlebih dahulu'}
         </button>
@@ -630,7 +630,7 @@ const BackupView = ({ onBack }) => {
     <div className="flex flex-col h-full bg-slate-50 overflow-y-auto">
 
       {toast && (
-        <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl text-white text-sm font-bold shadow-xl whitespace-nowrap
+        <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl text-white text-sm font-bold shadow-xl whitespace-nowrap
           ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'}`} style={{ animation: 'fadeInDown 0.2s ease' }}>
           {toast.msg}
         </div>

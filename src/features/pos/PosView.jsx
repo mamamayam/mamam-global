@@ -4,6 +4,7 @@ import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package, St
 import CartDrawer from '../pos/CartDrawer';
 import PaymentModal from '../pos/modals/PaymentModal';
 import VariantSelectionModal from '../pos/modals/VariantSelectionModal';
+import { Badge, EmptyState, Button } from '../../components/ui';
 
 const PosView = () => {
     const {
@@ -107,10 +108,10 @@ const PosView = () => {
 
             {/* Banner peringatan shift */}
             {!currentShift && (
-                <div className="bg-red-500 dark:bg-red-600 text-white p-2 text-center text-xs font-bold flex items-center justify-center gap-2">
+                <Badge variant="danger" className="w-full justify-center py-2 text-xs font-bold gap-2">
                     <AlertCircle className="w-4 h-4" />
                     Shift Kasir belum dibuka! Transaksi tidak akan masuk ke laporan Shift ini.
-                </div>
+                </Badge>
             )}
 
             {/* ── Header sticky ──────────────────────────────────────────── */}
@@ -139,26 +140,27 @@ const PosView = () => {
                 </div>
 
                 {/* Tab kategori */}
-                <div ref={categoryTabsRef} className="flex overflow-x-auto hide-scrollbar gap-2 pb-1 snap-x">
+                <div ref={categoryTabsRef} className="flex overflow-x-auto hide-scrollbar gap-2 p-2 snap-x">
                     {categories.map(cat => {
                         const isActive = selectedCategory === cat && !isSearching;
                         return (
-                            <button
+                            <Button
                                 key={cat}
                                 data-active={isActive}
                                 onClick={() => handleCategoryClick(cat)}
+                                variant={isActive ? 'primary' : 'secondary'}
+                                size="sm"
                                 className={[
-                                    'snap-center shrink-0 px-5 py-2 rounded-full text-sm font-semibold border transition-all duration-300',
+                                    'snap-center shrink-0 !rounded-full !font-semibold !px-5 !py-2 !text-sm border',
                                     isActive
-                                        ? 'bg-orange-600 dark:bg-orange-500 text-white border-transparent shadow-md scale-[1.05]'
+                                        ? 'border-transparent !shadow-md scale-[1.05]'
                                         : isSearching
-                                            // Tab ter-dim saat mode pencarian
-                                            ? 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700 opacity-50 hover:opacity-90 hover:bg-orange-50 dark:hover:bg-slate-800'
-                                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-orange-50 dark:hover:bg-slate-800 hover:border-orange-200 dark:hover:border-orange-500/40',
+                                            ? '!bg-white dark:!bg-slate-900 !text-slate-400 dark:!text-slate-600 border-slate-200 dark:border-slate-700 opacity-50 hover:opacity-90 hover:!bg-orange-50 dark:hover:!bg-slate-800'
+                                            : '!bg-white dark:!bg-slate-900 !text-slate-600 dark:!text-slate-300 border-slate-200 dark:border-slate-700 hover:!bg-orange-50 dark:hover:!bg-slate-800 hover:border-orange-200 dark:hover:border-orange-500/40',
                                 ].join(' ')}
                             >
                                 {cat}
-                            </button>
+                            </Button>
                         );
                     })}
                 </div>
@@ -209,9 +211,9 @@ const PosView = () => {
 
                             {/* Badge kategori — hanya muncul saat pencarian lintas kategori */}
                             {isSearching && (
-                                <span className="inline-block text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full mb-1">
+                                <Badge variant="neutral" className="mb-1">
                                     {menu.category}
-                                </span>
+                                </Badge>
                             )}
 
                             <p className="text-orange-600 dark:text-orange-400 font-bold text-xs md:text-sm mt-auto">
@@ -237,20 +239,22 @@ const PosView = () => {
 
                 {/* Empty state: tab Favorit kosong */}
                 {filteredMenus.length === 0 && selectedCategory === 'Favorit' && !isSearching && (
-                    <div className="text-center text-slate-400 dark:text-slate-500 mt-10 animate-in fade-in duration-300">
-                        <Star className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                        <p className="font-semibold">Belum ada menu favorit</p>
-                        <p className="text-xs mt-1">Menu yang sering dipesan akan otomatis muncul di sini</p>
-                    </div>
+                    <EmptyState
+                        icon={<Star className="w-12 h-12" />}
+                        title="Belum ada menu favorit"
+                        description="Menu yang sering dipesan akan otomatis muncul di sini"
+                        className="mt-10 animate-in fade-in duration-300"
+                    />
                 )}
 
                 {/* Empty state: pencarian/kategori tidak ada hasil */}
                 {filteredMenus.length === 0 && (selectedCategory !== 'Favorit' || isSearching) && (
-                    <div className="text-center text-slate-400 dark:text-slate-500 mt-10 animate-in fade-in duration-300">
-                        <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                        <p className="font-semibold">Menu tidak ditemukan</p>
-                        {isSearching && <p className="text-xs mt-1">Coba kata kunci yang berbeda</p>}
-                    </div>
+                    <EmptyState
+                        icon={<Package className="w-12 h-12" />}
+                        title="Menu tidak ditemukan"
+                        description={isSearching ? 'Coba kata kunci yang berbeda' : undefined}
+                        className="mt-10 animate-in fade-in duration-300"
+                    />
                 )}
             </div>
 

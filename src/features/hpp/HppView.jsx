@@ -6,8 +6,8 @@ import { usePersistState } from '../../hook/usePersistState';
 import CategoryModal from '../../components/CategoryModal';
 import { INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../../data/initialData';
 import {
-    Menu as MenuIcon, X, Plus, Trash2, CheckCircle2, ChevronRight,
-    Calculator, PieChart, Save, AlertCircle, Edit3,
+    Menu as MenuIcon, X, Plus, Trash2, ChevronRight,
+    Calculator, PieChart, Save, Edit3,
     BookOpen, Package, RefreshCw, Clock, Search,
     TrendingUp, TrendingDown, HelpCircle, DollarSign, User, Zap, Beaker
 } from 'lucide-react';
@@ -1028,8 +1028,8 @@ const LibraryHppView = () => {
 export default function App() {
     const [activeTab, setActiveTab] = useState('materials');
 
-    // Ambil categories dari outer AppContext (App.jsx) agar tidak duplikat state
-    // dan perubahan dari MenuMgmt langsung sinkron di sini juga
+    // Ambil dari outer AppContext (App.jsx) — termasuk triggerAlert/triggerConfirm
+    // agar modal alert/confirm dirender oleh global overlay di App.jsx, tidak duplikat di sini
     const {
         categories,
         setCategories,
@@ -1037,6 +1037,8 @@ export default function App() {
         setMenus,
         hppLibrary: outerHppLibrary,
         setHppLibrary: setOuterHppLibrary,
+        triggerAlert,
+        triggerConfirm,
     } = useAppContext();
 
     // Database States yang masih dikelola lokal (rawMaterials & semiFinished
@@ -1049,13 +1051,7 @@ export default function App() {
     const [editingRecipe, setEditingRecipe] = useState(null);
 
     // Modals
-    const [customAlert, setCustomAlert] = useState({ isOpen: false, message: '' });
-    const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null });
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-
-
-    const triggerAlert = (message) => setCustomAlert({ isOpen: true, message });
-    const triggerConfirm = (message, onConfirm) => setConfirmModal({ isOpen: true, message, onConfirm });
 
     // LIVE MATERIALS POOL (RAW + PREP)
     const availableMaterials = useMemo(() => {
@@ -1128,32 +1124,6 @@ export default function App() {
                     {activeTab === 'calculator' && <KalkulatorHppView />}
                     {activeTab === 'library' && <LibraryHppView />}
                 </div>
-
-                {/* Modals Alert & Confirm */}
-                {customAlert.isOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black backdrop-blur-sm transition-opacity duration-300">
-                        <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
-                            <div className="w-12 h-12 bg-green-50 dark:bg-green-500/10 text-green-500 dark:text-green-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in"><CheckCircle2 className="w-6 h-6" /></div>
-                            <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg mb-2">Pemberitahuan</h3>
-                            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">{customAlert.message}</p>
-                            <button onClick={() => setCustomAlert({ isOpen: false, message: '' })} className="w-full py-3 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-700 dark:hover:bg-orange-600 transition-colors shadow-sm text-sm">Tutup</button>
-                        </div>
-                    </div>
-                )}
-
-                {confirmModal.isOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black backdrop-blur-sm transition-opacity duration-300">
-                        <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
-                            <div className="w-12 h-12 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in"><AlertCircle className="w-6 h-6" /></div>
-                            <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg mb-2">Konfirmasi Tindakan</h3>
-                            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6 leading-relaxed">{confirmModal.message}</p>
-                            <div className="flex gap-3">
-                                <button onClick={() => setConfirmModal({ isOpen: false, message: '', onConfirm: null })} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm">Batal</button>
-                                <button onClick={() => { if (confirmModal.onConfirm) confirmModal.onConfirm(); setConfirmModal({ isOpen: false, message: '', onConfirm: null }); }} className="flex-1 py-3 bg-red-500 dark:bg-red-600 text-white font-bold rounded-xl hover:bg-red-600 dark:hover:bg-red-500 shadow-sm transition-colors text-sm">Ya, Lanjutkan</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
 
                 <CategoryModal
                     isOpen={isCategoryModalOpen}
