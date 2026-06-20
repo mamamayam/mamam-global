@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { 
-  Settings, Store, Save, ReceiptText, MapPin, Phone, Calculator, 
+import {
+  Settings, Store, Save, ReceiptText, MapPin, Phone, Calculator,
   Bluetooth, BluetoothSearching, Unplug, CheckCircle, Sun, Moon
 } from 'lucide-react';
+import { Alert, Button } from '../../components/ui';
 
 // =========================================================================
 // KOMPONEN TEXT INPUT
@@ -148,17 +149,13 @@ const SettingsView = () => {
         <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
           <Settings className="w-6 h-6 text-orange-500 dark:text-orange-400" /> Pengaturan
         </h2>
-
-        <div className={`transition-all duration-300 ${isSaved ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
-          <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-200 dark:border-emerald-500/30 flex items-center gap-2 shadow-sm">
-            ✓ Perubahan berhasil disimpan
-          </span>
-        </div>
       </div>
 
       <form onSubmit={handleSave} className="space-y-6 max-w-5xl pb-10">
+
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          
+
           {/* KOLOM KIRI */}
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
@@ -169,9 +166,26 @@ const SettingsView = () => {
               <TextInput label="Nama Toko" placeholder="Misal: Kedai Kopi Senja" value={localSettings.storeName} onChange={(val) => handleTextChange('storeName', val)} />
               <TextInput label="Nomor Telepon / WhatsApp" icon={Phone} type="tel" placeholder="Misal: 081234567890" value={localSettings.storePhone} onChange={(val) => handleTextChange('storePhone', val)} />
               <TextInput label="Alamat Lengkap" icon={MapPin} type="textarea" placeholder="Masukkan alamat lengkap toko..." value={localSettings.storeAddress} onChange={(val) => handleTextChange('storeAddress', val)} helperText="Alamat ini akan dicetak pada bagian atas struk kasir." />
-              
+
               {/* Pesan Penutup Struk Dipindahkan Kesini */}
               <TextInput label="Pesan Penutup Struk (Footer)" icon={ReceiptText} type="textarea" placeholder="Misal: Terima kasih atas kunjungannya!" value={localSettings.receiptFooter} onChange={(val) => handleTextChange('receiptFooter', val)} />
+              <Button
+                type='submit'
+                variant='primary'
+                size="full"
+              >
+                <Save className="w-4 h-4" /> Simpan Pengaturan
+              </Button>
+              <div className={`transition-all duration-300 ${isSaved ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
+                <Alert
+                  type="callout"
+                  variant="success"
+                  animate={false}
+                  className="shadow-sm items-center"
+                >
+                  Perubahan berhasil disimpan
+                </Alert>
+              </div>
             </div>
 
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
@@ -260,8 +274,8 @@ const SettingsView = () => {
                       <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{savedPrinter.address}</p>
                     </div>
                   </div>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={handleDisconnectPrinter}
                     className="p-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
                     title="Putuskan Printer"
@@ -312,12 +326,6 @@ const SettingsView = () => {
           </div>
         </div>
 
-        {/* FLOATING ACTION BAR FOR SAVING */}
-        <div className="sticky bottom-0 mt-8 py-4 bg-slate-50 dark:bg-slate-950/80 backdrop-blur-md border-t border-slate-200 dark:border-slate-700/60 flex justify-end">
-          <button type="submit" className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 bg-slate-800 text-white rounded-xl font-bold text-sm shadow-lg shadow-slate-200 hover:bg-slate-700 hover:-translate-y-0.5 transition-all active:scale-95 cursor-pointer">
-            <Save className="w-4 h-4" /> Simpan Pengaturan
-          </button>
-        </div>
       </form>
     </div>
   );

@@ -3,6 +3,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { usePersistState } from '../hook/usePersistState';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
 import { AppContext, useAppContext } from '../context/AppContext';
+import { Modal, Button } from '../components/ui';
 import PinModal from '../auth/PinModal';
 import AppRoutes from '../app/AppRoutes';
 import AppLayout from '../app/AppLayout';
@@ -876,59 +877,68 @@ export default function App() {
             {/* Overlay backdrop sidebar mobile */}
             {isSidebarOpen && (
               <div
-                className="fixed inset-0 bg-black z-40 md:hidden backdrop-blur-sm transition-opacity duration-300"
+                className="fixed inset-0 bg-slate-500/30 dark:bg-slate-800/40 z-40 md:hidden backdrop-blur-sm transition-opacity duration-300"
                 onClick={() => setIsSidebarOpen(false)}
               />
             )}
 
             {/* Alert modal */}
-            {customAlert.isOpen && (
-              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black backdrop-blur-sm transition-opacity duration-300">
-                <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
-                  <div className="w-12 h-12 bg-green-50 dark:bg-green-500/10 text-green-500 dark:text-green-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg mb-2">Pemberitahuan</h3>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">{customAlert.message}</p>
-                  <button
-                    onClick={() => setCustomAlert({ isOpen: false, message: '' })}
-                    className="w-full py-3 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-700 dark:hover:bg-orange-600 transition-colors"
-                  >
-                    Tutup
-                  </button>
-                </div>
+            <Modal
+              isOpen={customAlert.isOpen}
+              onClose={() => setCustomAlert({ isOpen: false, message: '' })}
+              zLevel="top"
+              size="sm"
+              className="p-6 text-center"
+            >
+              <div className="w-12 h-12 bg-green-50 dark:bg-green-500/10 text-green-500 dark:text-green-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
+                <CheckCircle2 className="w-6 h-6" />
               </div>
-            )}
+              <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg mb-2">Pemberitahuan</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">{customAlert.message}</p>
+              <Button
+                size="full"
+                onClick={() => setCustomAlert({ isOpen: false, message: '' })}
+              >
+                Tutup
+              </Button>
+            </Modal>
 
             {/* Confirm modal */}
-            {confirmModal.isOpen && (
-              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black backdrop-blur-sm transition-opacity duration-300">
-                <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-300 ease-out">
-                  <div className="w-12 h-12 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
-                    <AlertCircle className="w-6 h-6" />
-                  </div>
-                  <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg mb-2">Konfirmasi Tindakan</h3>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm mb-6 leading-relaxed">{confirmModal.message}</p>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setConfirmModal({ isOpen: false, message: '', onConfirm: null })}
-                      className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirmModal.onConfirm) confirmModal.onConfirm();
-                        setConfirmModal({ isOpen: false, message: '', onConfirm: null });
-                      }}
-                      className="flex-1 py-3 bg-red-500 dark:bg-red-600 text-white font-bold rounded-xl hover:bg-red-600 dark:hover:bg-red-500 transition-colors"
-                    >
-                      Ya
-                    </button>
-                  </div>
-                </div>
+            <Modal
+              isOpen={confirmModal.isOpen}
+              onClose={() => setConfirmModal({ isOpen: false, message: '', onConfirm: null })}
+              closeOnBackdrop={false}
+              zLevel="top"
+              size="sm"
+              className="p-6 text-center"
+            >
+              <div className="w-12 h-12 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
+                <AlertCircle className="w-6 h-6" />
               </div>
-            )}
+              <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg mb-2">Konfirmasi Tindakan</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-6 leading-relaxed">{confirmModal.message}</p>
+              <div className="flex gap-3">
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  className="flex-1"
+                  onClick={() => setConfirmModal({ isOpen: false, message: '', onConfirm: null })}
+                >
+                  Batal
+                </Button>
+                <Button
+                  variant="danger"
+                  size="lg"
+                  className="flex-1"
+                  onClick={() => {
+                    if (confirmModal.onConfirm) confirmModal.onConfirm();
+                    setConfirmModal({ isOpen: false, message: '', onConfirm: null });
+                  }}
+                >
+                  Ya
+                </Button>
+              </div>
+            </Modal>
 
             {/* PIN Modal */}
             <PinModal

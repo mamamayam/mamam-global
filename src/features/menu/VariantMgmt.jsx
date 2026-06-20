@@ -1,21 +1,21 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useAppContext } from "../../context/AppContext"; 
+import { useAppContext } from "../../context/AppContext";
 import { ChevronLeft, Plus, Edit3, Trash2, Settings2, Trash } from "lucide-react";
 import CategoryModal from "../../components/CategoryModal";
 import { Button, IconButton, Input, Select, PageHeader, EmptyState, Badge } from "../../components/ui";
 
 const VariantManagement = () => {
-  const { 
-    variantGroups, setVariantGroups, 
-    variantCategories, setVariantCategories, 
-    menus, setMenus, triggerAlert, triggerConfirm, formatRupiah 
+  const {
+    variantGroups, setVariantGroups,
+    variantCategories, setVariantCategories,
+    menus, setMenus, triggerAlert, triggerConfirm, formatRupiah
   } = useAppContext();
 
   const [isEditing, setIsEditing] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ 
-    id: '', name: '', category: variantCategories?.[0] || 'Lainnya', 
-    isRequired: false, maxSelection: 1, options: [] 
+  const [formData, setFormData] = useState({
+    id: '', name: '', category: variantCategories?.[0] || 'Lainnya',
+    isRequired: false, maxSelection: 1, options: []
   });
   const [newOption, setNewOption] = useState({ name: '', extraPrice: '' });
 
@@ -26,7 +26,7 @@ const VariantManagement = () => {
     // Mencegah crash jika AppContext belum mengekspor fungsi ini
     if (typeof setVariantCategories !== 'function') {
       console.warn("Peringatan: setVariantCategories belum ditambahkan ke AppContext.jsx");
-      return; 
+      return;
     }
 
     const externalCategories = [...new Set(variantGroups.map(item => item.category).filter(Boolean))];
@@ -42,9 +42,9 @@ const VariantManagement = () => {
   }, [variantGroups, setVariantCategories]);
 
   const handleSave = () => {
-    if ((formData.options ?? []).length === 0) { 
-      triggerAlert("Tambahkan minimal 1 opsi varian."); 
-      return; 
+    if ((formData.options ?? []).length === 0) {
+      triggerAlert("Tambahkan minimal 1 opsi varian.");
+      return;
     }
     if (!formData.name) {
       triggerAlert("Nama grup varian harus diisi.");
@@ -62,9 +62,9 @@ const VariantManagement = () => {
   const handleDelete = (id) => {
     triggerConfirm("Yakin ingin menghapus grup varian ini?", () => {
       setVariantGroups((variantGroups ?? []).filter(vg => vg.id !== id));
-      setMenus((menus ?? []).map(m => ({ 
-        ...m, 
-        variantGroupIds: (m.variantGroupIds ?? []).filter(vId => vId !== id) 
+      setMenus((menus ?? []).map(m => ({
+        ...m,
+        variantGroupIds: (m.variantGroupIds ?? []).filter(vId => vId !== id)
       })));
     });
   };
@@ -121,9 +121,15 @@ const VariantManagement = () => {
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
                 <label htmlFor="vgCategory" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Kategori Varian</label>
-                <button type="button" onClick={() => setIsCategoryModalOpen(true)} className="text-xs text-orange-600 dark:text-orange-400 font-bold hover:underline flex items-center gap-1 transition-colors">
-                  <Settings2 className="w-3.5 h-3.5" /> Kelola Kategori
-                </button>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => setIsCategoryModalOpen(true)}
+                  icon={<Settings2 className="w-3 h-3" />}
+                >
+                  Kelola Kategori
+                </Button>
               </div>
               <Select
                 id="vgCategory"
@@ -136,7 +142,7 @@ const VariantManagement = () => {
                 )}
               </Select>
             </div>
-            
+
             <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-3">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input type="checkbox" className="w-5 h-5 accent-orange-600 cursor-pointer" checked={formData.isRequired} onChange={e => setFormData({ ...formData, isRequired: e.target.checked })} />
@@ -145,7 +151,7 @@ const VariantManagement = () => {
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">Pelanggan harus memilih minimal satu opsi sebelum memesan.</p>
                 </div>
               </label>
-              
+
               <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
                 <label htmlFor="maxSel" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Maksimal Jumlah Pilihan Opsi</label>
                 <input
@@ -162,7 +168,7 @@ const VariantManagement = () => {
 
           <div className="space-y-4">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Opsi Pilihan Varian</h3>
-            
+
             <div className="flex gap-2 items-end bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
               <div className="flex-1 min-w-0">
                 <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mb-1">Nama Opsi</label>
@@ -258,7 +264,7 @@ const VariantManagement = () => {
       <div className="space-y-8 pb-10">
         {Object.keys(groupedVariantGroups).map(category => (
           <div key={category} className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            
+
             {/* --- Header Kategori --- */}
             <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
               <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
@@ -269,7 +275,7 @@ const VariantManagement = () => {
             <div className="flex flex-col gap-2">
               {groupedVariantGroups[category]?.map((vg) => (
                 <div key={vg.id} className="group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:border-orange-200 dark:hover:border-orange-500/30 transition-all gap-3 sm:gap-4">
-                  
+
                   {/* --- Info Kiri: Nama & Atribut Status --- */}
                   <div className="flex flex-col flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -281,7 +287,7 @@ const VariantManagement = () => {
                       </Badge>
                       <Badge variant="orange">Max: {vg.maxSelection} Pilihan</Badge>
                     </div>
-                    
+
                     {/* --- Daftar Opsi Horizontal --- */}
                     <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                       <span className="font-semibold text-slate-400">Opsi:</span>

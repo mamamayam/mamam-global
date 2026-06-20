@@ -108,8 +108,7 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-950 dark:bg-black/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 w-full max-w-xs rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-6 animate-in zoom-in-95 duration-250 flex flex-col items-center">
+<div className="fixed inset-0 bg-slate-500/30 dark:bg-slate-800/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4 animate-in fade-in duration-200">      <div className="bg-white dark:bg-slate-900 w-full max-w-xs rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-6 animate-in zoom-in-95 duration-250 flex flex-col items-center">
 
         {/* Header Modal */}
         <div className="w-full flex justify-between items-center mb-2">

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { History, Save, Trash2, TrendingDown, Pencil, X, Settings2 } from 'lucide-react';
+import { History, Save, Trash2, TrendingDown, Pencil, X, Settings2, RotateCcw } from 'lucide-react';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import CategoryModal from '../../components/CategoryModal';
 import { Button, PageHeader, Card, Input, Select, Badge, IconButton, EmptyState } from '../../components/ui';
+import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+import { pushTransactionDelete } from '../../storage/realtimeSync';
 
 const ExpenseView = () => {
   const {
@@ -22,6 +24,7 @@ const ExpenseView = () => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
 
   // State untuk melacak data yang sedang diedit
   const [editingId, setEditingId] = useState(null);
@@ -107,8 +110,25 @@ const ExpenseView = () => {
 
   const handleDeleteExpense = (id) => {
     triggerConfirm('Apakah Anda yakin ingin menghapus catatan pengeluaran ini?', () => {
+      setExpenses(expenses.map(e => e.id === id ? markDeleted(e) : e));
+      triggerAlert('Catatan dipindahkan ke Recycle Bin.');
+    });
+  };
+
+  const handleRestoreExpense = (id) => {
+    setExpenses(expenses.map(e => e.id === id ? restoreItem(e) : e));
+    triggerAlert('Catatan berhasil dikembalikan.');
+  };
+
+  const handlePermanentDeleteExpense = (id) => {
+    triggerConfirm('Hapus PERMANEN catatan ini? Tindakan ini tidak bisa dibatalkan.', () => {
       setExpenses(expenses.filter(e => e.id !== id));
-      triggerAlert('Catatan pengeluaran berhasil dihapus.');
+      // Langsung kirim delete ke Supabase saat ini juga, gak nunggu siklus
+      // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
+      pushTransactionDelete('expenses', id).catch(err =>
+        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+      );
+      triggerAlert('Catatan dihapus permanen.');
     });
   };
 
@@ -120,7 +140,7 @@ const ExpenseView = () => {
     setDateInput(toLocalDateString());
   };
 
-  const filteredExpenses = expenses.filter(e => filterMonth === '' || toLocalMonthString(e.date) === filterMonth);
+  const filteredExpenses = (showTrash ? trashedOnly(expenses) : activeOnly(expenses)).filter(e => filterMonth === '' || toLocalMonthString(e.date) === filterMonth);
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
@@ -146,10 +166,12 @@ const ExpenseView = () => {
 
           <Input
             type="number"
-            label="Nominal (Rp)"
+            label="Nominal"
+            icon={<span className="font-bold">Rp</span>}
             value={amount}
             onChange={e => setAmount(e.target.value)}
             placeholder="0"
+            className="text-lg font-bold"
           />
 
           <div>
@@ -188,13 +210,13 @@ const ExpenseView = () => {
             </div>
           )}
 
-<Input
+          <Input
             label="Catatan Tambahan"
             value={note}
             onChange={e => setNote(e.target.value)}
             placeholder="Contoh: Modal kembalian pagi"
           />
-          
+
           <div>
             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">Sumber Dana (Metode Bayar)</label>
             <div className="grid grid-cols-2 gap-2">
@@ -216,12 +238,6 @@ const ExpenseView = () => {
             </div>
           </div>
 
-          <Input
-            label="Catatan Tambahan"
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            placeholder="Contoh: Beli beras 5kg / Kasbon Budi"
-          />
 
           <Button
             onClick={handleAddExpense}
@@ -236,18 +252,28 @@ const ExpenseView = () => {
 
         <Card padding="none" className="lg:col-span-2 flex flex-col h-[600px]">
           <div className="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
-            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><History className="w-4 h-4" /> Riwayat Pengeluaran</h3>
+            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Pengeluaran'}</h3>
             <div className="flex items-center gap-2">
-              <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300" />
-              {filterMonth &&
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  onClick={() => setFilterMonth('')}
-                >
-                  Semua
-                </Button>
-              }
+              <button
+                onClick={() => setShowTrash(v => !v)}
+                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              >
+                {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(expenses).length})`}
+              </button>
+              {!showTrash && (
+                <>
+                  <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300" />
+                  {filterMonth &&
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      onClick={() => setFilterMonth('')}
+                    >
+                      Semua
+                    </Button>
+                  }
+                </>
+              )}
             </div>
           </div>
           <div className="p-3 bg-red-50 dark:bg-red-500/10 border-b border-red-100 dark:border-red-500/20 flex justify-between items-center">
@@ -257,8 +283,8 @@ const ExpenseView = () => {
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
             {filteredExpenses.length === 0 ? (
               <EmptyState
-                icon={<TrendingDown className="w-12 h-12" />}
-                title="Belum ada pengeluaran pada periode ini."
+                icon={showTrash ? <Trash2 className="w-12 h-12" /> : <TrendingDown className="w-12 h-12" />}
+                title={showTrash ? 'Recycle bin kosong.' : 'Belum ada pengeluaran pada periode ini.'}
                 className="h-full animate-in fade-in duration-300"
               />
             ) : (
@@ -282,12 +308,25 @@ const ExpenseView = () => {
                       <p className="font-bold text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-3 py-1.5 rounded-lg text-sm border border-red-100 dark:border-red-500/20">-{formatRupiah(exp.amount)}</p>
                       {isAdminMode && (
                         <div className="flex gap-1">
-                          <IconButton variant="edit" onClick={() => handleEditClick(exp)} title="Edit Catatan">
-                            <Pencil className="w-3.5 h-3.5" />
-                          </IconButton>
-                          <IconButton variant="delete" onClick={() => handleDeleteExpense(exp.id)} title="Hapus Catatan">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </IconButton>
+                          {showTrash ? (
+                            <>
+                              <IconButton variant="edit" onClick={() => handleRestoreExpense(exp.id)} title="Kembalikan">
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </IconButton>
+                              <IconButton variant="delete" onClick={() => handlePermanentDeleteExpense(exp.id)} title="Hapus Permanen">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </IconButton>
+                            </>
+                          ) : (
+                            <>
+                              <IconButton variant="edit" onClick={() => handleEditClick(exp)} title="Edit Catatan">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </IconButton>
+                              <IconButton variant="delete" onClick={() => handleDeleteExpense(exp.id)} title="Hapus Catatan">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </IconButton>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>

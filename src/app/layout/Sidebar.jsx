@@ -1,5 +1,6 @@
 import React from "react";
 import { X } from "lucide-react";
+import Button from '../../components/ui/Button';
 
 
 export default function Sidebar({
@@ -13,6 +14,7 @@ export default function Sidebar({
     triggerConfirm,
     setIsAdminMode,
 }) {
+    
     return (
         <aside className={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-900 shadow-2xl md:shadow-none border-r border-slate-100 dark:border-slate-800 transform transition-transform duration-300 ease-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
             <div className="p-6 bg-orange-600 dark:bg-orange-500 text-white flex items-center justify-between shrink-0">
@@ -50,14 +52,14 @@ export default function Sidebar({
 
                 <div className="p-3 border-t">
                     {!isAdminMode ? (
-                        <button
+                        <Button
                             onClick={() => setShowPinModal(true)}
                             className="w-full bg-orange-600 dark:bg-orange-500 text-white py-3 rounded-xl font-bold"
                         >
                             Login Admin
-                        </button>
+                        </Button>
                     ) : (
-                        <button
+                        <Button
                             onClick={() =>
                                 triggerConfirm(
                                     'Yakin ingin keluar dari mode admin?',
@@ -67,7 +69,7 @@ export default function Sidebar({
                             className="w-full bg-red-500 dark:bg-red-600 text-white py-3 rounded-xl font-bold"
                         >
                             Keluar Admin
-                        </button>
+                        </Button>
                     )}
                 </div>
             </nav>

@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Clock, FileText, History, Printer, Edit, Trash2, Share2 } from 'lucide-react';
+import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw } from 'lucide-react';
 import { isNativePlatform, printShiftNativeBluetooth } from '../../library/printer';
 import { toPng, toBlob } from 'html-to-image';
 import { generateUUID, toLocalMonthString } from '../../utils/formatters';
+import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+import { pushTransactionDelete } from '../../storage/realtimeSync';
 
 // Import komponen UI Design System
 import { 
@@ -35,6 +37,7 @@ const ShiftView = () => {
 
   // Filter Bulan untuk Rekapitulasi Riwayat Shift di Bagian Bawah
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString()); // Default YYYY-MM
+  const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
 
   const handleShareImage = async () => {
     const reportElement = document.getElementById('xreading-content');
@@ -187,19 +190,37 @@ const ShiftView = () => {
   };
 
   const handleDeleteShift = (id) => {
-    triggerConfirm('Apakah Anda yakin ingin menghapus data dompet ini secara permanen?', () => {
+    triggerConfirm('Pindahkan data dompet ini ke Recycle Bin?', () => {
+      setShiftHistory(shiftHistory.map(shift => shift.id === id ? markDeleted(shift) : shift));
+      triggerAlert('Data dipindahkan ke Recycle Bin.');
+    });
+  };
+
+  const handleRestoreShift = (id) => {
+    setShiftHistory(shiftHistory.map(shift => shift.id === id ? restoreItem(shift) : shift));
+    triggerAlert('Data berhasil dikembalikan.');
+  };
+
+  const handlePermanentDeleteShift = (id) => {
+    triggerConfirm('Hapus PERMANEN data dompet ini? Tindakan ini tidak bisa dibatalkan.', () => {
       setShiftHistory(shiftHistory.filter(shift => shift.id !== id));
-      triggerAlert('Data laporan berhasil dihapus.');
+      // Langsung kirim delete ke Supabase saat ini juga, gak nunggu siklus
+      // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
+      pushTransactionDelete('shiftHistory', id).catch(err =>
+        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+      );
+      triggerAlert('Data dihapus permanen.');
     });
   };
 
   const filteredShiftHistory = useMemo(() => {
-    return shiftHistory.filter(shift => {
+    const source = showTrash ? trashedOnly(shiftHistory) : activeOnly(shiftHistory);
+    return source.filter(shift => {
       if (!filterMonth) return true;
       const shiftDateStr = toLocalMonthString(shift.startTime);
       return shiftDateStr === filterMonth;
     });
-  }, [shiftHistory, filterMonth]);
+  }, [shiftHistory, filterMonth, showTrash]);
 
   const rekapShiftStats = useMemo(() => {
     let totalInitial = 0;
@@ -455,16 +476,24 @@ const ShiftView = () => {
         {/* --- DAFTAR RIWAYAT HARIAN SHIFT --- */}
         <Card padding="none" className="overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
-            <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Daftar Penutupan Dompet</h4>
-            <span className="text-slate-400 dark:text-slate-500 text-xs font-semibold">{filteredShiftHistory.length} data ditemukan</span>
+            <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">{showTrash ? 'Recycle Bin' : 'Daftar Penutupan Dompet'}</h4>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowTrash(v => !v)}
+                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              >
+                {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(shiftHistory).length})`}
+              </button>
+              <span className="text-slate-400 dark:text-slate-500 text-xs font-semibold">{filteredShiftHistory.length} data ditemukan</span>
+            </div>
           </div>
           
           <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[400px] overflow-y-auto custom-scrollbar">
             {filteredShiftHistory.length === 0 ? (
               <EmptyState 
                 size="sm"
-                icon={<Clock className="w-10 h-10 opacity-30" />} 
-                title="Tidak ada riwayat penutupan dompet pada periode ini" 
+                icon={showTrash ? <Trash2 className="w-10 h-10 opacity-30" /> : <Clock className="w-10 h-10 opacity-30" />} 
+                title={showTrash ? 'Recycle bin kosong.' : 'Tidak ada riwayat penutupan dompet pada periode ini'} 
               />
             ) : (
               filteredShiftHistory.map((shift) => {
@@ -501,12 +530,25 @@ const ShiftView = () => {
                       <div className="flex gap-1 border-l border-slate-200 dark:border-slate-700 pl-4 ml-2">
                         {isAdminMode && (
                           <>
-                            <IconButton variant="edit" onClick={() => handleOpenEditModal(shift)}>
-                              <Edit className="w-4 h-4" />
-                            </IconButton>
-                            <IconButton variant="delete" onClick={() => handleDeleteShift(shift.id)}>
-                              <Trash2 className="w-4 h-4" />
-                            </IconButton>
+                            {showTrash ? (
+                              <>
+                                <IconButton variant="edit" onClick={() => handleRestoreShift(shift.id)} title="Kembalikan">
+                                  <RotateCcw className="w-4 h-4" />
+                                </IconButton>
+                                <IconButton variant="delete" onClick={() => handlePermanentDeleteShift(shift.id)} title="Hapus Permanen">
+                                  <Trash2 className="w-4 h-4" />
+                                </IconButton>
+                              </>
+                            ) : (
+                              <>
+                                <IconButton variant="edit" onClick={() => handleOpenEditModal(shift)}>
+                                  <Edit className="w-4 h-4" />
+                                </IconButton>
+                                <IconButton variant="delete" onClick={() => handleDeleteShift(shift.id)}>
+                                  <Trash2 className="w-4 h-4" />
+                                </IconButton>
+                              </>
+                            )}
                           </>
                         )}
                         <IconButton 

@@ -1,5 +1,6 @@
 import { lazy, Suspense, Component } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { Button } from '../components/ui';
 
 const HomeView          = lazy(() => import('../features/home/HomeView'));
 const ShiftView         = lazy(() => import('../features/finance/ShiftView'));
@@ -79,13 +80,9 @@ class ViewErrorBoundary extends Component {
                             </p>
                         )}
                     </div>
-                    <button
-                        onClick={this.handleRetry}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 dark:bg-orange-500 text-white rounded-xl font-semibold text-sm hover:bg-orange-700 dark:hover:bg-orange-600 transition-colors active:scale-95"
-                    >
-                        <RefreshCw className="w-4 h-4" />
+                    <Button onClick={this.handleRetry} icon={<RefreshCw className="w-4 h-4" />}>
                         Coba Lagi
-                    </button>
+                    </Button>
                 </div>
             );
         }

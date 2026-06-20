@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { TrendingUp, History, Save, Trash2, Pencil, X, Settings2, ChevronDown } from 'lucide-react';
+import { TrendingUp, History, Save, Trash2, Pencil, X, Settings2, ChevronDown, RotateCcw } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import CategoryModal from '../../components/CategoryModal';
 import { PageHeader, Card, Input, Select, Badge, IconButton, EmptyState, Button  } from '../../components/ui';
+import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+import { pushTransactionDelete } from '../../storage/realtimeSync';
 
 const IncomeView = () => {
   const { incomes, setIncomes, incomeCategories, setIncomeCategories, triggerAlert, triggerConfirm, formatRupiah, currentShift, isAdminMode } = useAppContext();
@@ -13,6 +15,7 @@ const IncomeView = () => {
   const [dateInput, setDateInput] = useState(toLocalDateString());
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
 
   // State pelacak data edit
   const [editingId, setEditingId] = useState(null);
@@ -61,8 +64,25 @@ const IncomeView = () => {
 
   const handleDeleteIncome = (id) => {
     triggerConfirm('Apakah Anda yakin ingin menghapus catatan pemasukan ini?', () => {
+      setIncomes(incomes.map(i => i.id === id ? markDeleted(i) : i));
+      triggerAlert('Catatan dipindahkan ke Recycle Bin.');
+    });
+  };
+
+  const handleRestoreIncome = (id) => {
+    setIncomes(incomes.map(i => i.id === id ? restoreItem(i) : i));
+    triggerAlert('Catatan berhasil dikembalikan.');
+  };
+
+  const handlePermanentDeleteIncome = (id) => {
+    triggerConfirm('Hapus PERMANEN catatan ini? Tindakan ini tidak bisa dibatalkan.', () => {
       setIncomes(incomes.filter(i => i.id !== id));
-      triggerAlert('Catatan pemasukan berhasil dihapus.');
+      // Langsung kirim delete ke Supabase saat ini juga, gak nunggu siklus
+      // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
+      pushTransactionDelete('incomes', id).catch(err =>
+        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+      );
+      triggerAlert('Catatan dihapus permanen.');
     });
   };
 
@@ -74,7 +94,7 @@ const IncomeView = () => {
   };
 
   // Konversi ink.date ke bentuk Date Object untuk menghindari crash string saat pembacaan localStorage
-  const filteredIncomes = incomes.filter(inc => filterMonth === '' || toLocalMonthString(inc.date) === filterMonth);
+  const filteredIncomes = (showTrash ? trashedOnly(incomes) : activeOnly(incomes)).filter(inc => filterMonth === '' || toLocalMonthString(inc.date) === filterMonth);
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
@@ -144,23 +164,33 @@ const IncomeView = () => {
 
         <Card padding="none" className="lg:col-span-2 flex flex-col h-[500px]">
           <div className="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
-            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><History className="w-4 h-4" /> Riwayat Pemasukan</h3>
+            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Pemasukan'}</h3>
             <div className="flex items-center gap-2">
-              <input
-                type="month"
-                value={filterMonth}
-                onChange={e => setFilterMonth(e.target.value)}
-                className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
-              />
-              {filterMonth && 
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  onClick={() => setFilterMonth('')}
-                >
-                  Semua
-                </Button>
-              }
+              <button
+                onClick={() => setShowTrash(v => !v)}
+                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              >
+                {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(incomes).length})`}
+              </button>
+              {!showTrash && (
+                <>
+                  <input
+                    type="month"
+                    value={filterMonth}
+                    onChange={e => setFilterMonth(e.target.value)}
+                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
+                  />
+                  {filterMonth && 
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      onClick={() => setFilterMonth('')}
+                    >
+                      Semua
+                    </Button>
+                  }
+                </>
+              )}
             </div>
           </div>
           <div className="p-3 bg-green-50 dark:bg-green-500/10 border-b border-green-100 dark:border-green-500/20 flex justify-between items-center">
@@ -170,8 +200,8 @@ const IncomeView = () => {
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
             {filteredIncomes.length === 0 ? (
               <EmptyState
-                icon={<TrendingUp className="w-12 h-12" />}
-                title="Belum ada pemasukan pada periode ini."
+                icon={showTrash ? <Trash2 className="w-12 h-12" /> : <TrendingUp className="w-12 h-12" />}
+                title={showTrash ? 'Recycle bin kosong.' : 'Belum ada pemasukan pada periode ini.'}
                 className="h-full animate-in fade-in duration-300"
               />
             ) : (
@@ -185,12 +215,25 @@ const IncomeView = () => {
                     <p className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-3 py-1.5 rounded-lg text-sm border border-green-100 dark:border-green-500/20">+{formatRupiah(inc.amount)}</p>
                     {isAdminMode && (
                       <div className="flex gap-1">
-                        <IconButton variant="edit" onClick={() => handleEditClick(inc)} title="Edit Catatan">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </IconButton>
-                        <IconButton variant="delete" onClick={() => handleDeleteIncome(inc.id)} title="Hapus Catatan">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </IconButton>
+                        {showTrash ? (
+                          <>
+                            <IconButton variant="edit" onClick={() => handleRestoreIncome(inc.id)} title="Kembalikan">
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </IconButton>
+                            <IconButton variant="delete" onClick={() => handlePermanentDeleteIncome(inc.id)} title="Hapus Permanen">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </IconButton>
+                          </>
+                        ) : (
+                          <>
+                            <IconButton variant="edit" onClick={() => handleEditClick(inc)} title="Edit Catatan">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </IconButton>
+                            <IconButton variant="delete" onClick={() => handleDeleteIncome(inc.id)} title="Hapus Catatan">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </IconButton>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>

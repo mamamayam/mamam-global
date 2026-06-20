@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Award, BarChart3, Calendar, CircleMinus, ChevronRight, History, Package, PieChart } from 'lucide-react';
-import { useMemo } from 'react';
+import { Award, BarChart3, Calendar, CircleMinus, ChevronRight, History, Package } from 'lucide-react';
 import { formatRupiah, toLocalDateString } from '../../utils/formatters';
-import { PageHeader, Card, EmptyState, Button } from '../../components/ui';
+import { PageHeader, Card, EmptyState, Button, Input } from '../../components/ui';
 
 const ReportsView = () => {
   const { salesHistory, incomes, reportDateRange, setReportDateRange, activePreset } = useAppContext();
@@ -159,44 +158,37 @@ const ReportsView = () => {
         {/* --- KONTROL RENTANG TANGGAL & PRESET --- */}
 
         {/* Card 1: Tab Filter Periode Tanggal */}
-        <Card className="flex items-center gap-2 overflow-x-auto p-4 w-full scrollbar-hide">
+        <Card className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
           <Calendar className="text-slate-400 dark:text-slate-500 w-5 h-5 flex-shrink-0 mr-1" />
           {filterTabs.map(tab => (
-            <button
+            <Button
               key={tab.id}
+              variant={dateFilter === tab.id ? 'dark' : 'secondary'}
+              size="sm"
               onClick={() => setDateFilter(tab.id)}
-              className={`flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold transition-all border ${dateFilter === tab.id
-                ? 'bg-slate-800 text-white border-slate-800 dark:border-slate-100 shadow-sm'
-                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
+              className="flex-shrink-0 whitespace-nowrap rounded-full"
             >
               {tab.label}
-            </button>
+            </Button>
           ))}
         </Card>
 
         {/* 2. Input Khusus Tanggal Kustom */}
         {dateFilter === 'kustom' && (
-          <Card className="flex items-center gap-2 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl max-w-fit shadow-sm">
-            <div className="flex flex-col">
-              <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">Dari Tanggal</label>
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={(e) => setCustomStartDate(e.target.value)}
-                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 text-slate-700 dark:text-slate-200"
-              />
-            </div>
-            <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 mt-4" />
-            <div className="flex flex-col">
-              <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">Sampai Tanggal</label>
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={(e) => setCustomEndDate(e.target.value)}
-                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 text-slate-700 dark:text-slate-200"
-              />
-            </div>
+          <Card padding="sm" className="flex items-center gap-3 max-w-fit">
+            <Input
+              type="date"
+              label="Dari Tanggal"
+              value={customStartDate}
+              onChange={(e) => setCustomStartDate(e.target.value)}
+            />
+            <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 mt-5 flex-shrink-0" />
+            <Input
+              type="date"
+              label="Sampai Tanggal"
+              value={customEndDate}
+              onChange={(e) => setCustomEndDate(e.target.value)}
+            />
           </Card>
         )}
 

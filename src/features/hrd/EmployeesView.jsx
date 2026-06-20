@@ -3,7 +3,7 @@ import { formatRupiah, toLocalDateString, toLocalMonthString } from '../../utils
 import { useAppContext } from '../../context/AppContext';
 import PayslipModal from '../hrd/modals/PayslipModal';
 import CategoryModal from '../../components/CategoryModal';
-import { Card, Button, PageHeader, EmptyState } from '../../components/ui';
+import { Select, Card, Button, PageHeader, EmptyState, Input } from '../../components/ui';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 import {
@@ -370,7 +370,7 @@ const EmployeesView = () => {
                 className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold text-sm cursor-pointer flex justify-between items-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 onClick={() => setShowEmpDropdown(!showEmpDropdown)}
               >
-                <span>{dailyEmpId ? employees.find(e => e.id === dailyEmpId)?.name : '-- Pilih Karyawan --'}</span>
+                <span>{dailyEmpId ? employees.find(e => e.id === dailyEmpId)?.name : 'Pilih Karyawan'}</span>
                 <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
               </div>
 
@@ -468,7 +468,7 @@ const EmployeesView = () => {
                 <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Penghasilan (+)</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input
+                <Input
                   type="radio"
                   name="adjType"
                   checked={adjType === 'deduction'}
@@ -483,21 +483,29 @@ const EmployeesView = () => {
               <div>
                 <label className="flex justify-between items-center text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
                   Kategori
-                  <button type="button" onClick={() => setCatModalType(adjType)} className="text-[10px] text-orange-600 dark:text-orange-400 font-bold hover:underline flex items-center gap-1 transition-colors">
-                    <Settings2 className="w-3 h-3" /> Kelola
-                  </button>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="secondary"
+                    onClick={() => setIsCategoryModalOpen(true)}
+                    icon={<Settings2 className="w-3 h-3" />}
+                  >
+                    Kelola Kategori
+                  </Button>
                 </label>
-                <select
+                <Select
                   className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
                   value={adjCategory}
                   onChange={(e) => setAdjCategory(e.target.value)}
                 >
-                  <option value="">-- Pilih Kategori --</option>
+                  <option value="">Pilih Kategori</option>
                   {adjType === 'addition'
                     ? [...new Set(additionCategories)].map(c => <option key={c} value={c}>{c}</option>)
                     : [...new Set(deductionCategories)].map(c => <option key={c} value={c}>{c}</option>)
                   }
-                </select>
+                </Select>
+                
+
               </div>
 
               {/* --- TAMBAHKAN KODE INI TEPAT DI BAWAH KATEGORI --- */}
@@ -518,16 +526,18 @@ const EmployeesView = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-                  {adjCategory.toLowerCase() === 'lembur' ? 'Nominal Lembur (Otomatis)' : 'Nominal (Rp)'}
+                  {adjCategory.toLowerCase() === 'lembur' ? 'Nominal Lembur (Otomatis)' : 'Nominal'}
                 </label>
-                <input
+                <Input
                   type="number"
                   className={`w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none transition-colors ${adjCategory.toLowerCase() === 'lembur' ? 'bg-slate-100 dark:bg-slate-900 cursor-not-allowed opacity-80' : 'bg-slate-50 dark:bg-slate-950 focus:border-orange-500 dark:focus:border-orange-500'}`}
+                  icon={<span className="font-bold">Rp</span>}
                   placeholder="0"
                   value={adjAmount}
                   onChange={(e) => setAdjAmount(e.target.value)}
                   readOnly={adjCategory.toLowerCase() === 'lembur'}
                 />
+
               </div>
 
               {adjType === 'deduction' && (
@@ -803,11 +813,32 @@ const EmployeesView = () => {
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Upah per Jam (Rp)</label>
-              <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.hourlyRate} onChange={e => setEmpFormData({ ...empFormData, hourlyRate: Number(e.target.value) })} placeholder="0" />
+              <Input
+                type="number"
+                icon={<span className="font-bold">Rp</span>}
+                className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors"
+                value={empFormData.hourlyRate === 0 ? "" : empFormData.hourlyRate} // (Opsional) Supaya default 0 dari state awal tidak langsung muncul sebagai text
+                onChange={e => {
+                  const val = e.target.value;
+                  setEmpFormData({
+                    ...empFormData,
+                    hourlyRate: val === "" ? "" : Number(val)
+                  });
+                }}
+                placeholder="0"
+              />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">Bonus Full Time &gt;= 10 Jam (Rp)</label>
-              <input type="number" className="w-full p-3 bg-slate-50 border rounded-xl" value={empFormData.fullTimeBonus || ''} onChange={e => setEmpFormData({ ...empFormData, fullTimeBonus: Number(e.target.value) })} />
+              <Input
+                type="number"
+                icon={<span className="font-bold">Rp</span>}
+                className="w-full p-3 bg-slate-50 border rounded-xl"
+                value={empFormData || ''}
+                onChange={e => setEmpFormData({ ...empFormData, fullTimeBonus: Number(e.target.value) })}
+                placeholder="0"
+              />
+
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Mulai Kerja</label>
@@ -871,7 +902,7 @@ const EmployeesView = () => {
       <div className="shrink-0 mb-6">
         <PageHeader title="Manajemen Pegawai (HR)" icon={<UserCog className="w-6 h-6" />} className="mb-4" />
 
-        <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-3 overflow-x-auto hide-scrollbar">
+        <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 p-4 overflow-x-auto hide-scrollbar">
           <Button size="md" variant={activeTab === 'input' ? 'primary' : 'secondary'} onClick={() => setActiveTab('input')}>Input Harian</Button>
           <Button size="md" variant={activeTab === 'reports' ? 'primary' : 'secondary'} onClick={() => setActiveTab('reports')}>Rekap Laporan</Button>
           <Button size="md" variant={activeTab === 'manage' ? 'primary' : 'secondary'} onClick={() => setActiveTab('manage')}>Kelola Karyawan</Button>

@@ -2,18 +2,18 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { ChevronLeft, Plus, Edit3, Trash2, Settings2 } from "lucide-react";
 import CategoryModal from "../../components/CategoryModal";
-import { Button, IconButton, Input, Select, PageHeader, EmptyState, Badge } from "../../components/ui";
+import { Card, Button, IconButton, Input, Select, PageHeader, EmptyState, Badge } from "../../components/ui";
 
 const MenuManagement = () => {
-  const { 
-    menus, setMenus, variantGroups, formatRupiah, triggerAlert, 
-    triggerConfirm, categories, setCategories, hppLibrary, setHppLibrary 
+  const {
+    menus, setMenus, variantGroups, formatRupiah, triggerAlert,
+    triggerConfirm, categories, setCategories, hppLibrary, setHppLibrary
   } = useAppContext();
-  
+
   const [isEditing, setIsEditing] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ 
-    id: '', name: '', price: '', hpp: '', category: categories[0] || 'Lainnya', variantGroupIds: [] 
+  const [formData, setFormData] = useState({
+    id: '', name: '', price: '', hpp: '', category: categories[0] || 'Lainnya', variantGroupIds: []
   });
 
   // ✨ REVISI: SINKRONISASI KATEGORI OTOMATIS (FIX DOUBLE)
@@ -84,8 +84,8 @@ const MenuManagement = () => {
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
-          <div className="space-y-4">
-            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Informasi Dasar</h3>
+          <div className="space-y-6">
+            <Card className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Informasi Dasar</Card>
             <Input
               id="menuName"
               label="Nama Menu"
@@ -97,9 +97,15 @@ const MenuManagement = () => {
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
                 <label htmlFor="menuCategory" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Kategori</label>
-                <button type="button" onClick={() => setIsCategoryModalOpen(true)} className="text-xs text-orange-600 dark:text-orange-400 font-bold hover:underline flex items-center gap-1 transition-colors">
-                  <Settings2 className="w-3.5 h-3.5" /> Kelola Kategori
-                </button>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => setIsCategoryModalOpen(true)}
+                  icon={<Settings2 className="w-3 h-3" />}
+                >
+                  Kelola Kategori
+                </Button>
               </div>
               <Select
                 id="menuCategory"
@@ -115,16 +121,18 @@ const MenuManagement = () => {
             <div className="grid grid-cols-2 gap-4">
               <Input
                 id="menuPrice"
-                label="Harga Jual (Rp)"
+                label="Harga Jual"
                 type="number"
+                icon={<span className="font-bold">Rp</span>}
                 value={formData.price}
                 onChange={e => setFormData({ ...formData, price: e.target.value === '' ? '' : Number(e.target.value) })}
                 placeholder="0"
               />
               <Input
                 id="menuHpp"
-                label="HPP / Modal (Rp)"
+                label="HPP / Modal"
                 type="number"
+                icon={<span className="font-bold">Rp</span>}
                 value={formData.hpp}
                 onChange={e => setFormData({ ...formData, hpp: e.target.value === '' ? '' : Number(e.target.value) })}
                 placeholder="0"
@@ -205,7 +213,7 @@ const MenuManagement = () => {
       <div className="space-y-8 pb-10">
         {Object.keys(groupedMenus).map(category => (
           <div key={category} className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            
+
             {/* --- Header Kategori --- */}
             <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
               <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
@@ -216,13 +224,13 @@ const MenuManagement = () => {
             <div className="flex flex-col gap-2">
               {groupedMenus[category].map((menu) => (
                 <div key={menu.id} className="group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:border-orange-200 dark:hover:border-orange-500/30 transition-all gap-3 sm:gap-4">
-                  
+
                   {/* --- Info Kiri: Nama, HPP, Varian --- */}
                   <div className="flex flex-col flex-1 min-w-0">
                     <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate mb-0.5">
                       {menu.name}
                     </h3>
-                    
+
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
                       <span className="font-medium">HPP: {formatRupiah(menu.hpp || 0)}</span>
                       {menu.variantGroupIds?.length > 0 && (
@@ -241,7 +249,7 @@ const MenuManagement = () => {
                     <span className="font-bold text-orange-600 dark:text-orange-400 text-sm">
                       {formatRupiah(menu.price)}
                     </span>
-                    
+
                     <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       <IconButton
                         variant="edit"
