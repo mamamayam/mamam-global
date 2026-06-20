@@ -1,6 +1,7 @@
 import { getSupabaseClient, getDeviceId, isSupabaseConfigured } from './syncClient';
 import { saveData, loadData } from './db';
 import { TRANSACTION_KEYS, CONFIG_KEYS } from './syncKeys';
+import { splitExpired } from '../utils/softDelete';
 
 const deviceId = getDeviceId();
 
@@ -114,6 +115,7 @@ const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 menit
 const AUTO_SYNC_ITEM_GAP_MS = 250;            // jeda antar item yang dikirim, biar tidak sekaligus
 const AUTO_SYNC_SNAPSHOT_KEY = 'mamam_auto_sync_snapshot';
 const AUTO_SYNC_ENABLED_KEY = 'mamam_auto_sync_enabled';
+const RECYCLE_BIN_RETENTION_DAYS = 30; // item di recycle bin lebih lama dari ini → dipurge permanen
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -168,7 +170,19 @@ export async function runAutoSync() {
     let sentCount = 0;
 
     for (const tableKey of TRANSACTION_KEYS) {
-      const current = await loadData(tableKey, []);
+      let current = await loadData(tableKey, []);
+
+      // Beres-beres recycle bin: item yang sudah di-soft-delete (ada field
+      // deletedAt, lihat utils/softDelete.js) dan sudah lewat masa retensi
+      // dibuang permanen dari Dexie di sini. Diff di bawah otomatis
+      // mendeteksi ini sebagai "delete" (hilang dari array dibanding
+      // snapshot) dan ngirim pushTransactionDelete — jadi penghapusan
+      // permanen ini ikut ke-propagate ke Supabase juga, bukan cuma lokal.
+      const { keep, expired } = splitExpired(current, RECYCLE_BIN_RETENTION_DAYS);
+      if (expired.length > 0) {
+        await saveData(tableKey, keep);
+        current = keep;
+      }
 
       // Key belum pernah punya snapshot (pertama kali fitur ini aktif) →
       // jadikan baseline dulu, jangan kirim apa-apa supaya tidak dobel

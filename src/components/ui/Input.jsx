@@ -1,8 +1,14 @@
 /**
  * Input / Select / Textarea — form field components dengan dark mode konsisten.
  *
- * Semua field pakai base yang sama:
- *   bg-white dark:bg-slate-900
+ * Dua variant background field:
+ *   default (default) → bg-white dark:bg-slate-900, font-medium
+ *                         — field di atas Card putih biasa
+ *   muted             → bg-slate-50 dark:bg-slate-950, font-semibold
+ *                         — field yang butuh kesan "sunken/inset", mis. form padat
+ *                           (input harian karyawan, form data diri, dll)
+ *
+ * Base lain yang selalu sama:
  *   border border-slate-200 dark:border-slate-700
  *   focus:border-orange-500 dark:focus:border-orange-500
  *   text-slate-800 dark:text-slate-100
@@ -14,6 +20,7 @@
  *   error       string       — pesan error (merah, di bawah field)
  *   hint        string       — hint text abu-abu (di bawah field)
  *   icon        ReactNode    — icon di kiri (absolute positioned)
+ *   variant     'default' | 'muted'   — default: 'default'
  *   disabled    boolean
  *   className   string       — class tambahan untuk <input>
  *   ...rest                  — semua props HTML input (type, value, onChange, placeholder, dll)
@@ -21,6 +28,7 @@
  * Contoh:
  *   <Input label="Nama Menu" placeholder="e.g. Nasi Goreng" value={name} onChange={e => setName(e.target.value)} />
  *   <Input type="number" label="Harga" icon={<DollarSign className="w-4 h-4" />} error={errors.harga} />
+ *   <Input variant="muted" label="Upah per Jam (Rp)" type="number" value={rate} onChange={...} />
  *
  * === Select ===
  * Props sama seperti Input.
@@ -54,9 +62,14 @@ function FieldWrapper({ label, error, hint, children }) {
 }
 
 // ── Base field classes ───────────────────────────────────────────────────────
-const BASE = `
-  w-full p-3 text-sm font-medium
-  bg-white dark:bg-slate-900
+const FIELD_VARIANTS = {
+  default: 'bg-white dark:bg-slate-900 font-medium',
+  muted:   'bg-slate-50 dark:bg-slate-950 font-semibold',
+};
+
+const base = (variant) => `
+  w-full p-3 text-sm
+  ${FIELD_VARIANTS[variant] ?? FIELD_VARIANTS.default}
   border border-slate-200 dark:border-slate-700
   text-slate-800 dark:text-slate-100
   rounded-xl outline-none
@@ -74,6 +87,7 @@ export function Input({
   error,
   hint,
   icon,
+  variant = 'default',
   className = '',
   ...rest
 }) {
@@ -87,7 +101,7 @@ export function Input({
         )}
         <input
           className={`
-            ${BASE}
+            ${base(variant)}
             ${icon ? 'pl-9' : ''}
             ${error ? ERROR_BORDER : ''}
             ${className}
@@ -104,6 +118,7 @@ export function Select({
   label,
   error,
   hint,
+  variant = 'default',
   className = '',
   children,
   ...rest
@@ -112,7 +127,7 @@ export function Select({
     <FieldWrapper label={label} error={error} hint={hint}>
       <select
         className={`
-          ${BASE}
+          ${base(variant)}
           cursor-pointer appearance-none
           ${error ? ERROR_BORDER : ''}
           ${className}
@@ -131,6 +146,7 @@ export function Textarea({
   error,
   hint,
   rows = 3,
+  variant = 'default',
   className = '',
   ...rest
 }) {
@@ -139,7 +155,7 @@ export function Textarea({
       <textarea
         rows={rows}
         className={`
-          ${BASE}
+          ${base(variant)}
           resize-none
           ${error ? ERROR_BORDER : ''}
           ${className}

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext"; 
 import { ChevronLeft, Plus, Edit3, Trash2, Settings2, Trash } from "lucide-react";
 import CategoryModal from "../../components/CategoryModal";
+import { Button, IconButton, Input, Select, PageHeader, EmptyState, Badge } from "../../components/ui";
 
 const VariantManagement = () => {
   const { 
@@ -59,13 +60,13 @@ const VariantManagement = () => {
   };
 
   const handleDelete = (id) => {
-    if (window.confirm("Yakin ingin menghapus grup varian ini?")) {
+    triggerConfirm("Yakin ingin menghapus grup varian ini?", () => {
       setVariantGroups((variantGroups ?? []).filter(vg => vg.id !== id));
       setMenus((menus ?? []).map(m => ({ 
         ...m, 
         variantGroupIds: (m.variantGroupIds ?? []).filter(vId => vId !== id) 
       })));
-    }
+    });
   };
 
   const handleAddOption = () => {
@@ -109,21 +110,31 @@ const VariantManagement = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
           <div className="space-y-4">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Informasi Dasar</h3>
-            <div>
-              <label htmlFor="vgName" className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-1">Nama Grup Varian</label>
-              <input id="vgName" type="text" className="w-full p-3 border rounded-xl focus:border-orange-600 dark:focus:border-orange-500 outline-none transition-colors" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Misal: Level Pedas, Topping" />
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label htmlFor="vgCategory" className="block text-sm font-bold text-slate-600 dark:text-slate-300">Kategori Varian</label>
+            <Input
+              id="vgName"
+              label="Nama Grup Varian"
+              type="text"
+              value={formData.name}
+              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              placeholder="Misal: Level Pedas, Topping"
+            />
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label htmlFor="vgCategory" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Kategori Varian</label>
                 <button type="button" onClick={() => setIsCategoryModalOpen(true)} className="text-xs text-orange-600 dark:text-orange-400 font-bold hover:underline flex items-center gap-1 transition-colors">
                   <Settings2 className="w-3.5 h-3.5" /> Kelola Kategori
                 </button>
               </div>
-              <select id="vgCategory" className="w-full p-3 border rounded-xl focus:border-orange-600 dark:focus:border-orange-500 outline-none bg-white dark:bg-slate-900 transition-colors" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+              <Select
+                id="vgCategory"
+                value={formData.category}
+                onChange={e => setFormData({ ...formData, category: e.target.value })}
+              >
                 {(variantCategories ?? []).map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
-                {!(variantCategories ?? []).includes(formData.category) && formData.category && <option value={formData.category}>{formData.category}</option>}
-              </select>
+                {!(variantCategories ?? []).includes(formData.category) && formData.category && (
+                  <option value={formData.category}>{formData.category}</option>
+                )}
+              </Select>
             </div>
             
             <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-3">
@@ -137,7 +148,14 @@ const VariantManagement = () => {
               
               <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
                 <label htmlFor="maxSel" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Maksimal Jumlah Pilihan Opsi</label>
-                <input id="maxSel" type="number" min="1" className="w-24 p-2 border rounded-lg focus:border-orange-600 dark:focus:border-orange-500 outline-none transition-colors text-sm font-bold" value={formData.maxSelection} onChange={e => setFormData({ ...formData, maxSelection: Number(e.target.value) || 1 })} />
+                <input
+                  id="maxSel"
+                  type="number"
+                  min="1"
+                  className="w-24 p-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg focus:border-orange-500 dark:focus:border-orange-500 outline-none transition-colors text-sm font-bold"
+                  value={formData.maxSelection}
+                  onChange={e => setFormData({ ...formData, maxSelection: Number(e.target.value) || 1 })}
+                />
               </div>
             </div>
           </div>
@@ -148,20 +166,32 @@ const VariantManagement = () => {
             <div className="flex gap-2 items-end bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
               <div className="flex-1 min-w-0">
                 <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mb-1">Nama Opsi</label>
-                <input type="text" placeholder="Misal: Mozzarella" className="w-full p-2 text-xs border rounded-lg outline-none bg-white dark:bg-slate-900" value={newOption.name} onChange={e => setNewOption({ ...newOption, name: e.target.value })} />
+                <input
+                  type="text"
+                  placeholder="Misal: Mozzarella"
+                  className="w-full p-2 text-xs border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
+                  value={newOption.name}
+                  onChange={e => setNewOption({ ...newOption, name: e.target.value })}
+                />
               </div>
               <div className="w-28">
                 <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mb-1">Harga + (Rp)</label>
-                <input type="number" placeholder="0" className="w-full p-2 text-xs border rounded-lg outline-none bg-white dark:bg-slate-900" value={newOption.extraPrice} onChange={e => setNewOption({ ...newOption, extraPrice: e.target.value })} />
+                <input
+                  type="number"
+                  placeholder="0"
+                  className="w-full p-2 text-xs border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
+                  value={newOption.extraPrice}
+                  onChange={e => setNewOption({ ...newOption, extraPrice: e.target.value })}
+                />
               </div>
-              <button type="button" onClick={handleAddOption} className="p-2 bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 text-white rounded-lg text-xs font-bold shrink-0 shadow-sm transition-colors h-9 flex items-center justify-center px-3 gap-1">
-                <Plus className="w-3.5 h-3.5" /> Tambah
-              </button>
+              <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={handleAddOption} className="shrink-0 h-9">
+                Tambah
+              </Button>
             </div>
 
             <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
               {(formData.options ?? []).length === 0 ? (
-                <p className="text-xs italic text-slate-400 dark:text-slate-500 text-center py-4">Belum ada opsi pilihan dimasukkan.</p>
+                <EmptyState size="sm" title="Belum ada opsi pilihan dimasukkan." />
               ) : (
                 (formData.options ?? []).map((opt, idx) => (
                   <div key={opt.id || idx} className="flex justify-between items-center p-2.5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm">
@@ -169,9 +199,9 @@ const VariantManagement = () => {
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-100">{opt.name}</span>
                       <span className="text-[10px] text-slate-500 dark:text-slate-400">+{formatRupiah(opt.extraPrice)}</span>
                     </div>
-                    <button type="button" onClick={() => handleRemoveOption(opt.id)} className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
+                    <IconButton variant="delete" size="sm" onClick={() => handleRemoveOption(opt.id)}>
                       <Trash className="w-4 h-4" />
-                    </button>
+                    </IconButton>
                   </div>
                 ))
               )}
@@ -180,9 +210,9 @@ const VariantManagement = () => {
         </div>
 
         <div className="max-w-4xl mt-8 pt-6 border-t border-slate-200 dark:border-slate-700 flex justify-end">
-          <button onClick={handleSave} className="w-full md:w-auto px-8 py-3 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+          <Button onClick={handleSave} size="lg" className="w-full md:w-auto">
             {formData.id ? 'Simpan Perubahan' : 'Simpan Grup Varian'}
-          </button>
+          </Button>
         </div>
 
         <CategoryModal
@@ -210,12 +240,20 @@ const VariantManagement = () => {
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100">Library Varian</h2>
-        <button onClick={() => { setFormData({ id: '', name: '', category: variantCategories?.[0] || 'Lainnya', isRequired: false, maxSelection: 1, options: [] }); setIsEditing(true); }} className="bg-orange-600 dark:bg-orange-500 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-orange-700 dark:hover:bg-orange-600 hover:-translate-y-0.5 transition-all duration-300">
-          <Plus className="w-4 h-4" /> Tambah Grup Varian
-        </button>
-      </div>
+      <PageHeader
+        title="Library Varian"
+        action={
+          <Button
+            icon={<Plus className="w-4 h-4" />}
+            onClick={() => {
+              setFormData({ id: '', name: '', category: variantCategories?.[0] || 'Lainnya', isRequired: false, maxSelection: 1, options: [] });
+              setIsEditing(true);
+            }}
+          >
+            Tambah Grup Varian
+          </Button>
+        }
+      />
 
       <div className="space-y-8 pb-10">
         {Object.keys(groupedVariantGroups).map(category => (
@@ -224,7 +262,7 @@ const VariantManagement = () => {
             {/* --- Header Kategori --- */}
             <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
               <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
-              <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold px-2 py-0.5 rounded-full">{groupedVariantGroups[category].length} Grup</span>
+              <Badge variant="neutral">{groupedVariantGroups[category].length} Grup</Badge>
             </div>
 
             {/* --- DAFTAR GRUP VARIAN RINGKAS (1 BARIS) --- */}
@@ -238,12 +276,10 @@ const VariantManagement = () => {
                       <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
                         {vg.name}
                       </h3>
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${vg.isRequired ? 'bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                      <Badge variant={vg.isRequired ? 'danger' : 'neutral'}>
                         {vg.isRequired ? 'Wajib' : 'Opsional'}
-                      </span>
-                      <span className="text-[9px] font-medium bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded">
-                        Max: {vg.maxSelection} Pilihan
-                      </span>
+                      </Badge>
+                      <Badge variant="orange">Max: {vg.maxSelection} Pilihan</Badge>
                     </div>
                     
                     {/* --- Daftar Opsi Horizontal --- */}
@@ -259,20 +295,20 @@ const VariantManagement = () => {
 
                   {/* --- Info Kanan: Tombol Aksi --- */}
                   <div className="flex items-center justify-end gap-1 shrink-0 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300 border-t border-slate-50 dark:border-slate-800/50 sm:border-0 pt-2 sm:pt-0">
-                    <button 
-                      onClick={() => { setFormData({ ...vg, options: vg.options ?? [] }); setIsEditing(true); }} 
-                      className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+                    <IconButton
+                      variant="edit"
+                      onClick={() => { setFormData({ ...vg, options: vg.options ?? [] }); setIsEditing(true); }}
                       title="Edit Grup Varian"
                     >
                       <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(vg.id)} 
-                      className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                    </IconButton>
+                    <IconButton
+                      variant="delete"
+                      onClick={() => handleDelete(vg.id)}
                       title="Hapus Grup Varian"
                     >
                       <Trash2 className="w-4 h-4" />
-                    </button>
+                    </IconButton>
                   </div>
 
                 </div>
@@ -281,7 +317,24 @@ const VariantManagement = () => {
 
           </div>
         ))}
-        {(variantGroups ?? []).length === 0 && <div className="p-8 text-center text-slate-400 dark:text-slate-500 animate-in fade-in">Belum ada data grup varian</div>}
+        {(variantGroups ?? []).length === 0 && (
+          <EmptyState
+            icon={<Plus className="w-8 h-8" />}
+            title="Belum ada data grup varian"
+            description="Tambah grup varian pertama untuk mulai mengatur pilihan menu"
+            action={
+              <Button
+                icon={<Plus className="w-4 h-4" />}
+                onClick={() => {
+                  setFormData({ id: '', name: '', category: variantCategories?.[0] || 'Lainnya', isRequired: false, maxSelection: 1, options: [] });
+                  setIsEditing(true);
+                }}
+              >
+                Tambah Grup Varian
+              </Button>
+            }
+          />
+        )}
       </div>
     </div>
   );

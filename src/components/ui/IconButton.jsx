@@ -6,6 +6,9 @@
  *             default: 'neutral'
  *   size      'sm' | 'md'
  *             default: 'md'
+ *   ghost     boolean  — transparan saat idle, baru tampil tinted saat hover
+ *             (berlaku untuk variant 'edit'/'delete'; varian lain sudah transparan by default)
+ *             default: false
  *   label     string   — teks di kanan icon (opsional, untuk action yang butuh label)
  *   onClick   () => void
  *   disabled  boolean
@@ -19,6 +22,12 @@
  *
  *   <IconButton variant="delete" onClick={() => handleDelete(item.id)}>
  *     <Trash2 className="w-4 h-4" />
+ *   </IconButton>
+ *
+ *   // Versi subtle, idle transparan — cocok untuk aksi di pojok card yang hanya
+ *   // muncul saat hover/group-hover
+ *   <IconButton variant="edit" ghost onClick={() => handleEdit(item)}>
+ *     <Pencil className="w-4 h-4" />
  *   </IconButton>
  *
  *   <IconButton variant="neutral" label="Detail">
@@ -54,6 +63,19 @@ const VARIANTS = {
   `,
 };
 
+// Versi 'ghost': transparan saat idle, warnanya baru muncul saat hover.
+// Dipakai untuk aksi di pojok card/list yang ingin tampil minim sampai di-hover.
+const GHOST_VARIANTS = {
+  edit: `
+    text-blue-600 dark:text-blue-400
+    hover:bg-blue-50 dark:hover:bg-blue-500/10
+  `,
+  delete: `
+    text-red-500 dark:text-red-400
+    hover:bg-red-50 dark:hover:bg-red-500/10
+  `,
+};
+
 const SIZES = {
   sm: 'p-1.5',
   md: 'p-2',
@@ -62,6 +84,7 @@ const SIZES = {
 export default function IconButton({
   variant  = 'neutral',
   size     = 'md',
+  ghost    = false,
   label,
   onClick,
   disabled = false,
@@ -69,6 +92,10 @@ export default function IconButton({
   children,
   ...rest
 }) {
+  const toneClasses = ghost
+    ? (GHOST_VARIANTS[variant] ?? VARIANTS[variant] ?? VARIANTS.neutral)
+    : (VARIANTS[variant] ?? VARIANTS.neutral);
+
   return (
     <button
       type="button"
@@ -78,7 +105,7 @@ export default function IconButton({
         inline-flex items-center gap-1.5
         rounded-lg transition-colors duration-150
         disabled:opacity-40 disabled:cursor-not-allowed
-        ${VARIANTS[variant] ?? VARIANTS.neutral}
+        ${toneClasses}
         ${SIZES[size]       ?? SIZES.md}
         ${label ? 'pr-2.5' : ''}
         ${className}

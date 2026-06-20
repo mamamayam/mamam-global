@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'; // 💡 Ditambahkan useEffect
 import { X, Lock, Key, ShieldAlert } from 'lucide-react';
+import Alert from '../components/ui/Alert';
 
 const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
 
@@ -107,7 +108,7 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 dark:bg-black/10 backdrop-blur-md z-[999] flex items-center justify-center p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 bg-slate-950 dark:bg-black/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 w-full max-w-xs rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-6 animate-in zoom-in-95 duration-250 flex flex-col items-center">
 
         {/* Header Modal */}
@@ -128,16 +129,12 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
 
         {/* Pesan Error */}
         {errorMessage && (
-          <div className="w-full bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 text-xs font-bold p-2.5 rounded-xl text-center mt-2 border border-red-100 dark:border-red-500/20 animate-in zoom-in duration-200">
-            {errorMessage}
-          </div>
+          <Alert className="mt-2">{errorMessage}</Alert>
         )}
 
         {/* Pesan Sukses */}
         {successMessage && !errorMessage && (
-          <div className="w-full bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-bold p-2.5 rounded-xl text-center mt-2 border border-green-100 dark:border-green-500/20 animate-in zoom-in duration-200">
-            {successMessage}
-          </div>
+          <Alert variant="success" className="mt-2">{successMessage}</Alert>
         )}
 
         {/* Display PIN (Bulatan) */}

@@ -2,7 +2,7 @@
  * Button — komponen tombol global.
  *
  * Props:
- *   variant   'primary' | 'secondary' | 'danger' | 'ghost' | 'ghost-danger'
+ *   variant   'primary' | 'secondary' | 'danger' | 'success' | 'dark' | 'ghost' | 'ghost-danger' | 'ghost-success'
  *             default: 'primary'
  *   size      'xs' | 'sm' | 'md' | 'lg' | 'full'
  *             default: 'md'
@@ -13,11 +13,14 @@
  *   onClick, type, className, children, ...rest
  *
  * Variants:
- *   primary      → orange-600 / orange-500 dark — CTA utama
- *   secondary    → slate-100 / slate-800 dark   — aksi netral / batal
- *   danger       → red-500 / red-600 dark        — hapus / aksi destruktif
- *   ghost        → orange-50/10 dengan border    — secondary CTA, outline feel
- *   ghost-danger → red-50/10 dengan border       — delete yang lebih subtle
+ *   primary        → orange-600 / orange-500 dark — CTA utama
+ *   secondary      → slate-100 / slate-800 dark   — aksi netral / batal
+ *   danger         → red-500 / red-600 dark        — hapus / aksi destruktif
+ *   success        → green-600 / green-500 dark    — aksi penambahan / konfirmasi positif
+ *   dark           → slate-800 / slate-700 dark    — aksi sekunder yang ditonjolkan (mis. "Tambah X", "Kelola Y")
+ *   ghost          → orange-50/10 dengan border    — secondary CTA, outline feel
+ *   ghost-danger   → red-50/10 dengan border       — delete yang lebih subtle
+ *   ghost-success  → green-50/10 dengan border     — aksi penambahan yang lebih subtle
  *
  * Size:
  *   xs   → px-3 py-1.5 text-[11px]  — badge/chip action
@@ -30,6 +33,8 @@
  *   <Button>Simpan</Button>
  *   <Button variant="secondary" onClick={onClose}>Batal</Button>
  *   <Button variant="danger" size="sm" icon={<Trash2 className="w-3.5 h-3.5" />}>Hapus</Button>
+ *   <Button variant="success" icon={<Plus className="w-4 h-4" />}>Tambah Penghasilan</Button>
+ *   <Button variant="dark" icon={<Plus className="w-4 h-4" />}>Tambah Karyawan</Button>
  *   <Button size="full" loading={isSaving}>Simpan Perubahan</Button>
  */
 
@@ -50,6 +55,18 @@ const VARIANTS = {
     hover:shadow-md hover:-translate-y-0.5
     shadow-sm
   `,
+  success: `
+    bg-green-600 dark:bg-green-500 text-white
+    hover:bg-green-700 dark:hover:bg-green-600
+    hover:shadow-md hover:-translate-y-0.5
+    shadow-sm
+  `,
+  dark: `
+    bg-slate-800 dark:bg-slate-700 text-white
+    hover:bg-slate-900 dark:hover:bg-slate-600
+    hover:shadow-md hover:-translate-y-0.5
+    shadow-sm
+  `,
   ghost: `
     bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400
     border border-orange-200 dark:border-orange-500/30
@@ -59,6 +76,11 @@ const VARIANTS = {
     bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400
     border border-red-200 dark:border-red-500/30
     hover:bg-red-100 dark:hover:bg-red-500/15
+  `,
+  'ghost-success': `
+    bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400
+    border border-green-200 dark:border-green-500/30
+    hover:bg-green-100 dark:hover:bg-green-500/15
   `,
 };
 

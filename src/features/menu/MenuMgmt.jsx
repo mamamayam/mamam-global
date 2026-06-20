@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { ChevronLeft, Plus, Edit3, Trash2, Settings2 } from "lucide-react";
 import CategoryModal from "../../components/CategoryModal";
+import { Button, IconButton, Input, Select, PageHeader, EmptyState, Badge } from "../../components/ui";
 
 const MenuManagement = () => {
   const { 
@@ -51,9 +52,9 @@ const MenuManagement = () => {
   };
 
   const handleDelete = (id) => {
-    if (window.confirm("Yakin ingin menghapus menu ini?")) {
+    triggerConfirm("Yakin ingin menghapus menu ini?", () => {
       setMenus(menus.filter(m => m.id !== id));
-    }
+    });
   };
 
   const toggleVariantGroup = (vgId) => {
@@ -85,31 +86,49 @@ const MenuManagement = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
           <div className="space-y-4">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Informasi Dasar</h3>
-            <div>
-              <label htmlFor="menuName" className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-1">Nama Menu</label>
-              <input id="menuName" type="text" className="w-full p-3 border rounded-xl focus:border-orange-600 dark:focus:border-orange-500 outline-none transition-colors" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Misal: Lumpia Semarang" />
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label htmlFor="menuCategory" className="block text-sm font-bold text-slate-600 dark:text-slate-300">Kategori</label>
+            <Input
+              id="menuName"
+              label="Nama Menu"
+              type="text"
+              value={formData.name}
+              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              placeholder="Misal: Lumpia Semarang"
+            />
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label htmlFor="menuCategory" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Kategori</label>
                 <button type="button" onClick={() => setIsCategoryModalOpen(true)} className="text-xs text-orange-600 dark:text-orange-400 font-bold hover:underline flex items-center gap-1 transition-colors">
                   <Settings2 className="w-3.5 h-3.5" /> Kelola Kategori
                 </button>
               </div>
-              <select id="menuCategory" className="w-full p-3 border rounded-xl focus:border-orange-600 dark:focus:border-orange-500 outline-none bg-white dark:bg-slate-900 transition-colors" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+              <Select
+                id="menuCategory"
+                value={formData.category}
+                onChange={e => setFormData({ ...formData, category: e.target.value })}
+              >
                 {categories.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
-                {!categories.includes(formData.category) && formData.category && <option value={formData.category}>{formData.category}</option>}
-              </select>
+                {!categories.includes(formData.category) && formData.category && (
+                  <option value={formData.category}>{formData.category}</option>
+                )}
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="menuPrice" className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-1" >Harga Jual (Rp)</label>
-                <input id="menuPrice" type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 dark:focus:border-orange-500 outline-none transition-colors" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value === '' ? '' : Number(e.target.value) })} placeholder='0' />
-              </div>
-              <div>
-                <label htmlFor="menuHpp" className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-1">HPP / Modal (Rp)</label>
-                <input id="menuHpp" type="number" className="w-full p-3 border rounded-xl focus:border-orange-600 dark:focus:border-orange-500 outline-none transition-colors" value={formData.hpp} onChange={e => setFormData({ ...formData, hpp: e.target.value === '' ? '' : Number(e.target.value) })} placeholder='0' />
-              </div>
+              <Input
+                id="menuPrice"
+                label="Harga Jual (Rp)"
+                type="number"
+                value={formData.price}
+                onChange={e => setFormData({ ...formData, price: e.target.value === '' ? '' : Number(e.target.value) })}
+                placeholder="0"
+              />
+              <Input
+                id="menuHpp"
+                label="HPP / Modal (Rp)"
+                type="number"
+                value={formData.hpp}
+                onChange={e => setFormData({ ...formData, hpp: e.target.value === '' ? '' : Number(e.target.value) })}
+                placeholder="0"
+              />
             </div>
           </div>
 
@@ -135,9 +154,9 @@ const MenuManagement = () => {
         </div>
 
         <div className="max-w-4xl mt-8 pt-6 border-t border-slate-200 dark:border-slate-700 flex justify-end">
-          <button onClick={handleSave} className="w-full md:w-auto px-8 py-3 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+          <Button onClick={handleSave} size="lg" className="w-full md:w-auto">
             {formData.id ? 'Simpan Perubahan' : 'Tambah Menu'}
-          </button>
+          </Button>
         </div>
 
         <CategoryModal
@@ -168,12 +187,20 @@ const MenuManagement = () => {
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100">Manajemen Menu</h2>
-        <button onClick={() => { setFormData({ id: '', name: '', price: '', hpp: '', category: categories[0] || 'Lainnya', variantGroupIds: [] }); setIsEditing(true); }} className="bg-orange-600 dark:bg-orange-500 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-orange-700 dark:hover:bg-orange-600 hover:-translate-y-0.5 transition-all duration-300">
-          <Plus className="w-4 h-4" /> Tambah Data Menu
-        </button>
-      </div>
+      <PageHeader
+        title="Manajemen Menu"
+        action={
+          <Button
+            icon={<Plus className="w-4 h-4" />}
+            onClick={() => {
+              setFormData({ id: '', name: '', price: '', hpp: '', category: categories[0] || 'Lainnya', variantGroupIds: [] });
+              setIsEditing(true);
+            }}
+          >
+            Tambah Data Menu
+          </Button>
+        }
+      />
 
       <div className="space-y-8 pb-10">
         {Object.keys(groupedMenus).map(category => (
@@ -182,7 +209,7 @@ const MenuManagement = () => {
             {/* --- Header Kategori --- */}
             <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
               <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
-              <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold px-2 py-0.5 rounded-full">{groupedMenus[category].length} Item</span>
+              <Badge variant="neutral">{groupedMenus[category].length} Item</Badge>
             </div>
 
             {/* --- DAFTAR MENU RINGKAS (1 BARIS) --- */}
@@ -216,20 +243,20 @@ const MenuManagement = () => {
                     </span>
                     
                     <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <button 
-                        onClick={() => { setFormData(menu); setIsEditing(true); }} 
-                        className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+                      <IconButton
+                        variant="edit"
+                        onClick={() => { setFormData(menu); setIsEditing(true); }}
                         title="Edit Menu"
                       >
                         <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(menu.id)} 
-                        className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                      </IconButton>
+                      <IconButton
+                        variant="delete"
+                        onClick={() => handleDelete(menu.id)}
                         title="Hapus Menu"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                      </IconButton>
                     </div>
                   </div>
 
@@ -239,7 +266,24 @@ const MenuManagement = () => {
 
           </div>
         ))}
-        {menus.length === 0 && <div className="p-8 text-center text-slate-400 dark:text-slate-500 animate-in fade-in">Belum ada data menu</div>}
+        {menus.length === 0 && (
+          <EmptyState
+            icon={<Plus className="w-8 h-8" />}
+            title="Belum ada data menu"
+            description="Tambah menu pertama untuk mulai menerima pesanan"
+            action={
+              <Button
+                icon={<Plus className="w-4 h-4" />}
+                onClick={() => {
+                  setFormData({ id: '', name: '', price: '', hpp: '', category: categories[0] || 'Lainnya', variantGroupIds: [] });
+                  setIsEditing(true);
+                }}
+              >
+                Tambah Menu Pertama
+              </Button>
+            }
+          />
+        )}
       </div>
     </div>
   );

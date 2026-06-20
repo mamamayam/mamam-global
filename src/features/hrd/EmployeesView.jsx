@@ -3,6 +3,9 @@ import { formatRupiah, toLocalDateString, toLocalMonthString } from '../../utils
 import { useAppContext } from '../../context/AppContext';
 import PayslipModal from '../hrd/modals/PayslipModal';
 import CategoryModal from '../../components/CategoryModal';
+import { Card, Button, PageHeader, EmptyState } from '../../components/ui';
+import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+import { pushTransactionDelete } from '../../storage/realtimeSync';
 import {
   Calendar,
   ChevronDown,
@@ -21,8 +24,28 @@ import {
   ChevronRight,
   ChevronLeft,
   Briefcase,
-  Settings2
+  Settings2,
+  RotateCcw
 } from 'lucide-react';
+
+// Hitung jumlah jam kerja dari jam masuk & jam keluar (format "HH:MM").
+// Dipakai di efek otomatis & saat reset form pilih karyawan baru, supaya
+// keduanya konsisten dan jam kerja selalu langsung terhitung (tidak perlu
+// toggle Libur/Masuk dulu baru muncul).
+function calculateHoursFromTimes(clockInStr, clockOutStr) {
+  const [inHours, inMinutes] = clockInStr.split(':').map(Number);
+  const [outHours, outMinutes] = clockOutStr.split(':').map(Number);
+
+  const totalInMinutes = (inHours * 60) + inMinutes;
+  let totalOutMinutes = (outHours * 60) + outMinutes;
+
+  if (totalOutMinutes < totalInMinutes) {
+    totalOutMinutes += 24 * 60;
+  }
+
+  const diffMinutes = totalOutMinutes - totalInMinutes;
+  return Number((diffMinutes / 60).toFixed(2));
+}
 
 
 // =========================================================================
@@ -56,6 +79,7 @@ const EmployeesView = () => {
   const [currentRecordId, setCurrentRecordId] = useState(null);
   const [showEmpDropdown, setShowEmpDropdown] = useState(false);
   const [catModalType, setCatModalType] = useState(null); // null | 'addition' | 'deduction'
+  const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
 
   const [adjType, setAdjType] = useState('addition');
   const [adjCategory, setAdjCategory] = useState('');
@@ -72,20 +96,7 @@ const EmployeesView = () => {
       // Jika libur, paksa jam kerja jadi 0
       setHoursWorked(0);
     } else if (clockIn && clockOut) {
-      const [inHours, inMinutes] = clockIn.split(':').map(Number);
-      const [outHours, outMinutes] = clockOut.split(':').map(Number);
-
-      const totalInMinutes = (inHours * 60) + inMinutes;
-      let totalOutMinutes = (outHours * 60) + outMinutes;
-
-      if (totalOutMinutes < totalInMinutes) {
-        totalOutMinutes += 24 * 60;
-      }
-
-      const diffMinutes = totalOutMinutes - totalInMinutes;
-      const calculatedHours = diffMinutes / 60;
-
-      setHoursWorked(Number(calculatedHours.toFixed(2)));
+      setHoursWorked(calculateHoursFromTimes(clockIn, clockOut));
     }
   }, [clockIn, clockOut, isDayOff]); // <-- Tambahkan isDayOff di sini
 
@@ -171,7 +182,7 @@ const EmployeesView = () => {
   // --- LOGIC: INPUT HARIAN ---
   useEffect(() => {
     if (activeTab === 'input' && dailyEmpId && dailyDate) {
-      const existingRecord = employeeDailyRecords.find(r => r.employeeId === dailyEmpId && r.dateStr === dailyDate);
+      const existingRecord = employeeDailyRecords.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
       if (existingRecord) {
         setIsEditRecordMode(true);
         setCurrentRecordId(existingRecord.id);
@@ -188,7 +199,10 @@ const EmployeesView = () => {
         setCurrentRecordId(null);
         setClockIn('09:00');
         setClockOut('19:00');
-        setHoursWorked('');
+        // FIX: langsung hitung jam kerja dari jam masuk/keluar default di atas
+        // (bukan dikosongkan) — supaya begitu pilih karyawan, jam kerja & bonus
+        // full time langsung muncul tanpa harus pencet Libur lalu Masuk dulu.
+        setHoursWorked(calculateHoursFromTimes('09:00', '19:00'));
         setIsDayOff(false); // <-- Reset status libur
         setAdditions([]);
         setDeductions([]);
@@ -278,14 +292,35 @@ const EmployeesView = () => {
 
   const handleDeleteDailyRecord = (id) => {
     triggerConfirm('Hapus catatan harian ini?', () => {
-      setEmployeeDailyRecords(employeeDailyRecords.filter(r => r.id !== id));
-      triggerAlert('Catatan dihapus.');
+      setEmployeeDailyRecords(employeeDailyRecords.map(r => r.id === id ? markDeleted(r) : r));
+      triggerAlert('Catatan dihapus!');
       setDailyEmpId('');
     });
   };
 
+  const handleRestoreDailyRecord = (id) => {
+    setEmployeeDailyRecords(employeeDailyRecords.map(r => r.id === id ? restoreItem(r) : r));
+    triggerAlert('Catatan dipulihkan!');
+  };
+
+  const handlePermanentDeleteDailyRecord = (id) => {
+    triggerConfirm('Hapus permanen catatan ini? Tindakan ini tidak bisa dibatalkan', () => {
+      setEmployeeDailyRecords(employeeDailyRecords.filter(r => r.id !== id));
+      // Langsung kirim delete ke Supabase saat ini juga — gak nunggu siklus
+      // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
+      pushTransactionDelete('employeeDailyRecords', id).catch(err =>
+        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+      );
+      triggerAlert('Catatan dihapus permanen');
+    });
+  };
+
+  // Daftar yang ditampilkan di kartu "Riwayat Input Harian": aktif kalau
+  // mode normal, atau yang sudah dihapus (recycle bin) kalau showTrash aktif.
+  const visibleDailyRecords = showTrash ? trashedOnly(employeeDailyRecords) : activeOnly(employeeDailyRecords);
+
   const filteredRecordsForReport = useMemo(() => {
-    return employeeDailyRecords.filter(r => toLocalMonthString(r.date) === reportMonth);
+    return activeOnly(employeeDailyRecords).filter(r => toLocalMonthString(r.date) === reportMonth);
   }, [employeeDailyRecords, reportMonth]);
 
   const employeePerformance = useMemo(() => {
@@ -321,7 +356,7 @@ const EmployeesView = () => {
 
   const renderInputTab = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full animate-in fade-in slide-in-from-right-4 duration-300">
-      <div className="lg:col-span-1 bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col h-fit">
+      <Card padding="lg" className="lg:col-span-1 flex flex-col h-fit">
         <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
           <Calendar className="w-5 h-5 text-slate-800 dark:text-slate-100" />
           <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Form Input Harian</h3>
@@ -415,7 +450,7 @@ const EmployeesView = () => {
             />
           </div>
 
-          <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-white dark:bg-slate-900 mt-4 shadow-sm">
+          <Card padding="md" className="mt-4">
             <div className="flex items-center gap-2 mb-4">
               <Wallet className="w-5 h-5 text-green-600 dark:text-green-400" />
               <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">Tambahan & Potongan</h4>
@@ -534,7 +569,7 @@ const EmployeesView = () => {
                 {adjType === 'addition' ? 'Tambah Penghasilan' : 'Tambah Potongan'}
               </button>
             </div>
-          </div>
+          </Card>
 
           {(additions.length > 0 || deductions.length > 0) && (
             <div className="border border-slate-100 dark:border-slate-800 p-3 rounded-xl bg-slate-50 dark:bg-slate-950 space-y-3">
@@ -583,25 +618,36 @@ const EmployeesView = () => {
             </div>
           )}
 
-          <button onClick={handleSaveDailyRecord} className="w-full py-3.5 mt-4 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2">
-            <Save className="w-4 h-4" /> {isEditRecordMode ? 'Simpan Perubahan' : 'Simpan Data Harian'}
-          </button>
+          <Button variant="primary" size="full" className="mt-4" icon={<Save className="w-4 h-4" />} onClick={handleSaveDailyRecord}>
+            {isEditRecordMode ? 'Simpan Perubahan' : 'Simpan Data Harian'}
+          </Button>
         </div>
-      </div>
+      </Card>
 
-      <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col h-[650px]">
+      <Card padding="none" className="lg:col-span-2 flex flex-col h-[650px]">
         <div className="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
-          <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><History className="w-4 h-4" /> Riwayat Input Harian</h3>
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold">{employeeDailyRecords.length} Catatan</div>
+          <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Input Harian'}
+          </h3>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowTrash(v => !v)}
+              className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+            >
+              {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(employeeDailyRecords).length})`}
+            </button>
+            <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold">{visibleDailyRecords.length} Catatan</div>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-          {employeeDailyRecords.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full opacity-50">
-              <Calendar className="w-12 h-12 mb-2 text-slate-400 dark:text-slate-500" />
-              <p className="text-center text-slate-500 dark:text-slate-400 font-medium">Belum ada riwayat input karyawan.</p>
-            </div>
+          {visibleDailyRecords.length === 0 ? (
+            <EmptyState
+              className="h-full opacity-50"
+              icon={showTrash ? <Trash2 className="w-12 h-12" /> : <Calendar className="w-12 h-12" />}
+              title={showTrash ? 'Recycle bin kosong.' : 'Belum ada riwayat input karyawan.'}
+            />
           ) : (
-            employeeDailyRecords.slice(0, 50).map(rec => {
+            visibleDailyRecords.slice(0, 50).map(rec => {
               const emp = employees.find(e => e.id === rec.employeeId);
               const addSum = rec.additions.reduce((s, a) => s + a.amount, 0);
               const dedSum = rec.deductions.reduce((s, d) => s + d.amount, 0);
@@ -613,10 +659,19 @@ const EmployeesView = () => {
                       <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(rec.date).toLocaleDateString('id-ID')} • {rec.hoursWorked} Jam</p>
                     </div>
                     <div className="flex gap-1">
-                      <button onClick={() => {
-                        setDailyEmpId(rec.employeeId); setDailyDate(rec.dateStr);
-                      }} className="p-1.5 text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"><Edit3 className="w-4 h-4" /></button>
-                      <button onClick={() => handleDeleteDailyRecord(rec.id)} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      {showTrash ? (
+                        <>
+                          <button onClick={() => handleRestoreDailyRecord(rec.id)} className="p-1.5 text-emerald-500 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors" title="Kembalikan"><RotateCcw className="w-4 h-4" /></button>
+                          <button onClick={() => handlePermanentDeleteDailyRecord(rec.id)} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors" title="Hapus Permanen"><Trash2 className="w-4 h-4" /></button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => {
+                            setDailyEmpId(rec.employeeId); setDailyDate(rec.dateStr);
+                          }} className="p-1.5 text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"><Edit3 className="w-4 h-4" /></button>
+                          <button onClick={() => handleDeleteDailyRecord(rec.id)} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
@@ -634,32 +689,32 @@ const EmployeesView = () => {
             })
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 
   const renderReportsTab = () => (
     <div className="space-y-6 h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+      <Card className="flex justify-between items-center">
         <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PieChart className="w-5 h-5 text-orange-600 dark:text-orange-400" /> Rekap Penggajian</h3>
         <div className="flex items-center gap-2">
           <label className="text-xs font-bold text-slate-500 dark:text-slate-400">Bulan Laporan:</label>
           <input type="month" value={reportMonth} onChange={e => setReportMonth(e.target.value)} className="p-2 text-sm font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-700 dark:text-slate-200 focus:border-orange-500 dark:focus:border-orange-500" />
         </div>
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-slate-800 text-white p-5 rounded-2xl shadow-sm border border-slate-700 dark:border-slate-300 flex flex-col justify-center">
           <p className="text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400 dark:text-slate-500">Total Expenses Payroll</p>
           <h3 className="font-heading text-2xl font-black text-white">{formatRupiah(totalPayrollExpense)}</h3>
         </div>
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-center">
+        <Card padding="lg" className="flex flex-col justify-center">
           <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-2">Karyawan Aktif (Bulan Ini)</p>
           <h3 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100">{employeePerformance.length} Orang</h3>
-        </div>
+        </Card>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+      <Card padding="none" className="overflow-hidden">
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-between items-center">
           <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">Performa & Rincian Gaji Karyawan</h3>
         </div>
@@ -677,7 +732,7 @@ const EmployeesView = () => {
             </thead>
             <tbody>
               {employeePerformance.length === 0 ? (
-                <tr><td colSpan="6" className="p-8 text-center text-slate-400 dark:text-slate-500 italic text-sm">Tidak ada data penggajian pada bulan ini.</td></tr>
+                <tr><td colSpan="6"><EmptyState size="sm" title="Tidak ada data penggajian pada bulan ini." /></td></tr>
               ) : (
                 employeePerformance.map(p => (
                   <tr key={p.employee.id} className="hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors">
@@ -690,9 +745,9 @@ const EmployeesView = () => {
                     <td className="p-4 text-right font-bold text-red-500 dark:text-red-400 text-sm">-{formatRupiah(p.totalDeductions)}</td>
                     <td className="p-4 text-right font-black text-slate-900 dark:text-slate-50 text-sm">{formatRupiah(p.netPay)}</td>
                     <td className="p-4 text-center">
-                      <button onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })} className="px-3 py-1.5 bg-orange-100 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-500/20 font-bold text-xs rounded-lg transition-colors inline-flex items-center gap-1">
-                        <Printer className="w-3 h-3" /> Cetak Slip
-                      </button>
+                      <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>
+                        Cetak Slip
+                      </Button>
                     </td>
                   </tr>
                 ))
@@ -700,9 +755,9 @@ const EmployeesView = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 mt-6 mb-10">
+      <Card padding="lg" className="mt-6 mb-10">
         <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-4">Riwayat Bulan Sebelumnya</h4>
         <div className="space-y-2">
           {[1, 2, 3].map(i => {
@@ -720,14 +775,14 @@ const EmployeesView = () => {
             )
           })}
         </div>
-      </div>
+      </Card>
     </div>
   );
 
   const renderManageTab = () => (
     <div className="h-full animate-in fade-in slide-in-from-left-4 duration-300">
       {isEditingEmp ? (
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 max-w-3xl">
+        <Card padding="lg" className="max-w-3xl">
           <button onClick={() => setIsEditingEmp(false)} className="mb-4 text-slate-500 dark:text-slate-400 flex items-center gap-2 hover:text-slate-800 dark:hover:text-slate-100 font-medium transition-colors">
             <ChevronLeft className="w-5 h-5" /> Kembali
           </button>
@@ -760,13 +815,13 @@ const EmployeesView = () => {
             </div>
           </div>
 
-          <button onClick={handleSaveEmployee} className="px-8 py-3 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+          <Button variant="primary" size="lg" onClick={handleSaveEmployee}>
             Simpan Data Karyawan
-          </button>
-        </div>
+          </Button>
+        </Card>
       ) : (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+          <Card className="flex justify-between items-center">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Briefcase className="w-5 h-5 text-slate-700 dark:text-slate-200" /> Daftar Karyawan</h3>
             <button onClick={() => {
               setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: toLocalDateString() });
@@ -774,11 +829,11 @@ const EmployeesView = () => {
             }} className="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-slate-900 transition-all duration-300">
               <Plus className="w-4 h-4" /> Tambah Karyawan
             </button>
-          </div>
+          </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-10">
             {employees.map(emp => (
-              <div key={emp.id} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 relative group hover:shadow-md transition-shadow duration-300">
+              <Card key={emp.id} padding="lg" className="relative group hover:shadow-md transition-shadow duration-300">
                 <div className="absolute top-4 right-4 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
                   <button onClick={() => { setEmpFormData(emp); setIsEditingEmp(true); }} className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"><Edit3 className="w-4 h-4" /></button>
                   <button onClick={() => handleDeleteEmployee(emp.id)} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
@@ -802,9 +857,9 @@ const EmployeesView = () => {
                     <span className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">{emp.address || '-'}</span>
                   </div>
                 </div>
-              </div>
+              </Card>
             ))}
-            {employees.length === 0 && <div className="col-span-full p-8 text-center text-slate-400 dark:text-slate-500 italic">Belum ada data karyawan.</div>}
+            {employees.length === 0 && <EmptyState size="sm" className="col-span-full" title="Belum ada data karyawan." />}
           </div>
         </div>
       )}
@@ -814,12 +869,12 @@ const EmployeesView = () => {
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
       <div className="shrink-0 mb-6">
-        <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2"><UserCog className="w-6 h-6 text-slate-800 dark:text-slate-100" /> Manajemen Pegawai (HR)</h2>
+        <PageHeader title="Manajemen Pegawai (HR)" icon={<UserCog className="w-6 h-6" />} className="mb-4" />
 
         <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-3 overflow-x-auto hide-scrollbar">
-          <button onClick={() => setActiveTab('input')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'input' ? 'bg-orange-600 dark:bg-orange-500 text-white shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Input Harian</button>
-          <button onClick={() => setActiveTab('reports')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'reports' ? 'bg-orange-600 dark:bg-orange-500 text-white shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Rekap Laporan</button>
-          <button onClick={() => setActiveTab('manage')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'manage' ? 'bg-orange-600 dark:bg-orange-500 text-white shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Kelola Karyawan</button>
+          <Button size="md" variant={activeTab === 'input' ? 'primary' : 'secondary'} onClick={() => setActiveTab('input')}>Input Harian</Button>
+          <Button size="md" variant={activeTab === 'reports' ? 'primary' : 'secondary'} onClick={() => setActiveTab('reports')}>Rekap Laporan</Button>
+          <Button size="md" variant={activeTab === 'manage' ? 'primary' : 'secondary'} onClick={() => setActiveTab('manage')}>Kelola Karyawan</Button>
         </div>
       </div>
 
