@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter } from 'lucide-react';
+import { History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw } from 'lucide-react';
 import { formatRupiah } from '../../utils/formatters';
 import { PageHeader, Card, Button } from '../../components/ui';
+import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+import { pushTransactionDelete } from '../../storage/realtimeSync';
 
 const HistoryView = () => {
     const { salesHistory, setSalesHistory, isAdminMode, setReceiptModal, triggerConfirm } = useAppContext();
@@ -15,6 +17,7 @@ const HistoryView = () => {
     // State khusus untuk rentang tanggal kustom
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
+    const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
 
     // Daftar opsi tab periode tanggal
     const filterTabs = [
@@ -26,8 +29,11 @@ const HistoryView = () => {
         { id: 'kustom', label: 'Pilih Tanggal' }
     ];
 
+    // Sumber data sesuai mode: riwayat aktif, atau isi recycle bin
+    const visibleSalesHistory = showTrash ? trashedOnly(salesHistory) : activeOnly(salesHistory);
+
     // Mengambil daftar tipe order unik dari data riwayat untuk dropdown
-    const uniqueOrderTypes = [...new Set(salesHistory.map(order => order.orderType).filter(Boolean))];
+    const uniqueOrderTypes = [...new Set(visibleSalesHistory.map(order => order.orderType).filter(Boolean))];
 
     // Fungsi mengecek apakah tanggal pesanan masuk dalam rentang filter
     const isWithinDateRange = (dateString, filterType) => {
@@ -67,7 +73,7 @@ const HistoryView = () => {
     };
 
     // Logika Filter Gabungan (Pencarian Teks + Periode Tanggal + Tipe Order)
-    const filteredHistory = salesHistory.filter(order => {
+    const filteredHistory = visibleSalesHistory.filter(order => {
         const searchLower = searchTerm.toLowerCase();
 
         // 1. Filter Teks (Mencakup ID, No Order, ATAU Nama Pelanggan)
@@ -86,8 +92,23 @@ const HistoryView = () => {
     });
 
     const handleDelete = (id) => {
-        triggerConfirm('Hapus riwayat pesanan ini? Aksi ini tidak dapat dibatalkan.', () => {
+        triggerConfirm('Pindahkan riwayat pesanan ini ke Recycle Bin?', () => {
+            setSalesHistory(salesHistory.map(order => order.id === id ? markDeleted(order) : order));
+        });
+    };
+
+    const handleRestore = (id) => {
+        setSalesHistory(salesHistory.map(order => order.id === id ? restoreItem(order) : order));
+    };
+
+    const handlePermanentDelete = (id) => {
+        triggerConfirm('Hapus PERMANEN riwayat pesanan ini? Tindakan ini tidak bisa dibatalkan.', () => {
             setSalesHistory(salesHistory.filter(order => order.id !== id));
+            // Langsung kirim delete ke Supabase saat ini juga, gak nunggu siklus
+            // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
+            pushTransactionDelete('salesHistory', id).catch(err =>
+                console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+            );
         });
     };
 
@@ -96,9 +117,16 @@ const HistoryView = () => {
 
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <PageHeader
-                    title="Riwayat Pesanan"
+                    title={showTrash ? 'Recycle Bin' : 'Riwayat Pesanan'}
                     icon={<History className="w-6 h-6 text-green-500 dark:text-green-400" />}
                 />
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setShowTrash(v => !v)}
+                >
+                    {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(salesHistory).length})`}
+                </Button>
             </div>
 
             {/* CONTAINER UTAMA FILTER*/}
@@ -207,9 +235,20 @@ const HistoryView = () => {
                                         <Receipt className="w-4 h-4" /> Struk
                                     </button>
                                     {isAdminMode && (
-                                        <button onClick={() => handleDelete(order.id)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/15 rounded-lg transition-colors">
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                        showTrash ? (
+                                            <>
+                                                <button onClick={() => handleRestore(order.id)} className="p-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 rounded-lg transition-colors" title="Kembalikan">
+                                                    <RotateCcw className="w-4 h-4" />
+                                                </button>
+                                                <button onClick={() => handlePermanentDelete(order.id)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/15 rounded-lg transition-colors" title="Hapus Permanen">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <button onClick={() => handleDelete(order.id)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/15 rounded-lg transition-colors">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        )
                                     )}
                                 </div>
                             </div>
@@ -218,8 +257,8 @@ const HistoryView = () => {
                 ) : (
                     <div className="col-span-full py-16 flex flex-col items-center justify-center text-center">
                         <Calendar className="w-12 h-12 text-slate-200 dark:text-slate-700 mb-3" />
-                        <h3 className="text-slate-600 dark:text-slate-300 font-bold mb-1">Tidak ada pesanan</h3>
-                        <p className="text-slate-400 dark:text-slate-500 text-sm">Coba ubah rentang filter atau kata kunci pencarian.</p>
+                        <h3 className="text-slate-600 dark:text-slate-300 font-bold mb-1">{showTrash ? 'Recycle bin kosong' : 'Tidak ada pesanan'}</h3>
+                        <p className="text-slate-400 dark:text-slate-500 text-sm">{showTrash ? 'Belum ada riwayat pesanan yang dihapus.' : 'Coba ubah rentang filter atau kata kunci pencarian.'}</p>
                     </div>
                 )}
             </div>

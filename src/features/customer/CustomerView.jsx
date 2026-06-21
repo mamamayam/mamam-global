@@ -4,6 +4,7 @@ import { useAppContext } from '../../context/AppContext';
 import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2, Save, RotateCcw } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+import { PageHeader, Card, Input, Select, Button, EmptyState } from '../../components/ui';
 
 const CustomerView = () => {
   // Ambil triggerConfirm dari AppContext (pola yang sama seperti di EmployeesView)
@@ -170,7 +171,11 @@ const CustomerView = () => {
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col min-h-0 relative animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <div className="shrink-0">
-        <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2"><Users className="w-6 h-6 text-orange-600 dark:text-orange-400" /> Pelanggan & Reward</h2>
+        <PageHeader
+          title="Pelanggan & Reward"
+          icon={<Users className="w-6 h-6 text-orange-600 dark:text-orange-400" />}
+          className="mb-4"
+        />
 
         <div className="p-2 flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-3 mb-6 overflow-x-auto hide-scrollbar">
           <button onClick={() => setCustomerSubTab('manage')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${customerSubTab === 'manage' ? 'bg-slate-800 text-white shadow-sm -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Kelola Pelanggan & Voucher</button>
@@ -187,7 +192,7 @@ const CustomerView = () => {
             {/* ========================================= */}
             {/* KOLOM 1: KELOLA PELANGGAN                 */}
             {/* ========================================= */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col h-full min-h-[400px]">
+            <Card padding="none" className="flex flex-col h-full min-h-[400px]">
               <div className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0 flex justify-between items-center">
                 <span>{showTrashCustomers ? 'Recycle Bin' : (editingCustomerId ? 'Edit Data Pelanggan' : 'Data Pelanggan')}</span>
                 <button
@@ -200,8 +205,12 @@ const CustomerView = () => {
               {!showTrashCustomers && (
                 <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
                   <div className="flex gap-2">
-                    <input type="text" placeholder="Nama Pelanggan" className="flex-1 p-2.5 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20 transition-colors" value={newCustName} onChange={e => setNewCustName(e.target.value)} />
-                    <input type="text" placeholder="No. Whatsapp" className="w-1/3 p-2.5 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20 transition-colors" value={newCustPhone} onChange={e => setNewCustNamePhone(e.target.value)} />
+                    <div className="flex-1">
+                      <Input variant="muted" type="text" placeholder="Nama Pelanggan" className="font-semibold" value={newCustName} onChange={e => setNewCustName(e.target.value)} />
+                    </div>
+                    <div className="w-1/3">
+                      <Input variant="muted" type="text" placeholder="No. Whatsapp" value={newCustPhone} onChange={e => setNewCustNamePhone(e.target.value)} />
+                    </div>
                     
                     {/* Tombol Simpan Otomatis Berubah Warna & Icon Sesuai Mode Aktif */}
                     <button 
@@ -213,12 +222,13 @@ const CustomerView = () => {
                     </button>
 
                     {editingCustomerId && (
-                      <button 
-                        onClick={handleCancelEditCustomer} 
-                        className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-bold transition-all duration-300 animate-in fade-in"
+                      <Button
+                        variant="secondary"
+                        onClick={handleCancelEditCustomer}
+                        className="animate-in fade-in"
                       >
                         Batal
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -276,15 +286,15 @@ const CustomerView = () => {
                   </div>
                 ))}
                 {(showTrashCustomers ? trashedOnly(customers) : activeOnly(customers)).length === 0 && (
-                  <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-10">{showTrashCustomers ? 'Recycle bin kosong.' : 'Belum ada pelanggan'}</p>
+                  <EmptyState size="sm" title={showTrashCustomers ? 'Recycle bin kosong.' : 'Belum ada pelanggan'} />
                 )}
               </div>
-            </div>
+            </Card>
 
             {/* ========================================= */}
             {/* KOLOM 2: VOUCHER DISKON AKTIF             */}
             {/* ========================================= */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col h-full min-h-[400px]">
+            <Card padding="none" className="flex flex-col h-full min-h-[400px]">
               <div className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0 flex justify-between items-center">
                 <span>{showTrashVouchers ? 'Recycle Bin' : 'Voucher Diskon Aktif'}</span>
                 <button
@@ -297,49 +307,60 @@ const CustomerView = () => {
 
               {!showTrashVouchers && (
               <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-                <input
+                <Input
                   type="text"
                   placeholder="KODE VOUCHER (Maks 10 huruf)"
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm font-bold uppercase tracking-wider outline-none focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20 transition-colors"
+                  variant="muted"
+                  className="uppercase tracking-wider font-bold"
                   value={newVoucherCode}
                   maxLength={10}
                   onChange={e => setNewVoucherCode(e.target.value)}
                 />
 
                 <div className="flex gap-2">
-                  <select
-                    className="w-1/3 p-2.5 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm font-semibold outline-none transition-colors focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20"
-                    value={newVoucherType}
-                    onChange={e => setNewVoucherType(e.target.value)}
-                  >
-                    <option value="fixed">Nominal (Rp)</option>
-                    <option value="percent">Persen (%)</option>
-                  </select>
-                  <input
-                    type="number"
-                    placeholder="Nilai Potongan"
-                    className="flex-1 p-2.5 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none font-bold text-orange-600 dark:text-orange-400 focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20 transition-colors"
-                    value={newVoucherDiscount}
-                    onChange={e => setNewVoucherDiscount(e.target.value)}
-                  />
+                  <div className="w-1/3">
+                    <Select
+                      variant="muted"
+                      className="font-semibold"
+                      value={newVoucherType}
+                      onChange={e => setNewVoucherType(e.target.value)}
+                    >
+                      <option value="fixed">Nominal (Rp)</option>
+                      <option value="percent">Persen (%)</option>
+                    </Select>
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      placeholder="Nilai Potongan"
+                      variant="muted"
+                      className="font-bold text-orange-600 dark:text-orange-400"
+                      value={newVoucherDiscount}
+                      onChange={e => setNewVoucherDiscount(e.target.value)}
+                    />
+                  </div>
                 </div>
 
                 <div className="flex gap-2">
-                  <input
-                    type="number"
-                    placeholder="Syarat Minimal Belanja (Opsional)"
-                    className="flex-1 p-2.5 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20 transition-colors"
-                    value={newVoucherMinPurchase}
-                    onChange={e => setNewVoucherMinPurchase(e.target.value)}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Kuota"
-                    className="w-1/3 p-2.5 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20 transition-colors"
-                    value={newVoucherQuota}
-                    onChange={e => setNewVoucherQuota(e.target.value)}
-                    min="1"
-                  />
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      placeholder="Syarat Minimal Belanja (Opsional)"
+                      variant="muted"
+                      value={newVoucherMinPurchase}
+                      onChange={e => setNewVoucherMinPurchase(e.target.value)}
+                    />
+                  </div>
+                  <div className="w-1/3">
+                    <Input
+                      type="number"
+                      placeholder="Kuota"
+                      variant="muted"
+                      value={newVoucherQuota}
+                      onChange={e => setNewVoucherQuota(e.target.value)}
+                      min="1"
+                    />
+                  </div>
                 </div>
 
               <div className="flex gap-2 mt-1">
@@ -352,12 +373,12 @@ const CustomerView = () => {
                 </button>
                 
                 {editingVoucherId && (
-                  <button 
-                    onClick={handleCancelEdit} 
-                    className="px-4 py-3 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-bold transition-all duration-300"
+                  <Button
+                    variant="secondary"
+                    onClick={handleCancelEdit}
                   >
                     Batal
-                  </button>
+                  </Button>
                 )}
               </div>
               </div>
@@ -419,16 +440,16 @@ const CustomerView = () => {
                 </div>
               ))}
               {(showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers)).length === 0 && (
-                <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-10">{showTrashVouchers ? 'Recycle bin kosong.' : 'Belum ada voucher'}</p>
+                <EmptyState size="sm" title={showTrashVouchers ? 'Recycle bin kosong.' : 'Belum ada voucher'} />
               )}
             </div>
-            </div>
+            </Card>
 
           </div>
         )}
 
         {customerSubTab === 'loyal' && (
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 animate-in fade-in slide-in-from-right-4 duration-300 max-w-2xl ease-out">
+          <Card padding="lg" className="animate-in fade-in slide-in-from-right-4 duration-300 max-w-2xl ease-out">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base mb-4 flex items-center gap-2"><Award className="w-5 h-5 text-yellow-400 dark:text-yellow-400" /> Peringkat Pelanggan Terloyal (Poin Terbanyak)</h3>
             <div className="space-y-3">
               {loyalCustomers.map((c, index) => (
@@ -440,13 +461,13 @@ const CustomerView = () => {
                   <div className="text-right"><span className="bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 font-black px-4 py-2 rounded-xl border border-yellow-200 dark:border-yellow-500/30 text-sm shadow-sm">{c.points} Poin</span></div>
                 </div>
               ))}
-              {loyalCustomers.length === 0 && <p className="text-center text-slate-400 dark:text-slate-500 text-xs py-8">Belum ada data pelanggan.</p>}
+              {loyalCustomers.length === 0 && <EmptyState size="sm" title="Belum ada data pelanggan." />}
             </div>
-          </div>
+          </Card>
         )}
 
         {customerSubTab === 'claims' && (
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 animate-in fade-in slide-in-from-right-4 duration-300 max-w-3xl ease-out">
+          <Card padding="lg" className="animate-in fade-in slide-in-from-right-4 duration-300 max-w-3xl ease-out">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base mb-4 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-green-500 dark:text-green-400" /> Riwayat Klaim Reward & Tukar Poin</h3>
             <div className="space-y-3">
               {claimsHistory.map(claim => (
@@ -459,13 +480,13 @@ const CustomerView = () => {
                   <span className="bg-green-100 dark:bg-green-500/15 text-green-800 dark:text-green-300 text-xs font-bold px-3 py-1.5 rounded-lg border border-green-200 dark:border-green-500/30 shadow-sm">Selesai Klaim (-{claim.pointsUsed} Pts)</span>
                 </div>
               ))}
-              {claimsHistory.length === 0 && <p className="text-center text-slate-400 dark:text-slate-500 text-xs py-8">Belum ada riwayat klaim reward.</p>}
+              {claimsHistory.length === 0 && <EmptyState size="sm" title="Belum ada riwayat klaim reward." />}
             </div>
-          </div>
+          </Card>
         )}
 
         {customerSubTab === 'rules' && (
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 animate-in fade-in slide-in-from-right-4 duration-300 max-w-2xl space-y-6 ease-out">
+          <Card padding="none" className="p-6 animate-in fade-in slide-in-from-right-4 duration-300 max-w-2xl space-y-6 ease-out">
             <div className="flex items-center gap-2 border-b pb-3"><Info className="w-5 h-5 text-orange-600 dark:text-orange-400" /><h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base">Aturan Poin & Ketentuan Reward</h3></div>
             <div className="space-y-4">
               <div className="flex gap-3"><div className="w-6 h-6 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-sm">1</div><div><h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-0.5">Cara Mendapatkan Poin</h4><p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Pelanggan terdaftar akan mendapatkan <strong className="text-orange-600 dark:text-orange-400">1 Poin untuk setiap transaksi kelipatan Rp 10.000</strong> dari total tagihan bersih (setelah diskon).</p></div></div>
@@ -473,7 +494,7 @@ const CustomerView = () => {
               <div className="flex gap-3"><div className="w-6 h-6 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-sm">3</div><div><h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-0.5">Syarat Pelanggan & Member</h4><p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Pastikan nama pelanggan yang diinput pada saat transaksi di kasir sesuai dengan database member agar poin otomatis terhitung.</p></div></div>
             </div>
             <div className="bg-yellow-50 dark:bg-yellow-500/10 p-4 rounded-xl border border-yellow-100 dark:border-yellow-500/20 shadow-sm"><p className="text-xs text-yellow-800 dark:text-yellow-300 font-medium leading-relaxed"><strong>💡 Info Kasir:</strong> Anda dapat membantu pelanggan menukarkan poin mereka secara fleksibel melalui kolom "Klaim Poin" yang disediakan sejajar dengan voucher di keranjang pesanan.</p></div>
-          </div>
+          </Card>
         )}
 
       </div>
