@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAppContext } from "../../context/AppContext";
+import { activeOnly } from "../../utils/softDelete";
 import { 
   ShoppingCart, 
   Trash2, 
@@ -27,8 +28,8 @@ const CartDrawer = () => {
   setCurrentView('kasir');
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black backdrop-blur-sm transition-opacity duration-300" onClick={() => setIsCartOpen(false)} />
+    <div className="fixed inset-0 z-50 flex justify-center">
+      <div className="absolute inset-0 bg-slate-500/30 dark:bg-slate-800/40 backdrop-blur-sm transition-opacity duration-300" onClick={() => setIsCartOpen(false)} />
       <div className="w-full md:w-[420px] bg-white dark:bg-slate-900 h-full flex flex-col shadow-2xl relative animate-in slide-in-from-right duration-300 ease-out">
 
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900">
@@ -110,7 +111,7 @@ const CartDrawer = () => {
                     className="w-full border-b-2 border-slate-100 dark:border-slate-800 focus:border-orange-600 dark:focus:border-orange-500 pb-2 focus:outline-none bg-transparent transition-colors font-semibold text-slate-800 dark:text-slate-100 text-sm cursor-pointer"
                   >
                     <option value="">-- Pilih Pelanggan (Guest) --</option>
-                    {customers.map(c => (
+                    {activeOnly(customers).map(c => (
                       <option key={c.id} value={c.name}>{c.name} - {c.phone || 'Tanpa HP'} ({c.points} Pts)</option>
                     ))}
                   </select>
@@ -119,11 +120,11 @@ const CartDrawer = () => {
                 )}
 
                 {/* Fix Suggestion logic: Includes Phone numbers as well */}
-                {!isCustomerDropdownMode && customerName.trim() !== '' && !activeCustomer && customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).length > 0 && (
+                {!isCustomerDropdownMode && customerName.trim() !== '' && !activeCustomer && activeOnly(customers).filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).length > 0 && (
                   <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-300 bg-orange-50 dark:bg-orange-500/50 border border-orange-100 dark:border-orange-500/20 p-2 rounded-xl">
                     <p className="text-[10px] font-bold text-orange-600 dark:text-orange-400 mb-1.5 flex items-center gap-1"><Info className="w-3 h-3" /> Maksud Anda pelanggan ini?</p>
                     <div className="space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar pr-1 relative z-10">
-                      {customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).map(sc => (
+                      {activeOnly(customers).filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).map(sc => (
                         <div key={sc.id} onClick={() => setCustomerName(sc.name)} className="flex justify-between items-center bg-white dark:bg-slate-900 border border-orange-100 dark:border-orange-500/20 p-2 rounded-lg cursor-pointer hover:border-orange-300 dark:hover:border-orange-500/40 hover:shadow-sm transition-all">
                           <div className="flex flex-col">
                             <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">{sc.name}</span>
@@ -137,7 +138,7 @@ const CartDrawer = () => {
                 )}
 
                 {/* --- TAMBAH PELANGGAN BARU JIKA TIDAK DITEMUKAN --- */}
-                {!isCustomerDropdownMode && customerName.trim() !== '' && !activeCustomer && customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).length === 0 && (
+                {!isCustomerDropdownMode && customerName.trim() !== '' && !activeCustomer && activeOnly(customers).filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).length === 0 && (
                   <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-300 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 p-3 rounded-xl">
                     <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1">
                       <Info className="w-3.5 h-3.5" /> Pelanggan belum terdaftar
@@ -276,7 +277,7 @@ const CartDrawer = () => {
                         <input type="text" placeholder="VOUCHER" value={voucherInputCode} onChange={(e) => setVoucherInputCode(e.target.value.toUpperCase())} className="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-200 dark:border-slate-700 outline-none uppercase" />
                         <button onClick={() => {
                           if (!voucherInputCode) return;
-                          const validVoucher = vouchers.find(v => v.code === voucherInputCode);
+                          const validVoucher = activeOnly(vouchers).find(v => v.code === voucherInputCode);
                           if (validVoucher) {
                             if (getSubtotal() >= validVoucher.minPurchase) { setAppliedVoucher(validVoucher); triggerAlert(`Voucher ${validVoucher.code} berhasil dipasang!`); }
                             else { triggerAlert(`Minimal belanja untuk voucher ini: ${formatRupiah(validVoucher.minPurchase)}`); }

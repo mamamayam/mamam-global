@@ -24,52 +24,43 @@ async function writeAllToDexie(data, mode = 'merge') {
       continue;
     }
 
-    // mode === 'merge'
-    // Sentinel unik untuk bedakan "key tidak ada" vs "key ada tapi nilainya null"
     const MISSING = '__DEXIE_MISSING__';
     const existing = await loadData(key, MISSING);
 
-    // Key belum pernah ada di Dexie → langsung simpan dari file
     if (existing === MISSING) {
       await saveData(key, data[key]);
       continue;
     }
 
-    // Array of objects dengan id (transaksi & master data list)
-    // → merge by id, data LOKAL menang kalau id sudah ada
     if (Array.isArray(existing) && Array.isArray(data[key])) {
       const merged = [...existing];
       for (const item of data[key]) {
         const alreadyExists = merged.find(e => String(e.id) === String(item.id));
-        if (!alreadyExists) merged.push(item); // hanya tambah yang belum ada lokal
+        if (!alreadyExists) merged.push(item);
       }
       await saveData(key, merged);
       continue;
     }
 
-    // Plain object (config: storeSettings, menus, categories, dll)
-    // → deep merge dengan prioritas lokal (lokal menang di key yang sama)
     if (
       existing !== null && typeof existing === 'object' && !Array.isArray(existing) &&
       data[key] !== null && typeof data[key] === 'object' && !Array.isArray(data[key])
     ) {
-      const merged = { ...data[key], ...existing }; // existing overrides import
+      const merged = { ...data[key], ...existing };
       await saveData(key, merged);
       continue;
     }
 
-    // Primitif / null — hanya timpa kalau lokal memang kosong
     if (existing === null || existing === undefined) {
       await saveData(key, data[key]);
     }
-    // else: lokal ada isinya → biarkan, jangan overwrite
   }
 }
 
 function filterByDateRange(data, startDate, endDate) {
   if (!startDate && !endDate) return data;
   const start = startDate ? new Date(startDate + 'T00:00:00') : null;
-  const end   = endDate   ? new Date(endDate   + 'T23:59:59') : null;
+  const end = endDate ? new Date(endDate + 'T23:59:59') : null;
   const result = {};
   for (const key of ALL_KEYS) {
     if (!data[key]) continue;
@@ -79,7 +70,7 @@ function filterByDateRange(data, startDate, endDate) {
       if (!item[dateField]) return false;
       const d = new Date(item[dateField]);
       if (start && d < start) return false;
-      if (end   && d > end  ) return false;
+      if (end && d > end) return false;
       return true;
     });
   }
@@ -88,7 +79,7 @@ function filterByDateRange(data, startDate, endDate) {
 
 function calcStorageSize(allData) {
   const total = JSON.stringify(allData).length;
-  if (total < 1024)    return `${total} B`;
+  if (total < 1024) return `${total} B`;
   if (total < 1048576) return `${(total / 1024).toFixed(1)} KB`;
   return `${(total / 1048576).toFixed(1)} MB`;
 }
@@ -101,17 +92,9 @@ function calcRecordCount(allData) {
   return count;
 }
 
-// Jeda antar batch upload, supaya request tidak ditembak sekaligus/bersamaan
-// ke Supabase — lebih ramah ke rate limit & kuota free tier saat data sudah banyak.
 const SYNC_BATCH_DELAY_MS = 400;
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-/**
- * Upload SEMUA data ke Supabase secara manual (full sync).
- * Transaksi: upsert per-row ke tabel masing-masing (batch 100, dengan jeda
- * SYNC_BATCH_DELAY_MS antar batch supaya tidak sekaligus).
- * Config: upsert ke tabel app_config sebagai JSON blob per key.
- */
 async function syncAllToSupabase() {
   const supabase = await getSupabaseClient();
   if (!supabase) throw new Error('Konfigurasi Supabase belum ada di .env');
@@ -130,7 +113,7 @@ async function syncAllToSupabase() {
       const { error } = await supabase.from(key).upsert(batch, { onConflict: 'id' });
       if (error) throw new Error(`Gagal sync [${key}]: ${error.message}`);
       totalUpserted += batch.length;
-      await sleep(SYNC_BATCH_DELAY_MS); // jeda sebelum batch berikutnya — jangan sekaligus
+      await sleep(SYNC_BATCH_DELAY_MS);
     }
   }
 
@@ -149,10 +132,6 @@ async function syncAllToSupabase() {
   return totalUpserted;
 }
 
-/**
- * Restore SEMUA data dari Supabase ke Dexie.
- * Server adalah source of truth — data lokal akan ditimpa.
- */
 async function restoreFromSupabase(mode = 'replace') {
   const supabase = await getSupabaseClient();
   if (!supabase) throw new Error('Konfigurasi Supabase belum ada di .env');
@@ -177,30 +156,34 @@ async function restoreFromSupabase(mode = 'replace') {
 // ── DateRangeModal ─────────────────────────────────────────────────────────
 
 function DateRangeModal({ onClose, onConfirm, exportType }) {
-  const today        = new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
   const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
     .toISOString().slice(0, 10);
 
   const [startDate, setStartDate] = useState(firstOfMonth);
-  const [endDate,   setEndDate  ] = useState(today);
-  const [preset,    setPreset   ] = useState('thisMonth');
+  const [endDate, setEndDate] = useState(today);
+  const [preset, setPreset] = useState('thisMonth');
 
   const PRESETS = [
-    { id: 'today',     label: 'Hari Ini',    getRange: () => ({ s: today, e: today }) },
-    { id: 'thisWeek',  label: 'Minggu Ini',  getRange: () => {
+    { id: 'today', label: 'Hari Ini', getRange: () => ({ s: today, e: today }) },
+    {
+      id: 'thisWeek', label: 'Minggu Ini', getRange: () => {
         const d = new Date(), day = d.getDay(), mon = new Date(d);
         mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
         return { s: mon.toISOString().slice(0, 10), e: today };
-      }},
-    { id: 'thisMonth', label: 'Bulan Ini',   getRange: () => ({ s: firstOfMonth, e: today }) },
-    { id: 'lastMonth', label: 'Bulan Lalu',  getRange: () => {
+      }
+    },
+    { id: 'thisMonth', label: 'Bulan Ini', getRange: () => ({ s: firstOfMonth, e: today }) },
+    {
+      id: 'lastMonth', label: 'Bulan Lalu', getRange: () => {
         const d = new Date();
         const first = new Date(d.getFullYear(), d.getMonth() - 1, 1);
-        const last  = new Date(d.getFullYear(), d.getMonth(), 0);
+        const last = new Date(d.getFullYear(), d.getMonth(), 0);
         return { s: first.toISOString().slice(0, 10), e: last.toISOString().slice(0, 10) };
-      }},
-    { id: 'allTime',   label: 'Semua Data',  getRange: () => ({ s: '', e: '' }) },
-    { id: 'custom',    label: 'Kustom',      getRange: () => ({ s: startDate, e: endDate }) },
+      }
+    },
+    { id: 'allTime', label: 'Semua Data', getRange: () => ({ s: '', e: '' }) },
+    { id: 'custom', label: 'Kustom', getRange: () => ({ s: startDate, e: endDate }) },
   ];
 
   function applyPreset(p) {
@@ -209,8 +192,8 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
   }
 
   const isAllTime = preset === 'allTime';
-  const hasRange  = !isAllTime && (startDate || endDate);
-  const label     = exportType === 'json' ? 'JSON' : 'Excel';
+  const hasRange = !isAllTime && (startDate || endDate);
+  const label = exportType === 'json' ? 'JSON' : 'Excel';
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -273,22 +256,20 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
 
 function ImportModal({ type, onClose, onConfirm }) {
   const inputRef = useRef(null);
-  const [dragOver,      setDragOver     ] = useState(false);
-  const [file,          setFile         ] = useState(null);
-  // Default SELALU merge — user harus sengaja pilih Timpa Semua
-  const [mode,          setMode         ] = useState('merge');
-  // Untuk replace: wajib ketik konfirmasi supaya tidak tidak sengaja
+  const [dragOver, setDragOver] = useState(false);
+  const [file, setFile] = useState(null);
+  const [mode, setMode] = useState('merge');
   const [replaceConfirm, setReplaceConfirm] = useState('');
 
-  const label  = type === 'json' ? 'JSON' : 'Excel (.xlsx)';
+  const label = type === 'json' ? 'JSON' : 'Excel (.xlsx)';
   const accept = type === 'json' ? '.json,application/json' : '.xlsx,.xls';
-  const fmtBytes = b => b < 1024 ? `${b} B` : b < 1048576 ? `${(b/1024).toFixed(1)} KB` : `${(b/1048576).toFixed(1)} MB`;
+  const fmtBytes = b => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
   const canSubmit = file && (mode === 'merge' || replaceConfirm.trim().toUpperCase() === 'TIMPA');
 
   function handleModeChange(val) {
     setMode(val);
-    setReplaceConfirm(''); // reset konfirmasi saat ganti mode
+    setReplaceConfirm('');
   }
 
   return (
@@ -340,7 +321,6 @@ function ImportModal({ type, onClose, onConfirm }) {
 
         <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Mode Import</p>
         <div className="grid grid-cols-2 gap-2 mb-4">
-          {/* Gabungkan — default, aman */}
           <button onClick={() => handleModeChange('merge')}
             className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'merge' ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
           >
@@ -349,7 +329,6 @@ function ImportModal({ type, onClose, onConfirm }) {
             <p className="text-xs text-slate-400 dark:text-slate-500">Tambah ke data ada</p>
             {mode === 'merge' && <p className="text-xs text-orange-500 dark:text-orange-400 font-bold mt-1">✓ Aman — direkomendasikan</p>}
           </button>
-          {/* Timpa Semua — muted, perlu konfirmasi */}
           <button onClick={() => handleModeChange('replace')}
             className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'replace' ? 'border-red-400 bg-red-50 dark:bg-red-500/10' : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
           >
@@ -359,7 +338,6 @@ function ImportModal({ type, onClose, onConfirm }) {
           </button>
         </div>
 
-        {/* Konfirmasi ekstra untuk replace — wajib ketik "TIMPA" */}
         {mode === 'replace' && (
           <div className="bg-red-50 dark:bg-red-500/10 border-2 border-red-200 dark:border-red-500/30 rounded-xl p-4 mb-4 space-y-3">
             <div className="flex gap-2 items-start">
@@ -410,8 +388,8 @@ function ActionItem({ icon: Icon, label, sublabel, onClick, loading, done, iconB
     >
       <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${done ? 'bg-green-100' : iconBgClass}`}>
         {loading ? <RefreshCw className="w-5 h-5 text-orange-500 animate-spin" />
-          : done  ? <CheckCircle className="w-5 h-5 text-green-600" />
-          : <Icon className={`w-5 h-5 ${iconColorClass}`} />}
+          : done ? <CheckCircle className="w-5 h-5 text-green-600" />
+            : <Icon className={`w-5 h-5 ${iconColorClass}`} />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
@@ -421,7 +399,7 @@ function ActionItem({ icon: Icon, label, sublabel, onClick, loading, done, iconB
         <p className="text-xs mt-0.5">
           {loading ? <span className="text-orange-500 font-semibold">Memproses...</span>
             : done ? <span className="text-green-600 font-semibold">Selesai</span>
-            : <span className="text-slate-400">{sublabel}</span>}
+              : <span className="text-slate-400">{sublabel}</span>}
         </p>
       </div>
       {!loading && !done && <span className="text-slate-300 text-xl font-bold">›</span>}
@@ -432,15 +410,15 @@ function ActionItem({ icon: Icon, label, sublabel, onClick, loading, done, iconB
 // ── BackupView ─────────────────────────────────────────────────────────────
 
 const BackupView = ({ onBack }) => {
-  const [loadingState,   setLoadingState  ] = useState({});
-  const [doneState,      setDoneState     ] = useState({});
-  const [toast,          setToast         ] = useState(null);
-  const [importModal,    setImportModal   ] = useState(null);
+  const [loadingState, setLoadingState] = useState({});
+  const [doneState, setDoneState] = useState({});
+  const [toast, setToast] = useState(null);
+  const [importModal, setImportModal] = useState(null);
   const [dateRangeModal, setDateRangeModal] = useState(null);
-  const [isSyncing,      setIsSyncing     ] = useState(false);
-  const [isRestoring,    setIsRestoring   ] = useState(false);
-  const [storageSize,    setStorageSize   ] = useState('Menghitung...');
-  const [recordCount,    setRecordCount   ] = useState('...');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [storageSize, setStorageSize] = useState('Menghitung...');
+  const [recordCount, setRecordCount] = useState('...');
 
   const supabaseReady = isSupabaseConfigured();
   const lastBackup = localStorage.getItem('mamam_last_backup') || 'Belum pernah';
@@ -448,15 +426,18 @@ const BackupView = ({ onBack }) => {
     const raw = localStorage.getItem('mamam_last_supabase_sync');
     return raw ? new Date(raw).toLocaleString('id-ID') : null;
   });
-  const [autoSyncOn, setAutoSyncOn] = useState(() => isAutoSyncEnabled());
 
-  // Untuk countdown "sinkron berikutnya" — raw ISO dari localStorage
+  const [autoSyncOn, setAutoSyncOn] = useState(() => isAutoSyncEnabled());
+  const [dailySyncOn, setDailySyncOn] = useState(() => {
+    const saved = localStorage.getItem('mamam_daily_sync');
+    return saved !== 'false'; // Default bernilai true sebagai safety net
+  });
+
   const [lastSyncIso, setLastSyncIso] = useState(
     () => localStorage.getItem('mamam_last_supabase_sync')
   );
   const [now, setNow] = useState(() => new Date());
 
-  // Hitung menit hingga sync berikutnya (null = belum pernah sync)
   const minutesUntilSync = (() => {
     if (!autoSyncOn || !lastSyncIso) return null;
     const diff = Math.ceil(
@@ -471,6 +452,12 @@ const BackupView = ({ onBack }) => {
     setAutoSyncOn(next);
   }
 
+  function handleToggleDailySync() {
+    const next = !dailySyncOn;
+    localStorage.setItem('mamam_daily_sync', String(next));
+    setDailySyncOn(next);
+  }
+
   useEffect(() => {
     exportAllData().then(allData => {
       setStorageSize(calcStorageSize(allData));
@@ -478,17 +465,30 @@ const BackupView = ({ onBack }) => {
     });
   }, []);
 
-  // Refresh tiap menit — menangkap auto-sync yang jalan di background
-  // dan menurunkan countdown "sinkron berikutnya"
   useEffect(() => {
     const id = setInterval(() => {
       const raw = localStorage.getItem('mamam_last_supabase_sync');
       setLastSyncIso(raw);
       if (raw) setLastSyncTime(new Date(raw).toLocaleString('id-ID'));
-      setNow(new Date());
+      const currentTime = new Date();
+      setNow(currentTime);
+
+      // Trigger sync otomatis setiap jam 21:00 jika fitur dihidupkan
+      if (dailySyncOn && currentTime.getHours() === 21) {
+        const lastD = raw ? new Date(raw) : null;
+        if (!lastD || lastD.toDateString() !== currentTime.toDateString() || lastD.getHours() < 21) {
+          syncAllToSupabase().then(count => {
+            const tsStr = new Date().toISOString();
+            localStorage.setItem('mamam_last_supabase_sync', tsStr);
+            setLastSyncIso(tsStr);
+            setLastSyncTime(new Date(tsStr).toLocaleString('id-ID'));
+            showToast(`Auto-Sync 21:00 selesai — ${count} data tersimpan`);
+          }).catch(e => console.error("Daily sync fail:", e));
+        }
+      }
     }, 60_000);
     return () => clearInterval(id);
-  }, []);
+  }, [dailySyncOn]);
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
@@ -515,15 +515,13 @@ const BackupView = ({ onBack }) => {
     }, delay);
   }
 
-  // ── Export handlers ──────────────────────────────────────────────────────
-
   function handleExportJsonWithRange(startDate, endDate) {
     setDateRangeModal(null);
     const tag = startDate && endDate ? `${startDate}_${endDate}` : 'semua';
     startAction('exportJson', 300,
       Capacitor.isNativePlatform() ? 'Membuka menu simpan...' : 'File JSON berhasil diunduh!',
       async () => {
-        const raw  = await exportAllData();
+        const raw = await exportAllData();
         const data = filterByDateRange(raw, startDate, endDate);
         const jsonStr = JSON.stringify(data, null, 2);
         const filename = `backup-mamam-${tag}.json`;
@@ -548,9 +546,9 @@ const BackupView = ({ onBack }) => {
       Capacitor.isNativePlatform() ? 'Membuka menu simpan...' : 'File Excel berhasil diunduh!',
       async () => {
         const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs');
-        const raw  = await exportAllData();
+        const raw = await exportAllData();
         const data = filterByDateRange(raw, startDate, endDate);
-        const wb   = XLSX.utils.book_new();
+        const wb = XLSX.utils.book_new();
         const sheets = {
           salesHistory: 'Riwayat Penjualan', expenses: 'Pengeluaran',
           incomes: 'Pemasukan', employees: 'Karyawan',
@@ -571,8 +569,6 @@ const BackupView = ({ onBack }) => {
     );
   }
 
-  // ── Import handler ───────────────────────────────────────────────────────
-
   function handleImportConfirm(file, mode) {
     setImportModal(null);
     startAction('importJson', 200, 'Data berhasil diimpor! Muat ulang aplikasi.', async () => {
@@ -581,8 +577,6 @@ const BackupView = ({ onBack }) => {
       setTimeout(() => window.location.reload(), 1500);
     });
   }
-
-  // ── Supabase handlers ────────────────────────────────────────────────────
 
   async function handleManualSync() {
     if (!supabaseReady) { showToast('Supabase belum dikonfigurasi di .env', 'error'); return; }
@@ -617,13 +611,11 @@ const BackupView = ({ onBack }) => {
     }
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────
-
   const STATUS_ROWS = [
-    { label: 'Backup terakhir',        value: lastBackup },
-    { label: 'Sync cloud terakhir',    value: lastSyncTime || 'Belum pernah' },
-    { label: 'Total record',           value: `±${recordCount} data` },
-    { label: 'Ukuran tersimpan',       value: storageSize },
+    { label: 'Backup local terakhir', value: lastBackup },
+    { label: 'Sync cloud terakhir', value: lastSyncTime || 'Belum pernah' },
+    { label: 'Total record', value: `±${recordCount} data` },
+    { label: 'Ukuran tersimpan', value: storageSize },
   ];
 
   return (
@@ -652,7 +644,6 @@ const BackupView = ({ onBack }) => {
         <h2 className="font-black text-xl text-slate-800 flex items-center gap-2 flex-1">
           <Database className="w-6 h-6 text-orange-500" /> Backup & Restore
         </h2>
-        {/* Supabase connection badge */}
         <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 border text-xs font-bold
           ${supabaseReady ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-slate-50 border-slate-200 text-slate-400'}`}>
           {supabaseReady ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
@@ -693,6 +684,15 @@ const BackupView = ({ onBack }) => {
           </div>
         </div>
 
+        {/* Import Lokal */}
+        <div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Import dari File</p>
+          <ActionItem icon={FileUp} label="Import dari JSON" sublabel="Pulihkan data dari file backup lokal"
+            onClick={() => setImportModal('json')}
+            loading={loadingState['importJson']} done={doneState['importJson']}
+            iconBgClass="bg-orange-50" iconColorClass="text-orange-500" />
+        </div>
+
         {/* Cloud Sync */}
         <div>
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Cloud Sync Realtime — Supabase</p>
@@ -721,70 +721,49 @@ const BackupView = ({ onBack }) => {
               </div>
             )}
 
-            {/* Toggle: auto-sync berkala vs manual saja */}
+            {/* Layout 3 Tombol Berdampingan */}
             {supabaseReady && (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 space-y-2.5">
+              <div className="grid grid-cols-3 gap-2">
+                {/* 1. Sync Jam 21:00 (Safety Net) */}
+                <button onClick={handleToggleDailySync} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${dailySyncOn ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+                  <Clock className="w-5 h-5" />
+                  <p className="text-[10px] font-bold leading-tight">Otomatis<br />21:00</p>
+                  <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${dailySyncOn ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-500'}`}>{dailySyncOn ? 'ON' : 'OFF'}</div>
+                </button>
 
-                {/* Baris toggle */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <Clock className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-700">Auto-sync tiap 15 menit</p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {autoSyncOn
-                          ? 'Perubahan terkirim otomatis tiap 15 menit (hanya yang berubah, hemat kuota).'
-                          : 'Nonaktif — sync hanya saat tekan "Sync Sekarang" di bawah.'}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={autoSyncOn}
-                    onClick={handleToggleAutoSync}
-                    className={`relative w-12 h-7 rounded-full shrink-0 transition-colors
-                      ${autoSyncOn ? 'bg-blue-500' : 'bg-slate-300'}`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-sm transition-transform
-                      ${autoSyncOn ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </button>
-                </div>
+                {/* 2. Sync 15 Menit */}
+                <button onClick={handleToggleAutoSync} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${autoSyncOn ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+                  <RefreshCw className="w-5 h-5" />
+                  <p className="text-[10px] font-bold leading-tight">Otomatis<br />15 Menit</p>
+                  <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${autoSyncOn ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>{autoSyncOn ? 'ON' : 'OFF'}</div>
+                </button>
 
-                {/* Baris timestamp — hanya tampil saat auto-sync aktif */}
-                {autoSyncOn && (
-                  <div className="flex items-center justify-between border-t border-slate-200 pt-2">
-                    <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                      <RefreshCw className="w-3 h-3" />
-                      {lastSyncTime
-                        ? <span>Terakhir: <span className="font-semibold text-slate-500">{lastSyncTime}</span></span>
-                        : <span>Belum pernah sync</span>}
-                    </span>
-                    <span className={`text-xs font-bold tabular-nums
-                      ${minutesUntilSync === 0 ? 'text-orange-500 animate-pulse' : 'text-blue-500'}`}>
-                      {minutesUntilSync === null
-                        ? 'sync manual dulu'
-                        : minutesUntilSync === 0
-                        ? '⟳ Sebentar lagi...'
-                        : `dalam ${minutesUntilSync} mnt`}
-                    </span>
-                  </div>
-                )}
-
+                {/* 3. Sync Manual Sekarang */}
+                <button onClick={handleManualSync} disabled={isSyncing || isRestoring || !supabaseReady} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${isSyncing ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-indigo-500 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>
+                  {isSyncing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CloudUpload className="w-5 h-5" />}
+                  <p className="text-[10px] font-bold leading-tight">Manual<br />Sekarang</p>
+                  <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${isSyncing ? 'bg-orange-500 text-white' : 'bg-indigo-500 text-white'}`}>{isSyncing ? 'SYNC' : 'TAP'}</div>
+                </button>
               </div>
             )}
 
-            {/* Sync manual */}
-            <button onClick={handleManualSync} disabled={isSyncing || isRestoring || !supabaseReady}
-              className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2
-                ${isSyncing || !supabaseReady
-                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                  : 'bg-blue-500 hover:bg-blue-600 text-white shadow-md shadow-blue-200'}`}
-            >
-              {isSyncing
-                ? <><RefreshCw className="w-4 h-4 animate-spin" /> Menyinkronkan...</>
-                : <><CloudUpload className="w-4 h-4" /> Sync Sekarang (Full Upload)</>}
-            </button>
+            {/* Info Waktu Sync Terakhir */}
+            {supabaseReady && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <RefreshCw className="w-3 h-3" />
+                  {lastSyncTime
+                    ? <span>Terakhir: <span className="font-bold text-slate-700">{lastSyncTime}</span></span>
+                    : <span>Belum pernah sync</span>}
+                </span>
+                {(autoSyncOn && minutesUntilSync !== null) && (
+                  <span className={`text-xs font-bold tabular-nums
+                    ${minutesUntilSync === 0 ? 'text-orange-500 animate-pulse' : 'text-emerald-600'}`}>
+                    {minutesUntilSync === 0 ? '⟳ Sebentar lagi...' : `dalam ${minutesUntilSync} mnt`}
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Restore dari server */}
             <div className="border-t border-slate-100 pt-3">
@@ -805,14 +784,7 @@ const BackupView = ({ onBack }) => {
           </div>
         </div>
 
-        {/* Import Lokal */}
-        <div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Import dari File</p>
-          <ActionItem icon={FileUp} label="Import dari JSON" sublabel="Pulihkan data dari file backup lokal"
-            onClick={() => setImportModal('json')}
-            loading={loadingState['importJson']} done={doneState['importJson']}
-            iconBgClass="bg-orange-50" iconColorClass="text-orange-500" />
-        </div>
+
 
       </div>
 

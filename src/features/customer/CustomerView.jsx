@@ -1,14 +1,17 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 // Menambahkan icon Save untuk mode edit pelanggan
-import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2, Save } from 'lucide-react';
+import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2, Save, RotateCcw } from 'lucide-react';
 import { useState, useMemo } from 'react';
+import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 
 const CustomerView = () => {
   // Ambil triggerConfirm dari AppContext (pola yang sama seperti di EmployeesView)
   const { customers, setCustomers, vouchers, setVouchers, claimsHistory, triggerAlert, triggerConfirm, formatRupiah } = useAppContext();
 
   const [customerSubTab, setCustomerSubTab] = useState('manage');
+  const [showTrashCustomers, setShowTrashCustomers] = useState(false);
+  const [showTrashVouchers, setShowTrashVouchers] = useState(false);
   
   // State Input & Edit Pelanggan
   const [newCustName, setNewCustName] = useState('');
@@ -53,10 +56,22 @@ const CustomerView = () => {
   // 2. Fungsi untuk Menghapus Pelanggan (DENGAN RE-FIX BINDING CALLBACK AGAR TIDAK LANGSUNG TERHAPUS)
   const handleDeleteCustomer = (id) => {
     // Membungkus aksi penghapusan dalam callback ()=>{} supaya hanya berjalan setelah tombol OK ditekan
-    triggerConfirm('Apakah Anda yakin ingin menghapus pelanggan ini? Data riwayat poin mungkin akan kehilangan referensi.', () => {
-      setCustomers(customers.filter(c => c.id !== id));
-      triggerAlert('Data Pelanggan berhasil dihapus.');
+    triggerConfirm('Pindahkan pelanggan ini ke Recycle Bin?', () => {
+      setCustomers(customers.map(c => c.id === id ? markDeleted(c) : c));
+      triggerAlert('Pelanggan dipindahkan ke Recycle Bin.');
       if (editingCustomerId === id) handleCancelEditCustomer();
+    });
+  };
+
+  const handleRestoreCustomer = (id) => {
+    setCustomers(customers.map(c => c.id === id ? restoreItem(c) : c));
+    triggerAlert('Pelanggan berhasil dikembalikan.');
+  };
+
+  const handlePermanentDeleteCustomer = (id) => {
+    triggerConfirm('Hapus PERMANEN pelanggan ini? Data riwayat poin mungkin kehilangan referensi nama. Tindakan ini tidak bisa dibatalkan.', () => {
+      setCustomers(customers.filter(c => c.id !== id));
+      triggerAlert('Pelanggan dihapus permanen.');
     });
   };
 
@@ -80,10 +95,22 @@ const CustomerView = () => {
   // =========================================================================
 
   const handleDeleteVoucher = (id) => {
-    triggerConfirm('Apakah Anda yakin ingin menghapus voucher ini?', () => {
-      setVouchers(vouchers.filter(v => v.id !== id));
-      triggerAlert('Voucher berhasil dihapus!');
+    triggerConfirm('Pindahkan voucher ini ke Recycle Bin?', () => {
+      setVouchers(vouchers.map(v => v.id === id ? markDeleted(v) : v));
+      triggerAlert('Voucher dipindahkan ke Recycle Bin.');
       if (editingVoucherId === id) handleCancelEdit();
+    });
+  };
+
+  const handleRestoreVoucher = (id) => {
+    setVouchers(vouchers.map(v => v.id === id ? restoreItem(v) : v));
+    triggerAlert('Voucher berhasil dikembalikan.');
+  };
+
+  const handlePermanentDeleteVoucher = (id) => {
+    triggerConfirm('Hapus PERMANEN voucher ini? Tindakan ini tidak bisa dibatalkan.', () => {
+      setVouchers(vouchers.filter(v => v.id !== id));
+      triggerAlert('Voucher dihapus permanen.');
     });
   };
 
@@ -138,7 +165,7 @@ const CustomerView = () => {
     }
   };
 
-  const loyalCustomers = useMemo(() => [...customers].sort((a, b) => b.points - a.points), [customers]);
+  const loyalCustomers = useMemo(() => [...activeOnly(customers)].sort((a, b) => b.points - a.points), [customers]);
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col min-h-0 relative animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
@@ -161,35 +188,43 @@ const CustomerView = () => {
             {/* KOLOM 1: KELOLA PELANGGAN                 */}
             {/* ========================================= */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col h-full min-h-[400px]">
-              <div className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0">
-                {editingCustomerId ? 'Edit Data Pelanggan' : 'Data Pelanggan'}
+              <div className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0 flex justify-between items-center">
+                <span>{showTrashCustomers ? 'Recycle Bin' : (editingCustomerId ? 'Edit Data Pelanggan' : 'Data Pelanggan')}</span>
+                <button
+                  onClick={() => setShowTrashCustomers(v => !v)}
+                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                >
+                  {showTrashCustomers ? 'Kembali' : `Recycle Bin (${trashedOnly(customers).length})`}
+                </button>
               </div>
-              <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-                <div className="flex gap-2">
-                  <input type="text" placeholder="Nama Pelanggan" className="flex-1 p-2.5 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20 transition-colors" value={newCustName} onChange={e => setNewCustName(e.target.value)} />
-                  <input type="text" placeholder="No. Whatsapp" className="w-1/3 p-2.5 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20 transition-colors" value={newCustPhone} onChange={e => setNewCustNamePhone(e.target.value)} />
-                  
-                  {/* Tombol Simpan Otomatis Berubah Warna & Icon Sesuai Mode Aktif */}
-                  <button 
-                    onClick={handleSaveCustomer} 
-                    className={`px-4 py-2 text-white rounded-xl text-sm font-bold shadow-md hover:-translate-y-0.5 duration-300 transition-colors flex items-center justify-center ${editingCustomerId ? 'bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600' : 'bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600'}`}
-                    title={editingCustomerId ? 'Simpan Perubahan' : 'Tambah Pelanggan'}
-                  >
-                    {editingCustomerId ? <Save className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                  </button>
-
-                  {editingCustomerId && (
+              {!showTrashCustomers && (
+                <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <div className="flex gap-2">
+                    <input type="text" placeholder="Nama Pelanggan" className="flex-1 p-2.5 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20 transition-colors" value={newCustName} onChange={e => setNewCustName(e.target.value)} />
+                    <input type="text" placeholder="No. Whatsapp" className="w-1/3 p-2.5 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20 transition-colors" value={newCustPhone} onChange={e => setNewCustNamePhone(e.target.value)} />
+                    
+                    {/* Tombol Simpan Otomatis Berubah Warna & Icon Sesuai Mode Aktif */}
                     <button 
-                      onClick={handleCancelEditCustomer} 
-                      className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-bold transition-all duration-300 animate-in fade-in"
+                      onClick={handleSaveCustomer} 
+                      className={`px-4 py-2 text-white rounded-xl text-sm font-bold shadow-md hover:-translate-y-0.5 duration-300 transition-colors flex items-center justify-center ${editingCustomerId ? 'bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600' : 'bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600'}`}
+                      title={editingCustomerId ? 'Simpan Perubahan' : 'Tambah Pelanggan'}
                     >
-                      Batal
+                      {editingCustomerId ? <Save className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
                     </button>
-                  )}
+
+                    {editingCustomerId && (
+                      <button 
+                        onClick={handleCancelEditCustomer} 
+                        className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-bold transition-all duration-300 animate-in fade-in"
+                      >
+                        Batal
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-950/30 custom-scrollbar">
-                {customers.map(c => (
+                {(showTrashCustomers ? trashedOnly(customers) : activeOnly(customers)).map(c => (
                   <div key={c.id} className="flex justify-between items-center p-3 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm hover:border-orange-200 dark:hover:border-orange-500/30 transition-all duration-300">
                     <div>
                       <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{c.name}</p>
@@ -199,27 +234,50 @@ const CustomerView = () => {
                     <div className="flex items-center gap-2">
                       <span className="bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-100 dark:border-orange-500/20">{c.points} Poin</span>
                       
-                      {/* Tambahan: Akses tombol Edit Pelanggan */}
-                      <button 
-                        onClick={() => handleStartEditCustomer(c)} 
-                        className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
-                        title="Edit Pelanggan"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      
-                      {/* Perbaikan Utama: onClick menggunakan Arrow Function agar tidak trigger instan */}
-                      <button 
-                        onClick={() => handleDeleteCustomer(c.id)} 
-                        className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
-                        title="Hapus Pelanggan"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {showTrashCustomers ? (
+                        <>
+                          <button 
+                            onClick={() => handleRestoreCustomer(c.id)} 
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
+                            title="Kembalikan"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handlePermanentDeleteCustomer(c.id)} 
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                            title="Hapus Permanen"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {/* Tambahan: Akses tombol Edit Pelanggan */}
+                          <button 
+                            onClick={() => handleStartEditCustomer(c)} 
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+                            title="Edit Pelanggan"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          
+                          {/* Perbaikan Utama: onClick menggunakan Arrow Function agar tidak trigger instan */}
+                          <button 
+                            onClick={() => handleDeleteCustomer(c.id)} 
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                            title="Hapus Pelanggan"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
-                {customers.length === 0 && <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-10">Belum ada pelanggan</p>}
+                {(showTrashCustomers ? trashedOnly(customers) : activeOnly(customers)).length === 0 && (
+                  <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-10">{showTrashCustomers ? 'Recycle bin kosong.' : 'Belum ada pelanggan'}</p>
+                )}
               </div>
             </div>
 
@@ -227,8 +285,17 @@ const CustomerView = () => {
             {/* KOLOM 2: VOUCHER DISKON AKTIF             */}
             {/* ========================================= */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col h-full min-h-[400px]">
-              <div className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0">Voucher Diskon Aktif</div>
+              <div className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0 flex justify-between items-center">
+                <span>{showTrashVouchers ? 'Recycle Bin' : 'Voucher Diskon Aktif'}</span>
+                <button
+                  onClick={() => setShowTrashVouchers(v => !v)}
+                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                >
+                  {showTrashVouchers ? 'Kembali' : `Recycle Bin (${trashedOnly(vouchers).length})`}
+                </button>
+              </div>
 
+              {!showTrashVouchers && (
               <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
                 <input
                   type="text"
@@ -294,9 +361,10 @@ const CustomerView = () => {
                 )}
               </div>
               </div>
+              )}
 
             <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-950/30 custom-scrollbar">
-              {vouchers.map(v => (
+              {(showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers)).map(v => (
                 <div key={v.id} className="flex justify-between items-center p-3 bg-white dark:bg-slate-900 border border-orange-100 dark:border-orange-500/20 rounded-xl shadow-sm relative overflow-hidden transition-shadow duration-300">
                   <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-orange-600 dark:bg-orange-500"></div>
                   <div className="pl-3">
@@ -311,25 +379,48 @@ const CustomerView = () => {
                       Diskon {v.discountType === 'percent' ? `${v.discountValue}%` : formatRupiah(v.discountValue)}
                     </span>
                     
-                    <button 
-                      onClick={() => handleStartEdit(v)} 
-                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
-                      title="Edit Voucher"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    
-                    <button 
-                      onClick={() => handleDeleteVoucher(v.id)} 
-                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
-                      title="Hapus Voucher"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {showTrashVouchers ? (
+                      <>
+                        <button 
+                          onClick={() => handleRestoreVoucher(v.id)} 
+                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
+                          title="Kembalikan"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handlePermanentDeleteVoucher(v.id)} 
+                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                          title="Hapus Permanen"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button 
+                          onClick={() => handleStartEdit(v)} 
+                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+                          title="Edit Voucher"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        
+                        <button 
+                          onClick={() => handleDeleteVoucher(v.id)} 
+                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                          title="Hapus Voucher"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
-              {vouchers.length === 0 && <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-10">Belum ada voucher</p>}
+              {(showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers)).length === 0 && (
+                <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-10">{showTrashVouchers ? 'Recycle bin kosong.' : 'Belum ada voucher'}</p>
+              )}
             </div>
             </div>
 

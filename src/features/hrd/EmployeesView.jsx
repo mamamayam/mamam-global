@@ -1,16 +1,17 @@
-import React, { useState, useMemo, useEffect, createContext, useContext, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { formatRupiah, toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import { useAppContext } from '../../context/AppContext';
 import PayslipModal from '../hrd/modals/PayslipModal';
 import CategoryModal from '../../components/CategoryModal';
-import { Select, Card, Button, PageHeader, EmptyState, Input } from '../../components/ui';
+import {
+  Select, Card, Button, PageHeader, EmptyState, Input,
+  SegmentedControl, Badge, Alert, IconButton
+} from '../../components/ui';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 import {
   Calendar,
-  ChevronDown,
   UserCog,
-  Info,
   Wallet,
   Plus,
   Trash2,
@@ -25,7 +26,8 @@ import {
   ChevronLeft,
   Briefcase,
   Settings2,
-  RotateCcw
+  RotateCcw,
+  Users
 } from 'lucide-react';
 
 // Hitung jumlah jam kerja dari jam masuk & jam keluar (format "HH:MM").
@@ -77,7 +79,6 @@ const EmployeesView = () => {
   const [deductions, setDeductions] = useState([]);
   const [isEditRecordMode, setIsEditRecordMode] = useState(false);
   const [currentRecordId, setCurrentRecordId] = useState(null);
-  const [showEmpDropdown, setShowEmpDropdown] = useState(false);
   const [catModalType, setCatModalType] = useState(null); // null | 'addition' | 'deduction'
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
 
@@ -88,9 +89,7 @@ const EmployeesView = () => {
   const [overtimeHours, setOvertimeHours] = useState('');
   const [adjPaymentMethod, setAdjPaymentMethod] = useState('Tunai');
 
-  const empDropdownRef = useRef(null);
-
-  // TUKANG HITUNG OTOMATIS (TAMBAHKAN KODE INI)
+  // Hitung otomatis jumlah jam kerja setiap kali jam masuk/keluar/status libur berubah.
   useEffect(() => {
     if (isDayOff) {
       // Jika libur, paksa jam kerja jadi 0
@@ -98,7 +97,7 @@ const EmployeesView = () => {
     } else if (clockIn && clockOut) {
       setHoursWorked(calculateHoursFromTimes(clockIn, clockOut));
     }
-  }, [clockIn, clockOut, isDayOff]); // <-- Tambahkan isDayOff di sini
+  }, [clockIn, clockOut, isDayOff]);
 
   // 1. AUTO BONUS FULL TIME (Jika jam kerja >= 10)
   useEffect(() => {
@@ -144,16 +143,6 @@ const EmployeesView = () => {
     }
   }, [overtimeHours, adjCategory, dailyEmpId, employees]);
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (empDropdownRef.current && !empDropdownRef.current.contains(event.target)) {
-        setShowEmpDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   // --- STATE UNTUK TAB: REKAP LAPORAN ---
   const [reportMonth, setReportMonth] = useState(toLocalMonthString());
 
@@ -197,13 +186,10 @@ const EmployeesView = () => {
       } else {
         setIsEditRecordMode(false);
         setCurrentRecordId(null);
-        setClockIn('09:00');
-        setClockOut('19:00');
-        // FIX: langsung hitung jam kerja dari jam masuk/keluar default di atas
-        // (bukan dikosongkan) — supaya begitu pilih karyawan, jam kerja & bonus
-        // full time langsung muncul tanpa harus pencet Libur lalu Masuk dulu.
-        setHoursWorked(calculateHoursFromTimes('09:00', '19:00'));
-        setIsDayOff(false); // <-- Reset status libur
+        setClockIn('null');
+        setClockOut('null');
+        setHoursWorked(calculateHoursFromTimes('0', '0'));
+        setIsDayOff(true); // <-- Reset status libur
         setAdditions([]);
         setDeductions([]);
       }
@@ -364,91 +350,98 @@ const EmployeesView = () => {
 
         <div className="space-y-4">
           <div className="flex gap-2">
-            <div className="flex-1 relative" ref={empDropdownRef}>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Karyawan</label>
-              <div
-                className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold text-sm cursor-pointer flex justify-between items-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                onClick={() => setShowEmpDropdown(!showEmpDropdown)}
+            <div className="flex-1">
+              <Select
+                label="Karyawan"
+                variant="muted"
+                value={dailyEmpId}
+                onChange={e => setDailyEmpId(e.target.value)}
               >
-                <span>{dailyEmpId ? employees.find(e => e.id === dailyEmpId)?.name : 'Pilih Karyawan'}</span>
-                <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-              </div>
-
-              {showEmpDropdown && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl rounded-xl z-10 overflow-hidden flex flex-col animate-in slide-in-from-top-1 duration-200 max-h-60">
-                  <div className="overflow-y-auto custom-scrollbar flex-1">
-                    {employees.map(emp => (
-                      <div
-                        key={emp.id}
-                        className={`p-3 text-sm font-semibold cursor-pointer transition-colors ${dailyEmpId === emp.id ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400' : 'hover:bg-slate-50 dark:hover:bg-slate-950 text-slate-700 dark:text-slate-200'}`}
-                        onClick={() => { setDailyEmpId(emp.id); setShowEmpDropdown(false); }}
-                      >
-                        {emp.name}
-                      </div>
-                    ))}
-                    {employees.length === 0 && <div className="p-3 text-xs text-slate-400 dark:text-slate-500 text-center">Belum ada karyawan</div>}
-                  </div>
-                  <div
-                    className="p-3 bg-slate-800 text-white text-xs font-bold text-center cursor-pointer hover:bg-slate-900 flex items-center justify-center gap-2 transition-colors border-t border-slate-700 dark:border-slate-300"
-                    onClick={() => { setShowEmpDropdown(false); setActiveTab('manage'); }}
-                  >
-                    <UserCog className="w-4 h-4" /> Kelola Karyawan
-                  </div>
-                </div>
-              )}
+                <option value="">Pilih Karyawan</option>
+                {employees.map(emp => (
+                  <option key={emp.id} value={emp.id}>{emp.name}</option>
+                ))}
+              </Select>
             </div>
             <div className="w-1/3">
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Tanggal</label>
-              <input type="date" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-bold text-sm outline-none focus:border-slate-800 dark:focus:border-slate-100 transition-colors" value={dailyDate} onChange={e => setDailyDate(e.target.value)} />
+              <Input
+                type="date"
+                label="Tanggal"
+                variant="muted"
+                value={dailyDate}
+                onChange={e => setDailyDate(e.target.value)}
+              />
             </div>
           </div>
 
+          {employees.length === 0 && (
+            <Alert
+              type="callout"
+              variant="warning"
+              action={<Button size="xs" variant="secondary" onClick={() => setActiveTab('manage')}>Tambah</Button>}
+            >
+              Belum ada data karyawan.
+            </Alert>
+          )}
+
           {isEditRecordMode && (
-            <div className="bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 p-2 rounded-lg text-xs font-bold flex items-center gap-2 border border-blue-100 dark:border-blue-500/20 animate-in fade-in">
-              <Info className="w-4 h-4" /> Data sudah ada, mengubah data yang ada.
-            </div>
+            <Alert type="callout" variant="info">
+              Data sudah ada, mengubah data yang ada.
+            </Alert>
           )}
 
           {/* Toggle Masuk / Libur */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">Status Kehadiran</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => { setIsDayOff(false); setClockIn('09:00'); setClockOut('19:00'); }}
-                className={`py-2.5 rounded-xl text-sm font-bold transition-all duration-200 border ${!isDayOff ? 'bg-green-600 dark:bg-green-500 text-white border-green-600 dark:border-green-500 shadow-sm' : 'bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-              >
-                Masuk
-              </button>
-              <button
-                onClick={() => { setIsDayOff(true); setClockIn('null'); setClockOut('null'); }}
-                className={`py-2.5 rounded-xl text-sm font-bold transition-all duration-200 border ${isDayOff ? 'bg-red-500 dark:bg-red-600 text-white border-red-500 dark:border-red-600 shadow-sm' : 'bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-              >
-                Libur
-              </button>
-            </div>
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+              Status Kehadiran
+            </label>
+            <SegmentedControl
+              options={[
+                { value: false, label: 'Masuk', tone: 'green' },
+                { value: true, label: 'Libur', tone: 'red' },
+              ]}
+              value={isDayOff}
+              onChange={(val) => {
+                setIsDayOff(val);
+                if (val) {
+                  setClockIn('00:00');
+                  setClockOut('00:00');
+                } else {
+                  setClockIn('09:00');
+                  setClockOut('19:00');
+                }
+              }}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Jam Masuk</label>
-              <input type="time" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" value={clockIn} onChange={e => setClockIn(e.target.value)} disabled={isDayOff} />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Jam Keluar</label>
-              <input type="time" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" value={clockOut} onChange={e => setClockOut(e.target.value)} disabled={isDayOff} />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Jumlah Jam Kerja</label>
-            <input
-              type="number"
-              className="w-full p-3 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none cursor-not-allowed opacity-75"
-              value={hoursWorked}
-              readOnly
-              placeholder="0"
+            <Input
+              type="time"
+              label="Jam Masuk"
+              variant="muted"
+              value={clockIn}
+              onChange={e => setClockIn(e.target.value)}
+              disabled={isDayOff}
+            />
+            <Input
+              type="time"
+              label="Jam Keluar"
+              variant="muted"
+              value={clockOut}
+              onChange={e => setClockOut(e.target.value)}
+              disabled={isDayOff}
             />
           </div>
+
+          <Input
+            type="number"
+            label="Jumlah Jam Kerja"
+            variant="muted"
+            value={hoursWorked}
+            readOnly
+            placeholder="0"
+            className="opacity-75 cursor-not-allowed"
+          />
 
           <Card padding="md" className="mt-4">
             <div className="flex items-center gap-2 mb-4">
@@ -456,45 +449,31 @@ const EmployeesView = () => {
               <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">Tambahan & Potongan</h4>
             </div>
 
-            <div className="flex gap-4 p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl mb-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="adjType"
-                  checked={adjType === 'addition'}
-                  onChange={() => { setAdjType('addition'); setAdjCategory(''); }}
-                  className="w-4 h-4 text-orange-600 dark:text-orange-400 focus:ring-orange-500 dark:focus:ring-orange-500"
-                />
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Penghasilan (+)</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <Input
-                  type="radio"
-                  name="adjType"
-                  checked={adjType === 'deduction'}
-                  onChange={() => { setAdjType('deduction'); setAdjCategory(''); }}
-                  className="w-4 h-4 text-orange-600 dark:text-orange-400 focus:ring-orange-500 dark:focus:ring-orange-500"
-                />
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Potongan (-)</span>
-              </label>
-            </div>
-
             <div className="space-y-4">
+              <SegmentedControl
+                options={[
+                  { value: 'addition', label: 'Penghasilan (+)', tone: 'green' },
+                  { value: 'deduction', label: 'Potongan (-)', tone: 'red' },
+                ]}
+                value={adjType}
+                onChange={(val) => { setAdjType(val); setAdjCategory(''); }}
+              />
+
               <div>
-                <label className="flex justify-between items-center text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+                <label className="flex justify-between items-center text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                   Kategori
                   <Button
                     type="button"
                     size="xs"
                     variant="secondary"
-                    onClick={() => setIsCategoryModalOpen(true)}
+                    onClick={() => setCatModalType(adjType)}
                     icon={<Settings2 className="w-3 h-3" />}
                   >
                     Kelola Kategori
                   </Button>
                 </label>
                 <Select
-                  className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
+                  variant="muted"
                   value={adjCategory}
                   onChange={(e) => setAdjCategory(e.target.value)}
                 >
@@ -504,19 +483,16 @@ const EmployeesView = () => {
                     : [...new Set(deductionCategories)].map(c => <option key={c} value={c}>{c}</option>)
                   }
                 </Select>
-                
-
               </div>
 
-              {/* --- TAMBAHKAN KODE INI TEPAT DI BAWAH KATEGORI --- */}
               {adjCategory.toLowerCase() === 'lembur' && (
-                <div className="animate-in fade-in slide-in-from-top-2 duration-200 mt-2">
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Total Jam Lembur</label>
-                  <input
+                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                  <Input
                     type="number"
                     step="any"
                     min="0"
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
+                    label="Total Jam Lembur"
+                    variant="muted"
                     placeholder="Contoh: 2.5"
                     value={overtimeHours}
                     onChange={(e) => setOvertimeHours(e.target.value)}
@@ -524,66 +500,58 @@ const EmployeesView = () => {
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-                  {adjCategory.toLowerCase() === 'lembur' ? 'Nominal Lembur (Otomatis)' : 'Nominal'}
-                </label>
-                <Input
-                  type="number"
-                  className={`w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl font-bold outline-none transition-colors ${adjCategory.toLowerCase() === 'lembur' ? 'bg-slate-100 dark:bg-slate-900 cursor-not-allowed opacity-80' : 'bg-slate-50 dark:bg-slate-950 focus:border-orange-500 dark:focus:border-orange-500'}`}
-                  icon={<span className="font-bold">Rp</span>}
-                  placeholder="0"
-                  value={adjAmount}
-                  onChange={(e) => setAdjAmount(e.target.value)}
-                  readOnly={adjCategory.toLowerCase() === 'lembur'}
-                />
-
-              </div>
+              <Input
+                type="number"
+                label={adjCategory.toLowerCase() === 'lembur' ? 'Nominal Lembur (Otomatis)' : 'Nominal'}
+                variant="muted"
+                icon={<span className="font-bold">Rp</span>}
+                placeholder="0"
+                value={adjAmount}
+                onChange={(e) => setAdjAmount(e.target.value)}
+                readOnly={adjCategory.toLowerCase() === 'lembur'}
+                className={adjCategory.toLowerCase() === 'lembur' ? 'opacity-80 cursor-not-allowed' : ''}
+              />
 
               {adjType === 'deduction' && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Metode (Sumber Potongan)</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setAdjPaymentMethod('Tunai')}
-                      className={`py-2 rounded-xl text-xs font-bold transition-all border ${adjPaymentMethod === 'Tunai' ? 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/30' : 'bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    >
-                      Tunai
-                    </button>
-                    <button
-                      onClick={() => setAdjPaymentMethod('Non-Tunai')}
-                      className={`py-2 rounded-xl text-xs font-bold transition-all border ${adjPaymentMethod === 'Non-Tunai' ? 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/30' : 'bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                    >
-                      Non-Tunai (Bank)
-                    </button>
-                  </div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                    Metode (Sumber Potongan)
+                  </label>
+                  <SegmentedControl
+                    size="sm"
+                    options={[
+                      { value: 'Tunai', label: 'Tunai', tone: 'red-soft' },
+                      { value: 'Non-Tunai', label: 'Non-Tunai (Bank)', tone: 'red-soft' },
+                    ]}
+                    value={adjPaymentMethod}
+                    onChange={setAdjPaymentMethod}
+                  />
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Catatan</label>
-                <input
-                  type="text"
-                  className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
-                  placeholder="Opsional"
-                  value={adjNote}
-                  onChange={(e) => setAdjNote(e.target.value)}
-                />
-              </div>
+              <Input
+                label="Catatan"
+                variant="muted"
+                placeholder="Opsional"
+                value={adjNote}
+                onChange={(e) => setAdjNote(e.target.value)}
+              />
 
-              <button
+              <Button
+                variant={adjType === 'addition' ? 'success' : 'danger'}
+                size="full"
+                className="mt-2"
+                icon={<Plus className="w-4 h-4" />}
                 onClick={handleAddAdjustment}
-                className={`w-full py-3 mt-2 text-white font-bold rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center gap-2 ${adjType === 'addition' ? 'bg-green-600 dark:bg-green-500 hover:bg-green-700 dark:hover:bg-green-600' : 'bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-500'}`}
               >
-                <Plus className="w-4 h-4" />
                 {adjType === 'addition' ? 'Tambah Penghasilan' : 'Tambah Potongan'}
-              </button>
+              </Button>
             </div>
           </Card>
 
           {(additions.length > 0 || deductions.length > 0) && (
-            <div className="border border-slate-100 dark:border-slate-800 p-3 rounded-xl bg-slate-50 dark:bg-slate-950 space-y-3">
-              <h5 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Daftar Penyesuaian</h5>
+            <Card variant="muted" padding="sm" className="space-y-3">
+              <h5 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Daftar Penyesuaian</h5>
 
               {additions.length > 0 && (
                 <div>
@@ -597,7 +565,9 @@ const EmployeesView = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-green-600 dark:text-green-400">+{formatRupiah(add.amount)}</span>
-                          <button onClick={() => setAdditions(additions.filter(a => a.id !== add.id))} className="text-red-400 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                          <IconButton variant="delete" size="sm" onClick={() => setAdditions(additions.filter(a => a.id !== add.id))}>
+                            <Trash2 className="w-3 h-3" />
+                          </IconButton>
                         </div>
                       </div>
                     ))}
@@ -613,19 +583,21 @@ const EmployeesView = () => {
                       <div key={ded.id} className="flex justify-between items-center bg-white dark:bg-slate-900 p-2 border border-slate-100 dark:border-slate-800 rounded-lg shadow-sm text-xs">
                         <div>
                           <span className="font-bold text-slate-700 dark:text-slate-200">{ded.category}</span>
-                          {ded.paymentMethod && <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1 py-0.5 rounded text-[9px] ml-1">{ded.paymentMethod}</span>}
+                          {ded.paymentMethod && <Badge size="sm" variant="neutral" className="ml-1">{ded.paymentMethod}</Badge>}
                           {ded.note && <span className="text-slate-400 dark:text-slate-500 ml-1 text-[10px]">({ded.note})</span>}
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-red-500 dark:text-red-400">-{formatRupiah(ded.amount)}</span>
-                          <button onClick={() => setDeductions(deductions.filter(d => d.id !== ded.id))} className="text-red-400 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                          <IconButton variant="delete" size="sm" onClick={() => setDeductions(deductions.filter(d => d.id !== ded.id))}>
+                            <Trash2 className="w-3 h-3" />
+                          </IconButton>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-            </div>
+            </Card>
           )}
 
           <Button variant="primary" size="full" className="mt-4" icon={<Save className="w-4 h-4" />} onClick={handleSaveDailyRecord}>
@@ -635,7 +607,7 @@ const EmployeesView = () => {
       </Card>
 
       <Card padding="none" className="lg:col-span-2 flex flex-col h-[650px]">
-        <div className="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
           <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Input Harian'}
           </h3>
@@ -646,7 +618,7 @@ const EmployeesView = () => {
             >
               {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(employeeDailyRecords).length})`}
             </button>
-            <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold">{visibleDailyRecords.length} Catatan</div>
+            <Badge variant="neutral">{visibleDailyRecords.length} Catatan</Badge>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
@@ -671,15 +643,21 @@ const EmployeesView = () => {
                     <div className="flex gap-1">
                       {showTrash ? (
                         <>
-                          <button onClick={() => handleRestoreDailyRecord(rec.id)} className="p-1.5 text-emerald-500 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors" title="Kembalikan"><RotateCcw className="w-4 h-4" /></button>
-                          <button onClick={() => handlePermanentDeleteDailyRecord(rec.id)} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors" title="Hapus Permanen"><Trash2 className="w-4 h-4" /></button>
+                          <IconButton variant="success" onClick={() => handleRestoreDailyRecord(rec.id)} title="Kembalikan">
+                            <RotateCcw className="w-4 h-4" />
+                          </IconButton>
+                          <IconButton variant="delete" onClick={() => handlePermanentDeleteDailyRecord(rec.id)} title="Hapus Permanen">
+                            <Trash2 className="w-4 h-4" />
+                          </IconButton>
                         </>
                       ) : (
                         <>
-                          <button onClick={() => {
-                            setDailyEmpId(rec.employeeId); setDailyDate(rec.dateStr);
-                          }} className="p-1.5 text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"><Edit3 className="w-4 h-4" /></button>
-                          <button onClick={() => handleDeleteDailyRecord(rec.id)} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                          <IconButton variant="edit" onClick={() => { setDailyEmpId(rec.employeeId); setDailyDate(rec.dateStr); }}>
+                            <Edit3 className="w-4 h-4" />
+                          </IconButton>
+                          <IconButton variant="delete" onClick={() => handleDeleteDailyRecord(rec.id)}>
+                            <Trash2 className="w-4 h-4" />
+                          </IconButton>
                         </>
                       )}
                     </div>
@@ -708,16 +686,23 @@ const EmployeesView = () => {
       <Card className="flex justify-between items-center">
         <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PieChart className="w-5 h-5 text-orange-600 dark:text-orange-400" /> Rekap Penggajian</h3>
         <div className="flex items-center gap-2">
-          <label className="text-xs font-bold text-slate-500 dark:text-slate-400">Bulan Laporan:</label>
-          <input type="month" value={reportMonth} onChange={e => setReportMonth(e.target.value)} className="p-2 text-sm font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-700 dark:text-slate-200 focus:border-orange-500 dark:focus:border-orange-500" />
+          <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Bulan Laporan:</label>
+          <div className="w-40">
+            <Input
+              type="month"
+              variant="muted"
+              value={reportMonth}
+              onChange={e => setReportMonth(e.target.value)}
+            />
+          </div>
         </div>
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-800 text-white p-5 rounded-2xl shadow-sm border border-slate-700 dark:border-slate-300 flex flex-col justify-center">
+        <Card variant="dark" padding="lg" className="flex flex-col justify-center">
           <p className="text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400 dark:text-slate-500">Total Expenses Payroll</p>
           <h3 className="font-heading text-2xl font-black text-white">{formatRupiah(totalPayrollExpense)}</h3>
-        </div>
+        </Card>
         <Card padding="lg" className="flex flex-col justify-center">
           <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-2">Karyawan Aktif (Bulan Ini)</p>
           <h3 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100">{employeePerformance.length} Orang</h3>
@@ -742,7 +727,7 @@ const EmployeesView = () => {
             </thead>
             <tbody>
               {employeePerformance.length === 0 ? (
-                <tr><td colSpan="6"><EmptyState size="sm" title="Tidak ada data penggajian pada bulan ini." /></td></tr>
+                <tr><td colSpan="6"><EmptyState size="sm" icon={<PieChart className="w-8 h-8" />} title="Tidak ada data penggajian pada bulan ini." /></td></tr>
               ) : (
                 employeePerformance.map(p => (
                   <tr key={p.employee.id} className="hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors">
@@ -793,57 +778,80 @@ const EmployeesView = () => {
     <div className="h-full animate-in fade-in slide-in-from-left-4 duration-300">
       {isEditingEmp ? (
         <Card padding="lg" className="max-w-3xl">
-          <button onClick={() => setIsEditingEmp(false)} className="mb-4 text-slate-500 dark:text-slate-400 flex items-center gap-2 hover:text-slate-800 dark:hover:text-slate-100 font-medium transition-colors">
-            <ChevronLeft className="w-5 h-5" /> Kembali
-          </button>
-          <h2 className="font-heading text-xl font-bold mb-6 text-slate-800 dark:text-slate-100 border-b pb-2">{empFormData.id ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}</h2>
+          <IconButton
+            variant="neutral"
+            label="Kembali"
+            className="mb-4"
+            onClick={() => setIsEditingEmp(false)}
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </IconButton>
+
+          <h2 className="font-heading text-xl font-bold mb-6 text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">
+            {empFormData.id ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}
+          </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Nama Lengkap</label>
-              <input type="text" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.name} onChange={e => setEmpFormData({ ...empFormData, name: e.target.value })} placeholder="Misal: Budi Santoso" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">No. Handphone (WA)</label>
-              <input type="text" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.phone} onChange={e => setEmpFormData({ ...empFormData, phone: e.target.value })} placeholder="Misal: 081234567890" />
-            </div>
+            <Input
+              label="Nama Lengkap"
+              variant="muted"
+              value={empFormData.name}
+              onChange={e => setEmpFormData({ ...empFormData, name: e.target.value })}
+              placeholder="Misal: Budi Santoso"
+            />
+            <Input
+              label="No. Handphone (WA)"
+              variant="muted"
+              value={empFormData.phone}
+              onChange={e => setEmpFormData({ ...empFormData, phone: e.target.value })}
+              placeholder="Misal: 081234567890"
+            />
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Alamat</label>
-              <input type="text" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.address} onChange={e => setEmpFormData({ ...empFormData, address: e.target.value })} placeholder="Alamat lengkap..." />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Upah per Jam (Rp)</label>
               <Input
-                type="number"
-                icon={<span className="font-bold">Rp</span>}
-                className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-bold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors"
-                value={empFormData.hourlyRate === 0 ? "" : empFormData.hourlyRate} // (Opsional) Supaya default 0 dari state awal tidak langsung muncul sebagai text
-                onChange={e => {
-                  const val = e.target.value;
-                  setEmpFormData({
-                    ...empFormData,
-                    hourlyRate: val === "" ? "" : Number(val)
-                  });
-                }}
-                placeholder="0"
+                label="Alamat"
+                variant="muted"
+                value={empFormData.address}
+                onChange={e => setEmpFormData({ ...empFormData, address: e.target.value })}
+                placeholder="Alamat lengkap..."
               />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">Bonus Full Time &gt;= 10 Jam (Rp)</label>
-              <Input
-                type="number"
-                icon={<span className="font-bold">Rp</span>}
-                className="w-full p-3 bg-slate-50 border rounded-xl"
-                value={empFormData || ''}
-                onChange={e => setEmpFormData({ ...empFormData, fullTimeBonus: Number(e.target.value) })}
-                placeholder="0"
-              />
-
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Mulai Kerja</label>
-              <input type="date" className="w-full p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl font-semibold outline-none focus:border-orange-600 dark:focus:border-orange-500 transition-colors" value={empFormData.startDate} onChange={e => setEmpFormData({ ...empFormData, startDate: e.target.value })} />
-            </div>
+            <Input
+              type="number"
+              label="Upah per Jam (Rp)"
+              variant="muted"
+              icon={<span className="font-bold">Rp</span>}
+              value={empFormData.hourlyRate === 0 ? "" : empFormData.hourlyRate}
+              onChange={e => {
+                const val = e.target.value;
+                setEmpFormData({
+                  ...empFormData,
+                  hourlyRate: val === "" ? "" : Number(val)
+                });
+              }}
+              placeholder="0"
+            />
+            <Input
+              type="number"
+              label="Bonus Full Time >= 10 Jam (Rp)"
+              variant="muted"
+              icon={<span className="font-bold">Rp</span>}
+              value={empFormData.fullTimeBonus === 0 ? "" : empFormData.fullTimeBonus}
+              onChange={e => {
+                const val = e.target.value;
+                setEmpFormData({
+                  ...empFormData,
+                  fullTimeBonus: val === "" ? "" : Number(val)
+                });
+              }}
+              placeholder="0"
+            />
+            <Input
+              type="date"
+              label="Mulai Kerja"
+              variant="muted"
+              value={empFormData.startDate}
+              onChange={e => setEmpFormData({ ...empFormData, startDate: e.target.value })}
+            />
           </div>
 
           <Button variant="primary" size="lg" onClick={handleSaveEmployee}>
@@ -854,20 +862,28 @@ const EmployeesView = () => {
         <div className="space-y-6">
           <Card className="flex justify-between items-center">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Briefcase className="w-5 h-5 text-slate-700 dark:text-slate-200" /> Daftar Karyawan</h3>
-            <button onClick={() => {
-              setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, startDate: toLocalDateString() });
-              setIsEditingEmp(true);
-            }} className="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-slate-900 transition-all duration-300">
-              <Plus className="w-4 h-4" /> Tambah Karyawan
-            </button>
+            <Button
+              variant="dark"
+              icon={<Plus className="w-4 h-4" />}
+              onClick={() => {
+                setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString() });
+                setIsEditingEmp(true);
+              }}
+            >
+              Tambah Karyawan
+            </Button>
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-10">
             {employees.map(emp => (
               <Card key={emp.id} padding="lg" className="relative group hover:shadow-md transition-shadow duration-300">
                 <div className="absolute top-4 right-4 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => { setEmpFormData(emp); setIsEditingEmp(true); }} className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"><Edit3 className="w-4 h-4" /></button>
-                  <button onClick={() => handleDeleteEmployee(emp.id)} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                  <IconButton variant="edit" ghost onClick={() => { setEmpFormData(emp); setIsEditingEmp(true); }}>
+                    <Edit3 className="w-4 h-4" />
+                  </IconButton>
+                  <IconButton variant="delete" ghost onClick={() => handleDeleteEmployee(emp.id)}>
+                    <Trash2 className="w-4 h-4" />
+                  </IconButton>
                 </div>
 
                 <div className="flex items-center gap-3 mb-4">
@@ -890,7 +906,26 @@ const EmployeesView = () => {
                 </div>
               </Card>
             ))}
-            {employees.length === 0 && <EmptyState size="sm" className="col-span-full" title="Belum ada data karyawan." />}
+            {employees.length === 0 && (
+              <EmptyState
+                className="col-span-full"
+                icon={<Users className="w-10 h-10" />}
+                title="Belum ada data karyawan"
+                description="Tambahkan data karyawan pertama untuk mulai mencatat absensi & penggajian"
+                action={
+                  <Button
+                    variant="dark"
+                    icon={<Plus className="w-4 h-4" />}
+                    onClick={() => {
+                      setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString() });
+                      setIsEditingEmp(true);
+                    }}
+                  >
+                    Tambah Karyawan
+                  </Button>
+                }
+              />
+            )}
           </div>
         </div>
       )}
