@@ -866,8 +866,8 @@ export default function App() {
           <>
             {/* Toast "Ketuk sekali lagi untuk keluar" */}
             {showExitToast && (
-              <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[200] pointer-events-none exit-toast">
-                <div className="flex items-center gap-2 bg-slate-800/95 dark:bg-slate-700/95 text-white text-sm font-semibold px-5 py-3 rounded-full shadow-2xl backdrop-blur-sm border border-white/10 whitespace-nowrap">
+              <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[200] pointer-events-none exit-toast animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="flex items-center gap-2 bg-orange-600/95 dark:bg-orange-500/95 text-white text-sm font-semibold px-5 py-3 rounded-full shadow-2xl backdrop-blur-sm border border-white/20 dark:border-orange-400/30 whitespace-nowrap">
                   <span>Ketuk sekali lagi untuk keluar</span>
                 </div>
               </div>

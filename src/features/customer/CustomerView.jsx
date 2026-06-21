@@ -13,7 +13,7 @@ const CustomerView = () => {
   const [customerSubTab, setCustomerSubTab] = useState('manage');
   const [showTrashCustomers, setShowTrashCustomers] = useState(false);
   const [showTrashVouchers, setShowTrashVouchers] = useState(false);
-  
+
   // State Input & Edit Pelanggan
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustNamePhone] = useState('');
@@ -35,7 +35,7 @@ const CustomerView = () => {
   // 1. Fungsi untuk Menyimpan atau Memperbarui Pelanggan
   const handleSaveCustomer = () => {
     if (!newCustName) return triggerAlert('Nama pelanggan wajib diisi!');
-    
+
     if (editingCustomerId) {
       // MODE EDIT / UPDATE PELANGGAN
       setCustomers(customers.map(c => c.id === editingCustomerId ? {
@@ -48,8 +48,8 @@ const CustomerView = () => {
     } else {
       // MODE TAMBAH PELANGGAN BARU
       setCustomers([...customers, { id: `CUST-${Date.now()}`, name: newCustName, phone: newCustPhone, points: 0 }]);
-      setNewCustName(''); 
-      setNewCustNamePhone(''); 
+      setNewCustName('');
+      setNewCustNamePhone('');
       triggerAlert('Data Pelanggan berhasil ditambahkan!');
     }
   };
@@ -178,14 +178,42 @@ const CustomerView = () => {
         />
 
         <div className="p-2 flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-3 mb-6 overflow-x-auto hide-scrollbar">
-          <button onClick={() => setCustomerSubTab('manage')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${customerSubTab === 'manage' ? 'bg-slate-800 text-white shadow-sm -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Kelola Pelanggan & Voucher</button>
-          <button onClick={() => setCustomerSubTab('loyal')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${customerSubTab === 'loyal' ? 'bg-slate-800 text-white shadow-sm -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Loyal Customers</button>
-          <button onClick={() => setCustomerSubTab('claims')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${customerSubTab === 'claims' ? 'bg-slate-800 text-white shadow-sm -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Riwayat Klaim</button>
-          <button onClick={() => setCustomerSubTab('rules')} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${customerSubTab === 'rules' ? 'bg-slate-800 text-white shadow-sm -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>Aturan Poin</button>
+          <Button 
+  variant={customerSubTab === 'manage' ? 'primary' : 'secondary'} 
+  onClick={() => setCustomerSubTab('manage')} 
+  className="whitespace-nowrap"
+>
+  Kelola Pelanggan & Voucher
+</Button>
+
+<Button 
+  variant={customerSubTab === 'loyal' ? 'primary' : 'secondary'} 
+  onClick={() => setCustomerSubTab('loyal')} 
+  className="whitespace-nowrap"
+>
+  Loyal Customers
+</Button>
+
+<Button 
+  variant={customerSubTab === 'claims' ? 'primary' : 'secondary'} 
+  onClick={() => setCustomerSubTab('claims')} 
+  className="whitespace-nowrap"
+>
+  Riwayat Klaim
+</Button>
+
+<Button 
+  variant={customerSubTab === 'rules' ? 'primary' : 'secondary'} 
+  onClick={() => setCustomerSubTab('rules')} 
+  className="whitespace-nowrap"
+>
+  Aturan Poin
+</Button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar pb-10">
+
         {customerSubTab === 'manage' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in slide-in-from-right-4 duration-300 ease-out h-full">
 
@@ -211,10 +239,10 @@ const CustomerView = () => {
                     <div className="w-1/3">
                       <Input variant="muted" type="text" placeholder="No. Whatsapp" value={newCustPhone} onChange={e => setNewCustNamePhone(e.target.value)} />
                     </div>
-                    
+
                     {/* Tombol Simpan Otomatis Berubah Warna & Icon Sesuai Mode Aktif */}
-                    <button 
-                      onClick={handleSaveCustomer} 
+                    <button
+                      onClick={handleSaveCustomer}
                       className={`px-4 py-2 text-white rounded-xl text-sm font-bold shadow-md hover:-translate-y-0.5 duration-300 transition-colors flex items-center justify-center ${editingCustomerId ? 'bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600' : 'bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600'}`}
                       title={editingCustomerId ? 'Simpan Perubahan' : 'Tambah Pelanggan'}
                     >
@@ -240,21 +268,21 @@ const CustomerView = () => {
                       <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{c.name}</p>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{c.phone || 'Tanpa No. HP'}</p>
                     </div>
-                    
+
                     <div className="flex items-center gap-2">
                       <span className="bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-100 dark:border-orange-500/20">{c.points} Poin</span>
-                      
+
                       {showTrashCustomers ? (
                         <>
-                          <button 
-                            onClick={() => handleRestoreCustomer(c.id)} 
+                          <button
+                            onClick={() => handleRestoreCustomer(c.id)}
                             className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
                             title="Kembalikan"
                           >
                             <RotateCcw className="w-4 h-4" />
                           </button>
-                          <button 
-                            onClick={() => handlePermanentDeleteCustomer(c.id)} 
+                          <button
+                            onClick={() => handlePermanentDeleteCustomer(c.id)}
                             className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
                             title="Hapus Permanen"
                           >
@@ -264,17 +292,17 @@ const CustomerView = () => {
                       ) : (
                         <>
                           {/* Tambahan: Akses tombol Edit Pelanggan */}
-                          <button 
-                            onClick={() => handleStartEditCustomer(c)} 
+                          <button
+                            onClick={() => handleStartEditCustomer(c)}
                             className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
                             title="Edit Pelanggan"
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
-                          
+
                           {/* Perbaikan Utama: onClick menggunakan Arrow Function agar tidak trigger instan */}
-                          <button 
-                            onClick={() => handleDeleteCustomer(c.id)} 
+                          <button
+                            onClick={() => handleDeleteCustomer(c.id)}
                             className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
                             title="Hapus Pelanggan"
                           >
@@ -306,143 +334,143 @@ const CustomerView = () => {
               </div>
 
               {!showTrashVouchers && (
-              <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-                <Input
-                  type="text"
-                  placeholder="KODE VOUCHER (Maks 10 huruf)"
-                  variant="muted"
-                  className="uppercase tracking-wider font-bold"
-                  value={newVoucherCode}
-                  maxLength={10}
-                  onChange={e => setNewVoucherCode(e.target.value)}
-                />
+                <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                  <Input
+                    type="text"
+                    placeholder="KODE VOUCHER (Maks 10 huruf)"
+                    variant="muted"
+                    className="uppercase tracking-wider font-bold"
+                    value={newVoucherCode}
+                    maxLength={10}
+                    onChange={e => setNewVoucherCode(e.target.value)}
+                  />
 
-                <div className="flex gap-2">
-                  <div className="w-1/3">
-                    <Select
-                      variant="muted"
-                      className="font-semibold"
-                      value={newVoucherType}
-                      onChange={e => setNewVoucherType(e.target.value)}
+                  <div className="flex gap-2">
+                    <div className="w-1/3">
+                      <Select
+                        variant="muted"
+                        className="font-semibold"
+                        value={newVoucherType}
+                        onChange={e => setNewVoucherType(e.target.value)}
+                      >
+                        <option value="fixed">Nominal (Rp)</option>
+                        <option value="percent">Persen (%)</option>
+                      </Select>
+                    </div>
+                    <div className="flex-1">
+                      <Input
+                        type="number"
+                        placeholder="Nilai Potongan"
+                        variant="muted"
+                        className="font-bold text-orange-600 dark:text-orange-400"
+                        value={newVoucherDiscount}
+                        onChange={e => setNewVoucherDiscount(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Input
+                        type="number"
+                        placeholder="Syarat Minimal Belanja (Opsional)"
+                        variant="muted"
+                        value={newVoucherMinPurchase}
+                        onChange={e => setNewVoucherMinPurchase(e.target.value)}
+                      />
+                    </div>
+                    <div className="w-1/3">
+                      <Input
+                        type="number"
+                        placeholder="Kuota"
+                        variant="muted"
+                        value={newVoucherQuota}
+                        onChange={e => setNewVoucherQuota(e.target.value)}
+                        min="1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 mt-1">
+                    <button
+                      onClick={handleAddVoucher}
+                      className={`flex-1 py-3 text-white rounded-xl text-sm font-bold shadow-md transition-all duration-300 hover:-translate-y-0.5 flex items-center justify-center gap-2 ${editingVoucherId ? 'bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600' : 'bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600'}`}
                     >
-                      <option value="fixed">Nominal (Rp)</option>
-                      <option value="percent">Persen (%)</option>
-                    </Select>
-                  </div>
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      placeholder="Nilai Potongan"
-                      variant="muted"
-                      className="font-bold text-orange-600 dark:text-orange-400"
-                      value={newVoucherDiscount}
-                      onChange={e => setNewVoucherDiscount(e.target.value)}
-                    />
-                  </div>
-                </div>
+                      <Ticket className="w-4 h-4" />
+                      {editingVoucherId ? 'Perbarui Voucher' : 'Simpan Voucher'}
+                    </button>
 
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      placeholder="Syarat Minimal Belanja (Opsional)"
-                      variant="muted"
-                      value={newVoucherMinPurchase}
-                      onChange={e => setNewVoucherMinPurchase(e.target.value)}
-                    />
-                  </div>
-                  <div className="w-1/3">
-                    <Input
-                      type="number"
-                      placeholder="Kuota"
-                      variant="muted"
-                      value={newVoucherQuota}
-                      onChange={e => setNewVoucherQuota(e.target.value)}
-                      min="1"
-                    />
-                  </div>
-                </div>
-
-              <div className="flex gap-2 mt-1">
-                <button 
-                  onClick={handleAddVoucher} 
-                  className={`flex-1 py-3 text-white rounded-xl text-sm font-bold shadow-md transition-all duration-300 hover:-translate-y-0.5 flex items-center justify-center gap-2 ${editingVoucherId ? 'bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600' : 'bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600'}`}
-                >
-                  <Ticket className="w-4 h-4" /> 
-                  {editingVoucherId ? 'Perbarui Voucher' : 'Simpan Voucher'}
-                </button>
-                
-                {editingVoucherId && (
-                  <Button
-                    variant="secondary"
-                    onClick={handleCancelEdit}
-                  >
-                    Batal
-                  </Button>
-                )}
-              </div>
-              </div>
-              )}
-
-            <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-950/30 custom-scrollbar">
-              {(showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers)).map(v => (
-                <div key={v.id} className="flex justify-between items-center p-3 bg-white dark:bg-slate-900 border border-orange-100 dark:border-orange-500/20 rounded-xl shadow-sm relative overflow-hidden transition-shadow duration-300">
-                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-orange-600 dark:bg-orange-500"></div>
-                  <div className="pl-3">
-                    <p className="font-black text-orange-600 dark:text-orange-400 tracking-wider text-sm">{v.code}</p>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                      Min. Order: {formatRupiah(v.minPurchase)} &bull; Sisa Kuota: <span className="font-bold text-orange-600 dark:text-orange-400">{v.quota || 0}x</span>
-                    </p>
-                  </div>
-                  
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                      Diskon {v.discountType === 'percent' ? `${v.discountValue}%` : formatRupiah(v.discountValue)}
-                    </span>
-                    
-                    {showTrashVouchers ? (
-                      <>
-                        <button 
-                          onClick={() => handleRestoreVoucher(v.id)} 
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
-                          title="Kembalikan"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handlePermanentDeleteVoucher(v.id)} 
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
-                          title="Hapus Permanen"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button 
-                          onClick={() => handleStartEdit(v)} 
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
-                          title="Edit Voucher"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        
-                        <button 
-                          onClick={() => handleDeleteVoucher(v.id)} 
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
-                          title="Hapus Voucher"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
+                    {editingVoucherId && (
+                      <Button
+                        variant="secondary"
+                        onClick={handleCancelEdit}
+                      >
+                        Batal
+                      </Button>
                     )}
                   </div>
                 </div>
-              ))}
-              {(showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers)).length === 0 && (
-                <EmptyState size="sm" title={showTrashVouchers ? 'Recycle bin kosong.' : 'Belum ada voucher'} />
               )}
-            </div>
+
+              <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-950/30 custom-scrollbar">
+                {(showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers)).map(v => (
+                  <div key={v.id} className="flex justify-between items-center p-3 bg-white dark:bg-slate-900 border border-orange-100 dark:border-orange-500/20 rounded-xl shadow-sm relative overflow-hidden transition-shadow duration-300">
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-orange-600 dark:bg-orange-500"></div>
+                    <div className="pl-3">
+                      <p className="font-black text-orange-600 dark:text-orange-400 tracking-wider text-sm">{v.code}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                        Min. Order: {formatRupiah(v.minPurchase)} &bull; Sisa Kuota: <span className="font-bold text-orange-600 dark:text-orange-400">{v.quota || 0}x</span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-sm text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                        Diskon {v.discountType === 'percent' ? `${v.discountValue}%` : formatRupiah(v.discountValue)}
+                      </span>
+
+                      {showTrashVouchers ? (
+                        <>
+                          <button
+                            onClick={() => handleRestoreVoucher(v.id)}
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
+                            title="Kembalikan"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handlePermanentDeleteVoucher(v.id)}
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                            title="Hapus Permanen"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleStartEdit(v)}
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+                            title="Edit Voucher"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteVoucher(v.id)}
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                            title="Hapus Voucher"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {(showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers)).length === 0 && (
+                  <EmptyState size="sm" title={showTrashVouchers ? 'Recycle bin kosong.' : 'Belum ada voucher'} />
+                )}
+              </div>
             </Card>
 
           </div>
