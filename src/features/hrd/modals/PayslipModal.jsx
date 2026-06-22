@@ -1,6 +1,11 @@
 import React from "react";
-import { Printer } from "lucide-react"; 
-import { useAppContext } from "../../../context/AppContext"; 
+import { Share2 } from "lucide-react";
+import { useAppContext } from "../../../context/AppContext";
+import { Capacitor } from '@capacitor/core';
+import { Share } from '@capacitor/share';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import jsPDF from 'jspdf';
+import { toPng } from 'html-to-image';
 
 const PayslipModal = () => {
   const { payslipModal, setPayslipModal, formatRupiah } = useAppContext();
@@ -8,7 +13,78 @@ const PayslipModal = () => {
   const { data, month } = payslipModal;
 
   const basicPay = data.totalHours * data.employee.hourlyRate;
-  const printPayslip = () => window.print();
+
+  const handleSharePDF = async () => {
+    const element = document.getElementById('payslip-content');
+    if (!element) {
+      alert('Error: Elemen payslip tidak ditemukan.');
+      return;
+    }
+
+    try {
+      // html-to-image pakai browser native rendering - support oklch & CSS modern
+      const dataUrl = await toPng(element, {
+        backgroundColor: '#ffffff',
+        pixelRatio: 2,
+        width: element.scrollWidth,
+        height: element.scrollHeight,
+        style: {
+          overflow: 'visible',
+          height: `${element.scrollHeight}px`,
+        },
+      });
+
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise((resolve) => { img.onload = resolve; });
+
+      const imgData = dataUrl;
+      const imgWidth = 210; // A4 width mm
+      const pageHeight = 297; // A4 height mm
+      const imgHeight = (img.naturalHeight * imgWidth) / img.naturalWidth;
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const fileName = `slip-gaji-${data.employee.name}-${month}.pdf`;
+
+      if (Capacitor.isNativePlatform()) {
+        const pdfBase64 = pdf.output('datauristring').split(',')[1];
+
+        const savedFile = await Filesystem.writeFile({
+          path: fileName,
+          data: pdfBase64,
+          directory: Directory.Cache,
+        });
+
+        await Share.share({
+          title: 'Slip Gaji',
+          text: `Slip gaji ${data.employee.name} - ${monthLabel}`,
+          url: savedFile.uri,
+          dialogTitle: 'Bagikan Slip Gaji via',
+        });
+      } else {
+        // Web: auto-download PDF
+        pdf.save(fileName);
+      }
+    } catch (error) {
+      console.error('PDF Error:', error);
+      if (error.name !== 'AbortError') {
+        alert(`Gagal membuat PDF!\n\nError: ${error.message || JSON.stringify(error)}`);
+      }
+    }
+  };
 
   const monthLabel = new Date(`${month}-01`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
 
@@ -156,8 +232,8 @@ const PayslipModal = () => {
         </div>
 
         <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-b-lg border-t border-slate-200 dark:border-slate-700 flex gap-4 print:hidden mt-auto">
-          <button onClick={printPayslip} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg hover:bg-slate-900 flex justify-center items-center gap-2 transition-colors">
-            <Printer className="w-5 h-5" /> Cetak PDF / Print
+          <button onClick={handleSharePDF} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg hover:bg-slate-900 flex justify-center items-center gap-2 transition-colors">
+            <Share2 className="w-5 h-5" /> Bagikan PDF
           </button>
           <button onClick={() => setPayslipModal({ isOpen: false, data: null })} className="flex-1 py-3 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-600 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
             Tutup

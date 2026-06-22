@@ -18,6 +18,7 @@ const DATE_KEYS = [
   'incomes',
   'hppLibrary',
   'claimsHistory',
+  'attendanceLog',
 ];
 
 // Konversi field date setelah data dibaca dari DB

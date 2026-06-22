@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw } from 'lucide-react';
+import { History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw, ArrowUpDown } from 'lucide-react';
 import { formatRupiah } from '../../utils/formatters';
 import { PageHeader, Card, Button } from '../../components/ui';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
@@ -13,6 +13,7 @@ const HistoryView = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFilter, setDateFilter] = useState('semua');
     const [orderTypeFilter, setOrderTypeFilter] = useState('semua'); // State baru untuk Tipe Order
+    const [sortOrder, setSortOrder] = useState('terbaru'); // 'terbaru' = newest first, 'terlama' = oldest first
 
     // State khusus untuk rentang tanggal kustom
     const [customStartDate, setCustomStartDate] = useState('');
@@ -89,6 +90,13 @@ const HistoryView = () => {
         const matchesOrderType = orderTypeFilter === 'semua' || order.orderType === orderTypeFilter;
 
         return matchesSearch && matchesDate && matchesOrderType;
+    });
+
+    // Urutkan hasil filter berdasarkan waktu pesanan (terbaru/terlama)
+    const sortedHistory = [...filteredHistory].sort((a, b) => {
+        const dateA = new Date(a.date);
+        const dateB = new Date(b.date);
+        return sortOrder === 'terbaru' ? dateB - dateA : dateA - dateB;
     });
 
     const handleDelete = (id) => {
@@ -173,7 +181,7 @@ const HistoryView = () => {
                     </Card>
                 )}
 
-                {/* Card 2: Dropdown Filter Tipe Order & Input Pencarian */}
+                {/* Card 2: Dropdown Filter Tipe Order, Sort Waktu & Input Pencarian */}
                 <Card className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto p-4">
                     {/* Dropdown Filter Tipe Order */}
                     <div className="relative w-full sm:w-48">
@@ -188,6 +196,19 @@ const HistoryView = () => {
                             ))}
                         </select>
                         <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
+                    </div>
+
+                    {/* Dropdown Sort Waktu Pesanan */}
+                    <div className="relative w-full sm:w-48">
+                        <select
+                            className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+                            value={sortOrder}
+                            onChange={(e) => setSortOrder(e.target.value)}
+                        >
+                            <option value="terbaru">Terbaru Dulu</option>
+                            <option value="terlama">Terlama Dulu</option>
+                        </select>
+                        <ArrowUpDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
                     </div>
 
                     {/* Input Pencarian */}
@@ -207,8 +228,8 @@ const HistoryView = () => {
 
             {/* Grid Riwayat Pesanan */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20">
-                {filteredHistory.length > 0 ? (
-                    filteredHistory.map(order => (
+                {sortedHistory.length > 0 ? (
+                    sortedHistory.map(order => (
                         <div key={order.id} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-4 relative flex flex-col hover:shadow-md transition-shadow">
                             <div className="flex justify-between items-start mb-3 border-b border-dashed border-slate-200 dark:border-slate-700 pb-3">
                                 <div>

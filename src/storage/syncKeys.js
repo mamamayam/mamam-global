@@ -12,6 +12,7 @@ export const ALL_KEYS = [
   'currentShift', 'shiftHistory', 'customers', 'vouchers', 'claimsHistory',
   'storeSettings', 'rawMaterials', 'semiFinished', 'categories',
   'employees', 'employeeDailyRecords', 'additionCategories', 'deductionCategories',
+  'attendanceLog',
 ];
 
 // Key transaksi: array of objects dengan field `id`.
@@ -21,6 +22,7 @@ export const ALL_KEYS = [
 export const TRANSACTION_KEYS = [
   'salesHistory', 'expenses', 'incomes', 'shiftHistory',
   'employeeDailyRecords', 'claimsHistory', 'savedBills',
+  'attendanceLog',
 ];
 
 // Key konfigurasi: disimpan sebagai satu blob JSON per key di tabel `app_config`.
@@ -40,6 +42,7 @@ export const DATE_FILTERABLE_KEYS = {
   incomes:              'date',
   shiftHistory:         'startTime',
   employeeDailyRecords: 'date',
+  attendanceLog:        'date',
 };
 
 // Map key app -> nama tabel Supabase untuk transaksi

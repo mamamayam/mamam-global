@@ -78,28 +78,66 @@ const SettingsView = () => {
     setIsScanning(true);
     setScannedDevices([]);
 
-    window.bluetoothSerial.isEnabled(
-      () => {
-        window.bluetoothSerial.list(
-          (devices) => {
-            if (devices.length === 0) {
-              alert("Tidak ada perangkat Bluetooth yang terdeteksi. Pastikan Printer sudah di-pairing di Pengaturan Android!");
-            } else {
-              setScannedDevices(devices);
+    // Fungsi utama untuk scan (dipisah agar bisa dipanggil setelah izin diberikan)
+    const executeScan = () => {
+      window.bluetoothSerial.isEnabled(
+        () => {
+          window.bluetoothSerial.list(
+            (devices) => {
+              if (devices.length === 0) {
+                alert("Tidak ada perangkat Bluetooth yang terdeteksi. Pastikan Printer sudah di-pairing di Pengaturan Android!");
+              } else {
+                setScannedDevices(devices);
+              }
+              setIsScanning(false);
+            },
+            (err) => {
+              // Tangkap pesan error spesifik jika izin tetap gagal di sistem
+              if (err && typeof err === 'string' && err.includes('BLUETOOTH_CONNECT')) {
+                alert("Izin 'Perangkat di Sekitar' ditolak oleh sistem. Mohon izinkan manual di Pengaturan Aplikasi HP.");
+              } else {
+                alert(`Gagal scan: ${err}`);
+              }
+              setIsScanning(false);
             }
+          );
+        },
+        () => {
+          alert("Bluetooth HP lu mati. Nyalain dulu bos!");
+          setIsScanning(false);
+        }
+      );
+    };
+
+    // Pengecekan Runtime Permission untuk Android 12+
+    if (window.cordova && window.cordova.plugins && window.cordova.plugins.permissions) {
+      const permissions = window.cordova.plugins.permissions;
+      // Gunakan string native langsung agar kompatibel dengan berbagai versi plugin
+      const bluetoothConnectPermission = 'android.permission.BLUETOOTH_CONNECT';
+
+      permissions.hasPermission(bluetoothConnectPermission, (status) => {
+        if (status.hasPermission) {
+          // Izin sudah ada, langsung eksekusi scan
+          executeScan();
+        } else {
+          // Izin belum ada, tampilkan pop-up request ke user
+          permissions.requestPermission(bluetoothConnectPermission, (reqStatus) => {
+            if (reqStatus.hasPermission) {
+              executeScan(); // Lanjut scan jika di-allow
+            } else {
+              alert("Izin akses Bluetooth ditolak. Aplikasi tidak bisa mencari printer.");
+              setIsScanning(false);
+            }
+          }, () => {
+            alert("Gagal meminta izin Bluetooth dari sistem.");
             setIsScanning(false);
-          },
-          (err) => {
-            alert(`Gagal scan: ${err}`);
-            setIsScanning(false);
-          }
-        );
-      },
-      () => {
-        alert("Bluetooth HP lu mati. Nyalain dulu bos!");
-        setIsScanning(false);
-      }
-    );
+          });
+        }
+      });
+    } else {
+      // Fallback jika plugin permission tidak terinstall (misal di Android versi lama)
+      executeScan();
+    }
   };
 
   const handleConnectPrinter = (device) => {

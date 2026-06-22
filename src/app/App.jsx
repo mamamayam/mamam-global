@@ -27,6 +27,7 @@ import {
   Download,
   Edit3,
   FileText,
+  Fingerprint,
   History,
   Home,
   Info,
@@ -193,6 +194,7 @@ export default function App() {
   // --- PAYROLL STATES ---
   const [employees, setEmployees, l18, setEmployeesRemote] = usePersistState('employees', [], { syncMode: 'config', syncReadyPromise });
   const [employeeDailyRecords, setEmployeeDailyRecords, l19, setEmployeeDailyRecordsRemote] = usePersistState('employeeDailyRecords', [], { syncMode: 'transaction', syncReadyPromise });
+  const [attendanceLog, setAttendanceLog, l24, setAttendanceLogRemote] = usePersistState('attendanceLog', [], { syncMode: 'transaction', syncReadyPromise });
   const [additionCategories, setAdditionCategories, l20, setAdditionCategoriesRemote] = usePersistState('additionCategories', ['Ongkir', 'Lembur', 'Bonus', 'Potongin Ayam'], { syncMode: 'config', syncReadyPromise });
   const [deductionCategories, setDeductionCategories, l21, setDeductionCategoriesRemote] = usePersistState('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi'], { syncMode: 'config', syncReadyPromise });
 
@@ -214,7 +216,7 @@ export default function App() {
   }, [theme]);
 
   // Semua data dari Dexie sudah selesai dimuat?
-  const allDataLoaded = ![l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22].some(Boolean);
+  const allDataLoaded = ![l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l24].some(Boolean);
 
   // ── Map setter remote — dipakai oleh realtime callback ──────────────────
   const remoteSetterMap = useRef({});
@@ -239,6 +241,7 @@ export default function App() {
       claimsHistory: setClaimsHistoryRemote,
       employees: setEmployeesRemote,
       employeeDailyRecords: setEmployeeDailyRecordsRemote,
+      attendanceLog: setAttendanceLogRemote,
       additionCategories: setAdditionCategoriesRemote,
       deductionCategories: setDeductionCategoriesRemote,
       storeSettings: setStoreSettingsRemote,
@@ -617,6 +620,7 @@ export default function App() {
     // Employee / Payroll
     employees, setEmployees,
     employeeDailyRecords, setEmployeeDailyRecords,
+    attendanceLog, setAttendanceLog,
     additionCategories, setAdditionCategories,
     deductionCategories, setDeductionCategories,
     payslipModal, setPayslipModal,
@@ -680,6 +684,7 @@ export default function App() {
   const menuItems = [
 
     { id: 'dompet', icon: Clock, label: 'Dompet Kasir' },
+    { id: 'absensi', icon: Fingerprint, label: 'Absensi Karyawan' },
     { id: 'kasir', icon: ShoppingCart, label: 'Kasir Utama' },
     { id: 'riwayat', icon: History, label: 'Riwayat Pesanan' },
     { id: 'pemasukan', icon: TrendingUp, label: 'Pemasukan' },
@@ -700,7 +705,7 @@ export default function App() {
   const visibleMenus = isAdminMode
     ? menuItems
     : menuItems.filter(item =>
-      ['dompet', 'riwayat', 'pengeluaran', 'pemasukan', 'menu', 'varian', 'backup'].includes(item.id)
+      ['dompet', 'absensi', 'riwayat', 'pengeluaran', 'pemasukan', 'menu', 'varian', 'backup'].includes(item.id)
     );
 
 
