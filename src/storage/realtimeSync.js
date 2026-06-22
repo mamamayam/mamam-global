@@ -11,8 +11,6 @@ export async function pushTransactionUpsert(tableKey, item, readyPromise) {
 
   if (readyPromise) await readyPromise;
 
-  // FIX: Gunakan updated_at bawaan item jika ada. Jangan selalu buat new Date()
-  // Ini mencegah Supabase mengira data lama dari Device 2 adalah data paling baru.
   const itemUpdatedAt = item.updated_at || new Date().toISOString();
 
   try {
@@ -50,13 +48,12 @@ const configPushTimers = {};
 export function pushConfig(key, value, readyPromise, delay = 1500) {
   if (!isSupabaseConfigured()) return;
   clearTimeout(configPushTimers[key]);
-  
+
   configPushTimers[key] = setTimeout(async () => {
     if (readyPromise) await readyPromise;
 
-    // FIX: Cek apakah value (jika object) punya updated_at sendiri
     const configUpdatedAt = (value && typeof value === 'object' && value.updated_at)
-      ? value.updated_at 
+      ? value.updated_at
       : new Date().toISOString();
 
     try {
@@ -99,36 +96,20 @@ export function diffArrays(prevArr, nextArr) {
   return { upserts, deletes };
 }
 
-// ── AUTO SYNC BERKALA (interval bisa diatur lewat toggle di UI) ────────────
-// Jaring pengaman tambahan di atas push real-time per-record di atas: secara
-// berkala bandingkan data lokal dengan snapshot hasil sync terakhir, lalu HANYA
-// kirim yang benar-benar berubah (pakai diffArrays + fungsi push yang sama
-// seperti di atas) — BUKAN re-upload seluruh data tiap kali. Tujuannya supaya
-// sync tidak "sekaligus" membebani & menghabiskan kuota Supabase free tier
-// walau data sudah menumpuk ribuan baris. Berguna juga utk menangkap
-// perubahan yang gagal terkirim sebelumnya (misal device sempat offline saat
-// ada transaksi baru).
-//
-// User bisa pilih lewat toggle di BackupView: "Auto-sync tiap 15 menit" atau
-// "Manual saja" (lihat isAutoSyncEnabled/setAutoSyncEnabled). Default: aktif.
-const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 menit
-const AUTO_SYNC_ITEM_GAP_MS = 250;            // jeda antar item yang dikirim, biar tidak sekaligus
+// ── AUTO SYNC BERKALA ────────────────────────────────────────────────────────
+const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000;
+const AUTO_SYNC_ITEM_GAP_MS = 250;
 const AUTO_SYNC_SNAPSHOT_KEY = 'mamam_auto_sync_snapshot';
 const AUTO_SYNC_ENABLED_KEY = 'mamam_auto_sync_enabled';
-const RECYCLE_BIN_RETENTION_DAYS = 30; // item di recycle bin lebih lama dari ini → dipurge permanen
+const RECYCLE_BIN_RETENTION_DAYS = 30;
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-/**
- * Status toggle auto-sync (true = tiap 15 menit, false = manual saja).
- * Default true kalau belum pernah diset (belum pernah dipencet togglenya).
- */
 export function isAutoSyncEnabled() {
   const raw = localStorage.getItem(AUTO_SYNC_ENABLED_KEY);
   return raw === null ? true : raw === 'true';
 }
 
-/** Dipanggil dari toggle di BackupView untuk menyalakan/mematikan auto-sync. */
 export function setAutoSyncEnabled(enabled) {
   localStorage.setItem(AUTO_SYNC_ENABLED_KEY, enabled ? 'true' : 'false');
 }
@@ -153,41 +134,56 @@ function saveAutoSyncSnapshot(snapshot) {
 let autoSyncInFlight = false;
 
 /**
- * Dipanggil otomatis tiap 15 menit oleh initRealtimeSync di bawah — TAPI cuma
- * benar-benar jalan kalau toggle "Auto-sync" di BackupView sedang aktif
- * (isAutoSyncEnabled() === true). Kalau user pilih "Manual saja", fungsi ini
- * langsung return tanpa request apa pun ke Supabase.
- * Bandingkan data lokal vs snapshot terakhir per key, kirim satu-satu HANYA
- * yang beda (dengan jeda kecil antar item — tidak sekaligus), baru update
- * snapshot setelah selesai.
+ * Cek apakah sync sedang berjalan.
+ * Dipakai UI untuk guard tombol manual sync.
  */
-export async function runAutoSync() {
-  if (!isAutoSyncEnabled() || !isSupabaseConfigured() || autoSyncInFlight) return;
+export function isSyncInFlight() {
+  return autoSyncInFlight;
+}
+
+/**
+ * Sync diff-based: hanya kirim yang berubah sejak snapshot terakhir.
+ *
+ * @param {Object} [options]
+ * @param {boolean} [options.force=false]
+ *   false (default) → skip kalau isAutoSyncEnabled() = false, dan skip key yang
+ *                      belum punya snapshot (buat baseline saja).
+ *   true            → bypass toggle isAutoSyncEnabled, dan pada key yang belum
+ *                      punya snapshot langsung push semua sebagai initial upload
+ *                      (dipakai sync manual & safety-net 21:00).
+ *
+ * @returns {Promise<number>} Jumlah record/config yang berhasil dikirim.
+ */
+export async function runAutoSync({ force = false } = {}) {
+  if ((!isAutoSyncEnabled() && !force) || !isSupabaseConfigured() || autoSyncInFlight) return 0;
   autoSyncInFlight = true;
 
   try {
     const snapshot = loadAutoSyncSnapshot();
     let sentCount = 0;
 
+    // ── TRANSACTION KEYS ──────────────────────────────────────────────────
     for (const tableKey of TRANSACTION_KEYS) {
       let current = await loadData(tableKey, []);
 
-      // Beres-beres recycle bin: item yang sudah di-soft-delete (ada field
-      // deletedAt, lihat utils/softDelete.js) dan sudah lewat masa retensi
-      // dibuang permanen dari Dexie di sini. Diff di bawah otomatis
-      // mendeteksi ini sebagai "delete" (hilang dari array dibanding
-      // snapshot) dan ngirim pushTransactionDelete — jadi penghapusan
-      // permanen ini ikut ke-propagate ke Supabase juga, bukan cuma lokal.
+      // Purge item yang sudah lewat masa retensi recycle bin
       const { keep, expired } = splitExpired(current, RECYCLE_BIN_RETENTION_DAYS);
       if (expired.length > 0) {
         await saveData(tableKey, keep);
         current = keep;
       }
 
-      // Key belum pernah punya snapshot (pertama kali fitur ini aktif) →
-      // jadikan baseline dulu, jangan kirim apa-apa supaya tidak dobel
-      // dengan data yang sudah tersinkron lewat push real-time/manual sync.
       if (!(tableKey in snapshot)) {
+        // Key belum punya snapshot.
+        // force → push semua sebagai initial upload (misal install ulang / localStorage bersih)
+        // normal → buat baseline saja, tidak push (supaya tidak dobel dengan realtime)
+        if (force && current.length > 0) {
+          for (const item of current) {
+            await pushTransactionUpsert(tableKey, item);
+            sentCount++;
+            await sleep(AUTO_SYNC_ITEM_GAP_MS);
+          }
+        }
         snapshot[tableKey] = current;
         continue;
       }
@@ -208,10 +204,17 @@ export async function runAutoSync() {
       snapshot[tableKey] = current;
     }
 
+    // ── CONFIG KEYS ───────────────────────────────────────────────────────
     for (const key of CONFIG_KEYS) {
       const current = await loadData(key, undefined);
 
       if (!(key in snapshot)) {
+        // Sama seperti transaction: force → push, normal → baseline saja
+        if (force && current !== undefined) {
+          pushConfig(key, current);
+          sentCount++;
+          await sleep(AUTO_SYNC_ITEM_GAP_MS);
+        }
         snapshot[key] = current;
         continue;
       }
@@ -227,9 +230,17 @@ export async function runAutoSync() {
 
     saveAutoSyncSnapshot(snapshot);
     localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
-    if (sentCount > 0) console.log(`[sync] auto-sync 15 menit: ${sentCount} perubahan terkirim ✅`);
+
+    if (sentCount > 0) {
+      console.log(`[sync] ${force ? 'manual' : 'auto'}-sync: ${sentCount} perubahan terkirim ✅`);
+    } else {
+      console.log(`[sync] ${force ? 'manual' : 'auto'}-sync: tidak ada perubahan`);
+    }
+
+    return sentCount;
   } catch (err) {
-    console.warn('[sync] auto-sync 15 menit gagal:', err.message);
+    console.warn(`[sync] ${force ? 'manual' : 'auto'}-sync gagal:`, err.message);
+    return 0;
   } finally {
     autoSyncInFlight = false;
   }
@@ -248,7 +259,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
   let channel = null;
   let cancelled = false;
 
-  // Auto-sync berkala tiap 15 menit, hanya jalan kalau toggle-nya aktif (lihat runAutoSync di atas)
+  // Auto-sync berkala tiap 15 menit (tanpa force — hanya diff normal)
   const autoSyncTimer = setInterval(runAutoSync, AUTO_SYNC_INTERVAL_MS);
 
   (async () => {
@@ -279,7 +290,6 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
 
         for (const row of rows || []) {
           const existing = localMap.get(row.id);
-          // Prioritaskan data Supabase jika beda
           if (!existing || JSON.stringify(existing) !== JSON.stringify(row.payload)) {
             localMap.set(row.id, row.payload);
             changed = true;

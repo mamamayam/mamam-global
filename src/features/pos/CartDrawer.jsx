@@ -350,7 +350,7 @@ const CartDrawer = () => {
                   isOpen: true,
                   isSplitMode: false,
                   splitPayments: [],
-                  method: orderType === 'Ojol' ? 'Ojol' : 'Tunai', // OTOMATIS SET METODE SESUAI TIPE PESANAN
+                  method: orderType === 'Ojol' ? 'Ojol' : 'Tunai', 
                   amountPaid: '',
                   status: 'pending'
                 })}

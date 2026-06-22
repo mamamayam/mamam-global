@@ -2,8 +2,8 @@ import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useAppContext } from '../../context/AppContext';
 import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package, Star, X } from 'lucide-react';
 import CartDrawer from '../pos/CartDrawer';
-import PaymentModal from '../pos/modals/PaymentModal';
-import VariantSelectionModal from '../pos/modals/VariantSelectionModal';
+import PaymentModal from './PaymentModal';
+import VariantSelectionModal from './VariantSelectionModal';
 import { Badge, EmptyState, Button } from '../../components/ui';
 
 const PosView = () => {

@@ -11,7 +11,7 @@ import { Share } from '@capacitor/share';
 import { exportAllData, loadData, saveData } from '../storage/db';
 import { ALL_KEYS, TRANSACTION_KEYS, CONFIG_KEYS, DATE_FILTERABLE_KEYS } from '../storage/syncKeys';
 import { getSupabaseClient, isSupabaseConfigured } from '../storage/syncClient';
-import { isAutoSyncEnabled, setAutoSyncEnabled } from '../storage/realtimeSync';
+import { isAutoSyncEnabled, setAutoSyncEnabled, runAutoSync, isSyncInFlight } from '../storage/realtimeSync';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -92,45 +92,10 @@ function calcRecordCount(allData) {
   return count;
 }
 
-const SYNC_BATCH_DELAY_MS = 400;
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function syncAllToSupabase() {
-  const supabase = await getSupabaseClient();
-  if (!supabase) throw new Error('Konfigurasi Supabase belum ada di .env');
-
-  const data = await exportAllData();
-  let totalUpserted = 0;
-
-  for (const key of TRANSACTION_KEYS) {
-    const items = Array.isArray(data[key]) ? data[key] : [];
-    if (!items.length) continue;
-    for (let i = 0; i < items.length; i += 100) {
-      const batch = items.slice(i, i + 100).map(item => ({
-        id: String(item.id), payload: item,
-        updated_at: item.updated_at || new Date().toISOString(),
-      }));
-      const { error } = await supabase.from(key).upsert(batch, { onConflict: 'id' });
-      if (error) throw new Error(`Gagal sync [${key}]: ${error.message}`);
-      totalUpserted += batch.length;
-      await sleep(SYNC_BATCH_DELAY_MS);
-    }
-  }
-
-  const configBatch = CONFIG_KEYS
-    .filter(k => data[k] !== undefined)
-    .map(k => ({ key: k, value: data[k], updated_at: new Date().toISOString() }));
-
-  if (configBatch.length) {
-    await sleep(SYNC_BATCH_DELAY_MS);
-    const { error } = await supabase.from('app_config').upsert(configBatch, { onConflict: 'key' });
-    if (error) throw new Error(`Gagal sync config: ${error.message}`);
-    totalUpserted += configBatch.length;
-  }
-
-  localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
-  return totalUpserted;
-}
+// syncAllToSupabase dihapus — digantikan runAutoSync({ force: true })
+// yang hanya mengirim data yang benar-benar berubah sejak sync terakhir.
 
 async function restoreFromSupabase(mode = 'replace') {
   const supabase = await getSupabaseClient();
@@ -477,12 +442,11 @@ const BackupView = ({ onBack }) => {
       if (dailySyncOn && currentTime.getHours() === 21) {
         const lastD = raw ? new Date(raw) : null;
         if (!lastD || lastD.toDateString() !== currentTime.toDateString() || lastD.getHours() < 21) {
-          syncAllToSupabase().then(count => {
-            const tsStr = new Date().toISOString();
-            localStorage.setItem('mamam_last_supabase_sync', tsStr);
+          runAutoSync({ force: true }).then(count => {
+            const tsStr = localStorage.getItem('mamam_last_supabase_sync');
             setLastSyncIso(tsStr);
-            setLastSyncTime(new Date(tsStr).toLocaleString('id-ID'));
-            showToast(`Auto-Sync 21:00 selesai — ${count} data tersimpan`);
+            if (tsStr) setLastSyncTime(new Date(tsStr).toLocaleString('id-ID'));
+            showToast(`Auto-Sync 21:00 — ${count > 0 ? count + ' perubahan dikirim' : 'sudah tersinkron'}`);
           }).catch(e => console.error("Daily sync fail:", e));
         }
       }
@@ -524,7 +488,7 @@ const BackupView = ({ onBack }) => {
         const raw = await exportAllData();
         const data = filterByDateRange(raw, startDate, endDate);
         const jsonStr = JSON.stringify(data, null, 2);
-        const filename = `backup-mamam-${tag}.json`;
+        const filename = `mamam-ayam-backup-data-${tag}.json`;
 
         if (Capacitor.isNativePlatform()) {
           const b64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (_, p1) => String.fromCharCode(parseInt(p1, 16))));
@@ -557,7 +521,7 @@ const BackupView = ({ onBack }) => {
         for (const [key, name] of Object.entries(sheets)) {
           if (data[key]?.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data[key]), name);
         }
-        const filename = `laporan-mamam-${tag}.xlsx`;
+        const filename = `mamam-ayam-laporan-excel-${tag}.xlsx`;
         if (Capacitor.isNativePlatform()) {
           const b64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
           const r = await Filesystem.writeFile({ path: filename, data: b64, directory: Directory.Cache });
@@ -580,15 +544,15 @@ const BackupView = ({ onBack }) => {
 
   async function handleManualSync() {
     if (!supabaseReady) { showToast('Supabase belum dikonfigurasi di .env', 'error'); return; }
+    if (isSyncInFlight()) { showToast('Sync sedang berjalan, tunggu sebentar...', 'error'); return; }
     setIsSyncing(true);
     try {
-      const count = await syncAllToSupabase();
-      const raw = localStorage.getItem('mamam_last_supabase_sync');
-      const ts = new Date().toLocaleString('id-ID');
-      setLastSyncIso(raw);
-      setLastSyncTime(ts);
+      const count = await runAutoSync({ force: true });
+      const tsStr = localStorage.getItem('mamam_last_supabase_sync');
+      setLastSyncIso(tsStr);
+      if (tsStr) setLastSyncTime(new Date(tsStr).toLocaleString('id-ID'));
       setNow(new Date());
-      showToast(`Sync selesai — ${count} record diupload`);
+      showToast(count > 0 ? `Sync selesai — ${count} perubahan dikirim` : 'Semua data sudah tersinkron ✓');
     } catch (err) {
       showToast('Gagal: ' + err.message, 'error');
     } finally {
@@ -669,30 +633,6 @@ const BackupView = ({ onBack }) => {
           </div>
         </div>
 
-        {/* Export */}
-        <div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Export / Backup Lokal</p>
-          <div className="space-y-2">
-            <ActionItem icon={FileJson} label="Export Data (JSON)" sublabel="Backup dengan pilihan rentang tanggal"
-              badge="Range" onClick={() => setDateRangeModal('json')}
-              loading={loadingState['exportJson']} done={doneState['exportJson']}
-              iconBgClass="bg-orange-50" iconColorClass="text-orange-500" />
-            <ActionItem icon={Sheet} label="Export ke Excel" sublabel="Laporan transaksi dengan filter tanggal"
-              badge="Range" onClick={() => setDateRangeModal('excel')}
-              loading={loadingState['exportExcel']} done={doneState['exportExcel']}
-              iconBgClass="bg-green-50" iconColorClass="text-green-600" />
-          </div>
-        </div>
-
-        {/* Import Lokal */}
-        <div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Import dari File</p>
-          <ActionItem icon={FileUp} label="Import dari JSON" sublabel="Pulihkan data dari file backup lokal"
-            onClick={() => setImportModal('json')}
-            loading={loadingState['importJson']} done={doneState['importJson']}
-            iconBgClass="bg-orange-50" iconColorClass="text-orange-500" />
-        </div>
-
         {/* Cloud Sync */}
         <div>
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Cloud Sync Realtime — Supabase</p>
@@ -765,8 +705,8 @@ const BackupView = ({ onBack }) => {
               </div>
             )}
 
-            {/* Restore dari server */}
-            <div className="border-t border-slate-100 pt-3">
+            {/* Restore dari server (belum butuh) */}
+            {/* <div className="border-t border-slate-100 pt-3">
               <p className="text-xs text-slate-400 mb-2">
                 Pindah HP atau install ulang? Tarik semua data dari cloud. Server adalah <strong>source of truth</strong>.
               </p>
@@ -780,11 +720,33 @@ const BackupView = ({ onBack }) => {
                   ? <><RefreshCw className="w-4 h-4 animate-spin" /> Memulihkan...</>
                   : <><Upload className="w-4 h-4" /> Restore dari Server</>}
               </button>
-            </div>
+            </div> */}
           </div>
         </div>
 
+        {/* Export */}
+        <div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Export / Backup Lokal</p>
+          <div className="space-y-2">
+            <ActionItem icon={FileJson} label="Export Data (JSON)" sublabel="Backup dengan pilihan rentang tanggal"
+              badge="Range" onClick={() => setDateRangeModal('json')}
+              loading={loadingState['exportJson']} done={doneState['exportJson']}
+              iconBgClass="bg-orange-50" iconColorClass="text-orange-500" />
+            <ActionItem icon={Sheet} label="Export ke Excel" sublabel="Laporan transaksi dengan filter tanggal"
+              badge="Range" onClick={() => setDateRangeModal('excel')}
+              loading={loadingState['exportExcel']} done={doneState['exportExcel']}
+              iconBgClass="bg-green-50" iconColorClass="text-green-600" />
+          </div>
+        </div>
 
+        {/* Import Lokal */}
+        <div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Import dari File</p>
+          <ActionItem icon={FileUp} label="Import dari JSON" sublabel="Pulihkan data dari file backup lokal"
+            onClick={() => setImportModal('json')}
+            loading={loadingState['importJson']} done={doneState['importJson']}
+            iconBgClass="bg-orange-50" iconColorClass="text-orange-500" />
+        </div>
 
       </div>
 

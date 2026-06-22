@@ -2,7 +2,7 @@
  * Card — container section konsisten.
  *
  * Props:
- *   variant   'default' | 'elevated' | 'flush' | 'dark' | 'muted'
+ *   variant   'default' | 'elevated' | 'flush' | 'dark' | 'muted' | 'dark-elevated' | 'dark-muted'
  *             default → rounded-2xl, border tipis, shadow kecil (paling umum)
  *             elevated → rounded-3xl, shadow-lg (untuk hero card / summary)
  *             flush → rounded-2xl tanpa border/shadow (untuk nested card)
@@ -10,6 +10,10 @@
  *             muted → bg-slate-50 dark:bg-slate-950, rounded-xl (panel "sunken"/nested
  *                     di dalam card putih, mis. pembungkus daftar/radio group — pasangan
  *                     dari Input variant="muted")
+ *             dark-elevated → bg-slate-900, rounded-3xl, shadow-2xl (hero panel gelap,
+ *                     mis. panel hasil kalkulasi/simulasi yang ditonjolkan)
+ *             dark-muted → bg-slate-800, rounded-2xl (nested sub-box di dalam
+ *                     dark-elevated, mis. highlight box angka di dalam panel gelap)
  *   padding   'none' | 'sm' | 'md' | 'lg'
  *             default: 'md'
  *   onClick   () => void — kalau diisi, card jadi clickable
@@ -33,6 +37,14 @@
  *   <Card variant="muted" padding="sm">
  *     <p className="text-xs font-bold uppercase">Daftar Penyesuaian</p>
  *     ...
+ *   </Card>
+ *
+ *   <Card variant="dark-elevated" padding="lg" className="text-white space-y-6">
+ *     <h4 className="font-black border-b border-slate-800 dark:border-slate-100 pb-3">HASIL ANALISA</h4>
+ *     <Card variant="dark-muted" padding="lg" className="text-center">
+ *       <span className="block text-xs uppercase text-slate-400">HPP per Unit</span>
+ *       <span className="block text-3xl font-black text-green-400">Rp 12.500</span>
+ *     </Card>
  *   </Card>
  *
  *   <Card variant="flush" padding="none" className="border-t border-slate-100 dark:border-slate-800">
@@ -64,6 +76,16 @@ const VARIANTS = {
     bg-slate-50 dark:bg-slate-950
     rounded-xl
     border border-slate-100 dark:border-slate-800
+  `,
+  'dark-elevated': `
+    bg-slate-900 text-white
+    rounded-3xl shadow-2xl
+    border border-slate-800 dark:border-slate-100
+  `,
+  'dark-muted': `
+    bg-slate-800
+    rounded-2xl
+    border border-slate-700 dark:border-slate-300
   `,
 };
 

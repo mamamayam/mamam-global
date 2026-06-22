@@ -4,6 +4,7 @@ import { AppContext, useAppContext } from '../../context/AppContext';
 import { formatRupiah } from '../../utils/formatters';
 import { usePersistState } from '../../hook/usePersistState';
 import CategoryModal from '../../components/CategoryModal';
+import { Card, Button, IconButton, PageHeader, EmptyState, Input, Select, Badge } from '../../components/ui';
 import { INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../../data/initialData';
 import {
     Menu as MenuIcon, X, Plus, Trash2, ChevronRight,
@@ -61,56 +62,64 @@ const BahanBakuView = () => {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
-                <div>
-                    <h3 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                        <Package className="w-6 h-6 text-orange-600 dark:text-orange-400" /> Database Bahan Baku Pasar
-                    </h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Kelola acuan harga bahan baku dasar murni dari pasar disini.</p>
-                </div>
-                {!isEditing && (
-                    <button onClick={() => setIsEditing(true)} className="bg-orange-600 dark:bg-orange-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
-                        <Plus className="w-4 h-4" /> Tambah Bahan Baku
-                    </button>
+            <PageHeader
+                title="Database Bahan Baku Pasar"
+                subtitle="Kelola acuan harga bahan baku dasar murni dari pasar disini."
+                icon={<Package className="w-6 h-6 text-orange-600 dark:text-orange-400" />}
+                className="mb-2"
+                action={!isEditing && (
+                    <Button icon={<Plus className="w-4 h-4" />} onClick={() => setIsEditing(true)}>
+                        Tambah Bahan Baku
+                    </Button>
                 )}
-            </div>
+            />
 
             {isEditing ? (
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 animate-in slide-in-from-top-2 duration-300">
+                <Card padding="lg" className="animate-in slide-in-from-top-2 duration-300">
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 mb-5">
                         <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg">{formData.id ? 'Edit Bahan Baku' : 'Tambah Bahan Baku Baru'}</h4>
-                        <button onClick={() => { setIsEditing(false); setFormData({ id: '', name: '', unit: '', price: '' }); }} className="p-2 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+                        <IconButton variant="neutral" className="rounded-full" onClick={() => { setIsEditing(false); setFormData({ id: '', name: '', unit: '', price: '' }); }}><X className="w-5 h-5" /></IconButton>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-                        <div>
-                            <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Nama Bahan Baku</label>
-                            <input type="text" className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-orange-600 dark:focus:border-orange-500 text-sm font-medium text-slate-800 dark:text-slate-100 transition-colors" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Contoh: Ayam Potong" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Satuan Pembelian</label>
-                            <input type="text" className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-orange-600 dark:focus:border-orange-500 text-sm font-medium text-slate-800 dark:text-slate-100 transition-colors" value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })} placeholder="Contoh: Ekor, Kg, Liter, Gram" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Harga Beli Saat Ini (Rp)</label>
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-sm font-bold">Rp</span>
-                                <input type="number" className="w-full p-3 pl-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-orange-600 dark:focus:border-orange-500 text-sm font-bold text-slate-800 dark:text-slate-100 transition-colors" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} placeholder="0" />
-                            </div>
-                        </div>
+                        <Input
+                            label="Nama Bahan Baku"
+                            type="text"
+                            value={formData.name}
+                            onChange={e => setFormData({ ...formData, name: e.target.value })}
+                            placeholder="Contoh: Ayam Potong"
+                        />
+                        <Input
+                            label="Satuan Pembelian"
+                            type="text"
+                            value={formData.unit}
+                            onChange={e => setFormData({ ...formData, unit: e.target.value })}
+                            placeholder="Contoh: Ekor, Kg, Liter, Gram"
+                        />
+                        <Input
+                            label="Harga Beli Saat Ini (Rp)"
+                            type="number"
+                            icon={<span className="font-bold">Rp</span>}
+                            value={formData.price}
+                            onChange={e => setFormData({ ...formData, price: e.target.value })}
+                            placeholder="0"
+                        />
                     </div>
                     <div className="flex justify-end gap-3">
-                        <button onClick={() => { setIsEditing(false); setFormData({ id: '', name: '', unit: '', price: '' }); }} className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm">Batal</button>
-                        <button onClick={handleSave} className="px-6 py-2.5 bg-orange-600 dark:bg-orange-500 text-white font-bold rounded-xl shadow-sm hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-md hover:-translate-y-0.5 flex items-center gap-2 transition-all duration-300 text-sm"><Save className="w-4 h-4" /> Simpan Bahan</button>
+                        <Button variant="secondary" onClick={() => { setIsEditing(false); setFormData({ id: '', name: '', unit: '', price: '' }); }}>Batal</Button>
+                        <Button icon={<Save className="w-4 h-4" />} onClick={handleSave}>Simpan Bahan</Button>
                     </div>
-                </div>
+                </Card>
             ) : (
-                <div className="bg-white dark:bg-slate-900 p-2.5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-center">
-                    <Search className="w-5 h-5 text-slate-400 dark:text-slate-500 ml-3 mr-2" />
-                    <input type="text" placeholder="Cari bahan baku..." className="flex-1 p-2 outline-none text-sm font-medium text-slate-800 dark:text-slate-100 bg-transparent" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                </div>
+                <Input
+                    type="text"
+                    placeholder="Cari bahan baku..."
+                    icon={<Search className="w-5 h-5" />}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                />
             )}
 
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+            <Card padding="none" className="overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
@@ -124,7 +133,7 @@ const BahanBakuView = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                             {filteredMaterials.length === 0 ? (
-                                <tr><td colSpan="5" className="p-8 text-center text-slate-400 dark:text-slate-500 italic">Belum ada data bahan baku</td></tr>
+                                <tr><td colSpan="5"><EmptyState size="sm" title="Belum ada data bahan baku" /></td></tr>
                             ) : (
                                 filteredMaterials.map((rm) => {
                                     const isUpdatedToday = rm.lastUpdated && new Date(rm.lastUpdated).toDateString() === new Date().toDateString();
@@ -142,8 +151,8 @@ const BahanBakuView = () => {
                                                 </div>
                                             </td>
                                             <td className="p-4 flex justify-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                                <button onClick={() => { setFormData(rm); setIsEditing(true); }} className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors" title="Edit"><Edit3 className="w-4 h-4" /></button>
-                                                <button onClick={() => handleDelete(rm.id)} className="p-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors" title="Hapus"><Trash2 className="w-4 h-4" /></button>
+                                                <IconButton variant="edit" ghost onClick={() => { setFormData(rm); setIsEditing(true); }}><Edit3 className="w-4 h-4" /></IconButton>
+                                                <IconButton variant="delete" ghost onClick={() => handleDelete(rm.id)}><Trash2 className="w-4 h-4" /></IconButton>
                                             </td>
                                         </tr>
                                     )
@@ -152,7 +161,7 @@ const BahanBakuView = () => {
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </Card>
         </div>
     );
 };
@@ -271,48 +280,55 @@ const BahanSetengahJadiView = () => {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
-                <div>
-                    <h3 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                        <Beaker className="w-6 h-6 text-orange-600 dark:text-orange-400" /> Bahan Setengah Jadi (Prep)
-                    </h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Buat bahan olahan (misal: Bumbu Dasar, Ayam Ungkep) untuk dipakai di Kalkulator HPP.</p>
-                </div>
-                {!isEditing && (
-                    <button onClick={() => setIsEditing(true)} className="bg-orange-600 dark:bg-orange-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
-                        <Plus className="w-4 h-4" /> Tambah Bahan Prep
-                    </button>
+            <PageHeader
+                title="Bahan Setengah Jadi (Prep)"
+                subtitle="Buat bahan olahan (misal: Bumbu Dasar, Ayam Ungkep) untuk dipakai di Kalkulator HPP."
+                icon={<Beaker className="w-6 h-6 text-orange-600 dark:text-orange-400" />}
+                className="mb-2"
+                action={!isEditing && (
+                    <Button icon={<Plus className="w-4 h-4" />} onClick={() => setIsEditing(true)}>
+                        Tambah Bahan Prep
+                    </Button>
                 )}
-            </div>
+            />
 
             {isEditing ? (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-in slide-in-from-top-2 duration-300">
                     <div className="lg:col-span-8 space-y-4">
-                        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-5">
+                        <Card padding="lg" className="space-y-5">
                             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
                                 <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg">{prepId ? 'Edit Bahan Setengah Jadi' : 'Form Bahan Setengah Jadi Baru'}</h4>
-                                <button onClick={resetForm} className="p-2 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+                                <IconButton variant="neutral" className="rounded-full" onClick={resetForm}><X className="w-5 h-5" /></IconButton>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Nama Prep</label>
-                                    <input type="text" className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-orange-600 dark:focus:border-orange-500 text-sm font-medium text-slate-800 dark:text-slate-100 transition-colors" value={prepName} onChange={e => setPrepName(e.target.value)} placeholder="Contoh: Bumbu Dasar Merah" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Satuan Hasil</label>
-                                    <input type="text" className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-orange-600 dark:focus:border-orange-500 text-sm font-medium text-slate-800 dark:text-slate-100 transition-colors" value={resultUnit} onChange={e => setResultUnit(e.target.value)} placeholder="Contoh: Gram, Liter, Porsi" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Jumlah Hasil</label>
-                                    <input type="number" className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-orange-600 dark:focus:border-orange-500 text-sm font-medium text-slate-800 dark:text-slate-100 transition-colors" value={yieldQty} onChange={e => setYieldQty(e.target.value)} placeholder="0" />
-                                </div>
+                                <Input
+                                    label="Nama Prep"
+                                    type="text"
+                                    value={prepName}
+                                    onChange={e => setPrepName(e.target.value)}
+                                    placeholder="Contoh: Bumbu Dasar Merah"
+                                />
+                                <Input
+                                    label="Satuan Hasil"
+                                    type="text"
+                                    value={resultUnit}
+                                    onChange={e => setResultUnit(e.target.value)}
+                                    placeholder="Contoh: Gram, Liter, Porsi"
+                                />
+                                <Input
+                                    label="Jumlah Hasil"
+                                    type="number"
+                                    value={yieldQty}
+                                    onChange={e => setYieldQty(e.target.value)}
+                                    placeholder="0"
+                                />
                             </div>
 
                             <div className="pt-4">
                                 <label className="block text-sm font-bold text-slate-800 dark:text-slate-100 mb-3 border-b pb-2">Komposisi Bahan Mentah:</label>
 
-                                <div className="space-y-4 bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                <Card variant="muted" padding="lg" className="space-y-4">
                                     {ingredients.map((ing, index) => (
                                         <div key={ing.id} className="grid grid-cols-12 gap-3 items-center border-b border-slate-200 dark:border-slate-700 pb-5 md:pb-0 md:border-none last:border-0 last:pb-0">
                                             <div className="col-span-12 md:col-span-3">
@@ -375,35 +391,37 @@ const BahanSetengahJadiView = () => {
                                             </div>
                                         </div>
                                     ))}
-                                </div>
+                                </Card>
 
                                 <div className="mt-5 flex justify-center md:justify-start">
-                                    <button onClick={handleAddIngredient} className="flex items-center gap-2 px-5 py-2.5 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-500/15 border border-orange-200 dark:border-orange-500/30 text-sm font-bold rounded-xl transition-all duration-200">
-                                        <Plus className="w-4 h-4" /> Tambah Bahan Mentah
-                                    </button>
+                                    <Button variant="ghost" icon={<Plus className="w-4 h-4" />} onClick={handleAddIngredient}>
+                                        Tambah Bahan Mentah
+                                    </Button>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-6 border-t border-slate-100 dark:border-slate-800">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase">Total Biaya Tenaga Kerja (1 Resep Prep)</label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-sm font-bold">Rp</span>
-                                        <input type="number" className="w-full p-3 pl-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-orange-600 dark:focus:border-orange-500 text-sm font-bold text-slate-800 dark:text-slate-100 transition-colors" value={laborCost} onChange={e => setLaborCost(e.target.value)} placeholder="0" />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase">Total Biaya Overhead Gas/Dll (1 Resep Prep)</label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-sm font-bold">Rp</span>
-                                        <input type="number" className="w-full p-3 pl-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-orange-600 dark:focus:border-orange-500 text-sm font-bold text-slate-800 dark:text-slate-100 transition-colors" value={overheadCost} onChange={e => setOverheadCost(e.target.value)} placeholder="0" />
-                                    </div>
-                                </div>
+                                <Input
+                                    label="Total Biaya Tenaga Kerja (1 Resep Prep)"
+                                    type="number"
+                                    icon={<span className="font-bold">Rp</span>}
+                                    value={laborCost}
+                                    onChange={e => setLaborCost(e.target.value)}
+                                    placeholder="0"
+                                />
+                                <Input
+                                    label="Total Biaya Overhead Gas/Dll (1 Resep Prep)"
+                                    type="number"
+                                    icon={<span className="font-bold">Rp</span>}
+                                    value={overheadCost}
+                                    onChange={e => setOverheadCost(e.target.value)}
+                                    placeholder="0"
+                                />
                             </div>
-                        </div>
+                        </Card>
                     </div>
 
-                    <div className="lg:col-span-4 bg-slate-900 rounded-3xl shadow-2xl border border-slate-800 dark:border-slate-100 p-6 text-white space-y-6">
+                    <Card variant="dark-elevated" padding="lg" className="lg:col-span-4 space-y-6">
                         <h4 className="font-heading font-black text-lg text-slate-100 dark:text-slate-800 border-b border-slate-800 dark:border-slate-100 pb-3">SIMULASI HPP PREP</h4>
 
                         <div className="space-y-3 text-sm">
@@ -426,26 +444,30 @@ const BahanSetengahJadiView = () => {
                             </div>
                         </div>
 
-                        <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 dark:border-slate-300 text-center mt-6">
+                        <Card variant="dark-muted" padding="lg" className="text-center mt-6">
                             <span className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">HPP Prep per {resultUnit || 'Satuan'}</span>
                             <span className="block text-3xl font-heading font-black text-green-400 dark:text-green-400">{formatRupiah(livePrepCostPerUnit)}</span>
-                        </div>
+                        </Card>
 
                         <p className="text-xs text-slate-500 dark:text-slate-400 text-center italic mt-4">Bahan Prep ini akan muncul di dropdown tab Kalkulator HPP secara otomatis.</p>
 
-                        <button onClick={handleSave} className="w-full py-4 mt-6 bg-green-600 dark:bg-green-500 hover:bg-green-700 dark:hover:bg-green-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-sm">
-                            <Save className="w-5 h-5" /> {prepId ? 'Update Bahan Prep' : 'Simpan Bahan Prep'}
-                        </button>
-                    </div>
+                        <Button variant="success" size="full" className="mt-6" icon={<Save className="w-5 h-5" />} onClick={handleSave}>
+                            {prepId ? 'Update Bahan Prep' : 'Simpan Bahan Prep'}
+                        </Button>
+                    </Card>
                 </div>
             ) : (
                 <>
-                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-center mb-5">
-                        <Search className="w-5 h-5 text-slate-400 dark:text-slate-500 ml-3 mr-2" />
-                        <input type="text" placeholder="Cari bahan setengah jadi..." className="flex-1 p-2 outline-none text-sm font-medium text-slate-800 dark:text-slate-100 bg-transparent" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                    </div>
+                    <Input
+                        type="text"
+                        placeholder="Cari bahan setengah jadi..."
+                        icon={<Search className="w-5 h-5" />}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="mb-5"
+                    />
 
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+                    <Card padding="none" className="overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
@@ -459,21 +481,21 @@ const BahanSetengahJadiView = () => {
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                                     {filteredPreps.length === 0 ? (
-                                        <tr><td colSpan="5" className="p-8 text-center text-slate-400 dark:text-slate-500 italic">Belum ada data bahan setengah jadi</td></tr>
+                                        <tr><td colSpan="5"><EmptyState size="sm" title="Belum ada data bahan setengah jadi" /></td></tr>
                                     ) : (
                                         filteredPreps.map((prep) => {
                                             const originalPrep = semiFinished.find(s => s.id === prep.id);
                                             return (
                                                 <tr key={prep.id} className="hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors group">
-                                                    <td className="p-4 font-bold text-slate-800 dark:text-slate-100 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">{prep.name.replace(' [Prep]', '')} <span className="bg-orange-100 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300 text-[10px] px-2 py-0.5 rounded font-bold ml-2">PREP</span></td>
+                                                    <td className="p-4 font-bold text-slate-800 dark:text-slate-100 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">{prep.name.replace(' [Prep]', '')} <Badge variant="orange" size="sm" className="ml-2">PREP</Badge></td>
                                                     <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">{prep.unit}</td>
                                                     <td className="p-4 font-black text-green-600 dark:text-green-400">{formatRupiah(prep.price)}</td>
                                                     <td className="p-4 text-slate-500 dark:text-slate-400 font-medium text-sm">
                                                         {prep.lastUpdated ? new Date(prep.lastUpdated).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
                                                     </td>
                                                     <td className="p-4 flex justify-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                                        <button onClick={() => handleEdit(originalPrep)} className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors" title="Edit"><Edit3 className="w-4 h-4" /></button>
-                                                        <button onClick={() => handleDelete(prep.id)} className="p-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors" title="Hapus"><Trash2 className="w-4 h-4" /></button>
+                                                        <IconButton variant="edit" ghost onClick={() => handleEdit(originalPrep)}><Edit3 className="w-4 h-4" /></IconButton>
+                                                        <IconButton variant="delete" ghost onClick={() => handleDelete(prep.id)}><Trash2 className="w-4 h-4" /></IconButton>
                                                     </td>
                                                 </tr>
                                             )
@@ -482,7 +504,7 @@ const BahanSetengahJadiView = () => {
                                 </tbody>
                             </table>
                         </div>
-                    </div>
+                    </Card>
                 </>
             )}
         </div>
@@ -661,13 +683,16 @@ const KalkulatorHppView = () => {
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 <div className="lg:col-span-7 space-y-6">
-                    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-5">
+                    <Card padding="lg" className="space-y-5">
                         <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg">Informasi Produk</h4>
                         <div className="space-y-5">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Nama Produk Final</label>
-                                <input type="text" className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-orange-600 dark:focus:border-orange-500 text-sm font-medium text-slate-800 dark:text-slate-100 transition-colors" value={productName} onChange={e => setProductName(e.target.value)} placeholder="Contoh: Es Teh, Nasi Goreng, Bakso" />
-                            </div>
+                            <Input
+                                label="Nama Produk Final"
+                                type="text"
+                                value={productName}
+                                onChange={e => setProductName(e.target.value)}
+                                placeholder="Contoh: Es Teh, Nasi Goreng, Bakso"
+                            />
                             <div>
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="block text-sm font-bold text-slate-600 dark:text-slate-300">Kategori</label>
@@ -675,15 +700,15 @@ const KalkulatorHppView = () => {
                                         <Edit3 className="w-3.5 h-3.5" /> Kelola Kategori
                                     </button>
                                 </div>
-                                <select className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-orange-600 dark:focus:border-orange-500 text-sm font-medium text-slate-800 dark:text-slate-100 transition-colors cursor-pointer" value={category} onChange={e => setCategory(e.target.value)}>
+                                <Select value={category} onChange={e => setCategory(e.target.value)}>
                                     {categories.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
                                     {!categories.includes(category) && category && <option value={category}>{category}</option>}
-                                </select>
+                                </Select>
                             </div>
                         </div>
-                    </div>
+                    </Card>
 
-                    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-5">
+                    <Card padding="lg" className="space-y-5">
                         <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg flex items-center gap-2">
                             <span>🛒</span> Komposisi Bahan & Satuan Pakai
                         </h4>
@@ -757,7 +782,7 @@ const KalkulatorHppView = () => {
                         </div>
 
                         <div className="flex justify-center md:justify-start pt-2">
-                            <button onClick={handleAddIngredient} className="flex items-center gap-2 px-5 py-2.5 bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 dark:hover:bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/30 text-sm font-bold rounded-xl transition-all duration-200"><Plus className="w-4 h-4" /> Tambah Komposisi</button>
+                            <Button variant="ghost" icon={<Plus className="w-4 h-4" />} onClick={handleAddIngredient}>Tambah Komposisi</Button>
                         </div>
 
                         <div className="bg-orange-50 dark:bg-orange-500/10 p-5 rounded-2xl border border-orange-200 dark:border-orange-500/30 flex flex-col gap-3 text-sm mt-5">
@@ -774,25 +799,28 @@ const KalkulatorHppView = () => {
                                 <span className="text-base font-black text-orange-600 dark:text-orange-400">{formatRupiah(totalWeight > 0 ? totalIngredientCost / totalWeight : 0)}</span>
                             </div>
                         </div>
-                    </div>
+                    </Card>
 
-                    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-4">
+                    <Card padding="lg" className="space-y-4">
                         <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg flex items-center gap-2"><span>📦</span> Jumlah Produk yang Dihasilkan</h4>
-                        <div className="space-y-2">
-                            <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Jumlah Produk (Unit)</label>
-                            <input type="number" className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-orange-600 dark:focus:border-orange-500 text-sm font-bold text-slate-800 dark:text-slate-100 transition-colors" value={yieldQty} onChange={e => setYieldQty(e.target.value)} placeholder="Contoh: 10, 50, 100" />
-                        </div>
-                    </div>
+                        <Input
+                            label="Jumlah Produk (Unit)"
+                            type="number"
+                            value={yieldQty}
+                            onChange={e => setYieldQty(e.target.value)}
+                            placeholder="Contoh: 10, 50, 100"
+                        />
+                    </Card>
 
                     <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                        <button onClick={handleCalculate} className="flex-1 py-3.5 bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300"><Calculator className="w-5 h-5" /> Hitung HPP Final</button>
-                        <button onClick={handleReset} className="py-3.5 px-8 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-colors">Reset</button>
+                        <Button size="lg" className="flex-1" icon={<Calculator className="w-5 h-5" />} onClick={handleCalculate}>Hitung HPP Final</Button>
+                        <Button variant="secondary" size="lg" onClick={handleReset}>Reset</Button>
                     </div>
                 </div>
 
                 <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-4">
                     {showResult ? (
-                        <div className="bg-slate-900 rounded-3xl shadow-2xl border border-slate-800 dark:border-slate-100 p-6 text-white space-y-6 animate-in zoom-in-95 duration-300 ease-out">
+                        <Card variant="dark-elevated" padding="lg" className="space-y-6 animate-in zoom-in-95 duration-300 ease-out">
                             <div className="border-b border-slate-800 dark:border-slate-100 pb-4 flex justify-between items-center">
                                 <div>
                                     <h4 className="font-heading font-black text-lg text-slate-100 dark:text-slate-800 tracking-wider">HASIL ANALISA & HARGA JUAL</h4>
@@ -821,7 +849,7 @@ const KalkulatorHppView = () => {
                                 </div>
                             </div>
 
-                            <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 dark:border-slate-300 mt-4 space-y-3">
+                            <Card variant="dark-muted" padding="md" className="mt-4 space-y-3">
                                 <div className="flex justify-between items-center text-sm text-slate-400 dark:text-slate-500">
                                     <span>Total HPP (Satu Resep Penuh):</span>
                                     <span className="font-bold text-slate-200 dark:text-slate-700">{formatRupiah(totalHppPerUnit * yld)}</span>
@@ -834,7 +862,7 @@ const KalkulatorHppView = () => {
                                         </span>
                                     </div>
                                 )}
-                            </div>
+                            </Card>
 
                             <div className="space-y-4 pt-4 border-t border-slate-800 dark:border-slate-100">
                                 <div className="flex justify-between items-center text-sm">
@@ -847,10 +875,10 @@ const KalkulatorHppView = () => {
                                 </div>
                             </div>
 
-                            <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 dark:border-slate-300 space-y-2 text-center mt-6">
+                            <Card variant="dark-muted" padding="lg" className="space-y-2 text-center mt-6">
                                 <span className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Rekomendasi Harga Jual</span>
                                 <span className="block text-3xl font-heading font-black text-slate-100 dark:text-slate-800">{formatRupiah(roundedRecommendedPrice)}</span>
-                            </div>
+                            </Card>
 
                             <div className="space-y-3 pt-4 border-t border-slate-800 dark:border-slate-100">
                                 <label className="block text-xs font-bold text-slate-300 dark:text-slate-600 uppercase tracking-wider">Harga Jual Final Restoran</label>
@@ -872,15 +900,18 @@ const KalkulatorHppView = () => {
                                 </div>
                             </div>
 
-                            <button onClick={handleSaveToLibrary} className="w-full py-4 mt-6 bg-green-600 dark:bg-green-500 hover:bg-green-700 dark:hover:bg-green-600 text-white font-bold text-base rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5">
-                                <Save className="w-5 h-5" /> {editingRecipe ? 'Simpan Perubahan' : 'Simpan Formula ke Library'}
-                            </button>
-                        </div>
+                            <Button variant="success" size="full" className="mt-6 text-base" icon={<Save className="w-5 h-5" />} onClick={handleSaveToLibrary}>
+                                {editingRecipe ? 'Simpan Perubahan' : 'Simpan Formula ke Library'}
+                            </Button>
+                        </Card>
                     ) : (
-                        <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-center text-slate-400 dark:text-slate-500 py-24 animate-in fade-in duration-300">
-                            <Calculator className="w-16 h-16 mx-auto opacity-20 mb-4" />
-                            <p className="font-heading font-bold text-base text-slate-500 dark:text-slate-400">Silakan isi formulir di samping</p>
-                            <p className="text-sm text-slate-400 dark:text-slate-500 mt-2">Lalu klik tombol "Hitung HPP Final" untuk melihat analisa harga jual & margin laba aktual.</p>
+                        <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-8 py-24 animate-in fade-in duration-300">
+                            <EmptyState
+                                size="lg"
+                                icon={<Calculator className="w-16 h-16" />}
+                                title="Silakan isi formulir di samping"
+                                description='Lalu klik tombol "Hitung HPP Final" untuk melihat analisa harga jual & margin laba aktual.'
+                            />
                         </div>
                     )}
                 </div>
@@ -937,17 +968,19 @@ const LibraryHppView = () => {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
-            <div className="border-b border-slate-200 dark:border-slate-700 pb-5">
-                <h3 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                    <BookOpen className="w-6 h-6 text-orange-600 dark:text-orange-400" /> Katalog Library Menu (Final)
-                </h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Daftar menu dengan total HPP terhitung otomatis berdasarkan harga bahan baku pasar & bahan setengah jadi terbaru.</p>
-            </div>
+            <PageHeader
+                title="Katalog Library Menu (Final)"
+                subtitle="Daftar menu dengan total HPP terhitung otomatis berdasarkan harga bahan baku pasar & bahan setengah jadi terbaru."
+                icon={<BookOpen className="w-6 h-6 text-orange-600 dark:text-orange-400" />}
+                className="border-b border-slate-200 dark:border-slate-700 pb-5"
+            />
 
             {hppLibrary.length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 shadow-sm p-12 py-24 animate-in zoom-in-95 duration-300">
-                    <BookOpen className="w-16 h-16 mb-4 opacity-20 text-slate-500 dark:text-slate-400" />
-                    <p className="font-heading font-bold text-slate-500 dark:text-slate-400 text-base">Belum ada resep / menu final yang disimpan ke Library.</p>
+                <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 shadow-sm p-12 py-24 animate-in zoom-in-95 duration-300">
+                    <EmptyState
+                        icon={<BookOpen className="w-16 h-16" />}
+                        title="Belum ada resep / menu final yang disimpan ke Library."
+                    />
                 </div>
             ) : (
                 <div className="space-y-10">
@@ -959,7 +992,7 @@ const LibraryHppView = () => {
                             <div key={category} className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                 <div className="flex items-center gap-3">
                                     <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight uppercase">{category}</span>
-                                    <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold px-2.5 py-0.5 rounded-full">{items.length} Menu</span>
+                                    <Badge variant="neutral" size="md">{items.length} Menu</Badge>
                                     <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1 ml-2"></div>
                                 </div>
 
@@ -967,23 +1000,23 @@ const LibraryHppView = () => {
                                     {items.map(item => {
                                         const isMarginDanger = item.actualMarginPercent < (item.marginPercent / 2);
                                         return (
-                                            <div key={item.id} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 relative group hover:shadow-md transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between">
+                                            <Card key={item.id} padding="lg" className="relative group hover:shadow-md transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between">
                                                 <div>
                                                     <div className="flex justify-between items-start mb-3">
-                                                        <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-500 dark:text-slate-400 uppercase tracking-wider">Yield: {item.yieldQty} Porsi</span>
+                                                        <Badge variant="neutral" size="sm">Yield: {item.yieldQty} Porsi</Badge>
                                                         <div className="flex gap-1.5 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                                            <button onClick={() => handleEdit(item)} className="p-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/15 transition-colors" title="Edit Formula Resep"><Edit3 className="w-4 h-4" /></button>
-                                                            <button onClick={() => handleDelete(item.id)} className="p-1.5 bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-500/15 transition-colors" title="Hapus"><Trash2 className="w-4 h-4" /></button>
+                                                            <IconButton variant="edit" size="sm" onClick={() => handleEdit(item)}><Edit3 className="w-4 h-4" /></IconButton>
+                                                            <IconButton variant="delete" size="sm" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></IconButton>
                                                         </div>
                                                     </div>
 
                                                     <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg leading-tight mb-4 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">{item.name}</h4>
 
                                                     <div className="space-y-3 mb-5">
-                                                        <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center text-sm">
+                                                        <Card variant="muted" padding="sm" className="flex justify-between items-center text-sm">
                                                             <span className="text-slate-500 dark:text-slate-400 font-bold">HPP Aktual</span>
                                                             <span className="font-black text-slate-800 dark:text-slate-100">{formatRupiah(item.liveHpp)}</span>
-                                                        </div>
+                                                        </Card>
 
                                                         <div className="flex justify-between items-end text-sm p-1">
                                                             <div>
@@ -1006,7 +1039,7 @@ const LibraryHppView = () => {
                                                         <p className="text-[11px] font-bold leading-relaxed">Margin kritis! Periksa kembali harga bahan baku / prep Anda.</p>
                                                     </div>
                                                 )}
-                                            </div>
+                                            </Card>
                                         )
                                     })}
                                 </div>
@@ -1096,26 +1129,22 @@ export default function App() {
                 {/* Main Content */}
                 <div className="flex-1 overflow-hidden relative flex flex-col p-4 md:p-6 overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
                     {/* Header Bagian Internal */}
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                            Kalkulator HPP Cerdas
-                        </h2>
-                    </div>
+                    <PageHeader title="Kalkulator HPP Cerdas" />
 
                     {/* Tabs Navigation */}
                     <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 pt-2 pb-5 mb-8 overflow-x-auto hide-scrollbar shrink-0">
-                        <button onClick={() => setActiveTab('materials')} className={`px-5 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'materials' ? 'bg-slate-800 text-white shadow-md -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm'}`}>
+                        <Button variant={activeTab === 'materials' ? 'dark' : 'secondary'} onClick={() => setActiveTab('materials')}>
                             Database Bahan Baku
-                        </button>
-                        <button onClick={() => setActiveTab('semi-finished')} className={`px-5 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'semi-finished' ? 'bg-slate-800 text-white shadow-md -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm'}`}>
+                        </Button>
+                        <Button variant={activeTab === 'semi-finished' ? 'dark' : 'secondary'} onClick={() => setActiveTab('semi-finished')}>
                             Bahan Setengah Jadi (Prep)
-                        </button>
-                        <button onClick={() => setActiveTab('calculator')} className={`px-5 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'calculator' ? 'bg-slate-800 text-white shadow-md -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm'}`}>
+                        </Button>
+                        <Button variant={activeTab === 'calculator' ? 'dark' : 'secondary'} onClick={() => setActiveTab('calculator')}>
                             {editingRecipe ? '✏️ Edit Resep Menu' : 'Kalkulator HPP Final'}
-                        </button>
-                        <button onClick={() => setActiveTab('library')} className={`px-5 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === 'library' ? 'bg-slate-800 text-white shadow-md -translate-y-0.5' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm'}`}>
+                        </Button>
+                        <Button variant={activeTab === 'library' ? 'dark' : 'secondary'} onClick={() => setActiveTab('library')}>
                             Library Menu ({hppLibrary.length})
-                        </button>
+                        </Button>
                     </div>
 
                     {/* View Switcher */}

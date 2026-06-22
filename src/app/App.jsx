@@ -10,7 +10,7 @@ import AppLayout from '../app/AppLayout';
 import Sidebar from '../app/layout/Sidebar';
 import Header from '../app/layout/Header';
 import BottomNav from '../app/layout/BottomNav';
-import ReceiptModal from '../features/pos/modals/ReceiptModal';
+import ReceiptModal from '../features/pos/ReceiptModal';
 
 import {
   AlertCircle,
@@ -700,7 +700,7 @@ export default function App() {
   const visibleMenus = isAdminMode
     ? menuItems
     : menuItems.filter(item =>
-      ['dompet', 'kasir', 'riwayat', 'pengeluaran', 'pemasukan'].includes(item.id)
+      ['dompet', 'riwayat', 'pengeluaran', 'pemasukan', 'menu', 'varian', 'backup'].includes(item.id)
     );
 
 

@@ -1,7 +1,7 @@
 import React from "react";
-import { useAppContext } from "../../../context/AppContext";
+import { useAppContext } from "../../context/AppContext";
 import { Printer, Share2 } from "lucide-react";
-import { isNativePlatform, printNativeBluetooth } from '../../../library/printer.js';
+import { isNativePlatform, printNativeBluetooth } from '../../library/printer.js';
 import { toPng, toBlob } from 'html-to-image';
 import { Capacitor } from '@capacitor/core';
 import { Share } from '@capacitor/share';
@@ -50,7 +50,7 @@ const ReceiptModal = () => {
 
                 await Share.share({
                     title: 'Struk Pesanan',
-                    text: `Terima kasih! Berikut adalah struk pesanan Anda (ID: ${data.id})`,
+                    text: `Terimakasih sudah order, ini struknya ya`,
                     url: savedFile.uri,
                     dialogTitle: 'Bagikan Struk via'
                 });

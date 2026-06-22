@@ -1,6 +1,6 @@
 import React from "react";
-import { useAppContext } from '../../../context/AppContext'; 
-import { generateUUID } from '../../../utils/formatters';
+import { useAppContext } from '../../context/AppContext'; 
+import { generateUUID } from '../../utils/formatters';
 import { 
   SplitSquareHorizontal, 
   X, 
@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 const PaymentModal = () => {
-  const { paymentModal, setPaymentModal, getTotal, getRoundedTotal, getRoundingAdjustment, formatRupiah, activeCustomer, pointsToRedeem, customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, customerName, orderType, cart, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount, deliveryFee, salesHistory, setSalesHistory, setIsCartOpen, setCart, setCustomerName, setAppliedVoucher, setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings, triggerAlert, navigate } = useAppContext();
+  const { paymentModal, setOrderType, setPaymentModal, getTotal, getRoundedTotal, getRoundingAdjustment, formatRupiah, activeCustomer, pointsToRedeem, customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, customerName, orderType, cart, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount, deliveryFee, salesHistory, setSalesHistory, setIsCartOpen, setCart, setCustomerName, setAppliedVoucher, setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings, triggerAlert, navigate } = useAppContext();
 
   if (!paymentModal.isOpen) return null;
 
@@ -42,8 +42,12 @@ const PaymentModal = () => {
       if (!isSplitReadyToPay) return triggerAlert('Pembayaran belum lunas!');
     }
 
+    // 1. BUAT VARIABEL LOKAL UNTUK MENGELOLA PERUBAHAN POIN CUSTOMER
+    let updatedCustomers = [...customers];
+
+    // Proses Pengurangan Poin (Jika ada klaim reward)
     if (activeCustomer && pointsToRedeem > 0) {
-      setCustomers(customers.map(c => c.id === activeCustomer.id ? { ...c, points: c.points - pointsToRedeem } : c));
+      updatedCustomers = updatedCustomers.map(c => c.id === activeCustomer.id ? { ...c, points: c.points - pointsToRedeem } : c);
       setClaimsHistory([{ id: `cl-${generateUUID()}`, customerName: activeCustomer.name, rewardName: `Potongan Belanja ${formatRupiah(getPointDiscount())}`, pointsUsed: pointsToRedeem, date: new Date() }, ...claimsHistory]);
     }
 
@@ -56,22 +60,32 @@ const PaymentModal = () => {
       originalTotal,
       roundingAdjustment,
       paymentMethod: isSplitMode ? 'Split Payment' : method,
-      ojolName: method === 'Ojol' ? ojolName : null,             // <- BARIS BARU
+      ojolName: method === 'Ojol' ? ojolName : null,
       orderNumber: method === 'Ojol' ? orderNumber : null,
       splitDetails: isSplitMode ? splitPayments : [],
       hppTotal: cart.reduce((sum, item) => sum + (item.hpp * item.qty), 0)
     };
 
+    // 2. PROSES PENAMBAHAN POIN BARU (BERLAKU UNTUK SINGLE & SPLIT)
     const pointsEarned = Math.floor(total / 10000);
     if (pointsEarned > 0) {
-      const latestCustomersList = activeCustomer && pointsToRedeem > 0 ? customers.map(c => c.id === activeCustomer.id ? { ...c, points: c.points - pointsToRedeem } : c) : customers;
-      const registeredCustomer = latestCustomersList.find(c => c.name.toLowerCase() === newOrder.customerName.toLowerCase());
-      if (registeredCustomer) setCustomers(latestCustomersList.map(c => c.id === registeredCustomer.id ? { ...c, points: c.points + pointsEarned } : c));
+      // Cari pelanggan dengan prioritas ID activeCustomer (lebih akurat) baru fallback ke nama
+      const registeredCustomer = activeCustomer 
+        ? updatedCustomers.find(c => c.id === activeCustomer.id)
+        : updatedCustomers.find(c => c.name.toLowerCase() === newOrder.customerName.toLowerCase());
+
+      if (registeredCustomer) {
+        updatedCustomers = updatedCustomers.map(c => c.id === registeredCustomer.id ? { ...c, points: c.points + pointsEarned } : c);
+      }
     }
 
+    // 3. COMMIT PERUBAHAN STATE CUSTOMERS HANYA SATU KALI DI SINI
+    setCustomers(updatedCustomers);
+
+    // Reset State POS & Selesaikan Transaksi
     setSalesHistory([newOrder, ...salesHistory]);
     setPaymentModal({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending' });
-    setIsCartOpen(false); setCart([]); setCustomerName(''); setAppliedVoucher(null); setVoucherInputCode(''); setPointsToRedeem(0); setManualDiscount({ type: 'fixed', value: 0 });
+    setIsCartOpen(false); setCart([]); setCustomerName(''); setAppliedVoucher(null); setVoucherInputCode(''); setPointsToRedeem(0); setOrderType('Takeaway'); setManualDiscount({ type: 'fixed', value: 0 });
 
     setReceiptModal({ isOpen: true, data: newOrder, kembalian: isSplitMode ? splitKembalian : (method === 'Tunai' ? kembalian : 0) });
 
