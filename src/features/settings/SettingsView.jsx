@@ -78,7 +78,6 @@ const SettingsView = () => {
     setIsScanning(true);
     setScannedDevices([]);
 
-    // Fungsi utama untuk scan (dipisah agar bisa dipanggil setelah izin diberikan)
     const executeScan = () => {
       window.bluetoothSerial.isEnabled(
         () => {
@@ -92,7 +91,6 @@ const SettingsView = () => {
               setIsScanning(false);
             },
             (err) => {
-              // Tangkap pesan error spesifik jika izin tetap gagal di sistem
               if (err && typeof err === 'string' && err.includes('BLUETOOTH_CONNECT')) {
                 alert("Izin 'Perangkat di Sekitar' ditolak oleh sistem. Mohon izinkan manual di Pengaturan Aplikasi HP.");
               } else {
@@ -109,33 +107,31 @@ const SettingsView = () => {
       );
     };
 
-    // Pengecekan Runtime Permission untuk Android 12+
-    if (window.cordova && window.cordova.plugins && window.cordova.plugins.permissions) {
-      const permissions = window.cordova.plugins.permissions;
-      // Gunakan string native langsung agar kompatibel dengan berbagai versi plugin
-      const bluetoothConnectPermission = 'android.permission.BLUETOOTH_CONNECT';
+    // Deteksi versi Android dari user agent — gak perlu plugin tambahan (cordova-plugin-device)
+    const uaMatch = navigator.userAgent.match(/Android\s([0-9.]+)/);
+    const androidVersion = uaMatch ? parseFloat(uaMatch[1]) : null;
+    const needsRuntimePermission = androidVersion !== null && androidVersion >= 12;
 
-      permissions.hasPermission(bluetoothConnectPermission, (status) => {
-        if (status.hasPermission) {
-          // Izin sudah ada, langsung eksekusi scan
-          executeScan();
-        } else {
-          // Izin belum ada, tampilkan pop-up request ke user
-          permissions.requestPermission(bluetoothConnectPermission, (reqStatus) => {
-            if (reqStatus.hasPermission) {
-              executeScan(); // Lanjut scan jika di-allow
-            } else {
-              alert("Izin akses Bluetooth ditolak. Aplikasi tidak bisa mencari printer.");
-              setIsScanning(false);
-            }
-          }, () => {
-            alert("Gagal meminta izin Bluetooth dari sistem.");
+    if (needsRuntimePermission && window.cordova?.plugins?.permissions) {
+      const permissions = window.cordova.plugins.permissions;
+      permissions.requestPermissions(
+        ['android.permission.BLUETOOTH_CONNECT', 'android.permission.BLUETOOTH_SCAN'],
+        (status) => {
+          if (status.hasPermission) {
+            executeScan();
+          } else {
+            alert("Izin 'Perangkat di Sekitar' ditolak. Aktifkan manual di Pengaturan Aplikasi > Permissions.");
             setIsScanning(false);
-          });
+          }
+        },
+        () => {
+          alert("Gagal meminta izin dari sistem.");
+          setIsScanning(false);
         }
-      });
+      );
     } else {
-      // Fallback jika plugin permission tidak terinstall (misal di Android versi lama)
+      // Android 11 ke bawah: getBondedDevices() gak butuh izin runtime,
+      // permission BLUETOOTH normal udah auto-granted dari manifest.
       executeScan();
     }
   };
@@ -205,28 +201,8 @@ const SettingsView = () => {
               <TextInput label="Nomor Telepon / WhatsApp" icon={Phone} type="tel" placeholder="Misal: 081234567890" value={localSettings.storePhone} onChange={(val) => handleTextChange('storePhone', val)} />
               <TextInput label="Alamat Lengkap" icon={MapPin} type="textarea" placeholder="Masukkan alamat lengkap toko..." value={localSettings.storeAddress} onChange={(val) => handleTextChange('storeAddress', val)} helperText="Alamat ini akan dicetak pada bagian atas struk kasir." />
 
-              {/* Pesan Penutup Struk Dipindahkan Kesini */}
               <TextInput label="Pesan Penutup Struk (Footer)" icon={ReceiptText} type="textarea" placeholder="Misal: Terima kasih atas kunjungannya!" value={localSettings.receiptFooter} onChange={(val) => handleTextChange('receiptFooter', val)} />
-              <Button
-                type='submit'
-                variant='primary'
-                size="full"
-              >
-                <Save className="w-4 h-4" /> Simpan Pengaturan
-              </Button>
-              <div className={`transition-all duration-300 ${isSaved ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
-                <Alert
-                  type="callout"
-                  variant="success"
-                  animate={false}
-                  className="shadow-sm items-center"
-                >
-                  Perubahan berhasil disimpan
-                </Alert>
-              </div>
-            </div>
 
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
               <div className="flex items-center gap-2 border-b pb-2">
                 <Calculator className="w-5 h-5 text-slate-700 dark:text-slate-200" />
                 <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Pajak & Biaya Tambahan</h3>
@@ -246,6 +222,24 @@ const SettingsView = () => {
                     <span className="text-slate-400 dark:text-slate-500 font-bold">%</span>
                   </div>
                 </div>
+              </div>
+
+              <Button
+                type='submit'
+                variant='primary'
+                size="full"
+              >
+                <Save className="w-4 h-4" /> Simpan Pengaturan
+              </Button>
+              <div className={`transition-all duration-300 ${isSaved ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
+                <Alert
+                  type="callout"
+                  variant="success"
+                  animate={false}
+                  className="shadow-sm items-center"
+                >
+                  Perubahan berhasil disimpan
+                </Alert>
               </div>
             </div>
           </div>
