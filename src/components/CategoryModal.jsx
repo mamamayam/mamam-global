@@ -1,12 +1,27 @@
 import React, { useState } from 'react';
-import { X, Plus, Edit3, Trash2, Save, Layers, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, Plus, Edit3, Trash2, Save, Layers, GripVertical } from 'lucide-react';
+import {
+    DndContext,
+    closestCenter,
+    PointerSensor,
+    TouchSensor,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    useSortable,
+    verticalListSortingStrategy,
+    arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import Modal      from './ui/Modal';
 import Button     from './ui/Button';
 import IconButton from './ui/IconButton';
 import EmptyState from './ui/EmptyState';
 
 /**
- * Modal generic untuk kelola daftar kategori (tambah/edit/hapus/urutkan).
+ * Modal generic untuk kelola daftar kategori (tambah/edit/hapus/urutkan via drag).
  *
  * Props:
  * - isOpen, onClose
@@ -18,6 +33,82 @@ import EmptyState from './ui/EmptyState';
  * - onDeleteFallback: string — nama kategori pengganti di teks konfirmasi
  * - triggerAlert, triggerConfirm: dari useAppContext
  */
+
+// ── Sortable item ─────────────────────────────────────────────────────────────
+// Dipisah jadi komponen sendiri karena useSortable harus dipanggil di level item,
+// bukan di loop induk.
+function SortableCategoryItem({
+    cat, idx,
+    editIndex, editValue, setEditValue,
+    startEdit, saveEdit, handleDelete, setEditIndex,
+}) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+        useSortable({ id: cat });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+    };
+
+    return (
+        <li
+            ref={setNodeRef}
+            style={style}
+            className={`flex items-center p-3 transition-colors
+                border-b border-slate-100 dark:border-slate-800 last:border-0
+                ${isDragging
+                    ? 'bg-orange-50 dark:bg-orange-950/20 shadow-lg relative z-10 rounded-xl opacity-90'
+                    : 'hover:bg-white dark:hover:bg-slate-900'
+                }`}
+        >
+            {editIndex === idx ? (
+                // Mode edit inline — border biru intentional (bukan orange)
+                // karena ini edit state, bukan input form biasa
+                <div className="flex flex-1 gap-2 mr-2 animate-in fade-in">
+                    <input
+                        type="text"
+                        value={editValue}
+                        onChange={e => setEditValue(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && saveEdit(cat, idx)}
+                        className="flex-1 p-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-500/40 rounded-lg outline-none focus:border-blue-500 dark:focus:border-blue-400 text-sm font-bold text-slate-700 dark:text-slate-200 shadow-sm transition-colors"
+                        autoFocus
+                    />
+                    <IconButton variant="success" onClick={() => saveEdit(cat, idx)}>
+                        <Save className="w-4 h-4" />
+                    </IconButton>
+                    <IconButton variant="neutral" onClick={() => setEditIndex(-1)}>
+                        <X className="w-4 h-4" />
+                    </IconButton>
+                </div>
+            ) : (
+                <>
+                    {/* Drag handle — listeners hanya di sini, bukan seluruh item,
+                        supaya tombol Edit/Hapus tetap bisa diklik normal */}
+                    <span
+                        {...attributes}
+                        {...listeners}
+                        className="mr-2 shrink-0 text-slate-300 dark:text-slate-600 cursor-grab active:cursor-grabbing touch-none"
+                    >
+                        <GripVertical className="w-4 h-4" />
+                    </span>
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate flex-1 mr-2">
+                        {cat}
+                    </span>
+                    <div className="flex gap-1 shrink-0">
+                        <IconButton variant="edit" onClick={() => startEdit(cat, idx)}>
+                            <Edit3 className="w-4 h-4" />
+                        </IconButton>
+                        <IconButton variant="delete" onClick={() => handleDelete(cat, idx)}>
+                            <Trash2 className="w-4 h-4" />
+                        </IconButton>
+                    </div>
+                </>
+            )}
+        </li>
+    );
+}
+
+// ── Main modal ────────────────────────────────────────────────────────────────
 const CategoryModal = ({
     isOpen, onClose, title = 'Kelola Kategori',
     categories = [], setCategories,
@@ -27,6 +118,13 @@ const CategoryModal = ({
     const [newCat, setNewCat]       = useState('');
     const [editIndex, setEditIndex] = useState(-1);
     const [editValue, setEditValue] = useState('');
+
+    // TouchSensor penting untuk Android via Capacitor.
+    // delay 150ms + tolerance 5px supaya scroll vertikal modal tetap jalan normal.
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+        useSensor(TouchSensor,   { activationConstraint: { delay: 150, tolerance: 5 } }),
+    );
 
     // ── Handlers ────────────────────────────────────────────────────────────
     const handleAdd = () => {
@@ -63,18 +161,12 @@ const CategoryModal = ({
         setEditIndex(-1);
     };
 
-    const moveUp = (idx) => {
-        if (idx === 0) return;
-        const next = [...categories];
-        [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-        setCategories(next);
-    };
-
-    const moveDown = (idx) => {
-        if (idx === categories.length - 1) return;
-        const next = [...categories];
-        [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
-        setCategories(next);
+    // categories adalah string[] tanpa duplicate → aman dipakai sebagai drag ID
+    const handleDragEnd = ({ active, over }) => {
+        if (!over || active.id === over.id) return;
+        const oldIndex = categories.indexOf(active.id);
+        const newIndex = categories.indexOf(over.id);
+        setCategories(arrayMove(categories, oldIndex, newIndex));
     };
 
     // ── Render ───────────────────────────────────────────────────────────────
@@ -119,67 +211,30 @@ const CategoryModal = ({
                         title="Belum ada kategori terdaftar."
                     />
                 ) : (
-                    <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {categories.map((cat, idx) => (
-                            <li
-                                key={idx}
-                                className="flex justify-between items-center p-3 hover:bg-white dark:hover:bg-slate-900 transition-colors"
-                            >
-                                {editIndex === idx ? (
-                                    // Mode edit inline — border biru intentional (bukan orange)
-                                    // karena ini edit state, bukan input form biasa
-                                    <div className="flex flex-1 gap-2 mr-2 animate-in fade-in">
-                                        <input
-                                            type="text"
-                                            value={editValue}
-                                            onChange={e => setEditValue(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && saveEdit(cat, idx)}
-                                            className="flex-1 p-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-500/40 rounded-lg outline-none focus:border-blue-500 dark:focus:border-blue-400 text-sm font-bold text-slate-700 dark:text-slate-200 shadow-sm transition-colors"
-                                            autoFocus
-                                        />
-                                        <IconButton variant="success" onClick={() => saveEdit(cat, idx)}>
-                                            <Save className="w-4 h-4" />
-                                        </IconButton>
-                                        <IconButton variant="neutral" onClick={() => setEditIndex(-1)}>
-                                            <X className="w-4 h-4" />
-                                        </IconButton>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate mr-2">
-                                            {cat}
-                                        </span>
-                                        <div className="flex gap-1 shrink-0">
-                                            <IconButton
-                                                variant="neutral"
-                                                size="sm"
-                                                onClick={() => moveUp(idx)}
-                                                disabled={idx === 0}
-                                                title="Pindah ke atas"
-                                            >
-                                                <ChevronUp className="w-3.5 h-3.5" />
-                                            </IconButton>
-                                            <IconButton
-                                                variant="neutral"
-                                                size="sm"
-                                                onClick={() => moveDown(idx)}
-                                                disabled={idx === categories.length - 1}
-                                                title="Pindah ke bawah"
-                                            >
-                                                <ChevronDown className="w-3.5 h-3.5" />
-                                            </IconButton>
-                                            <IconButton variant="edit" onClick={() => startEdit(cat, idx)}>
-                                                <Edit3 className="w-4 h-4" />
-                                            </IconButton>
-                                            <IconButton variant="delete" onClick={() => handleDelete(cat, idx)}>
-                                                <Trash2 className="w-4 h-4" />
-                                            </IconButton>
-                                        </div>
-                                    </>
-                                )}
-                            </li>
-                        ))}
-                    </ul>
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                    >
+                        <SortableContext items={categories} strategy={verticalListSortingStrategy}>
+                            <ul>
+                                {categories.map((cat, idx) => (
+                                    <SortableCategoryItem
+                                        key={cat}
+                                        cat={cat}
+                                        idx={idx}
+                                        editIndex={editIndex}
+                                        editValue={editValue}
+                                        setEditValue={setEditValue}
+                                        startEdit={startEdit}
+                                        saveEdit={saveEdit}
+                                        handleDelete={handleDelete}
+                                        setEditIndex={setEditIndex}
+                                    />
+                                ))}
+                            </ul>
+                        </SortableContext>
+                    </DndContext>
                 )}
             </div>
 

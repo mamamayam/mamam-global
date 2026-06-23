@@ -117,7 +117,7 @@ const EmployeesView = () => {
             id: Date.now() + Math.random(),
             category: 'Bonus Full Time',
             amount: Number(bonusAmount),
-            note: 'Otomatis (Kerja 10 Jam)',
+            note: '(10 jam)',
             expenseRecorded: false
           }];
         }
@@ -502,7 +502,7 @@ const EmployeesView = () => {
 
               <Input
                 type="number"
-                label={adjCategory.toLowerCase() === 'lembur' ? 'Nominal Lembur (Otomatis)' : 'Nominal'}
+                label={adjCategory.toLowerCase() === 'lembur' ? 'Nominal Lembur' : 'Nominal'}
                 variant="muted"
                 icon={<span className="font-bold">Rp</span>}
                 placeholder="0"

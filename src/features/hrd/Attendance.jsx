@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Fingerprint, RefreshCw, Clock, Users, Trash2, RotateCcw, Link2, Copy, CheckCircle2,
+  AlertTriangle, Camera,
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { toLocalDateString } from '../../utils/formatters';
@@ -13,7 +14,7 @@ import {
 
 // URL web absen karyawan (project terpisah, di-deploy ke Vercel — lihat Step 4).
 // Ganti placeholder ini setelah web absennya online.
-const ATTENDANCE_WEB_URL = 'https://absen-mamam-kasir.vercel.app';
+const ATTENDANCE_WEB_URL = 'https://absenmamam.vercel.app';
 
 // Kode OTP berlaku 30 detik, lalu otomatis diganti.
 const OTP_LIFETIME_MS = 30_000;
@@ -239,6 +240,22 @@ export default function Attendance() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  {(masuk?.photoUrl || keluar?.photoUrl) && (
+                    <a
+                      href={(keluar?.photoUrl) || masuk?.photoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Lihat foto selfie"
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    >
+                      <Camera className="w-4 h-4" />
+                    </a>
+                  )}
+                  {(masuk?.location?.flagged || keluar?.location?.flagged) && (
+                    <span title="Lokasi jauh dari outlet">
+                      <AlertTriangle className="w-4 h-4 text-amber-500" />
+                    </span>
+                  )}
                   {keluar ? (
                     <Badge variant="neutral" dot>Pulang</Badge>
                   ) : masuk ? (

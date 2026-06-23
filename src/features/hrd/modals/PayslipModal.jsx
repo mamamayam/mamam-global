@@ -4,8 +4,8 @@ import { useAppContext } from "../../../context/AppContext";
 import { Capacitor } from '@capacitor/core';
 import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import jsPDF from 'jspdf';
-import { toPng } from 'html-to-image';
+import { pdf } from '@react-pdf/renderer';
+import PayslipPDFDocument from './PayslipPDFDocument';
 
 const PayslipModal = () => {
   const { payslipModal, setPayslipModal, formatRupiah } = useAppContext();
@@ -14,57 +14,33 @@ const PayslipModal = () => {
 
   const basicPay = data.totalHours * data.employee.hourlyRate;
 
+  const monthLabel = new Date(`${month}-01`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+
   const handleSharePDF = async () => {
-    const element = document.getElementById('payslip-content');
-    if (!element) {
-      alert('Error: Elemen payslip tidak ditemukan.');
-      return;
-    }
-
     try {
-      // html-to-image pakai browser native rendering - support oklch & CSS modern
-      const dataUrl = await toPng(element, {
-        backgroundColor: '#ffffff',
-        pixelRatio: 2,
-        width: element.scrollWidth,
-        height: element.scrollHeight,
-        style: {
-          overflow: 'visible',
-          height: `${element.scrollHeight}px`,
-        },
-      });
-
-      const img = new Image();
-      img.src = dataUrl;
-      await new Promise((resolve) => { img.onload = resolve; });
-
-      const imgData = dataUrl;
-      const imgWidth = 210; // A4 width mm
-      const pageHeight = 297; // A4 height mm
-      const imgHeight = (img.naturalHeight * imgWidth) / img.naturalWidth;
-
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
+      // Generate PDF murni dari JSX — teks asli, bukan gambar
+      const blob = await pdf(
+        <PayslipPDFDocument
+          data={data}
+          monthLabel={monthLabel}
+          formatRupiah={formatRupiah}
+        />
+      ).toBlob();
 
       const fileName = `slip-gaji-${data.employee.name}-${month}.pdf`;
 
       if (Capacitor.isNativePlatform()) {
-        const pdfBase64 = pdf.output('datauristring').split(',')[1];
+        // Blob → base64 untuk Capacitor Filesystem
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
 
         const savedFile = await Filesystem.writeFile({
           path: fileName,
-          data: pdfBase64,
+          data: base64,
           directory: Directory.Cache,
         });
 
@@ -76,7 +52,12 @@ const PayslipModal = () => {
         });
       } else {
         // Web: auto-download PDF
-        pdf.save(fileName);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
       }
     } catch (error) {
       console.error('PDF Error:', error);
@@ -85,8 +66,6 @@ const PayslipModal = () => {
       }
     }
   };
-
-  const monthLabel = new Date(`${month}-01`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
 
   // Urutkan records berdasarkan tanggal
   const sortedRecords = [...data.records].sort((a, b) => new Date(a.date) - new Date(b.date));
