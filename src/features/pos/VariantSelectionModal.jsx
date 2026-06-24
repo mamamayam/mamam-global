@@ -3,7 +3,18 @@ import { useAppContext } from '../../context/AppContext';
 import { X, CheckCircle2 } from 'lucide-react';
 
 const VariantSelectionModal = () => {
-  const { selectedMenuForVariant, setSelectedMenuForVariant, variantGroups, formatRupiah, addToCart, variantSelectedOptions, setVariantSelectedOptions } = useAppContext();
+  const { 
+    selectedMenuForVariant, 
+    setSelectedMenuForVariant, 
+    variantGroups, 
+    formatRupiah, 
+    addToCart, 
+    variantSelectedOptions, 
+    setVariantSelectedOptions,
+    editingCartItemId,
+    setEditingCartItemId,
+    updateCartItemVariants
+  } = useAppContext();
 
   if (!selectedMenuForVariant) return null;
   const menuVariants = variantGroups.filter(vg => selectedMenuForVariant.variantGroupIds.includes(vg.id));
@@ -25,16 +36,34 @@ const VariantSelectionModal = () => {
     return true;
   });
 
+  const handleCloseModal = () => {
+    setSelectedMenuForVariant(null);
+    setVariantSelectedOptions({});
+    setEditingCartItemId(null); 
+  };
+
+  const handleSave = () => {
+    if (editingCartItemId) {
+      updateCartItemVariants(editingCartItemId, variantSelectedOptions);
+      setEditingCartItemId(null);
+      setSelectedMenuForVariant(null);
+    } else {
+      addToCart(selectedMenuForVariant, variantSelectedOptions);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-black backdrop-blur-sm transition-opacity duration-300">
       <div className="bg-white dark:bg-slate-900 w-full md:w-[450px] rounded-t-3xl md:rounded-3xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-full md:zoom-in-95 duration-300 ease-out max-h-[90vh] flex flex-col">
 
         <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 sticky top-0 z-10">
           <div>
-            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg leading-tight">{selectedMenuForVariant.name}</h3>
+            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg leading-tight">
+              {editingCartItemId ? `Edit Varian: ${selectedMenuForVariant.name}` : selectedMenuForVariant.name}
+            </h3>
             <p className="text-sm font-bold text-orange-600 dark:text-orange-400">{formatRupiah(selectedMenuForVariant.price)}</p>
           </div>
-          <button onClick={() => setSelectedMenuForVariant(null)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"><X className="w-5 h-5" /></button>
+          <button onClick={handleCloseModal} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-5 overflow-y-auto flex-1 space-y-6 bg-slate-50 dark:bg-slate-950/50">
@@ -77,8 +106,8 @@ const VariantSelectionModal = () => {
         </div>
 
         <div className="p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
-          <button onClick={() => isSelectionValid && addToCart(selectedMenuForVariant, variantSelectedOptions)} disabled={!isSelectionValid} className="w-full py-3.5 rounded-xl bg-orange-600 dark:bg-orange-500 text-white font-bold disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-lg transition-all duration-300">
-            {isSelectionValid ? 'Tambah ke Keranjang' : 'Lengkapi Pilihan Wajib'}
+          <button onClick={() => isSelectionValid && handleSave()} disabled={!isSelectionValid} className="w-full py-3.5 rounded-xl bg-orange-600 dark:bg-orange-500 text-white font-bold disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-lg transition-all duration-300">
+            {editingCartItemId ? 'Simpan Perubahan Varian' : (isSelectionValid ? 'Tambah ke Keranjang' : 'Lengkapi Pilihan Wajib')}
           </button>
         </div>
       </div>

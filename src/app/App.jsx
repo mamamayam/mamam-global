@@ -80,6 +80,8 @@ export default function App() {
   const exitToastTimerRef = useRef(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
+  const [variantCategories, setVariantCategories] = useState(['Lainnya']);
+
 
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
@@ -183,7 +185,7 @@ export default function App() {
   const [incomes, setIncomes, l12, setIncomesRemote] = usePersistState('incomes', [], { syncMode: 'transaction', syncReadyPromise });
 
   // --- SHIFT ---
-  const [currentShift, setCurrentShift, l13, setCurrentShiftRemote] = usePersistState('currentShift', null, { syncMode: 'config', pushDelay: 0, syncReadyPromise });
+  const [currentShift, setCurrentShift, l13, setCurrentShiftRemote] = usePersistState('currentShift', null, { syncMode: 'live', syncReadyPromise });
   const [shiftHistory, setShiftHistory, l14, setShiftHistoryRemote] = usePersistState('shiftHistory', [], { syncMode: 'transaction', syncReadyPromise });
 
   // --- PELANGGAN ----
@@ -365,6 +367,7 @@ export default function App() {
 
   const [selectedMenuForVariant, setSelectedMenuForVariant] = useState(null);
   const [variantSelectedOptions, setVariantSelectedOptions] = useState({});
+  const [editingCartItemId, setEditingCartItemId] = useState(null);
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
@@ -466,8 +469,41 @@ export default function App() {
 
     const existingItem = cart.find(item => item.cartItemId === cartItemId);
     if (existingItem) setCart(cart.map(item => item.cartItemId === cartItemId ? { ...item, qty: item.qty + 1 } : item));
-    else setCart([...cart, { cartItemId, menuId: menu.id, name: menu.name, variantName: variantNameStr, price, qty: 1, hpp: menu.hpp, note: '' }]);
+    else setCart([...cart, { cartItemId, menuId: menu.id, name: menu.name, variantName: variantNameStr, price, qty: 1, hpp: menu.hpp, note: '', variantSelectedOptions: selectedOptions }]);
     setSelectedMenuForVariant(null);
+  };
+
+  const updateCartItemVariants = (oldCartItemId, newVariants) => {
+    setCart(cart.map(item => {
+      if (item.cartItemId === oldCartItemId) {
+        let extraPriceTotal = 0, variantNames = [], selectedVariantDetails = [];
+
+        Object.entries(newVariants).forEach(([groupId, optionIds]) => {
+          const group = variantGroups.find(g => g.id === groupId);
+          if (group) {
+            optionIds.forEach(optId => {
+              const opt = group.options.find(o => o.id === optId);
+              if (opt) { extraPriceTotal += opt.extraPrice; variantNames.push(opt.name); selectedVariantDetails.push({ optionId: opt.id }); }
+            });
+          }
+        });
+
+        const menu = menus.find(m => m.id === item.menuId);
+        const basePrice = menu ? menu.price : 0;
+        const newVariantNameStr = variantNames.join(', ');
+        const optionKeys = selectedVariantDetails.map(v => v.optionId).sort().join('-');
+        const newCartItemId = optionKeys ? `${item.menuId}-${optionKeys}` : item.menuId;
+
+        return { 
+          ...item, 
+          cartItemId: newCartItemId, 
+          variantName: newVariantNameStr, 
+          price: basePrice + extraPriceTotal,
+          variantSelectedOptions: newVariants 
+        };
+      }
+      return item;
+    }));
   };
 
   const updateCartQty = (cartItemId, delta) => {
@@ -586,9 +622,13 @@ export default function App() {
     updateCartQty,
     updateCartItemNote,
     isCartOpen, setIsCartOpen,
+    editingCartItemId,
+    setEditingCartItemId,
+    updateCartItemVariants,
     menus, setMenus,
     selectedMenuForVariant, setSelectedMenuForVariant,
     variantGroups, setVariantGroups,
+    variantCategories, setVariantCategories,
     variantSelectedOptions, setVariantSelectedOptions,
     isSidebarOpen,
 
@@ -964,13 +1004,6 @@ export default function App() {
   );
 }
 
-
-/**
- * Badge kecil di pojok kanan bawah layar.
- * - Tidak muncul jika Supabase tidak dikonfigurasi (status 'idle')
- * - Muncul sebentar saat 'ready' lalu fade out
- * - Tetap muncul merah saat 'error'
- */
 function SyncStatusBadge({ status }) {
   const [visible, setVisible] = useState(false);
 

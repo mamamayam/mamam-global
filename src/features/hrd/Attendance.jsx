@@ -1,111 +1,138 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Fingerprint, RefreshCw, Clock, Users, Trash2, RotateCcw, Link2, Copy, CheckCircle2,
-  AlertTriangle, Camera,
+  Fingerprint, Users, Trash2, RotateCcw,
+  AlertTriangle, Camera, AlarmClock, X, PenLine,
+  History, Search, Calendar, ChevronRight, Filter, ArrowUpDown,
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { toLocalDateString } from '../../utils/formatters';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
-import { pushConfig } from '../../storage/realtimeSync';
 import { isSupabaseConfigured } from '../../storage/syncClient';
+import { pushTransactionDelete } from '../../storage/realtimeSync';
 import {
   Card, Button, PageHeader, EmptyState, Badge, IconButton, Alert,
 } from '../../components/ui';
 
-// URL web absen karyawan (project terpisah, di-deploy ke Vercel — lihat Step 4).
-// Ganti placeholder ini setelah web absennya online.
-const ATTENDANCE_WEB_URL = 'https://absenmamam.vercel.app';
+const AUTO_CLOSE_HOUR = 21;
+const OUTLET_CLOSE_HOUR = 19;
 
-// Kode OTP berlaku 30 detik, lalu otomatis diganti.
-const OTP_LIFETIME_MS = 30_000;
+const LOG_FILTER_TABS = [
+  { id: 'hari-ini', label: 'Hari Ini' },
+  { id: '7-hari', label: '7 Hari' },
+  { id: '30-hari', label: '30 Hari' },
+  { id: 'bulan-berjalan', label: 'Bulan Ini' },
+  { id: 'semua', label: 'Semua Waktu' },
+  { id: 'kustom', label: 'Pilih Tanggal' },
+];
 
-function generateOtp() {
-  // 6 digit, gak diawali 0 biar gak ambigu kalau dibaca cepat
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
+const TYPE_OPTIONS = [
+  { value: 'semua', label: 'Semua Tipe' },
+  { value: 'masuk', label: 'Masuk' },
+  { value: 'bolong', label: 'Jam Bolong' },
+  { value: 'keluar', label: 'Pulang' },
+];
+
+const TYPE_LABEL = { masuk: 'Masuk', keluar: 'Pulang', bolong: 'Jam Bolong' };
+const TYPE_VARIANT = { masuk: 'success', keluar: 'neutral', bolong: 'warning' };
 
 /**
- * Attendance — layar yang dibuka kasir/owner & ditunjukkan ke karyawan saat
- * mereka datang. Nggak ada form di sini — cuma kode OTP (di-refresh tiap 30s)
- * + rekap siapa yang sudah/belum absen hari ini.
+ * Attendance — rekap & riwayat absensi untuk owner/admin.
  *
- * Karyawan absen lewat web terpisah (ATTENDANCE_WEB_URL) di HP masing-masing:
- * pilih nama → masukkan kode yang tampil di sini. Web itu insert langsung ke
- * tabel Supabase `attendanceLog`, yang otomatis nongol di sini lewat realtime
- * sync yang sudah disambungkan di App.jsx (tidak perlu polling manual).
+ * Section 1 — Status Hari Ini: status live semua karyawan (masuk/bolong/pulang)
+ *   + koreksi manual (admin mode).
  *
- * Kode OTP sendiri NGGAK disimpan di Dexie/state lokal (cuma hidup di memori
- * komponen ini) — tiap kali digenerate, langsung ditembak ke tabel
- * `app_config` (key: 'attendanceOtp') lewat pushConfig() yang sudah ada,
- * supaya web absen bisa baca & validasi kode yang diketik karyawan.
- *
- * Bentuk 1 record `attendanceLog` (diisi oleh web absen):
- *   { id, employeeId, employeeName, type: 'masuk'|'keluar', date, dateStr, deletedAt }
- *
- * Catatan: kalau ada 2 device yang sama-sama buka layar ini bersamaan, masing-
- * masing akan generate kode sendiri-sendiri tiap 30s (saling override di
- * Supabase). Untuk skala outlet kecil yang biasanya cuma 1 device buka ini
- * per shift, ini belum jadi masalah — kalau nanti kepakai multi-device
- * bersamaan, baru perlu dipikirin mekanisme "lock" tambahan.
+ * Section 2 — Riwayat Log Absen: semua record `attendanceLog` dengan filter
+ *   periode, tipe, karyawan, sort, dan search — mirip HistoryView pesanan.
+ *   Admin bisa soft-delete dan restore dari sini.
  */
 export default function Attendance() {
-  const { employees, attendanceLog, setAttendanceLog, isAdminMode } = useAppContext();
+  const { employees, attendanceLog, setAttendanceLog, isAdminMode, triggerConfirm } = useAppContext();
 
-  const [otpCode, setOtpCode] = useState(() => generateOtp());
-  const [otpGeneratedAt, setOtpGeneratedAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
-  const [showTrash, setShowTrash] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [autoClosedEmployees, setAutoClosedEmployees] = useState([]);
+  const autoCloseRef = useRef('');
 
-  // Tick tiap detik buat countdown visual
+  // Koreksi manual (Status Hari Ini)
+  const [editEmployeeId, setEditEmployeeId] = useState(null);
+  const [editType, setEditType] = useState('masuk');
+  const [editTime, setEditTime] = useState('');
+
+  // History section
+  const [showHistoryTrash, setShowHistoryTrash] = useState(false);
+  const [dateFilter, setDateFilter] = useState('hari-ini');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [typeFilter, setTypeFilter] = useState('semua');
+  const [empFilter, setEmpFilter] = useState('semua');
+  const [sortOrder, setSortOrder] = useState('terbaru');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Tick tiap detik untuk countdown auto-close
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
 
-  const pushOtp = (code) => {
-    pushConfig('attendanceOtp', {
-      code,
-      generatedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + OTP_LIFETIME_MS).toISOString(),
-    }, undefined, 0); // delay 0 — kirim langsung, gak usah didebounce kayak config biasa
-  };
-
-  // Generate kode baru tiap 30 detik + kirim kode awal pas mount.
-  // pushOtp sengaja gak dimasukin dependency array — dia stable enough
-  // (cuma baca otpCode lewat closure param, gak baca state luar).
+  // Auto-close jam 21:00 — insert record keluar bagi karyawan yang lupa absen
   useEffect(() => {
-    pushOtp(otpCode);
+    const nowDate = new Date(now);
+    if (nowDate.getHours() < AUTO_CLOSE_HOUR) return;
 
-    const timer = setInterval(() => {
-      const fresh = generateOtp();
-      setOtpCode(fresh);
-      setOtpGeneratedAt(Date.now());
-      pushOtp(fresh);
-    }, OTP_LIFETIME_MS);
+    const todayStr = toLocalDateString();
+    if (autoCloseRef.current === todayStr) return;
+    autoCloseRef.current = todayStr;
 
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const todayActiveAll = activeOnly(attendanceLog).filter(r => r.dateStr === todayStr);
 
-  const handleManualRefresh = () => {
-    const fresh = generateOtp();
-    setOtpCode(fresh);
-    setOtpGeneratedAt(Date.now());
-    pushOtp(fresh);
-  };
+    const getLastRecord = (empId) => {
+      const recs = todayActiveAll
+        .filter(r => r.employeeId === empId)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+      return recs[recs.length - 1];
+    };
 
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(ATTENDANCE_WEB_URL);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (_) {
-      // clipboard API gak tersedia (mis. http non-secure) — diemin aja
-    }
-  };
+    const toAutoCloseMasuk = employees.filter(emp => getLastRecord(emp.id)?.type === 'masuk');
+    const toAutoCloseBolong = employees.filter(emp => getLastRecord(emp.id)?.type === 'bolong');
 
-  const secondsLeft = Math.max(0, Math.ceil((otpGeneratedAt + OTP_LIFETIME_MS - now) / 1000));
+    if (toAutoCloseMasuk.length === 0 && toAutoCloseBolong.length === 0) return;
+
+    const outletCloseDate = new Date(nowDate);
+    outletCloseDate.setHours(OUTLET_CLOSE_HOUR, 0, 0, 0);
+
+    const newRecords = [
+      ...toAutoCloseMasuk.map(emp => ({
+        id: `AUTO-KELUAR-${emp.id}-${todayStr}`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        type: 'keluar',
+        date: outletCloseDate.toISOString(),
+        dateStr: todayStr,
+        isAutoClose: true,
+        deletedAt: null,
+      })),
+      ...toAutoCloseBolong.map(emp => {
+        const bolongRec = getLastRecord(emp.id);
+        return {
+          id: `AUTO-KELUAR-BOLONG-${emp.id}-${todayStr}`,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          type: 'keluar',
+          date: bolongRec.date,
+          dateStr: todayStr,
+          isAutoClose: true,
+          isFromBolong: true,
+          deletedAt: null,
+        };
+      }),
+    ];
+
+    setAttendanceLog(prev => [...prev, ...newRecords]);
+    setAutoClosedEmployees([
+      ...toAutoCloseMasuk.map(e => ({ name: e.name, fromBolong: false })),
+      ...toAutoCloseBolong.map(e => ({ name: e.name, fromBolong: true })),
+    ]);
+  }, [now, attendanceLog, employees, setAttendanceLog]);
+
   const todayStr = toLocalDateString();
 
   const todayActive = useMemo(
@@ -113,37 +140,131 @@ export default function Attendance() {
     [attendanceLog, todayStr]
   );
 
-  const trashedToday = useMemo(
-    () => trashedOnly(attendanceLog).filter(r => r.dateStr === todayStr),
-    [attendanceLog, todayStr]
-  );
-
-  // Status tiap karyawan hari ini: belum absen / sudah masuk / sudah pulang
-  const employeeStatuses = useMemo(() => {
-    return employees.map(emp => {
-      const records = todayActive
-        .filter(r => r.employeeId === emp.id)
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
-      return {
-        employee: emp,
-        masuk: records.find(r => r.type === 'masuk'),
-        keluar: records.find(r => r.type === 'keluar'),
-      };
-    });
-  }, [employees, todayActive]);
+  const employeeStatuses = useMemo(() => employees.map(emp => {
+    const records = todayActive
+      .filter(r => r.employeeId === emp.id)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    const lastRecord = records[records.length - 1];
+    const bolongRecords = records.filter(r => r.type === 'bolong');
+    return {
+      employee: emp,
+      masuk: records.find(r => r.type === 'masuk'),
+      bolong: bolongRecords[bolongRecords.length - 1],
+      keluar: records.find(r => r.type === 'keluar'),
+      lastRecord,
+    };
+  }), [employees, todayActive]);
 
   const sudahMasukCount = employeeStatuses.filter(s => s.masuk).length;
 
-  const handleDeleteRecord = (id) => {
-    setAttendanceLog(prev => prev.map(r => (r.id === id ? markDeleted(r) : r)));
+  // ─── History helpers ────────────────────────────────────────────────────────
+
+  // Daftar karyawan unik di seluruh log (termasuk yang sudah tidak aktif)
+  const uniqueLogEmployees = useMemo(() => {
+    const map = new Map();
+    attendanceLog.forEach(r => {
+      if (!map.has(r.employeeId))
+        map.set(r.employeeId, r.employeeName || r.employeeId);
+    });
+    return [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'id'));
+  }, [attendanceLog]);
+
+  const baseLogSource = showHistoryTrash
+    ? trashedOnly(attendanceLog)
+    : activeOnly(attendanceLog);
+
+  const filteredLogs = useMemo(() => {
+    const now = new Date();
+    const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const inRange = (dateString) => {
+      const d = new Date(dateString);
+      switch (dateFilter) {
+        case 'hari-ini': return d >= todayMid;
+        case '7-hari': {
+          const cutoff = new Date(todayMid); cutoff.setDate(cutoff.getDate() - 7);
+          return d >= cutoff;
+        }
+        case '30-hari': {
+          const cutoff = new Date(todayMid); cutoff.setDate(cutoff.getDate() - 30);
+          return d >= cutoff;
+        }
+        case 'bulan-berjalan':
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        case 'kustom': {
+          if (!customStartDate || !customEndDate) return true;
+          const start = new Date(customStartDate); start.setHours(0, 0, 0, 0);
+          const end = new Date(customEndDate); end.setHours(23, 59, 59, 999);
+          return d >= start && d <= end;
+        }
+        case 'semua':
+        default: return true;
+      }
+    };
+
+    const lower = searchTerm.trim().toLowerCase();
+
+    return baseLogSource
+      .filter(r => inRange(r.date))
+      .filter(r => typeFilter === 'semua' || r.type === typeFilter)
+      .filter(r => empFilter === 'semua' || r.employeeId === empFilter)
+      .filter(r => !lower || (r.employeeName ?? '').toLowerCase().includes(lower))
+      .sort((a, b) =>
+        sortOrder === 'terbaru'
+          ? new Date(b.date) - new Date(a.date)
+          : new Date(a.date) - new Date(b.date)
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseLogSource, dateFilter, customStartDate, customEndDate, typeFilter, empFilter, sortOrder, searchTerm]);
+
+  // ─── Handlers ───────────────────────────────────────────────────────────────
+
+  const handleDeleteRecord = (id) =>
+    setAttendanceLog(prev => prev.map(r => r.id === id ? markDeleted(r) : r));
+
+  const handleRestoreRecord = (id) =>
+    setAttendanceLog(prev => prev.map(r => r.id === id ? restoreItem(r) : r));
+
+  const handlePermanentDeleteRecord = (id) => {
+    triggerConfirm(
+      'Hapus record absen ini secara permanen? Tindakan ini tidak bisa dibatalkan.',
+      () => {
+        // 1. Hapus dari local state (layar langsung update)
+        setAttendanceLog(prev => prev.filter(r => r.id !== id));
+
+        // 2. Hapus dari Supabase cloud (background, tidak blokir UI)
+        pushTransactionDelete('attendanceLog', id).catch(err =>
+          console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+        );
+      }
+    );
   };
 
-  const handleRestoreRecord = (id) => {
-    setAttendanceLog(prev => prev.map(r => (r.id === id ? restoreItem(r) : r)));
+  const handleAddManualRecord = (employeeId, employeeName) => {
+    if (!editTime) return;
+    const [h, m] = editTime.split(':').map(Number);
+    const date = new Date(); date.setHours(h, m, 0, 0);
+    setAttendanceLog(prev => [...prev, {
+      id: `MANUAL-${employeeId}-${editType}-${Date.now()}`,
+      employeeId,
+      employeeName,
+      type: editType,
+      date: date.toISOString(),
+      dateStr: toLocalDateString(),
+      isManual: true,
+      deletedAt: null,
+    }]);
+    setEditEmployeeId(null);
   };
 
-  const formatTime = (d) =>
-    new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const fmtTime = (d) => new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const trashedCount = trashedOnly(attendanceLog).length;
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6">
@@ -153,6 +274,45 @@ export default function Attendance() {
         icon={<Fingerprint className="w-6 h-6" />}
       />
 
+      {/* ── Auto-close warning ─────────────────────────────────────────────── */}
+      {autoClosedEmployees.length > 0 && (
+        <div className="mb-4 border-2 border-red-500 bg-red-50 dark:bg-red-950/40 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 w-10 h-10 bg-red-100 dark:bg-red-900/60 rounded-full flex items-center justify-center">
+              <AlarmClock className="w-5 h-5 text-red-600 dark:text-red-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-red-700 dark:text-red-400 text-sm">
+                ⚠️ Absen Pulang Otomatis — Dicatat Jam {OUTLET_CLOSE_HOUR}:00
+              </p>
+              <p className="text-xs text-red-600 dark:text-red-500 mt-0.5 mb-2">
+                Karyawan berikut tidak absen pulang sampai jam {AUTO_CLOSE_HOUR}:00, sehingga jam pulang dicatat otomatis
+                pukul <span className="font-semibold">{OUTLET_CLOSE_HOUR}:00</span> (jam tutup outlet).
+                Yang bertanda <span className="font-semibold italic">(jam bolong)</span> — pulang dicatat saat mereka keluar bolong karena tidak absen balik.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {autoClosedEmployees.map(({ name, fromBolong }) => (
+                  <span
+                    key={name}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-300 text-xs font-bold"
+                  >
+                    {name}
+                    {fromBolong && <span className="font-normal opacity-70">(jam bolong)</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={() => setAutoClosedEmployees([])}
+              title="Tutup peringatan"
+              className="shrink-0 text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-300 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {!isSupabaseConfigured() && (
         <Alert type="callout" variant="warning" className="mb-4">
           Sinkronisasi cloud belum aktif. Karyawan belum bisa absen lewat HP sendiri
@@ -160,63 +320,12 @@ export default function Attendance() {
         </Alert>
       )}
 
-      {/* === Kode OTP — ini bagian yang diliatin ke karyawan === */}
-      <Card variant="dark-elevated" padding="lg" className="text-center mb-6">
-        <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-2">
-          Kode Absen Hari Ini
-        </p>
-        <p className="font-heading text-5xl md:text-6xl font-black tracking-[0.2em] text-orange-400 mb-3">
-          {otpCode}
-        </p>
-        <div className="flex items-center justify-center gap-2 text-xs text-slate-400 font-medium mb-4">
-          <Clock className="w-3.5 h-3.5" />
-          Berganti dalam {secondsLeft} detik
-        </div>
-        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mb-4">
-          <div
-            className="h-full bg-orange-500 transition-all duration-1000 ease-linear"
-            style={{ width: `${(secondsLeft / 30) * 100}%` }}
-          />
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          icon={<RefreshCw className="w-3.5 h-3.5" />}
-          onClick={handleManualRefresh}
-        >
-          Ganti Kode Sekarang
-        </Button>
-      </Card>
-
-      <Alert
-        type="callout"
-        variant="info"
-        icon={<Link2 className="w-4 h-4 mt-0.5 shrink-0" />}
-        action={
-          <IconButton variant="neutral" size="sm" title="Salin link" onClick={handleCopyLink}>
-            {copied ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-          </IconButton>
-        }
-        className="mb-6"
-      >
-        Karyawan absen lewat HP masing-masing di{' '}
-        <span className="font-bold break-all">{ATTENDANCE_WEB_URL}</span>, lalu masukkan kode di atas.
-      </Alert>
-
-      {/* === Status karyawan hari ini === */}
+      {/* ── Status Hari Ini ────────────────────────────────────────────────── */}
       <Card padding="none" className="mb-6 overflow-hidden">
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800">
           <h3 className="font-bold text-sm text-slate-700 dark:text-slate-200 flex items-center gap-2">
             <Users className="w-4 h-4" /> Status Hari Ini
           </h3>
-          {isAdminMode && trashedToday.length > 0 && (
-            <button
-              onClick={() => setShowTrash(s => !s)}
-              className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-            >
-              {showTrash ? 'Tutup Sampah' : `Sampah (${trashedToday.length})`}
-            </button>
-          )}
         </div>
 
         {employees.length === 0 ? (
@@ -228,82 +337,329 @@ export default function Attendance() {
           />
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {employeeStatuses.map(({ employee, masuk, keluar }) => (
-              <div key={employee.id} className="p-4 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
-                    {employee.name}
-                  </p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">
-                    {masuk ? `Masuk ${formatTime(masuk.date)}` : 'Belum absen masuk'}
-                    {keluar && ` · Pulang ${formatTime(keluar.date)}`}
-                  </p>
+            {employeeStatuses.map(({ employee, masuk, bolong, keluar, lastRecord }) => (
+              <div key={employee.id} className="flex flex-col">
+                <div className="p-4 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
+                      {employee.name}
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                      {masuk ? `Masuk ${fmtTime(masuk.date)}` : 'Belum absen masuk'}
+                      {bolong && ` · Bolong ${fmtTime(bolong.date)}`}
+                      {keluar && ` · Pulang ${fmtTime(keluar.date)}`}
+                      {keluar?.isAutoClose && (
+                        <span className={`ml-1 font-medium ${keluar.isFromBolong ? 'text-orange-400' : 'text-amber-500'}`}>
+                          {keluar.isFromBolong ? '(dari bolong)' : '(auto)'}
+                        </span>
+                      )}
+                      {lastRecord?.isManual && <span className="ml-1 text-blue-400 font-medium">(manual)</span>}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {(masuk?.photoUrl || keluar?.photoUrl) && (
+                      <a
+                        href={keluar?.photoUrl || masuk?.photoUrl}
+                        target="_blank" rel="noreferrer"
+                        title="Lihat foto selfie"
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      >
+                        <Camera className="w-4 h-4" />
+                      </a>
+                    )}
+                    {(masuk?.location?.flagged || keluar?.location?.flagged) && (
+                      <span title="Lokasi jauh dari outlet">
+                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      </span>
+                    )}
+                    {lastRecord?.type === 'keluar' ? (
+                      <Badge variant="neutral" dot>Pulang</Badge>
+                    ) : lastRecord?.type === 'bolong' ? (
+                      <Badge variant="warning" dot>Jam Bolong</Badge>
+                    ) : lastRecord?.type === 'masuk' ? (
+                      <Badge variant="success" dot>Masuk</Badge>
+                    ) : (
+                      <Badge variant="warning" dot>Belum Absen</Badge>
+                    )}
+                    {isAdminMode && (
+                      <IconButton
+                        variant="neutral" ghost
+                        title="Tambah record manual"
+                        onClick={() => {
+                          if (editEmployeeId === employee.id) { setEditEmployeeId(null); return; }
+                          const d = new Date();
+                          setEditTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+                          setEditType('masuk');
+                          setEditEmployeeId(employee.id);
+                        }}
+                      >
+                        <PenLine className="w-4 h-4" />
+                      </IconButton>
+                    )}
+                    {isAdminMode && lastRecord && (
+                      <IconButton
+                        variant="delete" ghost
+                        title={`Hapus record ${lastRecord.type} terakhir`}
+                        onClick={() => handleDeleteRecord(lastRecord.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </IconButton>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {(masuk?.photoUrl || keluar?.photoUrl) && (
-                    <a
-                      href={(keluar?.photoUrl) || masuk?.photoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Lihat foto selfie"
-                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                    >
-                      <Camera className="w-4 h-4" />
-                    </a>
-                  )}
-                  {(masuk?.location?.flagged || keluar?.location?.flagged) && (
-                    <span title="Lokasi jauh dari outlet">
-                      <AlertTriangle className="w-4 h-4 text-amber-500" />
-                    </span>
-                  )}
-                  {keluar ? (
-                    <Badge variant="neutral" dot>Pulang</Badge>
-                  ) : masuk ? (
-                    <Badge variant="success" dot>Masuk</Badge>
-                  ) : (
-                    <Badge variant="warning" dot>Belum Absen</Badge>
-                  )}
-                  {isAdminMode && masuk && (
-                    <IconButton
-                      variant="delete"
-                      ghost
-                      title="Koreksi: hapus catatan absen ini"
-                      onClick={() => handleDeleteRecord(keluar ? keluar.id : masuk.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </IconButton>
-                  )}
-                </div>
+
+                {/* Panel koreksi manual */}
+                {isAdminMode && editEmployeeId === employee.id && (
+                  <div className="px-4 pb-4 bg-slate-50 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider pt-3 mb-2">
+                      Tambah Record Manual
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <select
+                        value={editType}
+                        onChange={e => setEditType(e.target.value)}
+                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      >
+                        <option value="masuk">Masuk</option>
+                        <option value="bolong">Jam Bolong</option>
+                        <option value="keluar">Keluar</option>
+                      </select>
+                      <input
+                        type="time" value={editTime}
+                        onChange={e => setEditTime(e.target.value)}
+                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      />
+                      <button
+                        onClick={() => handleAddManualRecord(employee.id, employee.name)}
+                        disabled={!editTime}
+                        className="text-xs font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 hover:bg-green-100 disabled:opacity-40 px-3 py-1.5 rounded-lg transition"
+                      >
+                        Simpan
+                      </button>
+                      <button
+                        onClick={() => setEditEmployeeId(null)}
+                        className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1.5 rounded-lg transition"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </Card>
 
-      {/* === Recycle bin hari ini (khusus admin) === */}
-      {isAdminMode && showTrash && trashedToday.length > 0 && (
-        <Card padding="md">
-          <h4 className="font-bold text-xs uppercase text-slate-400 mb-3">
-            Absen Terhapus Hari Ini
-          </h4>
-          <div className="space-y-2">
-            {trashedToday.map(r => {
-              const emp = employees.find(e => e.id === r.employeeId);
-              return (
-                <div key={r.id} className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500 dark:text-slate-400">
-                    {emp?.name ?? r.employeeName} · {r.type === 'masuk' ? 'Masuk' : 'Pulang'}{' '}
-                    {formatTime(r.date)}
-                  </span>
-                  <IconButton variant="success" ghost title="Kembalikan" onClick={() => handleRestoreRecord(r.id)}>
-                    <RotateCcw className="w-4 h-4" />
-                  </IconButton>
-                </div>
-              );
-            })}
+      {/* ── Riwayat Log Absen ──────────────────────────────────────────────── */}
+      <div className="mb-10">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-sm text-slate-700 dark:text-slate-200 flex items-center gap-2">
+            <History className="w-4 h-4" />
+            {showHistoryTrash ? 'Recycle Bin Log Absen' : 'Riwayat Log Absen'}
+          </h3>
+          {isAdminMode && (
+            <button
+              onClick={() => setShowHistoryTrash(v => !v)}
+              className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            >
+              {showHistoryTrash ? '← Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
+            </button>
+          )}
+        </div>
+
+        {/* Filter Row 1 — periode */}
+        <Card className="flex items-center gap-2 overflow-x-auto scrollbar-hide mb-3 p-3">
+          <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 mr-1" />
+          {LOG_FILTER_TABS.map(tab => (
+            <Button
+              key={tab.id}
+              variant={dateFilter === tab.id ? 'dark' : 'secondary'}
+              size="sm"
+              onClick={() => setDateFilter(tab.id)}
+              className="shrink-0 whitespace-nowrap rounded-full"
+            >
+              {tab.label}
+            </Button>
+          ))}
+        </Card>
+
+        {/* Rentang tanggal kustom */}
+        {dateFilter === 'kustom' && (
+          <Card className="flex items-center gap-2 p-3 mb-3 max-w-fit">
+            <div className="flex flex-col">
+              <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">
+                Dari Tanggal
+              </label>
+              <input
+                type="date" value={customStartDate}
+                onChange={e => setCustomStartDate(e.target.value)}
+                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-slate-700 dark:text-slate-200 dark:bg-slate-900"
+              />
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 mt-4 shrink-0" />
+            <div className="flex flex-col">
+              <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">
+                Sampai Tanggal
+              </label>
+              <input
+                type="date" value={customEndDate}
+                onChange={e => setCustomEndDate(e.target.value)}
+                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-slate-700 dark:text-slate-200 dark:bg-slate-900"
+              />
+            </div>
+          </Card>
+        )}
+
+        {/* Filter Row 2 — karyawan, tipe, sort, search */}
+        <Card className="flex flex-col sm:flex-row gap-3 mb-3 p-4">
+          {/* Karyawan */}
+          <div className="relative w-full sm:w-52">
+            <select
+              value={empFilter}
+              onChange={e => setEmpFilter(e.target.value)}
+              className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+            >
+              <option value="semua">Semua Karyawan</option>
+              {uniqueLogEmployees.map(e => (
+                <option key={e.id} value={e.id}>{e.name}</option>
+              ))}
+            </select>
+            <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
+          </div>
+
+          {/* Tipe */}
+          <div className="relative w-full sm:w-44">
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+              className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+            >
+              {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
+          </div>
+
+          {/* Sort */}
+          <div className="relative w-full sm:w-44">
+            <select
+              value={sortOrder}
+              onChange={e => setSortOrder(e.target.value)}
+              className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+            >
+              <option value="terbaru">Terbaru Dulu</option>
+              <option value="terlama">Terlama Dulu</option>
+            </select>
+            <ArrowUpDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
+          </div>
+
+          {/* Search */}
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Cari nama karyawan..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+            />
           </div>
         </Card>
-      )}
+
+        {/* Log list */}
+        <Card padding="none" className="overflow-hidden">
+          {filteredLogs.length === 0 ? (
+            <EmptyState
+              size="sm"
+              icon={<History className="w-8 h-8" />}
+              title={showHistoryTrash ? 'Recycle bin kosong' : 'Tidak ada log ditemukan'}
+              description={showHistoryTrash
+                ? 'Belum ada record absen yang dihapus.'
+                : 'Coba ubah filter atau rentang tanggal.'}
+            />
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {filteredLogs.slice(0, 300).map(r => (
+                <div
+                  key={r.id}
+                  className="p-3.5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+                >
+                  {/* Nama + tanggal/jam */}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate leading-snug">
+                      {r.employeeName}
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 font-mono">
+                      {fmtDate(r.date)} · {fmtTime(r.date)}
+                    </p>
+                  </div>
+
+                  {/* Badge & actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {r.photoUrl && (
+                      <a
+                        href={r.photoUrl}
+                        target="_blank" rel="noreferrer"
+                        title="Lihat foto selfie"
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      >
+                        <Camera className="w-4 h-4" />
+                      </a>
+                    )}
+                    {r.location?.flagged && (
+                      <span title={`Lokasi ${r.location?.distance ?? '?'}m dari outlet`}>
+                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      </span>
+                    )}
+                    {r.isAutoClose && (
+                      <Badge size="sm" variant="neutral">Auto</Badge>
+                    )}
+                    {r.isManual && (
+                      <Badge size="sm" variant="neutral">Manual</Badge>
+                    )}
+                    <Badge variant={TYPE_VARIANT[r.type]} dot>
+                      {TYPE_LABEL[r.type]}
+                    </Badge>
+                    {isAdminMode && (
+                      showHistoryTrash ? (
+                        <>
+                          <IconButton
+                            variant="success" ghost
+                            title="Kembalikan"
+                            onClick={() => handleRestoreRecord(r.id)}
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </IconButton>
+                          <IconButton
+                            variant="delete" ghost
+                            title="Hapus Permanen"
+                            onClick={() => handlePermanentDeleteRecord(r.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </IconButton>
+                        </>
+                      ) : (
+                        <IconButton
+                          variant="delete" ghost
+                          title="Hapus (pindah ke recycle bin)"
+                          onClick={() => handleDeleteRecord(r.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </IconButton>
+                      )
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <p className="text-xs text-slate-400 dark:text-slate-500 text-right mt-2">
+          {filteredLogs.length} record
+          {filteredLogs.length > 300 ? ' · menampilkan 300 terbaru' : ''}
+        </p>
+      </div>
     </div>
   );
 }

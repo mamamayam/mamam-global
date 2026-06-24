@@ -1,27 +1,38 @@
 import React, { useState } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { activeOnly } from "../../utils/softDelete";
-import { 
-  ShoppingCart, 
-  Trash2, 
-  X, 
-  Save, 
-  Award, 
-  Info, 
-  Truck, 
-  Edit3, 
-  Minus, 
-  Plus, 
-  Ticket, 
-  ChevronRight 
+import {
+  ShoppingCart,
+  Trash2,
+  X,
+  Save,
+  Award,
+  Info,
+  Truck,
+  Edit3,
+  Minus,
+  Plus,
+  Ticket,
+  ChevronRight
 } from 'lucide-react';
 
 const CartDrawer = () => {
   // Tambahan: Destructure 'setCustomers' dari appContext
-  const { setCurrentView, isCartOpen, setIsCartOpen, cart, setCart, savedBills, triggerConfirm, formatRupiah, activeCustomer, customerName, setCustomerName, isCustomerDropdownMode, setIsCustomerDropdownMode, customers, setCustomers, orderType, setOrderType, deliveryFee, setDeliveryFee, customDeliveryFee, setCustomDeliveryFee, updateCartQty, updateCartItemNote, voucherInputCode, setVoucherInputCode, vouchers, appliedVoucher, setAppliedVoucher, getSubtotal, triggerAlert, pointsToRedeem, setPointsToRedeem, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, storeSettings, getDiscount, getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill } = useAppContext();
+  const { menus, setSelectedMenuForVariant, setVariantSelectedOptions, setEditingCartItemId,
+    setCurrentView, isCartOpen, setIsCartOpen, cart, setCart, savedBills, triggerConfirm, formatRupiah, activeCustomer, customerName, setCustomerName, isCustomerDropdownMode, setIsCustomerDropdownMode, customers, setCustomers, orderType, setOrderType, deliveryFee, setDeliveryFee, customDeliveryFee, setCustomDeliveryFee, updateCartQty, updateCartItemNote, voucherInputCode, setVoucherInputCode, vouchers, appliedVoucher, setAppliedVoucher, getSubtotal, triggerAlert, pointsToRedeem, setPointsToRedeem, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, storeSettings, getDiscount, getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill } = useAppContext();
 
   // Tambahan: Local state untuk input nomor HP pelanggan baru via Kasir
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
+
+  const handleEditVariant = (cartItem) => {
+    const originalMenu = menus.find(m => m.id === cartItem.menuId);
+    if (originalMenu) {
+      setSelectedMenuForVariant(originalMenu);
+      setVariantSelectedOptions(cartItem.variantSelectedOptions || {});
+      setEditingCartItemId(cartItem.cartItemId);
+      setIsCartOpen(false);
+    }
+  };
 
   if (!isCartOpen) return null;
 
@@ -144,14 +155,14 @@ const CartDrawer = () => {
                       <Info className="w-3.5 h-3.5" /> Pelanggan belum terdaftar
                     </p>
                     <div className="space-y-2">
-                      <input 
-                        type="text" 
-                        placeholder="No. Whatsapp (Opsional)" 
-                        value={newCustomerPhone} 
+                      <input
+                        type="text"
+                        placeholder="No. Whatsapp (Opsional)"
+                        value={newCustomerPhone}
                         onChange={(e) => setNewCustomerPhone(e.target.value)}
                         className="w-full text-xs p-2 rounded-lg border border-blue-200 dark:border-blue-500/30 bg-white dark:bg-slate-900 outline-none focus:border-blue-500 transition-colors"
                       />
-                      <button 
+                      <button
                         onClick={() => {
                           const newCustomer = {
                             id: `CUST-${Date.now()}`,
@@ -225,7 +236,20 @@ const CartDrawer = () => {
                   <div key={idx} className="flex justify-between items-start border-b border-slate-50 dark:border-slate-900 pb-3 last:border-0 last:pb-0 animate-in fade-in duration-300">
                     <div className="flex-1 pr-2">
                       <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight">{item.name}</h4>
-                      {item.variantName && <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">{item.variantName}</p>}
+                      {item.variantName && (
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                            {item.variantName}
+                          </p>
+                          <button
+                            onClick={() => handleEditVariant(item)}
+                            className="p-1 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors"
+                            title="Edit Varian"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}                      
                       <p className="text-sm font-bold text-orange-600 dark:text-orange-400 mt-1">{formatRupiah(item.price)}</p>
                       <div className="w-full mt-2 flex items-center gap-1.5">
                         <Edit3 className="w-3 h-3 text-slate-400 dark:text-slate-500" />
@@ -241,7 +265,7 @@ const CartDrawer = () => {
                     {/* --- REVISI INPUT KUANTITAS CUSTOM --- */}
                     <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-950 rounded-lg p-1 border border-slate-100 dark:border-slate-800">
                       <button onClick={() => updateCartQty(item.cartItemId, -1)} className="w-7 h-7 flex items-center justify-center bg-white dark:bg-slate-900 rounded shadow-sm text-slate-600 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors shrink-0"><Minus className="w-3 h-3" /></button>
-                      
+
                       <input
                         type="text"
                         inputMode="numeric"
@@ -350,7 +374,7 @@ const CartDrawer = () => {
                   isOpen: true,
                   isSplitMode: false,
                   splitPayments: [],
-                  method: orderType === 'Ojol' ? 'Ojol' : 'Tunai', 
+                  method: orderType === 'Ojol' ? 'Ojol' : 'Tunai',
                   amountPaid: '',
                   status: 'pending'
                 })}

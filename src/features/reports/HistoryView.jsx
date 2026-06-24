@@ -128,13 +128,16 @@ const HistoryView = () => {
                     title={showTrash ? 'Recycle Bin' : 'Riwayat Pesanan'}
                     icon={<History className="w-6 h-6 text-green-500 dark:text-green-400" />}
                 />
-                <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => setShowTrash(v => !v)}
-                >
-                    {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(salesHistory).length})`}
-                </Button>
+                {/* Tombol Recycle Bin hanya muncul untuk Admin */}
+                {isAdminMode && (
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setShowTrash(v => !v)}
+                    >
+                        {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(salesHistory).length})`}
+                    </Button>
+                )}
             </div>
 
             {/* CONTAINER UTAMA FILTER*/}
@@ -142,19 +145,19 @@ const HistoryView = () => {
 
                 {/* Card 1: Tab Filter Periode Tanggal */}
                 <Card className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-                          <Calendar className="text-slate-400 dark:text-slate-500 w-5 h-5 flex-shrink-0 mr-1" />
-                          {filterTabs.map(tab => (
-                            <Button
-                              key={tab.id}
-                              variant={dateFilter === tab.id ? 'dark' : 'secondary'}
-                              size="sm"
-                              onClick={() => setDateFilter(tab.id)}
-                              className="flex-shrink-0 whitespace-nowrap rounded-full"
-                            >
-                              {tab.label}
-                            </Button>
-                          ))}
-                        </Card>
+                    <Calendar className="text-slate-400 dark:text-slate-500 w-5 h-5 flex-shrink-0 mr-1" />
+                    {filterTabs.map(tab => (
+                        <Button
+                            key={tab.id}
+                            variant={dateFilter === tab.id ? 'dark' : 'secondary'}
+                            size="sm"
+                            onClick={() => setDateFilter(tab.id)}
+                            className="flex-shrink-0 whitespace-nowrap rounded-full"
+                        >
+                            {tab.label}
+                        </Button>
+                    ))}
+                </Card>
 
                 {/* Card 3: Input Khusus Tanggal Kustom */}
                 {dateFilter === 'kustom' && (
@@ -255,8 +258,10 @@ const HistoryView = () => {
                                     <button onClick={() => setReceiptModal({ isOpen: true, data: order, kembalian: 0 })} className="p-2 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/15 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold">
                                         <Receipt className="w-4 h-4" /> Struk
                                     </button>
-                                    {isAdminMode && (
-                                        showTrash ? (
+
+                                    {showTrash ? (
+                                        /* Di Recycle Bin: Hanya Admin yang bisa melihat tombol Restore dan Hapus Permanen */
+                                        isAdminMode && (
                                             <>
                                                 <button onClick={() => handleRestore(order.id)} className="p-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 rounded-lg transition-colors" title="Kembalikan">
                                                     <RotateCcw className="w-4 h-4" />
@@ -265,11 +270,12 @@ const HistoryView = () => {
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
                                             </>
-                                        ) : (
-                                            <button onClick={() => handleDelete(order.id)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/15 rounded-lg transition-colors">
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
                                         )
+                                    ) : (
+                                        /* Di Riwayat Aktif: Semua role (Kasir & Admin) bisa melakukan hapus biasa (soft delete) */
+                                        <button onClick={() => handleDelete(order.id)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/15 rounded-lg transition-colors" title="Hapus ke Recycle Bin">
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
                                     )}
                                 </div>
                             </div>

@@ -1,6 +1,6 @@
 import { getSupabaseClient, getDeviceId, isSupabaseConfigured } from './syncClient';
 import { saveData, loadData } from './db';
-import { TRANSACTION_KEYS, CONFIG_KEYS } from './syncKeys';
+import { TRANSACTION_KEYS, CONFIG_KEYS, LIVE_STATE_KEYS, APP_CONFIG_KEYS } from './syncKeys';
 import { splitExpired } from '../utils/softDelete';
 
 const deviceId = getDeviceId();
@@ -72,6 +72,34 @@ export function pushConfig(key, value, readyPromise, delay = 1500) {
   }, delay);
 }
 
+// ── PUSH: live state tunggal (currentShift, dkk) — INSTAN, tanpa debounce ──
+// Sama persis dengan pushConfig (tabel app_config, key/value, value boleh null
+// — lihat catatan di supabase_schema.sql), bedanya cuma satu: TIDAK didebounce.
+// Dipanggil tiap currentShift berubah supaya device lain gak pernah baca status
+// stale/null gara-gara nunggu jeda 1.5 detik kayak config biasa.
+export async function pushLiveState(key, value, readyPromise) {
+  if (!isSupabaseConfigured()) return;
+  if (readyPromise) await readyPromise;
+
+  const valueUpdatedAt = (value && typeof value === 'object' && value.updated_at)
+    ? value.updated_at
+    : new Date().toISOString();
+
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase.from('app_config').upsert({
+      key,
+      value,
+      updated_at: valueUpdatedAt,
+      updated_by: deviceId,
+    }, { onConflict: 'key' });
+    if (error) console.warn(`[sync] gagal push live-state ${key}:`, error.message);
+  } catch (err) {
+    console.warn(`[sync] error push live-state ${key}:`, err.message);
+  }
+}
+
 // ── DIFF HELPER ──────────────────────────────────────────────────────────
 export function diffArrays(prevArr, nextArr) {
   const prev = Array.isArray(prevArr) ? prevArr : [];
@@ -97,7 +125,9 @@ export function diffArrays(prevArr, nextArr) {
 }
 
 // ── AUTO SYNC BERKALA ────────────────────────────────────────────────────────
-const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000;
+// NOTE: auto-sync periodik 15 menit DIHAPUS (2026-06-24) — skema push sekarang
+// hanya: (1) manual, (2) safety-net 21:00, (3) instant per-transaksi.
+// runAutoSync() masih dipakai oleh #1 dan #2 (selalu dengan force: true).
 const AUTO_SYNC_ITEM_GAP_MS = 250;
 const AUTO_SYNC_SNAPSHOT_KEY = 'mamam_auto_sync_snapshot';
 const AUTO_SYNC_ENABLED_KEY = 'mamam_auto_sync_enabled';
@@ -228,6 +258,31 @@ export async function runAutoSync({ force = false } = {}) {
       snapshot[key] = current;
     }
 
+    // ── LIVE STATE KEYS (currentShift, dkk) — safety net manual & 21:00 ────
+    // Push instan (di luar fungsi ini) sudah cover real-time-nya; loop ini
+    // cuma jaring pengaman kalau push instan gagal terkirim (device offline dll).
+    for (const key of LIVE_STATE_KEYS) {
+      const current = await loadData(key, null);
+
+      if (!(key in snapshot)) {
+        if (force) {
+          await pushLiveState(key, current);
+          sentCount++;
+          await sleep(AUTO_SYNC_ITEM_GAP_MS);
+        }
+        snapshot[key] = current;
+        continue;
+      }
+
+      if (JSON.stringify(current) !== JSON.stringify(snapshot[key])) {
+        await pushLiveState(key, current);
+        sentCount++;
+        await sleep(AUTO_SYNC_ITEM_GAP_MS);
+      }
+
+      snapshot[key] = current;
+    }
+
     saveAutoSyncSnapshot(snapshot);
     localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
 
@@ -258,9 +313,6 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
 
   let channel = null;
   let cancelled = false;
-
-  // Auto-sync berkala tiap 15 menit (tanpa force — hanya diff normal)
-  const autoSyncTimer = setInterval(runAutoSync, AUTO_SYNC_INTERVAL_MS);
 
   (async () => {
     let supabase;
@@ -312,7 +364,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
         const { data: rows, error } = await supabase
           .from('app_config')
           .select('key, value, updated_at, updated_by')
-          .in('key', CONFIG_KEYS);
+          .in('key', APP_CONFIG_KEYS);
         if (error) {
           console.warn('[sync] initial pull config gagal:', error.message);
         } else {
@@ -358,7 +410,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
       if (payload.eventType === 'DELETE') return;
       const key = payload.new?.key;
       const value = payload.new?.value;
-      if (key && CONFIG_KEYS.includes(key)) onConfigUpdate?.(key, value);
+      if (key && APP_CONFIG_KEYS.includes(key)) onConfigUpdate?.(key, value);
     });
 
     channel.subscribe((status) => {
@@ -369,7 +421,6 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
   return {
     unsubscribe: () => {
       cancelled = true;
-      clearInterval(autoSyncTimer);
       if (channel) {
         getSupabaseClient().then(supabase => supabase?.removeChannel(channel));
       }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { loadData, saveData } from '../storage/db';
-import { diffArrays, pushTransactionUpsert, pushTransactionDelete, pushConfig } from '../storage/realtimeSync';
+import { diffArrays, pushTransactionUpsert, pushTransactionDelete, pushConfig, pushLiveState } from '../storage/realtimeSync';
 
 /**
  * Seperti useState biasa, tapi otomatis load dari Dexie (IndexedDB) saat mount
@@ -16,6 +16,11 @@ import { diffArrays, pushTransactionUpsert, pushTransactionDelete, pushConfig } 
  *                     `tableKey` (default = `key`) menentukan nama tabel Supabase.
  *  - 'config'      : seluruh `state` di-push sebagai 1 blob ke tabel app_config
  *                     (didebounce), cocok untuk data kecil yang jarang berubah.
+ *  - 'live'        : seperti 'config' (1 blob ke tabel app_config), TAPI push
+ *                     INSTAN tanpa debounce sama sekali. Khusus key yang masuk
+ *                     LIVE_STATE_KEYS di syncKeys.js (misal currentShift) — yang
+ *                     wajib langsung kelihatan di device lain begitu berubah,
+ *                     karena transaksi di bawahnya nunggu status ini.
  *  - undefined     : tidak ada sync ke Supabase (hanya simpan lokal ke Dexie).
  *
  * FIX:
@@ -28,7 +33,7 @@ import { diffArrays, pushTransactionUpsert, pushTransactionDelete, pushConfig } 
  *
  * @param {string} key - Key storage
  * @param {*} defaultValue - Nilai sementara sebelum data dari DB dimuat
- * @param {{ syncMode?: 'transaction'|'config', tableKey?: string, syncReadyPromise?: Promise<void> }} [options]
+ * @param {{ syncMode?: 'transaction'|'config'|'live', tableKey?: string, syncReadyPromise?: Promise<void> }} [options]
  * @returns {[*, Function, boolean]} - [state, setState, isLoading]
  */
 export function usePersistState(key, defaultValue, options = {}) {
@@ -108,6 +113,11 @@ export function usePersistState(key, defaultValue, options = {}) {
       // pushDelay bisa di-set ke 0 untuk key kritis (misal currentShift)
       // supaya push langsung tanpa debounce 1500ms default
       pushConfig(key, state, syncReadyPromise, pushDelay ?? 1500);
+    } else if (syncMode === 'live') {
+      // Live state (currentShift, dkk) — push INSTAN, gak lewat setTimeout
+      // sama sekali (beda dari 'config' + pushDelay:0 yang tetap nunggu satu
+      // tick event loop). Lihat LIVE_STATE_KEYS di storage/syncKeys.js.
+      pushLiveState(key, state, syncReadyPromise);
     }
 
     prevStateRef.current = state;

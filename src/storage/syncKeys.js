@@ -33,8 +33,24 @@ export const CONFIG_KEYS = [
   'menus', 'variantGroups', 'variantCategories', 'categories', 'hppLibrary',
   'customers', 'vouchers', 'employees',
   'expenseCategories', 'incomeCategories', 'additionCategories', 'deductionCategories',
-  'rawMaterials', 'semiFinished', 'storeSettings', 'currentShift',
+  'rawMaterials', 'semiFinished', 'storeSettings',
 ];
+
+// Key "live state": object TUNGGAL (bukan array-of-record kayak TRANSACTION_KEYS)
+// yang berubah sering & wajib langsung sampai ke device lain SEKETIKA — gak boleh
+// nunggu debounce kayak CONFIG_KEYS. Kalau nunggu, device lain bisa lihat status
+// null/stale (misal shift kelihatan belum buka padahal sudah), padahal transaksi
+// di bawahnya sudah jalan.
+// Tabel Supabase TETAP `app_config` (kolom sama: key, value, updated_at, updated_by)
+// — cuma beda fungsi push: pushLiveState() (instan) bukan pushConfig() (debounced 1.5s).
+export const LIVE_STATE_KEYS = [
+  'currentShift',
+];
+
+// Gabungan semua key yang fisiknya tinggal di tabel `app_config`.
+// Dipakai untuk query PULL & filter realtime subscribe — supaya CONFIG_KEYS
+// dan LIVE_STATE_KEYS sama-sama kebaca walau cara push-nya beda.
+export const APP_CONFIG_KEYS = [...CONFIG_KEYS, ...LIVE_STATE_KEYS];
 
 export const DATE_FILTERABLE_KEYS = {
   salesHistory:         'date',

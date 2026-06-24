@@ -49,6 +49,12 @@ function calculateHoursFromTimes(clockInStr, clockOutStr) {
   return Number((diffMinutes / 60).toFixed(2));
 }
 
+// Format ISO datetime → "HH:MM" (dipakai buat auto-fill dari attendanceLog).
+function formatTimeFromDate(isoStr) {
+  const d = new Date(isoStr);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 
 // =========================================================================
 // KOMPONEN: MANAJEMEN KARYAWAN (HR / PAYROLL)
@@ -59,7 +65,8 @@ const EmployeesView = () => {
     employeeDailyRecords, setEmployeeDailyRecords,
     additionCategories, setAdditionCategories, deductionCategories, setDeductionCategories,
     payslipModal, setPayslipModal,
-    expenses, setExpenses
+    expenses, setExpenses,
+    attendanceLog,
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState('input'); // 'input', 'reports', 'manage'
@@ -81,6 +88,9 @@ const EmployeesView = () => {
   const [currentRecordId, setCurrentRecordId] = useState(null);
   const [catModalType, setCatModalType] = useState(null); // null | 'addition' | 'deduction'
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
+
+  // Flag: jam masuk/keluar terisi otomatis dari data attendanceLog
+  const [absenFromAttendance, setAbsenFromAttendance] = useState(false);
 
   const [adjType, setAdjType] = useState('addition');
   const [adjCategory, setAdjCategory] = useState('');
@@ -169,32 +179,56 @@ const EmployeesView = () => {
   };
 
   // --- LOGIC: INPUT HARIAN ---
+  // Load existing daily record saat karyawan/tanggal dipilih,
+  // atau auto-fill dari attendanceLog jika record belum ada.
   useEffect(() => {
     if (activeTab === 'input' && dailyEmpId && dailyDate) {
       const existingRecord = employeeDailyRecords.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
       if (existingRecord) {
+        // Record sudah ada — load seperti biasa
         setIsEditRecordMode(true);
         setCurrentRecordId(existingRecord.id);
-        // Pastikan format jam valid untuk input type="time"
         const wasOff = existingRecord.isDayOff || false;
         setClockIn(wasOff ? '00:00' : (existingRecord.clockIn && existingRecord.clockIn !== '-' ? existingRecord.clockIn : '09:00'));
         setClockOut(wasOff ? '00:00' : (existingRecord.clockOut && existingRecord.clockOut !== '-' ? existingRecord.clockOut : '19:00'));
         setHoursWorked(existingRecord.hoursWorked || '');
-        setIsDayOff(wasOff); // <-- Tarik data libur
+        setIsDayOff(wasOff);
         setAdditions(existingRecord.additions || []);
         setDeductions(existingRecord.deductions || []);
+        setAbsenFromAttendance(false); // record manual, bukan dari absensi
       } else {
+        // Belum ada record — coba ambil dari attendanceLog
         setIsEditRecordMode(false);
         setCurrentRecordId(null);
-        setClockIn('null');
-        setClockOut('null');
-        setHoursWorked(calculateHoursFromTimes('0', '0'));
-        setIsDayOff(true); // <-- Reset status libur
         setAdditions([]);
         setDeductions([]);
+
+        const empLogs = activeOnly(attendanceLog ?? [])
+          .filter(r => r.employeeId === dailyEmpId && r.dateStr === dailyDate)
+          .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        // Ambil record masuk pertama & keluar terakhir (abaikan bolong di tengah)
+        const masukRec  = empLogs.find(r => r.type === 'masuk');
+        const keluarRec = [...empLogs].reverse().find(r => r.type === 'keluar');
+
+        if (masukRec) {
+          // Ada data absensi → auto-fill
+          const masukStr  = formatTimeFromDate(masukRec.date);
+          const keluarStr = keluarRec ? formatTimeFromDate(keluarRec.date) : '19:00';
+          setClockIn(masukStr);
+          setClockOut(keluarStr);
+          setIsDayOff(false);
+          setAbsenFromAttendance(true);
+        } else {
+          // Tidak ada data sama sekali → default libur (perilaku asli)
+          setClockIn('09:00');
+          setClockOut('19:00');
+          setIsDayOff(true);
+          setAbsenFromAttendance(false);
+        }
       }
     }
-  }, [dailyEmpId, dailyDate, employeeDailyRecords, activeTab]);
+  }, [dailyEmpId, dailyDate, employeeDailyRecords, activeTab, attendanceLog]);
 
   const handleAddAdjustment = () => {
     if (!adjCategory) return triggerAlert('Pilih kategori terlebih dahulu!');
@@ -403,6 +437,7 @@ const EmployeesView = () => {
               value={isDayOff}
               onChange={(val) => {
                 setIsDayOff(val);
+                setAbsenFromAttendance(false);
                 if (val) {
                   setClockIn('00:00');
                   setClockOut('00:00');
@@ -415,12 +450,19 @@ const EmployeesView = () => {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            {absenFromAttendance && !isDayOff && (
+              <div className="col-span-2">
+                <Alert type="callout" variant="info">
+                  Jam terisi otomatis dari data absensi. Edit jika perlu koreksi.
+                </Alert>
+              </div>
+            )}
             <Input
               type="time"
               label="Jam Masuk"
               variant="muted"
               value={clockIn}
-              onChange={e => setClockIn(e.target.value)}
+              onChange={e => { setClockIn(e.target.value); setAbsenFromAttendance(false); }}
               disabled={isDayOff}
             />
             <Input
@@ -428,7 +470,7 @@ const EmployeesView = () => {
               label="Jam Keluar"
               variant="muted"
               value={clockOut}
-              onChange={e => setClockOut(e.target.value)}
+              onChange={e => { setClockOut(e.target.value); setAbsenFromAttendance(false); }}
               disabled={isDayOff}
             />
           </div>

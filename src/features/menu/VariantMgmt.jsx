@@ -1,8 +1,173 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useAppContext } from "../../context/AppContext";
-import { ChevronLeft, Plus, Edit3, Trash2, Settings2, Trash } from "lucide-react";
+import { ChevronLeft, Plus, Edit3, Trash2, Settings2, Trash, GripVertical } from "lucide-react";
 import CategoryModal from "../../components/CategoryModal";
 import { Button, IconButton, Input, Select, PageHeader, EmptyState, Badge } from "../../components/ui";
+
+// ─── Hook drag & drop reorder (mouse + touch via Pointer Events, tanpa library tambahan) ───
+// Pakai: const drag = useDragReorder(onReorder) lalu pasang drag.registerRef(id) ke elemen item,
+// dan drag.startDrag(id) ke onPointerDown drag handle-nya.
+function useDragReorder(onReorder) {
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+  const overIdRef = useRef(null);
+  const itemRefs = useRef({});
+
+  const registerRef = useCallback((id) => (el) => {
+    if (el) itemRefs.current[id] = el;
+    else delete itemRefs.current[id];
+  }, []);
+
+  const startDrag = useCallback((id) => (e) => {
+    e.preventDefault();
+    try { e.target.setPointerCapture?.(e.pointerId); } catch (_) {}
+    overIdRef.current = id;
+    setDragId(id);
+    setOverId(id);
+  }, []);
+
+  useEffect(() => {
+    if (dragId === null) return;
+
+    const getY = (e) => (e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY);
+
+    // Cari item terdekat secara vertikal dari posisi jari/kursor saat ini
+    const handleMove = (e) => {
+      const y = getY(e);
+      if (y == null) return;
+      let closestId = null;
+      let closestDist = Infinity;
+      Object.entries(itemRefs.current).forEach(([id, el]) => {
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        const dist = Math.abs(y - mid);
+        if (dist < closestDist) { closestDist = dist; closestId = id; }
+      });
+      if (closestId !== null && closestId !== overIdRef.current) {
+        overIdRef.current = closestId;
+        setOverId(closestId);
+      }
+    };
+
+    const finishDrag = () => {
+      const finalOverId = overIdRef.current;
+      if (dragId !== null && finalOverId !== null && dragId !== finalOverId) {
+        onReorder(dragId, finalOverId);
+      }
+      setDragId(null);
+      setOverId(null);
+      overIdRef.current = null;
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', finishDrag);
+    window.addEventListener('pointercancel', finishDrag);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', finishDrag);
+      window.removeEventListener('pointercancel', finishDrag);
+    };
+  }, [dragId, onReorder]);
+
+  return { dragId, overId, registerRef, startDrag };
+}
+
+// Class helper buat styling item pas lagi di-drag / jadi target drop
+function getDragRowClass(isDragging, isDropTarget, baseClass, idleClass) {
+  if (isDragging) return `${baseClass} opacity-50 ring-2 ring-orange-400 z-10`;
+  if (isDropTarget) return `${baseClass} border-orange-400 bg-orange-50/60 dark:bg-orange-500/10`;
+  return `${baseClass} ${idleClass}`;
+}
+
+// ─── Satu kelompok kategori di "Library Varian", dengan grup varian yang bisa di-drag urut ───
+const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete }) => {
+  const drag = useDragReorder(onReorder);
+
+  return (
+    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+
+      {/* --- Header Kategori --- */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
+        <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
+        <Badge variant="neutral">{groups.length} Grup</Badge>
+      </div>
+
+      {/* --- DAFTAR GRUP VARIAN RINGKAS (1 BARIS), BISA DI-DRAG URUTANNYA --- */}
+      <div className="flex flex-col gap-2">
+        {groups.map((vg) => {
+          const isDragging = drag.dragId === vg.id;
+          const isDropTarget = drag.overId === vg.id && drag.dragId !== null && drag.dragId !== vg.id;
+          return (
+            <div
+              key={vg.id}
+              ref={drag.registerRef(vg.id)}
+              className={getDragRowClass(
+                isDragging,
+                isDropTarget,
+                "group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-xl border shadow-sm transition-all gap-3 sm:gap-4",
+                "border-slate-100 dark:border-slate-800 hover:border-orange-200 dark:hover:border-orange-500/30"
+              )}
+            >
+              {/* --- Drag handle + Info Kiri: Nama & Atribut Status --- */}
+              <div className="flex items-start sm:items-center gap-2 flex-1 min-w-0">
+                <div
+                  onPointerDown={drag.startDrag(vg.id)}
+                  className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-400 dark:hover:text-slate-500 shrink-0 p-1 -ml-1 touch-none"
+                  title="Tahan & geser untuk mengurutkan"
+                >
+                  <GripVertical className="w-4 h-4" />
+                </div>
+
+                <div className="flex flex-col flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
+                      {vg.name}
+                    </h3>
+                    <Badge variant={vg.isRequired ? 'danger' : 'neutral'}>
+                      {vg.isRequired ? 'Wajib' : 'Opsional'}
+                    </Badge>
+                    <Badge variant="orange">Max: {vg.maxSelection} Pilihan</Badge>
+                  </div>
+
+                  {/* --- Daftar Opsi Horizontal --- */}
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    <span className="font-semibold text-slate-400">Opsi:</span>
+                    {vg.options?.map((opt, oIdx) => (
+                      <span key={opt.id || oIdx} className="bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800/80 px-1.5 py-0.5 rounded text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                        {opt.name} {opt.extraPrice > 0 && `(+${opt.extraPrice})`}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* --- Info Kanan: Tombol Aksi --- */}
+              <div className="flex items-center justify-end gap-1 shrink-0 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300 border-t border-slate-50 dark:border-slate-800/50 sm:border-0 pt-2 sm:pt-0">
+                <IconButton
+                  variant="edit"
+                  onClick={() => onEdit(vg)}
+                  title="Edit Grup Varian"
+                >
+                  <Edit3 className="w-4 h-4" />
+                </IconButton>
+                <IconButton
+                  variant="delete"
+                  onClick={() => onDelete(vg.id)}
+                  title="Hapus Grup Varian"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </IconButton>
+              </div>
+
+            </div>
+          );
+        })}
+      </div>
+
+    </div>
+  );
+};
 
 const VariantManagement = () => {
   const {
@@ -86,6 +251,51 @@ const VariantManagement = () => {
   const handleRemoveOption = (optId) => {
     setFormData(prev => ({ ...prev, options: (prev.options ?? []).filter(o => o.id !== optId) }));
   };
+
+  // ─── Urutkan ulang grup varian DI DALAM satu kategori (drag & drop) ───
+  // Grup di kategori lain dibiarkan di posisi semula, cuma urutan di kategori
+  // yang di-drag aja yang berubah.
+  const handleReorderGroup = (categoryName) => (draggedId, overId) => {
+    setVariantGroups(prev => {
+      const list = prev ?? [];
+      const categoryIds = list
+        .filter(vg => (vg.category || 'Lainnya') === categoryName)
+        .map(vg => vg.id);
+
+      const fromIdx = categoryIds.indexOf(draggedId);
+      const toIdx = categoryIds.indexOf(overId);
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return list;
+
+      const reorderedIds = [...categoryIds];
+      const [movedId] = reorderedIds.splice(fromIdx, 1);
+      reorderedIds.splice(toIdx, 0, movedId);
+
+      let cursor = 0;
+      return list.map(vg => {
+        if ((vg.category || 'Lainnya') !== categoryName) return vg;
+        const newId = reorderedIds[cursor];
+        cursor += 1;
+        return list.find(v => v.id === newId);
+      });
+    });
+  };
+
+  // ─── Urutkan ulang opsi pilihan DI DALAM form tambah/edit grup varian (drag & drop) ───
+  const handleReorderOption = (draggedId, overId) => {
+    setFormData(prev => {
+      const options = prev.options ?? [];
+      const fromIdx = options.findIndex(o => o.id === draggedId);
+      const toIdx = options.findIndex(o => o.id === overId);
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
+
+      const reordered = [...options];
+      const [moved] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, moved);
+      return { ...prev, options: reordered };
+    });
+  };
+
+  const optionsDrag = useDragReorder(handleReorderOption);
 
   const groupedVariantGroups = useMemo(() => {
     const groups = {};
@@ -199,17 +409,39 @@ const VariantManagement = () => {
               {(formData.options ?? []).length === 0 ? (
                 <EmptyState size="sm" title="Belum ada opsi pilihan dimasukkan." />
               ) : (
-                (formData.options ?? []).map((opt, idx) => (
-                  <div key={opt.id || idx} className="flex justify-between items-center p-2.5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100">{opt.name}</span>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400">+{formatRupiah(opt.extraPrice)}</span>
+                (formData.options ?? []).map((opt) => {
+                  const isDragging = optionsDrag.dragId === opt.id;
+                  const isDropTarget = optionsDrag.overId === opt.id && optionsDrag.dragId !== null && optionsDrag.dragId !== opt.id;
+                  return (
+                    <div
+                      key={opt.id}
+                      ref={optionsDrag.registerRef(opt.id)}
+                      className={getDragRowClass(
+                        isDragging,
+                        isDropTarget,
+                        "flex justify-between items-center p-2.5 bg-white dark:bg-slate-900 border rounded-xl shadow-sm transition-all",
+                        "border-slate-100 dark:border-slate-800"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          onPointerDown={optionsDrag.startDrag(opt.id)}
+                          className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-400 dark:hover:text-slate-500 shrink-0 p-1 touch-none"
+                          title="Tahan & geser untuk mengurutkan"
+                        >
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{opt.name}</span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">+{formatRupiah(opt.extraPrice)}</span>
+                        </div>
+                      </div>
+                      <IconButton variant="delete" size="sm" onClick={() => handleRemoveOption(opt.id)}>
+                        <Trash className="w-4 h-4" />
+                      </IconButton>
                     </div>
-                    <IconButton variant="delete" size="sm" onClick={() => handleRemoveOption(opt.id)}>
-                      <Trash className="w-4 h-4" />
-                    </IconButton>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -263,65 +495,14 @@ const VariantManagement = () => {
 
       <div className="space-y-8 pb-10">
         {Object.keys(groupedVariantGroups).map(category => (
-          <div key={category} className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-
-            {/* --- Header Kategori --- */}
-            <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
-              <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
-              <Badge variant="neutral">{groupedVariantGroups[category].length} Grup</Badge>
-            </div>
-
-            {/* --- DAFTAR GRUP VARIAN RINGKAS (1 BARIS) --- */}
-            <div className="flex flex-col gap-2">
-              {groupedVariantGroups[category]?.map((vg) => (
-                <div key={vg.id} className="group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:border-orange-200 dark:hover:border-orange-500/30 transition-all gap-3 sm:gap-4">
-
-                  {/* --- Info Kiri: Nama & Atribut Status --- */}
-                  <div className="flex flex-col flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">
-                        {vg.name}
-                      </h3>
-                      <Badge variant={vg.isRequired ? 'danger' : 'neutral'}>
-                        {vg.isRequired ? 'Wajib' : 'Opsional'}
-                      </Badge>
-                      <Badge variant="orange">Max: {vg.maxSelection} Pilihan</Badge>
-                    </div>
-
-                    {/* --- Daftar Opsi Horizontal --- */}
-                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                      <span className="font-semibold text-slate-400">Opsi:</span>
-                      {vg.options?.map((opt, oIdx) => (
-                        <span key={opt.id || oIdx} className="bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800/80 px-1.5 py-0.5 rounded text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                          {opt.name} {opt.extraPrice > 0 && `(+${opt.extraPrice})`}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* --- Info Kanan: Tombol Aksi --- */}
-                  <div className="flex items-center justify-end gap-1 shrink-0 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300 border-t border-slate-50 dark:border-slate-800/50 sm:border-0 pt-2 sm:pt-0">
-                    <IconButton
-                      variant="edit"
-                      onClick={() => { setFormData({ ...vg, options: vg.options ?? [] }); setIsEditing(true); }}
-                      title="Edit Grup Varian"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </IconButton>
-                    <IconButton
-                      variant="delete"
-                      onClick={() => handleDelete(vg.id)}
-                      title="Hapus Grup Varian"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </IconButton>
-                  </div>
-
-                </div>
-              ))}
-            </div>
-
-          </div>
+          <VariantCategorySection
+            key={category}
+            category={category}
+            groups={groupedVariantGroups[category]}
+            onReorder={handleReorderGroup(category)}
+            onEdit={(vg) => { setFormData({ ...vg, options: vg.options ?? [] }); setIsEditing(true); }}
+            onDelete={handleDelete}
+          />
         ))}
         {(variantGroups ?? []).length === 0 && (
           <EmptyState
