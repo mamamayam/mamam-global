@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect} from "react";
 import { useAppContext } from "../../context/AppContext";
 import { activeOnly } from "../../utils/softDelete";
 import {
@@ -34,9 +34,13 @@ const CartDrawer = () => {
     }
   };
 
-  if (!isCartOpen) return null;
+  useEffect(() => {
+    if (isCartOpen) {
+      setCurrentView('kasir');
+    }
+  }, [isCartOpen, setCurrentView]);
 
-  setCurrentView('kasir');
+  if (!isCartOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center">

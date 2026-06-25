@@ -9,6 +9,8 @@
  */
 
 export { default as Modal }            from './Modal';
+export { default as DetailModal }      from './DetailModal';
+export { default as SortModal }        from './SortModal';
 export { default as Button }           from './Button';
 export { default as Input, Select, Textarea } from './Input';
 export { default as IconButton }       from './IconButton';

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw, ArrowUpDown } from 'lucide-react';
+import { X, History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw, ArrowUpDown, Eye } from 'lucide-react';
 import { formatRupiah } from '../../utils/formatters';
-import { PageHeader, Card, Button } from '../../components/ui';
+import { PageHeader, Card, Button, DetailModal, SortModal } from '../../components/ui';
+import { applySort } from '../../utils/sortUtils';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 
@@ -13,12 +14,14 @@ const HistoryView = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFilter, setDateFilter] = useState('semua');
     const [orderTypeFilter, setOrderTypeFilter] = useState('semua'); // State baru untuk Tipe Order
-    const [sortOrder, setSortOrder] = useState('terbaru'); // 'terbaru' = newest first, 'terlama' = oldest first
+    const [sortKey, setSortKey] = useState('date-desc'); // gabungan field-direction, dipasangin ke applySort
+    const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
 
     // State khusus untuk rentang tanggal kustom
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
+    const [detailOrder, setDetailOrder] = useState(null); // order yang sedang dibuka di Detail Modal
 
     // Daftar opsi tab periode tanggal
     const filterTabs = [
@@ -28,6 +31,15 @@ const HistoryView = () => {
         { id: '30-hari', label: '30 Hari' },
         { id: 'bulan-berjalan', label: 'Bulan Ini' },
         { id: 'kustom', label: 'Pilih Tanggal' }
+    ];
+
+    // Daftar opsi urutan buat SortModal — key = "field-direction"
+    const sortOptions = [
+        { key: 'date-desc', label: 'Terbaru Dulu' },
+        { key: 'date-asc', label: 'Terlama Dulu' },
+        { key: 'name-asc', label: 'Nama Pelanggan (A-Z)' },
+        { key: 'name-desc', label: 'Nama Pelanggan (Z-A)' },
+        { key: 'type-asc', label: 'Tipe Order (A-Z)' },
     ];
 
     // Sumber data sesuai mode: riwayat aktif, atau isi recycle bin
@@ -92,11 +104,11 @@ const HistoryView = () => {
         return matchesSearch && matchesDate && matchesOrderType;
     });
 
-    // Urutkan hasil filter berdasarkan waktu pesanan (terbaru/terlama)
-    const sortedHistory = [...filteredHistory].sort((a, b) => {
-        const dateA = new Date(a.date);
-        const dateB = new Date(b.date);
-        return sortOrder === 'terbaru' ? dateB - dateA : dateA - dateB;
+    // Urutkan hasil filter pakai sortKey terpilih ("date-desc", "name-asc", dst)
+    const sortedHistory = applySort(filteredHistory, sortKey, {
+        date: o => new Date(o.date),
+        name: o => o.customerName || '',
+        type: o => o.orderType || '',
     });
 
     const handleDelete = (id) => {
@@ -201,18 +213,15 @@ const HistoryView = () => {
                         <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
                     </div>
 
-                    {/* Dropdown Sort Waktu Pesanan */}
-                    <div className="relative w-full sm:w-48">
-                        <select
-                            className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
-                            value={sortOrder}
-                            onChange={(e) => setSortOrder(e.target.value)}
-                        >
-                            <option value="terbaru">Terbaru Dulu</option>
-                            <option value="terlama">Terlama Dulu</option>
-                        </select>
-                        <ArrowUpDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
-                    </div>
+                    {/* Tombol Urutkan — buka SortModal (bottom sheet) */}
+                    <button
+                        type="button"
+                        onClick={() => setIsSortOpen(true)}
+                        className="w-full sm:w-48 flex items-center justify-between gap-2 pl-4 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-orange-300 dark:hover:border-orange-500/40 transition-colors text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+                    >
+                        <span className="truncate">{sortOptions.find(o => o.key === sortKey)?.label || 'Urutkan'}</span>
+                        <ArrowUpDown className="text-slate-400 dark:text-slate-500 w-4 h-4 shrink-0" />
+                    </button>
 
                     {/* Input Pencarian */}
                     <div className="relative w-full sm:w-72">
@@ -224,6 +233,14 @@ const HistoryView = () => {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
+                        {/* Tombol X — muncul saat ada teks */}
+                        <button
+                            onClick={() => setSearchTerm('')}
+                            aria-label="Hapus pencarian"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200 animate-in zoom-in duration-150"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
                     </div>
                 </Card>
 
@@ -255,6 +272,9 @@ const HistoryView = () => {
                             <div className="flex justify-between items-center border-t border-slate-50 dark:border-slate-900 pt-3 mt-auto">
                                 <span className="font-black text-slate-800 dark:text-slate-100">{formatRupiah(order.total)}</span>
                                 <div className="flex gap-2">
+                                    <button onClick={() => setDetailOrder(order)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold">
+                                        <Eye className="w-4 h-4" /> Detail
+                                    </button>
                                     <button onClick={() => setReceiptModal({ isOpen: true, data: order, kembalian: 0 })} className="p-2 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/15 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold">
                                         <Receipt className="w-4 h-4" /> Struk
                                     </button>
@@ -289,6 +309,59 @@ const HistoryView = () => {
                     </div>
                 )}
             </div>
+
+            <SortModal
+                isOpen={isSortOpen}
+                onClose={() => setIsSortOpen(false)}
+                value={sortKey}
+                onChange={setSortKey}
+                options={sortOptions}
+            />
+
+            <DetailModal
+                isOpen={!!detailOrder}
+                onClose={() => setDetailOrder(null)}
+                icon={<Receipt className="w-4 h-4 text-orange-500 dark:text-orange-400" />}
+                title={detailOrder && `#${detailOrder.id}`}
+                subtitle={detailOrder && new Date(detailOrder.date).toLocaleString('id-ID')}
+                badges={detailOrder ? [
+                    {
+                        label: detailOrder.paymentMethod === 'Ojol' ? `Ojol (${detailOrder.ojolName})` : detailOrder.paymentMethod,
+                        variant: detailOrder.paymentMethod === 'Ojol' ? 'orange' : 'success',
+                    },
+                    { label: detailOrder.orderType, variant: 'neutral' },
+                ] : []}
+                sections={[{
+                    rows: [
+                        { label: 'Pelanggan', value: detailOrder?.customerName },
+                        { label: 'No. Order', value: detailOrder?.orderNumber },
+                    ]
+                }]}
+                items={detailOrder?.items?.map(it => ({
+                    name: it.name,
+                    note: [it.variantName, it.note].filter(Boolean).join(' • '),
+                    qty: it.qty,
+                    price: it.price,
+                }))}
+                summaryRows={[
+                    { label: 'Subtotal', value: detailOrder?.subtotal, type: 'currency' },
+                    { label: 'Diskon Voucher', value: detailOrder?.discount ? -detailOrder.discount : 0, type: 'currency' },
+                    { label: 'Potong Poin', value: detailOrder?.pointDiscount ? -detailOrder.pointDiscount : 0, type: 'currency' },
+                    { label: 'Diskon Manual', value: detailOrder?.manualDiscountAmount ? -detailOrder.manualDiscountAmount : 0, type: 'currency' },
+                    { label: 'Pajak', value: detailOrder?.taxAmount, type: 'currency' },
+                    { label: 'Service', value: detailOrder?.serviceAmount, type: 'currency' },
+                    { label: 'Ongkir', value: detailOrder?.deliveryFee, type: 'currency' },
+                ]}
+                highlight={{ label: 'Total Tagihan', value: detailOrder?.total }}
+                actions={[{
+                    label: 'Cetak Struk',
+                    icon: <Receipt className="w-4 h-4" />,
+                    onClick: () => {
+                        setReceiptModal({ isOpen: true, data: detailOrder, kembalian: 0 });
+                        setDetailOrder(null);
+                    },
+                }]}
+            />
         </div>
     );
 };

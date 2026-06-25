@@ -5,7 +5,7 @@ import { isNativePlatform, printShiftNativeBluetooth } from '../../library/print
 import { toPng, toBlob } from 'html-to-image';
 import { generateUUID, toLocalMonthString } from '../../utils/formatters';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
-import { pushTransactionDelete } from '../../storage/realtimeSync';
+import { pushTransactionDelete, pushLiveState } from '../../storage/realtimeSync';
 
 // Import komponen UI Design System
 import { 
@@ -128,11 +128,14 @@ const ShiftView = () => {
 
   const handleOpenShift = () => {
     if (!initialCashInput || Number(initialCashInput) < 0) return triggerAlert('Masukkan nominal saldo awal yang valid.');
-    setCurrentShift({
+    const newShift = {
       id: `DOMPET-${generateUUID().split('-')[0].toUpperCase()}`,
       startTime: new Date(),
       initialCash: Number(initialCashInput)
-    });
+    };
+    pushLiveState('currentShift', newShift).catch(err => 
+      console.warn('Gagal push manual :', err)
+    );
     setInitialCashInput('');
     triggerAlert('Dompet berhasil dibuka!');
   };
@@ -155,6 +158,9 @@ const ShiftView = () => {
       const filteredHistory = shiftHistory.filter(s => s.id !== shiftData.id);
       setShiftHistory([shiftData, ...filteredHistory]);
       setCurrentShift(null);
+      pushLiveState('currentShift', null).catch(err => 
+        console.warn('Gagal push manual close shift:', err)
+      );
       setClosedShiftData(shiftData);
       setActualCashInput('');
       setShowXReading(true);

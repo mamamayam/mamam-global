@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
-import { ChevronLeft, Plus, Edit3, Trash2, Settings2 } from "lucide-react";
+import { ChevronLeft, Plus, Edit3, Trash2, Settings2, Search, X } from "lucide-react";
 import CategoryModal from "../../components/CategoryModal";
 import { Card, Button, IconButton, Input, Select, PageHeader, EmptyState, Badge } from "../../components/ui";
 
@@ -9,6 +9,8 @@ const MenuManagement = () => {
     menus, setMenus, variantGroups, formatRupiah, triggerAlert,
     triggerConfirm, categories, setCategories, hppLibrary, setHppLibrary
   } = useAppContext();
+
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [isEditing, setIsEditing] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -210,70 +212,107 @@ const MenuManagement = () => {
         }
       />
 
+      {/* Input Pencarian */}
+      <div className="relative w-full sm:w-72 mb-6">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
+        <input
+          type="text"
+          placeholder="Cari nama menu atau kategori..."
+          className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            aria-label="Hapus pencarian"
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
       <div className="space-y-8 pb-10">
-        {Object.keys(groupedMenus).map(category => (
-          <div key={category} className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+        {Object.keys(groupedMenus)
+          .filter(category => {
+            if (!searchQuery) return true;
+            const q = searchQuery.toLowerCase();
+            const categoryMatch = category.toLowerCase().includes(q);
+            const menuMatch = groupedMenus[category].some(menu => menu.name.toLowerCase().includes(q));
+            return categoryMatch || menuMatch;
+          })
+          .map(category => {
+            const q = searchQuery.toLowerCase();
+            const categoryMatch = category.toLowerCase().includes(q);
+            const visibleMenus = (!searchQuery || categoryMatch)
+              ? groupedMenus[category]
+              : groupedMenus[category].filter(menu => menu.name.toLowerCase().includes(q));
 
-            {/* --- Header Kategori --- */}
-            <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
-              <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
-              <Badge variant="neutral">{groupedMenus[category].length} Item</Badge>
-            </div>
+            return (
+              <div key={category} className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
 
-            {/* --- DAFTAR MENU RINGKAS (1 BARIS) --- */}
-            <div className="flex flex-col gap-2">
-              {groupedMenus[category].map((menu) => (
-                <div key={menu.id} className="group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:border-orange-200 dark:hover:border-orange-500/30 transition-all gap-3 sm:gap-4">
-
-                  {/* --- Info Kiri: Nama, HPP, Varian --- */}
-                  <div className="flex flex-col flex-1 min-w-0">
-                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate mb-0.5">
-                      {menu.name}
-                    </h3>
-
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      <span className="font-medium">HPP: {formatRupiah(menu.hpp || 0)}</span>
-                      {menu.variantGroupIds?.length > 0 && (
-                        <>
-                          <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0"></span>
-                          <span className="truncate">
-                            Varian: {menu.variantGroupIds.map(vid => variantGroups.find(v => v.id === vid)?.name).filter(Boolean).join(', ')}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* --- Info Kanan: Harga & Tombol Aksi --- */}
-                  <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 border-t border-slate-50 dark:border-slate-800/50 sm:border-0 pt-2 sm:pt-0">
-                    <span className="font-bold text-orange-600 dark:text-orange-400 text-sm">
-                      {formatRupiah(menu.price)}
-                    </span>
-
-                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <IconButton
-                        variant="edit"
-                        onClick={() => { setFormData(menu); setIsEditing(true); }}
-                        title="Edit Menu"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </IconButton>
-                      <IconButton
-                        variant="delete"
-                        onClick={() => handleDelete(menu.id)}
-                        title="Hapus Menu"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </IconButton>
-                    </div>
-                  </div>
-
+                {/* --- Header Kategori --- */}
+                <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-2">
+                  <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
+                  <Badge variant="neutral">{visibleMenus.length} Item</Badge>
                 </div>
-              ))}
-            </div>
 
-          </div>
-        ))}
+                {/* --- DAFTAR MENU RINGKAS (1 BARIS) --- */}
+                <div className="flex flex-col gap-2">
+                  {visibleMenus.map((menu) => (
+                    <div key={menu.id} className="group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:border-orange-200 dark:hover:border-orange-500/30 transition-all gap-3 sm:gap-4">
+
+                      {/* --- Info Kiri: Nama, HPP, Varian --- */}
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate mb-0.5">
+                          {menu.name}
+                        </h3>
+
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                          <span className="font-medium">HPP: {formatRupiah(menu.hpp || 0)}</span>
+                          {menu.variantGroupIds?.length > 0 && (
+                            <>
+                              <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0"></span>
+                              <span className="truncate">
+                                Varian: {menu.variantGroupIds.map(vid => variantGroups.find(v => v.id === vid)?.name).filter(Boolean).join(', ')}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* --- Info Kanan: Harga & Tombol Aksi --- */}
+                      <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 border-t border-slate-50 dark:border-slate-800/50 sm:border-0 pt-2 sm:pt-0">
+                        <span className="font-bold text-orange-600 dark:text-orange-400 text-sm">
+                          {formatRupiah(menu.price)}
+                        </span>
+
+                        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                          <IconButton
+                            variant="edit"
+                            onClick={() => { setFormData(menu); setIsEditing(true); }}
+                            title="Edit Menu"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </IconButton>
+                          <IconButton
+                            variant="delete"
+                            onClick={() => handleDelete(menu.id)}
+                            title="Hapus Menu"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </IconButton>
+                        </div>
+                      </div>
+
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+            );
+          })}
         {menus.length === 0 && (
           <EmptyState
             icon={<Plus className="w-8 h-8" />}

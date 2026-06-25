@@ -158,13 +158,16 @@ export default function App() {
     return (url && key) ? 'syncing' : 'idle';
   });
   const [syncStep, setSyncStep] = useState('Menghubungkan ke server...');
-  const syncReadyRef = useRef(null); // Promise resolve untuk unblock push
-  const cleanupRef = useRef(null);   // unsubscribe realtime
 
-  // --- DATABASE STATES ---
-  // usePersistState sekarang menerima syncReadyPromise supaya push hanya
-  // bisa berjalan setelah initial pull dari Supabase selesai (step 1-4).
-  const syncReadyPromise = useRef(new Promise(r => { syncReadyRef.current = r; })).current;
+  const cleanupRef = useRef(null);
+
+  const syncGateRef = useRef(null);
+  if (!syncGateRef.current) {
+    let resolveSync;
+    const promise = new Promise(r => { resolveSync = r; });
+    syncGateRef.current = { promise, resolveSync };
+  }
+  const syncReadyPromise = syncGateRef.current.promise;
 
   const [variantGroups, setVariantGroups, l1, setVariantGroupsRemote] = usePersistState('variantGroups', INITIAL_VARIANT_GROUPS, { syncMode: 'config', syncReadyPromise });
   const [menus, setMenus, l2, setMenusRemote] = usePersistState('menus', INITIAL_MENUS, { syncMode: 'config', syncReadyPromise });
@@ -262,7 +265,7 @@ export default function App() {
     const timeoutId = setTimeout(() => {
       if (cancelled) return;
       console.warn('[App] Sync timeout 15s — masuk dengan data lokal');
-      syncReadyRef.current?.();
+      syncGateRef.current.resolveSync?.();
       setSyncStatus('error');
       setSyncStep('');
     }, 15000);
@@ -274,13 +277,13 @@ export default function App() {
         ({ isSupabaseConfigured } = await import('../storage/syncClient'));
         ({ initRealtimeSync } = await import('../storage/realtimeSync'));
       } catch (e) {
-        syncReadyRef.current?.();
+        syncGateRef.current.resolveSync?.();
         return;
       }
 
       // Jika Supabase tidak dikonfigurasi, langsung resolve supaya push tidak diblok
       if (!isSupabaseConfigured()) {
-        syncReadyRef.current?.();
+        syncGateRef.current.resolveSync?.();
         return;
       }
 
@@ -322,7 +325,7 @@ export default function App() {
       enginePromise.then(() => {
         if (cancelled) return;
         clearTimeout(timeoutId);
-        syncReadyRef.current?.();
+        syncGateRef.current.resolveSync?.();
         setSyncStatus('ready');
         setSyncStep('');
         console.log('[App] Sinkronisasi awal selesai ✅ — push diizinkan');
@@ -330,7 +333,7 @@ export default function App() {
         if (cancelled) return;
         clearTimeout(timeoutId);
         console.warn('[App] Sync awal gagal, masuk dengan data lokal:', err?.message);
-        syncReadyRef.current?.();
+        syncGateRef.current.resolveSync?.();
         setSyncStatus('error');
         setSyncStep('');
       });
@@ -494,12 +497,12 @@ export default function App() {
         const optionKeys = selectedVariantDetails.map(v => v.optionId).sort().join('-');
         const newCartItemId = optionKeys ? `${item.menuId}-${optionKeys}` : item.menuId;
 
-        return { 
-          ...item, 
-          cartItemId: newCartItemId, 
-          variantName: newVariantNameStr, 
+        return {
+          ...item,
+          cartItemId: newCartItemId,
+          variantName: newVariantNameStr,
           price: basePrice + extraPriceTotal,
-          variantSelectedOptions: newVariants 
+          variantSelectedOptions: newVariants
         };
       }
       return item;

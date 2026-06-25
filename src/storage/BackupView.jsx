@@ -9,7 +9,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { exportAllData, loadData, saveData } from '../storage/db';
-import { ALL_KEYS, TRANSACTION_KEYS, CONFIG_KEYS, DATE_FILTERABLE_KEYS } from '../storage/syncKeys';
+import { ALL_KEYS, TRANSACTION_KEYS, APP_CONFIG_KEYS, DATE_FILTERABLE_KEYS } from '../storage/syncKeys';
 import { getSupabaseClient, isSupabaseConfigured } from '../storage/syncClient';
 import { runAutoSync, isSyncInFlight } from '../storage/realtimeSync';
 
@@ -110,7 +110,7 @@ async function restoreFromSupabase(mode = 'replace') {
   }
 
   const { data: configRows, error: configErr } = await supabase
-    .from('app_config').select('key, value').in('key', CONFIG_KEYS);
+    .from('app_config').select('key, value').in('key', APP_CONFIG_KEYS);
   if (configErr) throw new Error(`Gagal restore config: ${configErr.message}`);
   for (const row of configRows || []) restored[row.key] = row.value;
 

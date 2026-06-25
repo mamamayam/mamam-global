@@ -110,13 +110,25 @@ const BahanBakuView = () => {
                     </div>
                 </Card>
             ) : (
-                <Input
-                    type="text"
-                    placeholder="Cari bahan baku..."
-                    icon={<Search className="w-5 h-5" />}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                />
+                <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
+                    <input
+                        type="text"
+                        placeholder="Cari bahan baku..."
+                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            aria-label="Hapus pencarian"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
             )}
 
             <Card padding="none" className="overflow-hidden">
@@ -458,14 +470,25 @@ const BahanSetengahJadiView = () => {
                 </div>
             ) : (
                 <>
-                    <Input
-                        type="text"
-                        placeholder="Cari bahan setengah jadi..."
-                        icon={<Search className="w-5 h-5" />}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="mb-5"
-                    />
+                    <div className="relative w-full sm:w-72 mb-5">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
+                        <input
+                            type="text"
+                            placeholder="Cari bahan setengah jadi..."
+                            className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                aria-label="Hapus pencarian"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
 
                     <Card padding="none" className="overflow-hidden">
                         <div className="overflow-x-auto">
@@ -926,6 +949,8 @@ const KalkulatorHppView = () => {
 const LibraryHppView = () => {
     const { hppLibrary, setHppLibrary, availableMaterials, categories, triggerConfirm, setEditingRecipe, setActiveTab } = useAppContext();
 
+    const [searchQuery, setSearchQuery] = useState('');
+
     const handleDelete = (id) => {
         triggerConfirm('Yakin ingin menghapus resep menu ini dari Library?', () => {
             setHppLibrary(hppLibrary.filter(item => item.id !== id));
@@ -975,6 +1000,27 @@ const LibraryHppView = () => {
                 className="border-b border-slate-200 dark:border-slate-700 pb-5"
             />
 
+            {/* Input Pencarian */}
+            <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
+                <input
+                    type="text"
+                    placeholder="Cari menu..."
+                    className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {searchQuery && (
+                    <button
+                        onClick={() => setSearchQuery('')}
+                        aria-label="Hapus pencarian"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                )}
+            </div>
+
             {hppLibrary.length === 0 ? (
                 <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 shadow-sm p-12 py-24 animate-in zoom-in-95 duration-300">
                     <EmptyState
@@ -985,7 +1031,9 @@ const LibraryHppView = () => {
             ) : (
                 <div className="space-y-10">
                     {[...categories, 'Uncategorized'].map(category => {
-                        const items = libraryWithLiveCalc[category];
+                        const items = (libraryWithLiveCalc[category] || []).filter(item =>
+                            item.name.toLowerCase().includes(searchQuery.toLowerCase())
+                        );
                         if (!items || items.length === 0) return null;
 
                         return (
