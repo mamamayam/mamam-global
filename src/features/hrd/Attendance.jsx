@@ -10,8 +10,9 @@ import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/s
 import { isSupabaseConfigured } from '../../storage/syncClient';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 import {
-  Card, Button, PageHeader, EmptyState, Badge, IconButton, Alert,
+  Card, Button, PageHeader, EmptyState, Badge, IconButton, Alert, SortModal,
 } from '../../components/ui';
+import { applySort } from '../../utils/sortUtils';
 
 const AUTO_CLOSE_HOUR = 21;
 const OUTLET_CLOSE_HOUR = 19;
@@ -34,6 +35,14 @@ const TYPE_OPTIONS = [
 
 const TYPE_LABEL = { masuk: 'Masuk', keluar: 'Pulang', bolong: 'Jam Bolong' };
 const TYPE_VARIANT = { masuk: 'success', keluar: 'neutral', bolong: 'warning' };
+
+const SORT_OPTIONS = [
+  { key: 'date-desc', label: 'Terbaru Dulu' },
+  { key: 'date-asc', label: 'Terlama Dulu' },
+  { key: 'name-asc', label: 'Nama Karyawan (A-Z)' },
+  { key: 'name-desc', label: 'Nama Karyawan (Z-A)' },
+  { key: 'type-asc', label: 'Tipe Absen (A-Z)' },
+];
 
 /**
  * Attendance — rekap & riwayat absensi untuk owner/admin.
@@ -64,7 +73,8 @@ export default function Attendance() {
   const [customEndDate, setCustomEndDate] = useState('');
   const [typeFilter, setTypeFilter] = useState('semua');
   const [empFilter, setEmpFilter] = useState('semua');
-  const [sortOrder, setSortOrder] = useState('terbaru');
+  const [sortKey, setSortKey] = useState('date-desc');
+  const [isSortOpen, setIsSortOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Tick tiap detik untuk countdown auto-close
@@ -206,18 +216,21 @@ export default function Attendance() {
 
     const lower = searchTerm.trim().toLowerCase();
 
-    return baseLogSource
-      .filter(r => inRange(r.date))
-      .filter(r => typeFilter === 'semua' || r.type === typeFilter)
-      .filter(r => empFilter === 'semua' || r.employeeId === empFilter)
-      .filter(r => !lower || (r.employeeName ?? '').toLowerCase().includes(lower))
-      .sort((a, b) =>
-        sortOrder === 'terbaru'
-          ? new Date(b.date) - new Date(a.date)
-          : new Date(a.date) - new Date(b.date)
-      );
+    return applySort(
+      baseLogSource
+        .filter(r => inRange(r.date))
+        .filter(r => typeFilter === 'semua' || r.type === typeFilter)
+        .filter(r => empFilter === 'semua' || r.employeeId === empFilter)
+        .filter(r => !lower || (r.employeeName ?? '').toLowerCase().includes(lower)),
+      sortKey,
+      {
+        date: r => new Date(r.date),
+        name: r => r.employeeName || '',
+        type: r => r.type || '',
+      }
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseLogSource, dateFilter, customStartDate, customEndDate, typeFilter, empFilter, sortOrder, searchTerm]);
+  }, [baseLogSource, dateFilter, customStartDate, customEndDate, typeFilter, empFilter, sortKey, searchTerm]);
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
@@ -349,7 +362,7 @@ export default function Attendance() {
                       {bolong && ` · Bolong ${fmtTime(bolong.date)}`}
                       {keluar && ` · Pulang ${fmtTime(keluar.date)}`}
                       {keluar?.isAutoClose && (
-                        <span className={`ml-1 font-medium ${keluar.isFromBolong ? 'text-orange-400' : 'text-amber-500'}`}>
+                        <span className={`ml-1 font-medium ${keluar.isFromBolong ? 'text-accent-400' : 'text-amber-500'}`}>
                           {keluar.isFromBolong ? '(dari bolong)' : '(auto)'}
                         </span>
                       )}
@@ -418,7 +431,7 @@ export default function Attendance() {
                       <select
                         value={editType}
                         onChange={e => setEditType(e.target.value)}
-                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-accent-400"
                       >
                         <option value="masuk">Masuk</option>
                         <option value="bolong">Jam Bolong</option>
@@ -427,7 +440,7 @@ export default function Attendance() {
                       <input
                         type="time" value={editTime}
                         onChange={e => setEditTime(e.target.value)}
-                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-accent-400"
                       />
                       <button
                         onClick={() => handleAddManualRecord(employee.id, employee.name)}
@@ -494,7 +507,7 @@ export default function Attendance() {
               <input
                 type="date" value={customStartDate}
                 onChange={e => setCustomStartDate(e.target.value)}
-                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-slate-700 dark:text-slate-200 dark:bg-slate-900"
+                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500 text-slate-700 dark:text-slate-200 dark:bg-slate-900"
               />
             </div>
             <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 mt-4 shrink-0" />
@@ -505,7 +518,7 @@ export default function Attendance() {
               <input
                 type="date" value={customEndDate}
                 onChange={e => setCustomEndDate(e.target.value)}
-                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-slate-700 dark:text-slate-200 dark:bg-slate-900"
+                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500 text-slate-700 dark:text-slate-200 dark:bg-slate-900"
               />
             </div>
           </Card>
@@ -518,7 +531,7 @@ export default function Attendance() {
             <select
               value={empFilter}
               onChange={e => setEmpFilter(e.target.value)}
-              className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+              className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-accent-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
             >
               <option value="semua">Semua Karyawan</option>
               {uniqueLogEmployees.map(e => (
@@ -533,7 +546,7 @@ export default function Attendance() {
             <select
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value)}
-              className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+              className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-accent-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
             >
               {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -541,17 +554,14 @@ export default function Attendance() {
           </div>
 
           {/* Sort */}
-          <div className="relative w-full sm:w-44">
-            <select
-              value={sortOrder}
-              onChange={e => setSortOrder(e.target.value)}
-              className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
-            >
-              <option value="terbaru">Terbaru Dulu</option>
-              <option value="terlama">Terlama Dulu</option>
-            </select>
-            <ArrowUpDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsSortOpen(true)}
+            className="w-full sm:w-44 flex items-center justify-between gap-2 pl-4 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-accent-300 dark:hover:border-accent-500/40 transition-colors text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+          >
+            <span className="truncate">{SORT_OPTIONS.find(o => o.key === sortKey)?.label || 'Urutkan'}</span>
+            <ArrowUpDown className="text-slate-400 dark:text-slate-500 w-4 h-4 shrink-0" />
+          </button>
 
           {/* Search */}
           <div className="relative flex-1 min-w-0">
@@ -561,7 +571,7 @@ export default function Attendance() {
               placeholder="Cari nama karyawan..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+              className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-accent-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
             />
           </div>
         </Card>
@@ -660,6 +670,14 @@ export default function Attendance() {
           {filteredLogs.length > 300 ? ' · menampilkan 300 terbaru' : ''}
         </p>
       </div>
+
+      <SortModal
+        isOpen={isSortOpen}
+        onClose={() => setIsSortOpen(false)}
+        value={sortKey}
+        onChange={setSortKey}
+        options={SORT_OPTIONS}
+      />
     </div>
   );
 }

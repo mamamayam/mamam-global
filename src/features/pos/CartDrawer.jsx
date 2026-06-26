@@ -24,6 +24,18 @@ const CartDrawer = () => {
   // Tambahan: Local state untuk input nomor HP pelanggan baru via Kasir
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
 
+  // Fix 2: Refs untuk menjaga customer tetap ada saat keranjang dikosongkan
+  const customerNameBackup = React.useRef('');
+  const isCustomerClearedIntentionally = React.useRef(false);
+  const prevCartLengthRef = React.useRef(cart.length);
+
+  // Fix 1: Handler untuk hapus customer secara sengaja (tombol X)
+  const handleClearCustomer = () => {
+    isCustomerClearedIntentionally.current = true;
+    customerNameBackup.current = '';
+    setCustomerName('');
+  };
+
   const handleEditVariant = (cartItem) => {
     const originalMenu = menus.find(m => m.id === cartItem.menuId);
     if (originalMenu) {
@@ -39,6 +51,28 @@ const CartDrawer = () => {
       setCurrentView('kasir');
     }
   }, [isCartOpen, setCurrentView]);
+
+  // Fix 2a: Backup customerName setiap kali ada isinya
+  useEffect(() => {
+    if (customerName.trim() !== '') {
+      customerNameBackup.current = customerName;
+      isCustomerClearedIntentionally.current = false;
+    }
+  }, [customerName]);
+
+  // Fix 2b: Restore customerName saat item baru masuk setelah keranjang kosong
+  useEffect(() => {
+    if (
+      prevCartLengthRef.current === 0 &&
+      cart.length > 0 &&
+      !customerName.trim() &&
+      customerNameBackup.current.trim() &&
+      !isCustomerClearedIntentionally.current
+    ) {
+      setCustomerName(customerNameBackup.current);
+    }
+    prevCartLengthRef.current = cart.length;
+  }, [cart.length]);
 
   if (!isCartOpen) return null;
 
@@ -71,16 +105,16 @@ const CartDrawer = () => {
               {savedBills.length > 0 && (
                 <div className="w-full bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-300">
                   <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-3 text-sm">
-                    <Save className="w-4 h-4 text-orange-600 dark:text-orange-400" /> Bill Tersimpan ({savedBills.length})
+                    <Save className="w-4 h-4 text-accent-600 dark:text-accent-400" /> Bill Tersimpan ({savedBills.length})
                   </h3>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {savedBills.map(bill => (
-                      <div key={bill.id} className="flex justify-between items-center p-3 border border-orange-100 dark:border-orange-500/20 rounded-xl bg-orange-50 dark:bg-orange-500/30">
+                      <div key={bill.id} className="flex justify-between items-center p-3 border border-accent-100 dark:border-accent-500/20 rounded-xl bg-orange-50 dark:bg-accent-500/30">
                         <div>
                           <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{bill.customerName}</p>
                           <p className="text-[10px] text-slate-500 dark:text-slate-400">{bill.cart.length} Item • {bill.date.toLocaleTimeString('id-ID')}</p>
                         </div>
-                        <button onClick={() => loadSavedBill(bill)} className="px-3 py-1.5 bg-orange-100 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400 rounded-lg text-xs font-bold hover:bg-orange-200 dark:hover:bg-orange-500/20 transition-colors">
+                        <button onClick={() => loadSavedBill(bill)} className="px-3 py-1.5 bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 rounded-lg text-xs font-bold hover:bg-accent-200 dark:hover:bg-accent-500/20 transition-colors">
                           Lanjut
                         </button>
                       </div>
@@ -111,7 +145,7 @@ const CartDrawer = () => {
                           setIsCustomerDropdownMode(!isCustomerDropdownMode);
                           if (!activeCustomer) setCustomerName('');
                         }}
-                        className={`w-7 h-4 rounded-full relative transition-colors duration-300 ${isCustomerDropdownMode ? 'bg-orange-600 dark:bg-orange-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                        className={`w-7 h-4 rounded-full relative transition-colors duration-300 ${isCustomerDropdownMode ? 'bg-accent-600 dark:bg-accent-500' : 'bg-slate-300 dark:bg-slate-600'}`}
                       >
                         <div className={`w-3 h-3 bg-white dark:bg-slate-900 rounded-full absolute top-0.5 transition-transform duration-300 ${isCustomerDropdownMode ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
                       </button>
@@ -120,32 +154,62 @@ const CartDrawer = () => {
                 </div>
 
                 {isCustomerDropdownMode ? (
-                  <select
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full border-b-2 border-slate-100 dark:border-slate-800 focus:border-orange-600 dark:focus:border-orange-500 pb-2 focus:outline-none bg-transparent transition-colors font-semibold text-slate-800 dark:text-slate-100 text-sm cursor-pointer"
-                  >
-                    <option value="">-- Pilih Pelanggan (Guest) --</option>
-                    {activeOnly(customers).map(c => (
-                      <option key={c.id} value={c.name}>{c.name} - {c.phone || 'Tanpa HP'} ({c.points} Pts)</option>
-                    ))}
-                  </select>
+                  // Fix 1 (dropdown mode): tambah tombol X untuk hapus pilihan pelanggan
+                  <div className="flex items-center gap-1">
+                    <select
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="flex-1 border-b-2 border-slate-100 dark:border-slate-800 focus:border-accent-600 dark:focus:border-accent-500 pb-2 focus:outline-none bg-transparent transition-colors font-semibold text-slate-800 dark:text-slate-100 text-sm cursor-pointer"
+                    >
+                      <option value="">-- Pilih Pelanggan (Guest) --</option>
+                      {activeOnly(customers).map(c => (
+                        <option key={c.id} value={c.name}>{c.name} - {c.phone || 'Tanpa HP'} ({c.points} Pts)</option>
+                      ))}
+                    </select>
+                    {customerName && (
+                      <button
+                        onClick={handleClearCustomer}
+                        title="Hapus pilihan pelanggan"
+                        className="pb-2 text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 ) : (
-                  <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Ketik nama / no. HP pelanggan..." className="w-full border-b-2 border-slate-100 dark:border-slate-800 focus:border-orange-600 dark:focus:border-orange-500 pb-2 focus:outline-none bg-transparent transition-colors font-semibold text-slate-800 dark:text-slate-100 text-sm" />
+                  // Fix 1 (text mode): tambah tombol X di dalam input
+                  <div className="relative flex items-end">
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Ketik nama / no. HP pelanggan..."
+                      className="w-full border-b-2 border-slate-100 dark:border-slate-800 focus:border-accent-600 dark:focus:border-accent-500 pb-2 focus:outline-none bg-transparent transition-colors font-semibold text-slate-800 dark:text-slate-100 text-sm pr-5"
+                    />
+                    {customerName && (
+                      <button
+                        onClick={handleClearCustomer}
+                        title="Hapus nama pelanggan"
+                        className="absolute right-0 bottom-2 text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 {/* Fix Suggestion logic: Includes Phone numbers as well */}
                 {!isCustomerDropdownMode && customerName.trim() !== '' && !activeCustomer && activeOnly(customers).filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).length > 0 && (
-                  <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-300 bg-orange-50 dark:bg-orange-500/50 border border-orange-100 dark:border-orange-500/20 p-2 rounded-xl">
-                    <p className="text-[10px] font-bold text-orange-600 dark:text-orange-400 mb-1.5 flex items-center gap-1"><Info className="w-3 h-3" /> Maksud Anda pelanggan ini?</p>
+                  <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-300 bg-orange-50 dark:bg-accent-500/50 border border-accent-100 dark:border-accent-500/20 p-2 rounded-xl">
+                    <p className="text-[10px] font-bold text-accent-600 dark:text-accent-400 mb-1.5 flex items-center gap-1"><Info className="w-3 h-3" /> Maksud Anda pelanggan ini?</p>
                     <div className="space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar pr-1 relative z-10">
                       {activeOnly(customers).filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).map(sc => (
-                        <div key={sc.id} onClick={() => setCustomerName(sc.name)} className="flex justify-between items-center bg-white dark:bg-slate-900 border border-orange-100 dark:border-orange-500/20 p-2 rounded-lg cursor-pointer hover:border-orange-300 dark:hover:border-orange-500/40 hover:shadow-sm transition-all">
+                        <div key={sc.id} onClick={() => setCustomerName(sc.name)} className="flex justify-between items-center bg-white dark:bg-slate-900 border border-accent-100 dark:border-accent-500/20 p-2 rounded-lg cursor-pointer hover:border-accent-300 dark:hover:border-accent-500/40 hover:shadow-sm transition-all">
                           <div className="flex flex-col">
                             <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">{sc.name}</span>
                             <span className="text-[9px] font-medium text-slate-500 dark:text-slate-400">{sc.phone || 'Tidak ada No. HP'}</span>
                           </div>
-                          <span className="text-[10px] text-orange-600 dark:text-orange-400 font-bold bg-orange-50 dark:bg-orange-500/10 px-2 py-1 rounded-md border border-orange-200 dark:border-orange-500/30">Pilih</span>
+                          <span className="text-[10px] text-accent-600 dark:text-accent-400 font-bold bg-orange-50 dark:bg-accent-500/10 px-2 py-1 rounded-md border border-accent-200 dark:border-accent-500/30">Pilih</span>
                         </div>
                       ))}
                     </div>
@@ -206,7 +270,7 @@ const CartDrawer = () => {
                         }
                       }}
                       className={`py-2 px-3 text-sm rounded-xl font-bold transition-all duration-200 ${orderType === type
-                        ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/30 shadow-sm'
+                        ? 'bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 border border-accent-200 dark:border-accent-500/30 shadow-sm'
                         : 'bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border border-transparent hover:bg-slate-100 dark:hover:bg-slate-800'
                         }`}
                     >
@@ -217,11 +281,11 @@ const CartDrawer = () => {
               </div>
 
               {orderType === 'Delivery' && (
-                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-orange-100 dark:border-orange-500/20 animate-in slide-in-from-top-3 duration-300">
-                  <label className="block text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider mb-3 flex items-center gap-1"><Truck className="w-3 h-3" /> Biaya Pengiriman</label>
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-accent-100 dark:border-accent-500/20 animate-in slide-in-from-top-3 duration-300">
+                  <label className="block text-xs font-bold text-accent-600 dark:text-accent-400 uppercase tracking-wider mb-3 flex items-center gap-1"><Truck className="w-3 h-3" /> Biaya Pengiriman</label>
                   <div className="flex overflow-x-auto pb-2 gap-2 snap-x hide-scrollbar">
                     {[0, 3000, 5000].map(fee => (
-                      <button key={fee} onClick={() => { setDeliveryFee(fee); setCustomDeliveryFee(''); }} className={`snap-center shrink-0 py-2 px-4 rounded-xl border font-bold text-sm transition-all whitespace-nowrap ${deliveryFee === fee && !customDeliveryFee ? 'bg-orange-600 dark:bg-orange-500 text-white border-orange-600 dark:border-orange-500 shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-950'}`}>
+                      <button key={fee} onClick={() => { setDeliveryFee(fee); setCustomDeliveryFee(''); }} className={`snap-center shrink-0 py-2 px-4 rounded-xl border font-bold text-sm transition-all whitespace-nowrap ${deliveryFee === fee && !customDeliveryFee ? 'bg-accent-600 dark:bg-accent-500 text-white border-accent-600 dark:border-accent-500 shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-950'}`}>
                         {fee === 0 ? 'Gratis' : formatRupiah(fee)}
                       </button>
                     ))}
@@ -247,14 +311,14 @@ const CartDrawer = () => {
                           </p>
                           <button
                             onClick={() => handleEditVariant(item)}
-                            className="p-1 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors"
+                            className="p-1 bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded hover:bg-accent-100 dark:hover:bg-accent-500/20 transition-colors"
                             title="Edit Varian"
                           >
                             <Edit3 className="w-3 h-3" />
                           </button>
                         </div>
                       )}                      
-                      <p className="text-sm font-bold text-orange-600 dark:text-orange-400 mt-1">{formatRupiah(item.price)}</p>
+                      <p className="text-sm font-bold text-accent-600 dark:text-accent-400 mt-1">{formatRupiah(item.price)}</p>
                       <div className="w-full mt-2 flex items-center gap-1.5">
                         <Edit3 className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                         <input
@@ -262,13 +326,13 @@ const CartDrawer = () => {
                           value={item.note || ''}
                           onChange={(e) => updateCartItemNote(item.cartItemId, e.target.value)}
                           placeholder="Catatan pesanan (opsional)..."
-                          className="flex-1 text-[11px] bg-transparent border-b border-slate-200 dark:border-slate-700 focus:border-orange-500 dark:focus:border-orange-500 outline-none pb-0.5 text-slate-600 dark:text-slate-300 transition-colors"
+                          className="flex-1 text-[11px] bg-transparent border-b border-slate-200 dark:border-slate-700 focus:border-accent-500 dark:focus:border-accent-500 outline-none pb-0.5 text-slate-600 dark:text-slate-300 transition-colors"
                         />
                       </div>
                     </div>
                     {/* --- REVISI INPUT KUANTITAS CUSTOM --- */}
                     <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-950 rounded-lg p-1 border border-slate-100 dark:border-slate-800">
-                      <button onClick={() => updateCartQty(item.cartItemId, -1)} className="w-7 h-7 flex items-center justify-center bg-white dark:bg-slate-900 rounded shadow-sm text-slate-600 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors shrink-0"><Minus className="w-3 h-3" /></button>
+                      <button onClick={() => updateCartQty(item.cartItemId, -1)} className="w-7 h-7 flex items-center justify-center bg-white dark:bg-slate-900 rounded shadow-sm text-slate-600 dark:text-slate-300 hover:text-accent-600 dark:hover:text-accent-400 transition-colors shrink-0"><Minus className="w-3 h-3" /></button>
 
                       <input
                         type="text"
@@ -285,7 +349,7 @@ const CartDrawer = () => {
                             updateCartQty(item.cartItemId, newQty - item.qty);
                           }
                         }}
-                        className="w-8 text-center font-bold text-sm bg-transparent outline-none focus:ring-2 focus:ring-orange-500/20 rounded transition-colors"
+                        className="w-8 text-center font-bold text-sm bg-transparent outline-none focus:ring-2 focus:ring-accent-500/20 rounded transition-colors"
                       />
 
                       <button onClick={() => updateCartQty(item.cartItemId, 1)} className="w-7 h-7 flex items-center justify-center bg-white dark:bg-slate-900 rounded shadow-sm text-slate-600 dark:text-slate-300 hover:text-green-500 dark:hover:text-green-400 transition-colors shrink-0"><Plus className="w-3 h-3" /></button>
@@ -325,7 +389,7 @@ const CartDrawer = () => {
                             <input type="number" min="0" max={activeCustomer.points} placeholder={`Max ${activeCustomer.points}`} value={pointsToRedeem || ''} onChange={(e) => { setPointsToRedeem(Math.min(activeCustomer.points, Math.max(0, Number(e.target.value) || 0))); }} className="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-200 dark:border-slate-700 outline-none" />
                             <button onClick={() => { setPointsToRedeem(activeCustomer.points); }} className="px-2.5 py-2 bg-yellow-400 dark:bg-yellow-500 hover:bg-yellow-500 dark:hover:bg-yellow-500 text-white text-[11px] font-bold rounded-lg transition-colors shrink-0">Semua</button>
                           </div>
-                          <span className="text-[10px] text-orange-600 dark:text-orange-400 font-bold block">Diskon: {formatRupiah(getPointDiscount())} (1 Poin = Rp100)</span>
+                          <span className="text-[10px] text-accent-600 dark:text-accent-400 font-bold block">Diskon: {formatRupiah(getPointDiscount())} (1 Poin = Rp100)</span>
                         </div>
                       ) : (
                         <div className="text-[11px] text-slate-400 dark:text-slate-500 italic flex items-center h-full">Masukkan member terdaftar untuk poin.</div>
@@ -368,11 +432,11 @@ const CartDrawer = () => {
                 <div className="flex justify-between text-slate-500 dark:text-slate-400"><span>Service Chg ({storeSettings.serviceCharge}%)</span><span className="font-semibold">{formatRupiah(getServiceChargeAmount())}</span></div>
               )}
 
-              {orderType === 'Delivery' && <div className="flex justify-between text-orange-600 dark:text-orange-400"><span>Ongkir</span><span className="font-semibold">{formatRupiah(deliveryFee)}</span></div>}
-              <div className="flex justify-between text-lg font-black text-slate-800 dark:text-slate-100 border-t border-slate-100 dark:border-slate-800 pt-2 mt-2"><span>Total Tagihan</span><span className="text-orange-600 dark:text-orange-400">{formatRupiah(getTotal())}</span></div>
+              {orderType === 'Delivery' && <div className="flex justify-between text-accent-600 dark:text-accent-400"><span>Ongkir</span><span className="font-semibold">{formatRupiah(deliveryFee)}</span></div>}
+              <div className="flex justify-between text-lg font-black text-slate-800 dark:text-slate-100 border-t border-slate-100 dark:border-slate-800 pt-2 mt-2"><span>Total Tagihan</span><span className="text-accent-600 dark:text-accent-400">{formatRupiah(getTotal())}</span></div>
             </div>
             <div className="flex gap-2">
-              <button onClick={handleOpenBill} className="flex-1 py-3.5 rounded-xl bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold border border-orange-200 dark:border-orange-500/30 shadow-sm hover:bg-orange-100 dark:hover:bg-orange-500/15 transition-all flex items-center justify-center gap-2 text-sm"><Save className="w-4 h-4" /> Simpan Bill</button>
+              <button onClick={handleOpenBill} className="flex-1 py-3.5 rounded-xl bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 font-bold border border-accent-200 dark:border-accent-500/30 shadow-sm hover:bg-accent-100 dark:hover:bg-accent-500/15 transition-all flex items-center justify-center gap-2 text-sm"><Save className="w-4 h-4" /> Simpan Bill</button>
               <button
                 onClick={() => setPaymentModal({
                   isOpen: true,
@@ -382,7 +446,7 @@ const CartDrawer = () => {
                   amountPaid: '',
                   status: 'pending'
                 })}
-                className="flex-[1.5] py-3.5 rounded-xl bg-orange-600 dark:bg-orange-500 text-white font-bold shadow-lg hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+                className="flex-[1.5] py-3.5 rounded-xl bg-accent-600 dark:bg-accent-500 text-white font-bold shadow-lg hover:bg-accent-700 dark:hover:bg-accent-600 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
               >
                 Bayar <ChevronRight className="w-4 h-4" />
               </button>

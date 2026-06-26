@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw } from 'lucide-react';
+import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown } from 'lucide-react';
 import { isNativePlatform, printShiftNativeBluetooth } from '../../library/printer';
 import { toPng, toBlob } from 'html-to-image';
 import { generateUUID, toLocalMonthString } from '../../utils/formatters';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete, pushLiveState } from '../../storage/realtimeSync';
+import { applySort } from '../../utils/sortUtils';
 
 // Import komponen UI Design System
 import { 
@@ -16,7 +17,8 @@ import {
   PageHeader, 
   EmptyState, 
   Badge, 
-  IconButton 
+  IconButton,
+  SortModal
 } from '../../components/ui';
 
 const ShiftView = () => {
@@ -34,10 +36,17 @@ const ShiftView = () => {
   // State untuk Fitur Edit (Khusus Admin)
   const [editingShift, setEditingShift] = useState(null);
   const [editActualCashInput, setEditActualCashInput] = useState('');
+  const [editInitialCashInput, setEditInitialCashInput] = useState('');
+
+  // State untuk Fitur Edit Saldo Awal pada Shift yang SEDANG AKTIF (Khusus Admin)
+  const [isEditingActiveInitial, setIsEditingActiveInitial] = useState(false);
+  const [editActiveInitialInput, setEditActiveInitialInput] = useState('');
 
   // Filter Bulan untuk Rekapitulasi Riwayat Shift di Bagian Bawah
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString()); // Default YYYY-MM
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
+  const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
+  const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
 
   const handleShareImage = async () => {
     const reportElement = document.getElementById('xreading-content');
@@ -170,19 +179,34 @@ const ShiftView = () => {
   const handleOpenEditModal = (shift) => {
     setEditingShift(shift);
     setEditActualCashInput(shift.actualCash.toString());
+    setEditInitialCashInput((shift.stats?.initialCash ?? 0).toString());
   };
 
   const handleSaveEdit = () => {
     if (!editActualCashInput || Number(editActualCashInput) < 0) {
       return triggerAlert('Masukkan nominal uang aktual yang valid.');
     }
+    if (editInitialCashInput === '' || Number(editInitialCashInput) < 0) {
+      return triggerAlert('Masukkan nominal saldo awal yang valid.');
+    }
 
     triggerConfirm(`Apakah Anda yakin ingin menyimpan perubahan pada laporan ${editingShift.id}?`, () => {
       const newActualCash = Number(editActualCashInput);
-      const newDifference = newActualCash - editingShift.stats.expectedCash;
+      const newInitialCash = Number(editInitialCashInput);
+
+      // Saldo awal berubah → recalculate expectedCash berdasarkan delta-nya,
+      // komponen lain (penjualan/pemasukan/pengeluaran) tidak berubah.
+      const initialDelta = newInitialCash - (editingShift.stats?.initialCash ?? 0);
+      const newExpectedCash = (editingShift.stats?.expectedCash ?? 0) + initialDelta;
+      const newDifference = newActualCash - newExpectedCash;
 
       const updatedShift = {
         ...editingShift,
+        stats: {
+          ...editingShift.stats,
+          initialCash: newInitialCash,
+          expectedCash: newExpectedCash
+        },
         actualCash: newActualCash,
         difference: newDifference
       };
@@ -192,6 +216,30 @@ const ShiftView = () => {
       setShiftHistory(updatedHistory);
       triggerAlert(`Data laporan ${updatedShift.id} berhasil diperbarui.`);
       setEditingShift(null);
+    });
+  };
+
+  // --- Edit Saldo Awal untuk Shift yang SEDANG BERJALAN (currentShift) ---
+  const handleOpenEditActiveInitial = () => {
+    setEditActiveInitialInput((currentShift?.initialCash ?? 0).toString());
+    setIsEditingActiveInitial(true);
+  };
+
+  const handleSaveActiveInitial = () => {
+    if (editActiveInitialInput === '' || Number(editActiveInitialInput) < 0) {
+      return triggerAlert('Masukkan nominal saldo awal yang valid.');
+    }
+
+    const newInitialCash = Number(editActiveInitialInput);
+
+    triggerConfirm('Apakah Anda yakin ingin mengoreksi Saldo Awal dompet yang sedang berjalan ini?', () => {
+      const updatedShift = { ...currentShift, initialCash: newInitialCash };
+      setCurrentShift(updatedShift);
+      pushLiveState('currentShift', updatedShift).catch(err =>
+        console.warn('Gagal push manual koreksi saldo awal:', err)
+      );
+      triggerAlert('Saldo Awal dompet berhasil dikoreksi.');
+      setIsEditingActiveInitial(false);
     });
   };
 
@@ -227,6 +275,21 @@ const ShiftView = () => {
       return shiftDateStr === filterMonth;
     });
   }, [shiftHistory, filterMonth, showTrash]);
+
+  // Urutkan hasil filter pakai sortKey terpilih (gak ngubah rekapShiftStats, cuma urutan tampil)
+  const sortedShiftHistory = useMemo(() => applySort(filteredShiftHistory, sortKey, {
+    date: s => new Date(s.startTime),
+    id: s => s.id || '',
+    difference: s => s.difference || 0,
+  }), [filteredShiftHistory, sortKey]);
+
+  const sortOptions = [
+    { key: 'date-desc', label: 'Terbaru Dulu' },
+    { key: 'date-asc', label: 'Terlama Dulu' },
+    { key: 'id-asc', label: 'ID Dompet (A-Z)' },
+    { key: 'id-desc', label: 'ID Dompet (Z-A)' },
+    { key: 'difference-desc', label: 'Selisih Terbesar' },
+  ];
 
   const rekapShiftStats = useMemo(() => {
     let totalInitial = 0;
@@ -385,7 +448,18 @@ const ShiftView = () => {
 
             <div className="mt-8 space-y-4 relative z-10">
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
-                <span className="text-sm text-slate-500 dark:text-slate-400">Saldo Awal</span>
+                <span className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                  Saldo Awal
+                  {isAdminMode && (
+                    <button
+                      onClick={handleOpenEditActiveInitial}
+                      title="Koreksi Saldo Awal (Admin)"
+                      className="text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </span>
                 <span className="font-bold text-slate-800 dark:text-slate-100">{formatRupiah(shiftStats?.initialCash)}</span>
               </div>
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
@@ -420,7 +494,7 @@ const ShiftView = () => {
                 value={actualCashInput}
                 onChange={e => setActualCashInput(e.target.value)}
                 placeholder="0"
-                className="text-xl font-black py-4 border-2 focus:border-orange-600"
+                className="text-xl font-black py-4 border-2 focus:border-accent-600"
               />
             </div>
 
@@ -442,7 +516,7 @@ const ShiftView = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
             <h3 className="font-heading text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <History className="w-5 h-5 text-orange-600 dark:text-orange-400" /> Riwayat
+              <History className="w-5 h-5 text-accent-600 dark:text-accent-400" /> Riwayat
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">Laporan performa dan akurasi kas di dompet.</p>
           </div>
@@ -486,23 +560,30 @@ const ShiftView = () => {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowTrash(v => !v)}
-                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
               >
                 {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(shiftHistory).length})`}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSortOpen(true)}
+                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>
               <span className="text-slate-400 dark:text-slate-500 text-xs font-semibold">{filteredShiftHistory.length} data ditemukan</span>
             </div>
           </div>
           
           <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[400px] overflow-y-auto custom-scrollbar">
-            {filteredShiftHistory.length === 0 ? (
+            {sortedShiftHistory.length === 0 ? (
               <EmptyState 
                 size="sm"
                 icon={showTrash ? <Trash2 className="w-10 h-10 opacity-30" /> : <Clock className="w-10 h-10 opacity-30" />} 
                 title={showTrash ? 'Recycle bin kosong.' : 'Tidak ada riwayat penutupan dompet pada periode ini'} 
               />
             ) : (
-              filteredShiftHistory.map((shift) => {
+              sortedShiftHistory.map((shift) => {
                 const badgeVariant = shift.difference < 0 ? 'danger' : shift.difference > 0 ? 'success' : 'neutral';
                 const statusLabel = shift.difference < 0 ? 'Minus' : shift.difference > 0 ? 'Lebih' : 'Pas (Balance)';
 
@@ -576,6 +657,75 @@ const ShiftView = () => {
         </Card>
       </div>
 
+      <SortModal
+        isOpen={isSortOpen}
+        onClose={() => setIsSortOpen(false)}
+        value={sortKey}
+        onChange={setSortKey}
+        options={sortOptions}
+      />
+
+      {/* =========================================================================
+          MODAL EDIT SALDO AWAL — SHIFT YANG SEDANG AKTIF (Khusus Admin)
+          ========================================================================= */}
+      <Modal
+        isOpen={isEditingActiveInitial}
+        onClose={() => setIsEditingActiveInitial(false)}
+        title="Koreksi Saldo Awal Dompet Aktif"
+      >
+        {currentShift && (
+          <>
+            <div className="p-4 md:p-6 space-y-4">
+              <p className="text-xs text-slate-500 dark:text-slate-400 -mt-2">ID: {currentShift.id}</p>
+
+              <div className="bg-blue-50 dark:bg-blue-500/10 text-blue-800 dark:text-blue-300 p-3 rounded-xl text-xs flex items-start gap-2 border border-blue-100 dark:border-blue-500/20">
+                <FileText className="w-4 h-4 mt-0.5 shrink-0" />
+                <p>Sebagai Admin, Anda dapat mengoreksi <b>Saldo Awal</b> dompet yang sedang berjalan ini. Saldo Akhir (target) akan dihitung ulang secara otomatis.</p>
+              </div>
+
+              <div>
+                <Input
+                  type="number"
+                  label="Koreksi Saldo Awal (Modal)"
+                  icon={<span className="font-bold">Rp</span>}
+                  value={editActiveInitialInput}
+                  onChange={e => setEditActiveInitialInput(e.target.value)}
+                  placeholder="0"
+                  className="text-lg font-bold py-3"
+                />
+              </div>
+
+              {/* Preview Saldo Akhir Baru */}
+              {editActiveInitialInput !== '' && shiftStats && (
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Preview Saldo Akhir Baru:</p>
+                  <p className="font-black text-lg text-slate-800 dark:text-slate-100">
+                    {formatRupiah(shiftStats.expectedCash + (Number(editActiveInitialInput) - shiftStats.initialCash))}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 md:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex gap-3">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => setIsEditingActiveInitial(false)}
+              >
+                Batal
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1"
+                onClick={handleSaveActiveInitial}
+              >
+                Simpan Koreksi
+              </Button>
+            </div>
+          </>
+        )}
+      </Modal>
+
       {/* =========================================================================
           MODAL EDIT SHIFT (Tampil jika ada shift yang diedit)
           ========================================================================= */}
@@ -602,6 +752,18 @@ const ShiftView = () => {
               <div>
                 <Input
                   type="number"
+                  label="Koreksi Saldo Awal (Modal)"
+                  icon={<span className="font-bold">Rp</span>}
+                  value={editInitialCashInput}
+                  onChange={e => setEditInitialCashInput(e.target.value)}
+                  placeholder="0"
+                  className="text-lg font-bold py-3"
+                />
+              </div>
+
+              <div>
+                <Input
+                  type="number"
                   label="Koreksi Saldo Aktual di Dompet"
                   icon={<span className="font-bold">Rp</span>}
                   value={editActualCashInput}
@@ -612,14 +774,20 @@ const ShiftView = () => {
               </div>
 
               {/* Preview Perubahan Selisih */}
-              {editActualCashInput && (
+              {editActualCashInput && editInitialCashInput !== '' && (
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
                   <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Preview Selisih Baru:</p>
-                  <p className={`font-black text-lg ${(Number(editActualCashInput) - editingShift.stats.expectedCash) < 0 ? 'text-red-500 dark:text-red-400' :
-                    (Number(editActualCashInput) - editingShift.stats.expectedCash) > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'
-                    }`}>
-                    {formatRupiah(Number(editActualCashInput) - editingShift.stats.expectedCash)}
-                  </p>
+                  {(() => {
+                    const previewExpected = editingShift.stats.expectedCash + (Number(editInitialCashInput) - editingShift.stats.initialCash);
+                    const previewDifference = Number(editActualCashInput) - previewExpected;
+                    return (
+                      <p className={`font-black text-lg ${previewDifference < 0 ? 'text-red-500 dark:text-red-400' :
+                        previewDifference > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'
+                        }`}>
+                        {formatRupiah(previewDifference)}
+                      </p>
+                    );
+                  })()}
                 </div>
               )}
             </div>

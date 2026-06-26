@@ -165,7 +165,7 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
       <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-3xl p-5 pb-8" style={{ animation: 'slideUp 0.25s ease' }}>
         <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-5" />
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-xl">
+          <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-accent-500/10 flex items-center justify-center text-xl">
             {exportType === 'json' ? '📦' : '📊'}
           </div>
           <div>
@@ -178,7 +178,7 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
           {PRESETS.map(p => (
             <button key={p.id} onClick={() => applyPreset(p)}
               className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all
-                ${preset === p.id ? 'border-orange-500 bg-orange-500 text-white' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-orange-300 dark:hover:border-orange-500/50'}`}
+                ${preset === p.id ? 'border-accent-500 bg-accent-500 text-white' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-accent-300 dark:hover:border-accent-500/50'}`}
             >{p.label}</button>
           ))}
         </div>
@@ -189,16 +189,16 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
               <div key={lbl}>
                 <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1.5 uppercase tracking-wider">{lbl}</p>
                 <input type="date" value={val} onChange={e => set(e.target.value)}
-                  className="w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors" />
+                  className="w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-accent-500 dark:focus:border-accent-500 transition-colors" />
               </div>
             ))}
           </div>
         )}
 
         {hasRange && (
-          <div className="bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-orange-500 dark:text-orange-400 shrink-0" />
-            <p className="text-xs text-orange-700 dark:text-orange-300 font-semibold">{startDate || '∞'} — {endDate || '∞'}</p>
+          <div className="bg-orange-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/30 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-accent-500 dark:text-accent-400 shrink-0" />
+            <p className="text-xs text-accent-700 dark:text-accent-300 font-semibold">{startDate || '∞'} — {endDate || '∞'}</p>
           </div>
         )}
         {isAllTime && (
@@ -209,7 +209,7 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
         )}
 
         <button onClick={() => onConfirm(isAllTime ? '' : startDate, isAllTime ? '' : endDate)}
-          className="w-full py-4 rounded-xl font-black text-sm bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600 text-white shadow-lg shadow-orange-200 dark:shadow-none transition-all">
+          className="w-full py-4 rounded-xl font-black text-sm bg-accent-600 dark:bg-accent-500 hover:bg-accent-700 dark:hover:bg-accent-600 text-white shadow-lg shadow-accent-200 dark:shadow-none transition-all">
           Download {label}
         </button>
       </div>
@@ -243,8 +243,8 @@ function ImportModal({ type, onClose, onConfirm }) {
         <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-5" />
 
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
-            <FileUp className="w-5 h-5 text-orange-500 dark:text-orange-400" />
+          <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-accent-500/10 flex items-center justify-center">
+            <FileUp className="w-5 h-5 text-accent-500 dark:text-accent-400" />
           </div>
           <div>
             <p className="font-black text-slate-900 dark:text-slate-100 text-base">Import dari {label}</p>
@@ -258,7 +258,7 @@ function ImportModal({ type, onClose, onConfirm }) {
           onDrop={e => { e.preventDefault(); setDragOver(false); setFile(e.dataTransfer.files[0]); }}
           onClick={() => !file && inputRef.current?.click()}
           className={`border-2 border-dashed rounded-2xl p-6 text-center mb-4 cursor-pointer transition-all
-            ${dragOver ? 'border-orange-400 bg-orange-50 dark:bg-orange-500/10' : file ? 'border-green-400 bg-green-50 dark:bg-green-500/10' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-orange-300 dark:hover:border-orange-500/50'}`}
+            ${dragOver ? 'border-accent-400 bg-orange-50 dark:bg-accent-500/10' : file ? 'border-green-400 bg-green-50 dark:bg-green-500/10' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-accent-300 dark:hover:border-accent-500/50'}`}
         >
           {file ? (
             <div className="flex items-center gap-3">
@@ -287,12 +287,12 @@ function ImportModal({ type, onClose, onConfirm }) {
         <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Mode Import</p>
         <div className="grid grid-cols-2 gap-2 mb-4">
           <button onClick={() => handleModeChange('merge')}
-            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'merge' ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
+            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'merge' ? 'border-accent-500 bg-orange-50 dark:bg-accent-500/10' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
           >
             <p className="text-base mb-1">🔗</p>
-            <p className={`font-bold text-xs ${mode === 'merge' ? 'text-orange-600 dark:text-orange-400' : 'text-slate-700 dark:text-slate-300'}`}>Gabungkan</p>
+            <p className={`font-bold text-xs ${mode === 'merge' ? 'text-accent-600 dark:text-accent-400' : 'text-slate-700 dark:text-slate-300'}`}>Gabungkan</p>
             <p className="text-xs text-slate-400 dark:text-slate-500">Tambah ke data ada</p>
-            {mode === 'merge' && <p className="text-xs text-orange-500 dark:text-orange-400 font-bold mt-1">✓ Aman — direkomendasikan</p>}
+            {mode === 'merge' && <p className="text-xs text-accent-500 dark:text-accent-400 font-bold mt-1">✓ Aman — direkomendasikan</p>}
           </button>
           <button onClick={() => handleModeChange('replace')}
             className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'replace' ? 'border-red-400 bg-red-50 dark:bg-red-500/10' : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
@@ -333,7 +333,7 @@ function ImportModal({ type, onClose, onConfirm }) {
             ${canSubmit
               ? mode === 'replace'
                 ? 'bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-500 text-white shadow-lg shadow-red-200 dark:shadow-none'
-                : 'bg-orange-600 dark:bg-orange-500 hover:bg-orange-700 dark:hover:bg-orange-600 text-white shadow-lg shadow-orange-200 dark:shadow-none'
+                : 'bg-accent-600 dark:bg-accent-500 hover:bg-accent-700 dark:hover:bg-accent-600 text-white shadow-lg shadow-accent-200 dark:shadow-none'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'}`}
         >
           {file ? `Import ${label}` : 'Pilih file terlebih dahulu'}
@@ -349,25 +349,25 @@ function ActionItem({ icon: Icon, label, sublabel, onClick, loading, done, iconB
   return (
     <button onClick={loading || done ? undefined : onClick}
       className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-all
-        ${done ? 'border-green-200 bg-green-50' : loading ? 'border-orange-200 bg-orange-50' : 'border-slate-100 bg-white hover:border-orange-200 hover:bg-orange-50'}`}
+        ${done ? 'border-green-200 dark:border-green-500/40 bg-green-50 dark:bg-green-500/10' : loading ? 'border-accent-200 dark:border-accent-500/40 bg-orange-50 dark:bg-accent-500/10' : 'border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-accent-200 dark:hover:border-accent-500/50 hover:bg-orange-50 dark:hover:bg-accent-500/10'}`}
     >
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${done ? 'bg-green-100' : iconBgClass}`}>
-        {loading ? <RefreshCw className="w-5 h-5 text-orange-500 animate-spin" />
-          : done ? <CheckCircle className="w-5 h-5 text-green-600" />
+      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${done ? 'bg-green-100 dark:bg-green-500/15' : iconBgClass}`}>
+        {loading ? <RefreshCw className="w-5 h-5 text-accent-500 animate-spin" />
+          : done ? <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
             : <Icon className={`w-5 h-5 ${iconColorClass}`} />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="font-bold text-sm text-slate-800">{label}</p>
-          {badge && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600">{badge}</span>}
+          <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{label}</p>
+          {badge && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-accent-100 dark:bg-accent-500/20 text-accent-600 dark:text-accent-400">{badge}</span>}
         </div>
         <p className="text-xs mt-0.5">
-          {loading ? <span className="text-orange-500 font-semibold">Memproses...</span>
-            : done ? <span className="text-green-600 font-semibold">Selesai</span>
-              : <span className="text-slate-400">{sublabel}</span>}
+          {loading ? <span className="text-accent-500 font-semibold">Memproses...</span>
+            : done ? <span className="text-green-600 dark:text-green-400 font-semibold">Selesai</span>
+              : <span className="text-slate-400 dark:text-slate-500">{sublabel}</span>}
         </p>
       </div>
-      {!loading && !done && <span className="text-slate-300 text-xl font-bold">›</span>}
+      {!loading && !done && <span className="text-slate-300 dark:text-slate-600 text-xl font-bold">›</span>}
     </button>
   );
 }
@@ -403,6 +403,12 @@ const BackupView = ({ onBack }) => {
     setDailySyncOn(next);
   }
 
+  // Baca timestamp sync terbaru dari localStorage dan update state
+  const refreshSyncTime = useRef(() => {
+    const raw = localStorage.getItem('mamam_last_supabase_sync');
+    if (raw) setLastSyncTime(new Date(raw).toLocaleString('id-ID'));
+  });
+
   useEffect(() => {
     exportAllData().then(allData => {
       setStorageSize(calcStorageSize(allData));
@@ -410,19 +416,34 @@ const BackupView = ({ onBack }) => {
     });
   }, []);
 
+  // Listener: update lastSyncTime kapanpun ada sync dari manapun
+  useEffect(() => {
+    const handler = () => refreshSyncTime.current();
+
+    // storage event: fired saat localStorage diubah dari tab/konteks lain
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'mamam_last_supabase_sync') handler();
+    });
+
+    // CustomEvent: fired dari realtimeSync saat sync selesai di tab yang sama
+    window.addEventListener('mamam_sync_updated', handler);
+
+    return () => {
+      window.removeEventListener('storage', handler);
+      window.removeEventListener('mamam_sync_updated', handler);
+    };
+  }, []);
+
+  // Interval: hanya untuk cek daily sync jam 21:00, bukan polling timestamp
   useEffect(() => {
     const id = setInterval(() => {
-      const raw = localStorage.getItem('mamam_last_supabase_sync');
-      if (raw) setLastSyncTime(new Date(raw).toLocaleString('id-ID'));
       const currentTime = new Date();
-
-      // Trigger sync otomatis setiap jam 21:00 jika fitur dihidupkan
       if (dailySyncOn && currentTime.getHours() === 21) {
+        const raw = localStorage.getItem('mamam_last_supabase_sync');
         const lastD = raw ? new Date(raw) : null;
         if (!lastD || lastD.toDateString() !== currentTime.toDateString() || lastD.getHours() < 21) {
           runAutoSync({ force: true }).then(count => {
-            const tsStr = localStorage.getItem('mamam_last_supabase_sync');
-            if (tsStr) setLastSyncTime(new Date(tsStr).toLocaleString('id-ID'));
+            refreshSyncTime.current();
             showToast(`Auto-Sync 21:00 — ${count > 0 ? count + ' perubahan dikirim' : 'sudah tersinkron'}`);
           }).catch(e => console.error("Daily sync fail:", e));
         }
@@ -525,8 +546,7 @@ const BackupView = ({ onBack }) => {
     setIsSyncing(true);
     try {
       const count = await runAutoSync({ force: true });
-      const tsStr = localStorage.getItem('mamam_last_supabase_sync');
-      if (tsStr) setLastSyncTime(new Date(tsStr).toLocaleString('id-ID'));
+      refreshSyncTime.current();
       showToast(count > 0 ? `Sync selesai — ${count} perubahan dikirim` : 'Semua data sudah tersinkron ✓');
     } catch (err) {
       showToast('Gagal: ' + err.message, 'error');
@@ -558,7 +578,7 @@ const BackupView = ({ onBack }) => {
   ];
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-y-auto">
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto">
 
       {toast && (
         <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl text-white text-sm font-bold shadow-xl whitespace-nowrap
@@ -574,17 +594,17 @@ const BackupView = ({ onBack }) => {
       )}
 
       {/* Header */}
-      <div className="bg-white border-b border-slate-100 px-4 py-4 flex items-center gap-3 shrink-0">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-4 py-4 flex items-center gap-3 shrink-0">
         {onBack && (
-          <button onClick={onBack} className="p-1 hover:bg-slate-100 rounded-lg transition-colors">
-            <ArrowLeft className="w-5 h-5 text-slate-600" />
+          <button onClick={onBack} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+            <ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-400" />
           </button>
         )}
-        <h2 className="font-black text-xl text-slate-800 flex items-center gap-2 flex-1">
-          <Database className="w-6 h-6 text-orange-500" /> Backup & Restore
+        <h2 className="font-black text-xl text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-1">
+          <Database className="w-6 h-6 text-accent-500" /> Backup & Restore
         </h2>
         <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 border text-xs font-bold
-          ${supabaseReady ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-slate-50 border-slate-200 text-slate-400'}`}>
+          ${supabaseReady ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-600 dark:text-emerald-400' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500'}`}>
           {supabaseReady ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
           {supabaseReady ? 'Cloud' : 'Offline'}
         </div>
@@ -593,16 +613,16 @@ const BackupView = ({ onBack }) => {
       <div className="p-4 space-y-4">
 
         {/* Status */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <p className="font-bold text-sm text-slate-700">Status Penyimpanan</p>
-            <span className="text-xs font-bold text-green-600 bg-green-50 border border-green-200 rounded-full px-3 py-0.5">● Aktif</span>
+            <p className="font-bold text-sm text-slate-700 dark:text-slate-200">Status Penyimpanan</p>
+            <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 rounded-full px-3 py-0.5">● Aktif</span>
           </div>
           <div className="space-y-2">
             {STATUS_ROWS.map(({ label, value }) => (
-              <div key={label} className="flex justify-between items-center py-1.5 border-b border-slate-50 last:border-0">
-                <span className="text-xs text-slate-400">{label}</span>
-                <span className="text-xs font-bold text-slate-700">{value}</span>
+              <div key={label} className="flex justify-between items-center py-1.5 border-b border-slate-50 dark:border-slate-800 last:border-0">
+                <span className="text-xs text-slate-400 dark:text-slate-500">{label}</span>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{value}</span>
               </div>
             ))}
           </div>
@@ -610,13 +630,13 @@ const BackupView = ({ onBack }) => {
 
         {/* Cloud Sync */}
         <div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Cloud Sync Realtime — Supabase</p>
-          <div className="bg-white rounded-2xl border-2 border-slate-100 p-4 space-y-4">
+          <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 px-1">Cloud Sync Realtime — Supabase</p>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-100 dark:border-slate-800 p-4 space-y-4">
 
             {!supabaseReady && (
-              <div className="flex gap-2 items-start bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <div className="flex gap-2 items-start bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl p-3">
                 <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-700">
+                <p className="text-xs text-amber-700 dark:text-amber-300">
                   <strong>VITE_SUPABASE_URL</strong> dan <strong>VITE_SUPABASE_ANON_KEY</strong> belum diset di .env.
                   Sync realtime tidak aktif.
                 </p>
@@ -640,28 +660,28 @@ const BackupView = ({ onBack }) => {
             {supabaseReady && (
               <div className="grid grid-cols-2 gap-2">
                 {/* 1. Sync Jam 21:00 (Safety Net) */}
-                <button onClick={handleToggleDailySync} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${dailySyncOn ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+                <button onClick={handleToggleDailySync} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${dailySyncOn ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
                   <Clock className="w-5 h-5" />
                   <p className="text-[10px] font-bold leading-tight">Otomatis<br />21:00</p>
-                  <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${dailySyncOn ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-500'}`}>{dailySyncOn ? 'ON' : 'OFF'}</div>
+                  <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${dailySyncOn ? 'bg-blue-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>{dailySyncOn ? 'ON' : 'OFF'}</div>
                 </button>
 
                 {/* 2. Sync Manual Sekarang */}
-                <button onClick={handleManualSync} disabled={isSyncing || isRestoring || !supabaseReady} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${isSyncing ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-indigo-500 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}>
+                <button onClick={handleManualSync} disabled={isSyncing || isRestoring || !supabaseReady} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${isSyncing ? 'border-accent-500 bg-orange-50 dark:bg-accent-500/10 text-accent-700 dark:text-accent-300' : 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'}`}>
                   {isSyncing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CloudUpload className="w-5 h-5" />}
                   <p className="text-[10px] font-bold leading-tight">Manual<br />Sekarang</p>
-                  <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${isSyncing ? 'bg-orange-500 text-white' : 'bg-indigo-500 text-white'}`}>{isSyncing ? 'SYNC' : 'TAP'}</div>
+                  <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${isSyncing ? 'bg-accent-500 text-white' : 'bg-indigo-500 text-white'}`}>{isSyncing ? 'SYNC' : 'TAP'}</div>
                 </button>
               </div>
             )}
 
             {/* Info Waktu Sync Terakhir */}
             {supabaseReady && (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-xs text-slate-500">
+              <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                   <RefreshCw className="w-3 h-3" />
                   {lastSyncTime
-                    ? <span>Terakhir: <span className="font-bold text-slate-700">{lastSyncTime}</span></span>
+                    ? <span>Terakhir: <span className="font-bold text-slate-700 dark:text-slate-200">{lastSyncTime}</span></span>
                     : <span>Belum pernah sync</span>}
                 </span>
               </div>
@@ -688,26 +708,26 @@ const BackupView = ({ onBack }) => {
 
         {/* Export */}
         <div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Export / Backup Lokal</p>
+          <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 px-1">Export / Backup Lokal</p>
           <div className="space-y-2">
             <ActionItem icon={FileJson} label="Export Data (JSON)" sublabel="Backup dengan pilihan rentang tanggal"
               badge="Range" onClick={() => setDateRangeModal('json')}
               loading={loadingState['exportJson']} done={doneState['exportJson']}
-              iconBgClass="bg-orange-50" iconColorClass="text-orange-500" />
+              iconBgClass="bg-orange-50 dark:bg-accent-500/10" iconColorClass="text-accent-500 dark:text-accent-400" />
             <ActionItem icon={Sheet} label="Export ke Excel" sublabel="Laporan transaksi dengan filter tanggal"
               badge="Range" onClick={() => setDateRangeModal('excel')}
               loading={loadingState['exportExcel']} done={doneState['exportExcel']}
-              iconBgClass="bg-green-50" iconColorClass="text-green-600" />
+              iconBgClass="bg-green-50 dark:bg-green-500/10" iconColorClass="text-green-600 dark:text-green-400" />
           </div>
         </div>
 
         {/* Import Lokal */}
         <div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Import dari File</p>
+          <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 px-1">Import dari File</p>
           <ActionItem icon={FileUp} label="Import dari JSON" sublabel="Pulihkan data dari file backup lokal"
             onClick={() => setImportModal('json')}
             loading={loadingState['importJson']} done={doneState['importJson']}
-            iconBgClass="bg-orange-50" iconColorClass="text-orange-500" />
+            iconBgClass="bg-orange-50 dark:bg-accent-500/10" iconColorClass="text-accent-500 dark:text-accent-400" />
         </div>
 
       </div>

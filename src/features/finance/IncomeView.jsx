@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { TrendingUp, History, Save, Trash2, Pencil, X, Settings2, ChevronDown, RotateCcw } from 'lucide-react';
+import { TrendingUp, History, Save, Trash2, Pencil, X, Settings2, ChevronDown, RotateCcw, ArrowUpDown } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import CategoryModal from '../../components/CategoryModal';
-import { PageHeader, Card, Input, Select, Badge, IconButton, EmptyState, Button  } from '../../components/ui';
+import { PageHeader, Card, Input, Select, Badge, IconButton, EmptyState, Button, SortModal } from '../../components/ui';
+import { applySort } from '../../utils/sortUtils';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 
@@ -16,6 +17,8 @@ const IncomeView = () => {
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
+  const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
+  const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
 
   // State pelacak data edit
   const [editingId, setEditingId] = useState(null);
@@ -96,6 +99,21 @@ const IncomeView = () => {
   // Konversi ink.date ke bentuk Date Object untuk menghindari crash string saat pembacaan localStorage
   const filteredIncomes = (showTrash ? trashedOnly(incomes) : activeOnly(incomes)).filter(inc => filterMonth === '' || toLocalMonthString(inc.date) === filterMonth);
 
+  // Urutkan hasil filter pakai sortKey terpilih
+  const sortedIncomes = applySort(filteredIncomes, sortKey, {
+    date: inc => new Date(inc.date),
+    category: inc => inc.category || '',
+    amount: inc => inc.amount || 0,
+  });
+
+  const sortOptions = [
+    { key: 'date-desc', label: 'Terbaru Dulu' },
+    { key: 'date-asc', label: 'Terlama Dulu' },
+    { key: 'category-asc', label: 'Kategori (A-Z)' },
+    { key: 'category-desc', label: 'Kategori (Z-A)' },
+    { key: 'amount-desc', label: 'Nominal Terbesar' },
+  ];
+
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <PageHeader
@@ -168,7 +186,7 @@ const IncomeView = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowTrash(v => !v)}
-                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
               >
                 {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(incomes).length})`}
               </button>
@@ -191,6 +209,13 @@ const IncomeView = () => {
                   }
                 </>
               )}
+              <button
+                type="button"
+                onClick={() => setIsSortOpen(true)}
+                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
+              </button>
             </div>
           </div>
           <div className="p-3 bg-green-50 dark:bg-green-500/10 border-b border-green-100 dark:border-green-500/20 flex justify-between items-center">
@@ -198,14 +223,14 @@ const IncomeView = () => {
             <span className="text-sm font-black text-green-700 dark:text-green-300">{formatRupiah(filteredIncomes.reduce((s, e) => s + e.amount, 0))}</span>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-            {filteredIncomes.length === 0 ? (
+            {sortedIncomes.length === 0 ? (
               <EmptyState
                 icon={showTrash ? <Trash2 className="w-12 h-12" /> : <TrendingUp className="w-12 h-12" />}
                 title={showTrash ? 'Recycle bin kosong.' : 'Belum ada pemasukan pada periode ini.'}
                 className="h-full animate-in fade-in duration-300"
               />
             ) : (
-              filteredIncomes.map(inc => (
+              sortedIncomes.map(inc => (
                 <div key={inc.id} className="flex justify-between items-center p-3.5 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700 transition-all duration-200 animate-in slide-in-from-left-2 duration-300">
                   <div className="flex-1 pr-4">
                     <p className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">{inc.category} <Badge variant="neutral">{new Date(inc.date).toLocaleDateString('id-ID')}</Badge></p>
@@ -243,6 +268,14 @@ const IncomeView = () => {
           </div>
         </Card>
       </div>
+
+      <SortModal
+        isOpen={isSortOpen}
+        onClose={() => setIsSortOpen(false)}
+        value={sortKey}
+        onChange={setSortKey}
+        options={sortOptions}
+      />
 
       <CategoryModal
         isOpen={isCategoryModalOpen}

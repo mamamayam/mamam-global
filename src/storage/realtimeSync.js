@@ -5,7 +5,81 @@ import { splitExpired } from '../utils/softDelete';
 
 const deviceId = getDeviceId();
 
-// ── PUSH: kirim 1 record transaksi (insert/update) ─────────────────────────
+// =============================================================================
+// MERGE — satu fungsi dipakai di SEMUA tempat yang nerima data dari luar
+// (initial pull & realtime), baik buat transaksi maupun config/live-state.
+//
+// Prinsip: TIDAK PERNAH overwrite mentah-mentah. Yang masuk (remote) selalu
+// digabung sama yang sudah ada (local), bukan gantiin total. Tujuannya supaya
+// perubahan lokal yang belum sempat ke-push gak ketiban/ke-hapus diam-diam
+// sama data lama/lain dari device sebelah.
+//
+// Aturan gabung tergantung bentuk datanya:
+//  - Array berisi object yang punya `id`  → gabung PER ITEM by id (union, gak
+//    ada yang ke-drop). Kalau id-nya sama ada di dua sisi, menang yang ada
+//    timestamp (`updatedAt`/`updated_at`/`deletedAt`) lebih baru; kalau gak
+//    ada timestamp sama sekali, remote dianggap versi paling baru.
+//  - Array isinya string/primitif (misal daftar kategori)  → union + dedupe.
+//    CATATAN: ini artinya hapus 1 kategori baru bener-bener "nempel" kalau
+//    SEMUA device sudah sync. Wajar & cukup buat list kategori — kalau butuh
+//    recycle-bin yang ketat juga di sini, list-nya perlu diubah ke bentuk
+//    {id, name, deletedAt} kayak data transaksi.
+//  - Object biasa (misal storeSettings) → gabung per-field, remote menang
+//    kalau field-nya bentrok, TAPI field lokal yang gak ada di remote tetap
+//    dipertahankan (gak hilang).
+//  - null / primitif / shape beda (misal currentShift pas shift ditutup jadi
+//    null) → remote dianggap paling baru, langsung dipakai. Ini BUKAN
+//    "overwrite" dalam arti buruk — currentShift itu status tunggal, gak ada
+//    konsep "gabung dua shift", jadi yang paling baru yang valid.
+// =============================================================================
+
+function isRecordArray(arr) {
+  return arr.length === 0 || (arr[0] && typeof arr[0] === 'object' && 'id' in arr[0]);
+}
+
+function recordTimestamp(item) {
+  const raw = item?.updatedAt || item?.updated_at || item?.deletedAt;
+  if (!raw) return null;
+  const t = new Date(raw).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+function mergeRecordArrays(local, remote) {
+  const map = new Map(local.map(item => [String(item.id), item]));
+  for (const item of remote) {
+    const id = String(item.id);
+    const existing = map.get(id);
+    if (!existing) { map.set(id, item); continue; }
+    const lt = recordTimestamp(existing);
+    const rt = recordTimestamp(item);
+    map.set(id, (lt !== null && rt !== null) ? (rt >= lt ? item : existing) : item);
+  }
+  return Array.from(map.values());
+}
+
+export function mergeValue(local, remote) {
+  if (remote === undefined) return local;
+  if (local === undefined) return remote;
+
+  if (Array.isArray(local) && Array.isArray(remote)) {
+    if (isRecordArray(local) && isRecordArray(remote)) {
+      return mergeRecordArrays(local, remote);
+    }
+    return Array.from(new Set([...local, ...remote]));
+  }
+
+  if (
+    local && remote && typeof local === 'object' && typeof remote === 'object' &&
+    !Array.isArray(local) && !Array.isArray(remote)
+  ) {
+    return { ...local, ...remote };
+  }
+
+  // primitif, null, atau bentuk lokal/remote beda jenis → remote menang
+  return remote;
+}
+
+// ── PUSH: kirim 1 record transaksi (insert/update) — INSTAN ────────────────
 export async function pushTransactionUpsert(tableKey, item, readyPromise) {
   if (!isSupabaseConfigured() || !item?.id) return;
 
@@ -22,12 +96,23 @@ export async function pushTransactionUpsert(tableKey, item, readyPromise) {
       updated_at: itemUpdatedAt,
       updated_by: deviceId,
     }, { onConflict: 'id' });
-    if (error) console.warn(`[sync] gagal push ${tableKey}/${item.id}:`, error.message);
+    if (error) {
+      console.warn(`[sync] gagal push ${tableKey}/${item.id}:`, error.message);
+    } else {
+      localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
+      window.dispatchEvent(new CustomEvent('mamam_sync_updated'));
+    }
   } catch (err) {
     console.warn(`[sync] error push ${tableKey}:`, err.message);
   }
 }
 
+// CATATAN PENTING soal hapus: fungsi ini cuma boleh dipanggil untuk record
+// yang BENERAN hilang dari array lokal — dan record cuma boleh hilang dari
+// array kalau sudah lewat masa retensi recycle bin (lihat splitExpired di
+// utils/softDelete.js + purge di runAutoSync & usePersistState).
+// Tombol "Hapus" di UI TIDAK PERNAH manggil ini secara langsung — dia harus
+// pakai markDeleted() (set `deletedAt`), bukan filter dari array.
 export async function pushTransactionDelete(tableKey, id, readyPromise) {
   if (!isSupabaseConfigured() || !id) return;
   if (readyPromise) await readyPromise;
@@ -42,48 +127,19 @@ export async function pushTransactionDelete(tableKey, id, readyPromise) {
   }
 }
 
-// ── PUSH: config (1 blob per key, debounced) ────────────────────────────────
-const configPushTimers = {};
-
-export function pushConfig(key, value, readyPromise, delay = 1500) {
-  if (!isSupabaseConfigured()) return;
-  clearTimeout(configPushTimers[key]);
-
-  configPushTimers[key] = setTimeout(async () => {
-    if (readyPromise) await readyPromise;
-
-    const configUpdatedAt = (value && typeof value === 'object' && value.updated_at)
-      ? value.updated_at
-      : new Date().toISOString();
-
-    try {
-      const supabase = await getSupabaseClient();
-      if (!supabase) return;
-      const { error } = await supabase.from('app_config').upsert({
-        key,
-        value,
-        updated_at: configUpdatedAt,
-        updated_by: deviceId,
-      }, { onConflict: 'key' });
-      if (error) console.warn(`[sync] gagal push config ${key}:`, error.message);
-    } catch (err) {
-      console.warn(`[sync] error push config ${key}:`, err.message);
-    }
-  }, delay);
-}
-
-// ── PUSH: live state tunggal (currentShift, dkk) — INSTAN, tanpa debounce ──
-// Sama persis dengan pushConfig (tabel app_config, key/value, value boleh null
-// — lihat catatan di supabase_schema.sql), bedanya cuma satu: TIDAK didebounce.
-// Dipanggil tiap currentShift berubah supaya device lain gak pernah baca status
-// stale/null gara-gara nunggu jeda 1.5 detik kayak config biasa.
-export async function pushLiveState(key, value, readyPromise) {
+// ── PUSH: config (1 blob per key) — MANUAL ONLY ─────────────────────────────
+// SENGAJA tidak ada debounce/auto-trigger di sini. Config (menus, customers,
+// rawMaterials, dll) HANYA pernah di-push lewat runAutoSync() — yaitu pas user
+// pencet "Sync Manual Sekarang" atau pas safety-net jam 21:00. Gak ada jalur
+// otomatis tiap state berubah (beda dari versi lama yang debounce 1.5 detik).
+//
+// Konsekuensi yang perlu lo tau: perubahan config di 1 device BARU kelihatan
+// di device lain setelah salah satu dari dua momen itu — bukan realtime kayak
+// transaksi/currentShift. Ini sesuai yang lo mau: config gak butuh instan,
+// dan ngirit kuota + ngilangin kompleksitas timer/debounce.
+export async function pushConfig(key, value, readyPromise) {
   if (!isSupabaseConfigured()) return;
   if (readyPromise) await readyPromise;
-
-  const valueUpdatedAt = (value && typeof value === 'object' && value.updated_at)
-    ? value.updated_at
-    : new Date().toISOString();
 
   try {
     const supabase = await getSupabaseClient();
@@ -91,7 +147,32 @@ export async function pushLiveState(key, value, readyPromise) {
     const { error } = await supabase.from('app_config').upsert({
       key,
       value,
-      updated_at: valueUpdatedAt,
+      updated_at: new Date().toISOString(),
+      updated_by: deviceId,
+    }, { onConflict: 'key' });
+    if (error) console.warn(`[sync] gagal push config ${key}:`, error.message);
+  } catch (err) {
+    console.warn(`[sync] error push config ${key}:`, err.message);
+  }
+}
+
+// ── PUSH: live state tunggal (currentShift, dkk) — INSTAN, tanpa debounce ──
+// Tabel & bentuk row SAMA dengan pushConfig (app_config: key/value, value
+// boleh null — lihat catatan di supabase_schema.sql). Bedanya cuma satu:
+// dipanggil LANGSUNG tiap currentShift berubah, gak nunggu manual sync,
+// karena transaksi di bawahnya butuh status ini selalu up-to-date di semua
+// device begitu berubah.
+export async function pushLiveState(key, value, readyPromise) {
+  if (!isSupabaseConfigured()) return;
+  if (readyPromise) await readyPromise;
+
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase.from('app_config').upsert({
+      key,
+      value,
+      updated_at: new Date().toISOString(),
       updated_by: deviceId,
     }, { onConflict: 'key' });
     if (error) console.warn(`[sync] gagal push live-state ${key}:`, error.message);
@@ -100,7 +181,9 @@ export async function pushLiveState(key, value, readyPromise) {
   }
 }
 
-// ── DIFF HELPER ──────────────────────────────────────────────────────────
+// ── DIFF HELPER — bandingin 2 array record, hasilnya yang berubah aja ──────
+// Dipakai supaya yang dikirim ke Supabase cuma record yang BENERAN berubah,
+// bukan re-upload semua isi array.
 export function diffArrays(prevArr, nextArr) {
   const prev = Array.isArray(prevArr) ? prevArr : [];
   const next = Array.isArray(nextArr) ? nextArr : [];
@@ -124,10 +207,12 @@ export function diffArrays(prevArr, nextArr) {
   return { upserts, deletes };
 }
 
-// ── AUTO SYNC BERKALA ────────────────────────────────────────────────────────
-// NOTE: auto-sync periodik 15 menit DIHAPUS (2026-06-24) — skema push sekarang
-// hanya: (1) manual, (2) safety-net 21:00, (3) instant per-transaksi.
-// runAutoSync() masih dipakai oleh #1 dan #2 (selalu dengan force: true).
+// =============================================================================
+// AUTO SYNC (manual & safety-net 21:00)
+// Skema push: (1) manual / 21:00 → transaksi (jaring pengaman) + SEMUA config,
+//             (2) instant per-transaksi (di luar fungsi ini, lewat usePersistState),
+//             (3) instant live-state (di luar fungsi ini).
+// =============================================================================
 const AUTO_SYNC_ITEM_GAP_MS = 250;
 const AUTO_SYNC_SNAPSHOT_KEY = 'mamam_auto_sync_snapshot';
 const AUTO_SYNC_ENABLED_KEY = 'mamam_auto_sync_enabled';
@@ -161,26 +246,37 @@ function saveAutoSyncSnapshot(snapshot) {
   }
 }
 
+// Purge generik — buang item yang sudah lewat retensi recycle bin dari SATU
+// array (asal arraynya berisi object dengan `deletedAt`). Aman dipanggil ke
+// array apapun: kalau gak ada item dengan `deletedAt`, hasilnya no-op.
+// Dipakai buat TRANSACTION_KEYS sekarang, dan otomatis ready dipakai juga
+// buat config-array (menus/customers/dkk) kalau suatu saat itu dikasih
+// pola recycle bin yang sama.
+async function purgeExpired(key, current) {
+  if (!Array.isArray(current)) return current;
+  const { keep, expired } = splitExpired(current, RECYCLE_BIN_RETENTION_DAYS);
+  if (expired.length === 0) return current;
+  await saveData(key, keep);
+  return keep;
+}
+
 let autoSyncInFlight = false;
 
-/**
- * Cek apakah sync sedang berjalan.
- * Dipakai UI untuk guard tombol manual sync.
- */
 export function isSyncInFlight() {
   return autoSyncInFlight;
 }
 
 /**
  * Sync diff-based: hanya kirim yang berubah sejak snapshot terakhir.
+ * Transaksi: per-record upsert/delete. Config: per-key (push manual only).
+ * Live state: safety net (push instan utamanya terjadi di luar fungsi ini).
  *
  * @param {Object} [options]
  * @param {boolean} [options.force=false]
- *   false (default) → skip kalau isAutoSyncEnabled() = false, dan skip key yang
- *                      belum punya snapshot (buat baseline saja).
- *   true            → bypass toggle isAutoSyncEnabled, dan pada key yang belum
- *                      punya snapshot langsung push semua sebagai initial upload
- *                      (dipakai sync manual & safety-net 21:00).
+ *   false → skip kalau isAutoSyncEnabled() = false, dan skip key tanpa
+ *           snapshot (cuma bikin baseline, gak push, biar gak dobel sama push instan).
+ *   true  → bypass toggle, dan key tanpa snapshot langsung di-push penuh
+ *           sebagai initial upload (dipakai sync manual & safety-net 21:00).
  *
  * @returns {Promise<number>} Jumlah record/config yang berhasil dikirim.
  */
@@ -192,21 +288,11 @@ export async function runAutoSync({ force = false } = {}) {
     const snapshot = loadAutoSyncSnapshot();
     let sentCount = 0;
 
-    // ── TRANSACTION KEYS ──────────────────────────────────────────────────
+    // ── TRANSACTION KEYS — push per-record, hapus permanen HANYA dari purge ─
     for (const tableKey of TRANSACTION_KEYS) {
-      let current = await loadData(tableKey, []);
-
-      // Purge item yang sudah lewat masa retensi recycle bin
-      const { keep, expired } = splitExpired(current, RECYCLE_BIN_RETENTION_DAYS);
-      if (expired.length > 0) {
-        await saveData(tableKey, keep);
-        current = keep;
-      }
+      let current = await purgeExpired(tableKey, await loadData(tableKey, []));
 
       if (!(tableKey in snapshot)) {
-        // Key belum punya snapshot.
-        // force → push semua sebagai initial upload (misal install ulang / localStorage bersih)
-        // normal → buat baseline saja, tidak push (supaya tidak dobel dengan realtime)
         if (force && current.length > 0) {
           for (const item of current) {
             await pushTransactionUpsert(tableKey, item);
@@ -225,6 +311,9 @@ export async function runAutoSync({ force = false } = {}) {
         sentCount++;
         await sleep(AUTO_SYNC_ITEM_GAP_MS);
       }
+      // `deletes` di sini cuma muncul dari item yang barusan kena purge di
+      // atas (UI gak pernah filter langsung dari array) — jadi delete di
+      // Supabase juga otomatis ngikut aturan "hapus cuma dari recycle bin".
       for (const id of deletes) {
         await pushTransactionDelete(tableKey, id);
         sentCount++;
@@ -234,14 +323,13 @@ export async function runAutoSync({ force = false } = {}) {
       snapshot[tableKey] = current;
     }
 
-    // ── CONFIG KEYS ───────────────────────────────────────────────────────
+    // ── CONFIG KEYS — push manual-only, per-key, cuma yang berubah ─────────
     for (const key of CONFIG_KEYS) {
-      const current = await loadData(key, undefined);
+      let current = await purgeExpired(key, await loadData(key, undefined));
 
       if (!(key in snapshot)) {
-        // Sama seperti transaction: force → push, normal → baseline saja
         if (force && current !== undefined) {
-          pushConfig(key, current);
+          await pushConfig(key, current);
           sentCount++;
           await sleep(AUTO_SYNC_ITEM_GAP_MS);
         }
@@ -250,7 +338,7 @@ export async function runAutoSync({ force = false } = {}) {
       }
 
       if (JSON.stringify(current) !== JSON.stringify(snapshot[key])) {
-        pushConfig(key, current);
+        await pushConfig(key, current);
         sentCount++;
         await sleep(AUTO_SYNC_ITEM_GAP_MS);
       }
@@ -285,6 +373,7 @@ export async function runAutoSync({ force = false } = {}) {
 
     saveAutoSyncSnapshot(snapshot);
     localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
+    window.dispatchEvent(new CustomEvent('mamam_sync_updated'));
 
     if (sentCount > 0) {
       console.log(`[sync] ${force ? 'manual' : 'auto'}-sync: ${sentCount} perubahan terkirim ✅`);
@@ -301,7 +390,12 @@ export async function runAutoSync({ force = false } = {}) {
   }
 }
 
-// ── PULL & REALTIME SUBSCRIBE ───────────────────────────────────────────────
+// =============================================================================
+// PULL & REALTIME SUBSCRIBE
+// Semua data yang masuk dari luar (initial pull maupun realtime event) WAJIB
+// lewat mergeValue() sebelum disimpan — gak ada lagi jalur yang overwrite
+// langsung. App.jsx cukup terima hasil yang udah di-merge dan langsung pakai.
+// =============================================================================
 export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onConfigUpdate }) {
   let _resolveReady;
   const syncReadyPromise = new Promise(resolve => { _resolveReady = resolve; });
@@ -327,7 +421,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
       return;
     }
 
-    // 1. Initial pull — ambil semua row dari tiap tabel transaksi
+    // 1. Initial pull — transaksi (merge by id, gak ada yang ke-drop)
     for (const tableKey of TRANSACTION_KEYS) {
       if (cancelled) break;
       try {
@@ -337,19 +431,10 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
         if (error) { console.warn(`[sync] initial pull ${tableKey} gagal:`, error.message); continue; }
 
         const local = await loadData(tableKey, []);
-        const localMap = new Map((Array.isArray(local) ? local : []).map(i => [String(i?.id), i]));
-        let changed = false;
+        const remoteItems = (rows || []).map(r => r.payload);
+        const merged = mergeValue(Array.isArray(local) ? local : [], remoteItems);
 
-        for (const row of rows || []) {
-          const existing = localMap.get(row.id);
-          if (!existing || JSON.stringify(existing) !== JSON.stringify(row.payload)) {
-            localMap.set(row.id, row.payload);
-            changed = true;
-          }
-        }
-
-        if (changed) {
-          const merged = Array.from(localMap.values());
+        if (JSON.stringify(local) !== JSON.stringify(merged)) {
           await saveData(tableKey, merged);
           onTransactionUpsert?.(tableKey, null, merged);
         }
@@ -358,7 +443,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
       }
     }
 
-    // 2. Initial pull config
+    // 2. Initial pull — config & live-state (merge, bukan overwrite)
     if (!cancelled) {
       try {
         const { data: rows, error } = await supabase
@@ -370,9 +455,10 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
         } else {
           for (const row of rows || []) {
             const local = await loadData(row.key, undefined);
-            if (JSON.stringify(local) !== JSON.stringify(row.value)) {
-              await saveData(row.key, row.value);
-              onConfigUpdate?.(row.key, row.value);
+            const merged = mergeValue(local, row.value);
+            if (JSON.stringify(local) !== JSON.stringify(merged)) {
+              await saveData(row.key, merged);
+              onConfigUpdate?.(row.key, merged);
             }
           }
         }
@@ -395,6 +481,9 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
         if (updatedBy === deviceId) return;
 
         if (payload.eventType === 'DELETE') {
+          // Realtime DELETE di Supabase cuma kejadian lewat purge (lihat
+          // pushTransactionDelete) — jadi ini aman dianggap "purge dari
+          // device lain", bukan hapus instan dari aksi user.
           const id = payload.old?.id;
           if (id) onTransactionDelete?.(tableKey, id);
         } else {
@@ -404,13 +493,21 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
       });
     }
 
-    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, (payload) => {
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, async (payload) => {
       const updatedBy = payload.new?.updated_by ?? payload.old?.updated_by;
       if (updatedBy === deviceId) return;
       if (payload.eventType === 'DELETE') return;
+
       const key = payload.new?.key;
-      const value = payload.new?.value;
-      if (key && APP_CONFIG_KEYS.includes(key)) onConfigUpdate?.(key, value);
+      const remoteValue = payload.new?.value;
+      if (!key || !APP_CONFIG_KEYS.includes(key)) return;
+
+      // Merge di sini (bukan di App.jsx) supaya satu-satunya tempat yang
+      // nentuin "gimana cara gabung data" ya cuma mergeValue() ini.
+      const local = await loadData(key, undefined);
+      const merged = mergeValue(local, remoteValue);
+      await saveData(key, merged);
+      onConfigUpdate?.(key, merged);
     });
 
     channel.subscribe((status) => {

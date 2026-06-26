@@ -209,6 +209,15 @@ export default function App() {
   }, { syncMode: 'config', syncReadyPromise });
 
   const [theme, setTheme, l23] = usePersistState('theme', 'light');
+  const [colorTheme, setColorThemeState] = usePersistState('colorTheme', 'orange');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-color-theme', colorTheme);
+  }, [colorTheme]);
+
+  const setColorTheme = (newTheme) => {
+    setColorThemeState(newTheme);
+  };
 
   // Terapkan class .dark ke <html> setiap kali tema berubah
   useEffect(() => {
@@ -639,6 +648,7 @@ export default function App() {
     savedBills, setSavedBills,
     storeSettings, setStoreSettings,
     theme, setTheme,
+    colorTheme, setColorTheme,
 
     // Payment / Discount
     appliedVoucher, setAppliedVoucher,

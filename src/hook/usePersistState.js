@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { loadData, saveData } from '../storage/db';
-import { diffArrays, pushTransactionUpsert, pushTransactionDelete, pushConfig, pushLiveState } from '../storage/realtimeSync';
+import { diffArrays, pushTransactionUpsert, pushTransactionDelete, pushLiveState } from '../storage/realtimeSync';
 
 /**
  * Seperti useState biasa, tapi otomatis load dari Dexie (IndexedDB) saat mount
@@ -14,22 +14,25 @@ import { diffArrays, pushTransactionUpsert, pushTransactionDelete, pushConfig, p
  *                     HANYA record yang baru/berubah/terhapus yang di-push
  *                     (per-record upsert/delete) — bukan re-upload semua array.
  *                     `tableKey` (default = `key`) menentukan nama tabel Supabase.
- *  - 'config'      : seluruh `state` di-push sebagai 1 blob ke tabel app_config
- *                     (didebounce), cocok untuk data kecil yang jarang berubah.
- *  - 'live'        : seperti 'config' (1 blob ke tabel app_config), TAPI push
- *                     INSTAN tanpa debounce sama sekali. Khusus key yang masuk
- *                     LIVE_STATE_KEYS di syncKeys.js (misal currentShift) — yang
- *                     wajib langsung kelihatan di device lain begitu berubah,
- *                     karena transaksi di bawahnya nunggu status ini.
+ *  - 'config'      : TIDAK ada push otomatis sama sekali di sini. State cuma
+ *                     disimpan lokal ke Dexie. Push ke Supabase HANYA terjadi
+ *                     lewat runAutoSync() (tombol "Sync Manual Sekarang" atau
+ *                     safety-net jam 21:00, lihat storage/realtimeSync.js) —
+ *                     ini yang dimaksud "config push manual". Cocok buat data
+ *                     yang jarang berubah (menus, customers, dll) dan gak perlu
+ *                     nyampe device lain detik itu juga.
+ *  - 'live'        : push KE Supabase INSTAN tanpa debounce/jeda apapun (tabel
+ *                     app_config, sama seperti config, value boleh null).
+ *                     Khusus key yang masuk LIVE_STATE_KEYS di syncKeys.js
+ *                     (misal currentShift) — wajib langsung kelihatan di
+ *                     device lain begitu berubah, karena transaksi di
+ *                     bawahnya nunggu status ini.
  *  - undefined     : tidak ada sync ke Supabase (hanya simpan lokal ke Dexie).
  *
- * FIX:
- *  - Terima `syncReadyPromise` dari App.jsx (hasil initRealtimeSync) supaya
- *    push tidak bisa jalan sebelum initial pull selesai.
- *  - Save ke DB dan push ke Supabase HANYA setelah isLoading false (tidak lagi
- *    skip pakai isFirstLoad ref yang bisa race).
- *  - prevStateRef diupdate SETELAH setState selesai (via useEffect terpisah)
- *    sehingga diffArrays selalu dapat nilai yang benar.
+ * Data yang masuk dari device lain (lewat onTransactionUpsert/onConfigUpdate
+ * di App.jsx) sudah di-merge oleh storage/realtimeSync.js sebelum sampai sini
+ * — jadi setStateRemote di bawah TIDAK PERNAH overwrite mentah, selalu nerima
+ * versi yang sudah digabung dengan data lokal.
  *
  * @param {string} key - Key storage
  * @param {*} defaultValue - Nilai sementara sebelum data dari DB dimuat
@@ -37,7 +40,7 @@ import { diffArrays, pushTransactionUpsert, pushTransactionDelete, pushConfig, p
  * @returns {[*, Function, boolean]} - [state, setState, isLoading]
  */
 export function usePersistState(key, defaultValue, options = {}) {
-  const { syncMode, tableKey = key, syncReadyPromise, pushDelay } = options;
+  const { syncMode, tableKey = key, syncReadyPromise } = options;
 
   const [state, setStateInternal] = useState(defaultValue);
   const [isLoading, setIsLoading]  = useState(true);
@@ -109,16 +112,14 @@ export function usePersistState(key, defaultValue, options = {}) {
       const { upserts, deletes } = diffArrays(prevStateRef.current, state);
       for (const item of upserts) pushTransactionUpsert(tableKey, item, syncReadyPromise);
       for (const id of deletes)   pushTransactionDelete(tableKey, id,   syncReadyPromise);
-    } else if (syncMode === 'config') {
-      // pushDelay bisa di-set ke 0 untuk key kritis (misal currentShift)
-      // supaya push langsung tanpa debounce 1500ms default
-      pushConfig(key, state, syncReadyPromise, pushDelay ?? 1500);
     } else if (syncMode === 'live') {
-      // Live state (currentShift, dkk) — push INSTAN, gak lewat setTimeout
-      // sama sekali (beda dari 'config' + pushDelay:0 yang tetap nunggu satu
-      // tick event loop). Lihat LIVE_STATE_KEYS di storage/syncKeys.js.
+      // Live state (currentShift, dkk) — push INSTAN ke Supabase tiap berubah.
+      // Lihat LIVE_STATE_KEYS di storage/syncKeys.js.
       pushLiveState(key, state, syncReadyPromise);
     }
+    // syncMode === 'config' SENGAJA tidak push apa-apa di sini — sudah
+    // ke-save lokal di atas (saveData), dan push ke Supabase-nya nunggu
+    // runAutoSync() (manual / safety-net 21:00). Lihat storage/realtimeSync.js.
 
     prevStateRef.current = state;
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -5,9 +5,10 @@ import PayslipModal from '../hrd/modals/PayslipModal';
 import CategoryModal from '../../components/CategoryModal';
 import {
   Select, Card, Button, PageHeader, EmptyState, Input,
-  SegmentedControl, Badge, Alert, IconButton
+  SegmentedControl, Badge, Alert, IconButton, SortModal
 } from '../../components/ui';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+import { applySort } from '../../utils/sortUtils';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 import {
   Calendar,
@@ -27,7 +28,8 @@ import {
   Briefcase,
   Settings2,
   RotateCcw,
-  Users
+  Users,
+  ArrowUpDown
 } from 'lucide-react';
 
 // Hitung jumlah jam kerja dari jam masuk & jam keluar (format "HH:MM").
@@ -55,6 +57,64 @@ function formatTimeFromDate(isoStr) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+// === Konstanta aturan jam kerja & lembur ===
+const OVERTIME_THRESHOLD_MINUTES = 19 * 60 + 30; // 19:30 — mulai dihitung lembur otomatis
+const OVERTIME_RATE_PER_30MIN = 5000;            // Rp per 30 menit lembur setelah 19:30
+const SIANG_SHIFT_START_MINUTES = 11 * 60;       // jam masuk >= 11:00 dianggap shift siang (tidak dapat Bonus Full Time)
+
+// "HH:MM" → total menit dari tengah malam.
+function timeStrToMinutes(timeStr) {
+  const [h, m] = timeStr.split(':').map(Number);
+  return (h * 60) + m;
+}
+
+// Total menit jam masuk→keluar yang kontinu (nambah 24 jam kalau keluar
+// "lewat tengah malam"), dipakai biar perbandingan ke jam 19:30 tetap benar.
+function getClockOutMinutesContinuous(clockInStr, clockOutStr) {
+  const inTotal = timeStrToMinutes(clockInStr);
+  let outTotal = timeStrToMinutes(clockOutStr);
+  if (outTotal < inTotal) outTotal += 24 * 60;
+  return outTotal;
+}
+
+// Hitung total menit "jam bolong" dari rangkaian absensi satu karyawan dalam
+// satu hari (sudah diurutkan ascending by date). Tiap record 'bolong' jadi
+// awal jeda; jeda berakhir di record berikutnya, baik itu 'masuk' lagi
+// (balik kerja) atau 'keluar' (lupa absen balik, sampai hari ditutup).
+function calculateBolongMinutes(sortedLogs) {
+  let totalMinutes = 0;
+  for (let i = 0; i < sortedLogs.length - 1; i++) {
+    if (sortedLogs[i].type === 'bolong') {
+      const gapStart = new Date(sortedLogs[i].date).getTime();
+      const gapEnd = new Date(sortedLogs[i + 1].date).getTime();
+      totalMinutes += Math.max(0, (gapEnd - gapStart) / 60000);
+    }
+  }
+  return totalMinutes;
+}
+
+// === Status Karyawan ===
+// Mau nambah status baru? Tinggal tambahin object baru di array ini —
+// form, badge, sama filter di bawah otomatis ngikut, gak perlu ubah di
+// banyak tempat.
+const EMPLOYEE_STATUS_OPTIONS = [
+  { value: 'aktif', label: 'Aktif', badgeVariant: 'success' },
+  { value: 'freelance', label: 'Freelance', badgeVariant: 'info' },
+  { value: 'cuti', label: 'Cuti', badgeVariant: 'warning' },
+  { value: 'resign', label: 'Resign', badgeVariant: 'neutral' },
+];
+
+// Data karyawan lama (sebelum fitur status ada) gak punya field `status` —
+// default-in ke 'aktif' di sini biar karyawan lama otomatis kebaca Aktif
+// tanpa perlu migration data manual.
+function getEmployeeStatus(emp) {
+  return emp?.status || 'aktif';
+}
+
+function getEmployeeStatusInfo(status) {
+  return EMPLOYEE_STATUS_OPTIONS.find(s => s.value === status) || EMPLOYEE_STATUS_OPTIONS[0];
+}
+
 
 // =========================================================================
 // KOMPONEN: MANAJEMEN KARYAWAN (HR / PAYROLL)
@@ -73,7 +133,7 @@ const EmployeesView = () => {
 
   // --- STATE UNTUK TAB: KELOLA KARYAWAN ---
   const [isEditingEmp, setIsEditingEmp] = useState(false);
-  const [empFormData, setEmpFormData] = useState({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString() });
+  const [empFormData, setEmpFormData] = useState({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString(), status: 'aktif', resignDate: '' });
 
   // --- STATE UNTUK TAB: INPUT HARIAN ---
   const [clockIn, setClockIn] = useState('09:00');
@@ -81,6 +141,7 @@ const EmployeesView = () => {
   const [dailyDate, setDailyDate] = useState(toLocalDateString());
   const [dailyEmpId, setDailyEmpId] = useState('');
   const [hoursWorked, setHoursWorked] = useState('');
+  const [bolongMinutes, setBolongMinutes] = useState(0); // total menit jam bolong yang dipotong dari jam kerja
   const [isDayOff, setIsDayOff] = useState(false);
   const [additions, setAdditions] = useState([]);
   const [deductions, setDeductions] = useState([]);
@@ -88,6 +149,15 @@ const EmployeesView = () => {
   const [currentRecordId, setCurrentRecordId] = useState(null);
   const [catModalType, setCatModalType] = useState(null); // null | 'addition' | 'deduction'
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
+
+  // State urutan buat 3 list di view ini (masing-masing independen)
+  const [dailySortKey, setDailySortKey] = useState('date-desc'); // Riwayat Input Harian
+  const [isDailySortOpen, setIsDailySortOpen] = useState(false);
+  const [perfSortKey, setPerfSortKey] = useState('name-asc'); // Performa & Gaji Karyawan
+  const [isPerfSortOpen, setIsPerfSortOpen] = useState(false);
+  const [empSortKey, setEmpSortKey] = useState('name-asc'); // Daftar Karyawan (Kelola)
+  const [isEmpSortOpen, setIsEmpSortOpen] = useState(false);
+  const [empStatusFilter, setEmpStatusFilter] = useState('semua'); // filter status Daftar Karyawan
 
   // Flag: jam masuk/keluar terisi otomatis dari data attendanceLog
   const [absenFromAttendance, setAbsenFromAttendance] = useState(false);
@@ -99,26 +169,33 @@ const EmployeesView = () => {
   const [overtimeHours, setOvertimeHours] = useState('');
   const [adjPaymentMethod, setAdjPaymentMethod] = useState('Tunai');
 
-  // Hitung otomatis jumlah jam kerja setiap kali jam masuk/keluar/status libur berubah.
+  // Hitung otomatis jumlah jam kerja setiap kali jam masuk/keluar/status libur
+  // (atau total jam bolong) berubah. Jam bolong memotong jam kerja: jam masuk
+  // & jam keluar di sini cuma catatan jam akhir, bukan dasar hitung langsung.
   useEffect(() => {
     if (isDayOff) {
       // Jika libur, paksa jam kerja jadi 0
       setHoursWorked(0);
     } else if (clockIn && clockOut) {
-      setHoursWorked(calculateHoursFromTimes(clockIn, clockOut));
+      const rawHours = calculateHoursFromTimes(clockIn, clockOut);
+      const netHours = Math.max(0, rawHours - (bolongMinutes / 60));
+      setHoursWorked(Number(netHours.toFixed(2)));
     }
-  }, [clockIn, clockOut, isDayOff]);
+  }, [clockIn, clockOut, isDayOff, bolongMinutes]);
 
-  // 1. AUTO BONUS FULL TIME (Jika jam kerja >= 10)
+  // 1. AUTO BONUS FULL TIME (Jika jam kerja >= 10, kecuali shift siang)
   useEffect(() => {
     if (!dailyEmpId) return;
     const emp = employees.find(e => e.id === dailyEmpId);
     if (!emp) return;
 
     const bonusAmount = emp.fullTimeBonus || 0;
+    // Shift siang (jam masuk >= 11:00) tidak dapat Bonus Full Time walaupun
+    // jam kerja tembus 10 jam — shift ini dapat Bonus Lembur sendiri (lihat efek di bawah).
+    const isShiftSiang = clockIn ? timeStrToMinutes(clockIn) >= SIANG_SHIFT_START_MINUTES : false;
 
-    // Jika kerja 10 jam atau lebih, dan upah bonusnya ada
-    if (Number(hoursWorked) >= 10 && bonusAmount > 0) {
+    // Jika kerja 10 jam atau lebih, upah bonusnya ada, dan bukan shift siang
+    if (Number(hoursWorked) >= 10 && bonusAmount > 0 && !isShiftSiang) {
       setAdditions(prev => {
         // Cek apakah bonus sudah masuk biar tidak duplikat
         const hasBonus = prev.some(a => a.category === 'Bonus Full Time');
@@ -133,11 +210,39 @@ const EmployeesView = () => {
         }
         return prev;
       });
-    } else if (Number(hoursWorked) < 10) {
-      // Jika jam diedit menjadi di bawah 10 jam, tarik kembali bonusnya
+    } else {
+      // Jam kerja < 10, atau shift siang, atau upah bonus belum diset → tarik kembali bonusnya
       setAdditions(prev => prev.filter(a => a.category !== 'Bonus Full Time'));
     }
-  }, [hoursWorked, dailyEmpId, employees]);
+  }, [hoursWorked, dailyEmpId, employees, clockIn]);
+
+  // 1B. AUTO BONUS LEMBUR (jam keluar lewat dari 19:30 → Rp5.000 / 30 menit)
+  // Berlaku untuk semua shift, termasuk shift siang yang tidak dapat Bonus Full Time.
+  useEffect(() => {
+    if (!dailyEmpId || isDayOff || !clockIn || !clockOut) {
+      setAdditions(prev => prev.filter(a => a.category !== 'Bonus Lembur'));
+      return;
+    }
+
+    const outMinutes = getClockOutMinutesContinuous(clockIn, clockOut);
+    const overtimeMinutes = Math.max(0, outMinutes - OVERTIME_THRESHOLD_MINUTES);
+    const blocks = Math.floor(overtimeMinutes / 30);
+    const lemburAmount = blocks * OVERTIME_RATE_PER_30MIN;
+
+    setAdditions(prev => {
+      const withoutAuto = prev.filter(a => a.category !== 'Bonus Lembur');
+      if (lemburAmount > 0) {
+        return [...withoutAuto, {
+          id: Date.now() + Math.random(),
+          category: 'Bonus Lembur',
+          amount: lemburAmount,
+          note: `(${blocks * 30} menit setelah 19:30)`,
+          expenseRecorded: false
+        }];
+      }
+      return withoutAuto;
+    });
+  }, [clockIn, clockOut, isDayOff, dailyEmpId]);
 
   // 2. AUTO HITUNG UANG LEMBUR
   useEffect(() => {
@@ -168,7 +273,7 @@ const EmployeesView = () => {
       triggerAlert('Karyawan baru berhasil ditambahkan.');
     }
     setIsEditingEmp(false);
-    setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString() });
+    setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString(), status: 'aktif', resignDate: '' });
   };
 
   const handleDeleteEmployee = (id) => {
@@ -192,6 +297,7 @@ const EmployeesView = () => {
         setClockIn(wasOff ? '00:00' : (existingRecord.clockIn && existingRecord.clockIn !== '-' ? existingRecord.clockIn : '09:00'));
         setClockOut(wasOff ? '00:00' : (existingRecord.clockOut && existingRecord.clockOut !== '-' ? existingRecord.clockOut : '19:00'));
         setHoursWorked(existingRecord.hoursWorked || '');
+        setBolongMinutes(0); // jam kerja record lama sudah final, gak perlu dipotong ulang
         setIsDayOff(wasOff);
         setAdditions(existingRecord.additions || []);
         setDeductions(existingRecord.deductions || []);
@@ -207,7 +313,8 @@ const EmployeesView = () => {
           .filter(r => r.employeeId === dailyEmpId && r.dateStr === dailyDate)
           .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-        // Ambil record masuk pertama & keluar terakhir (abaikan bolong di tengah)
+        // Ambil record masuk pertama & keluar terakhir sebagai catatan jam akhir saja —
+        // jam kerja sesungguhnya dihitung (masuk→keluar) dikurangi total jam bolong di tengah.
         const masukRec  = empLogs.find(r => r.type === 'masuk');
         const keluarRec = [...empLogs].reverse().find(r => r.type === 'keluar');
 
@@ -219,12 +326,14 @@ const EmployeesView = () => {
           setClockOut(keluarStr);
           setIsDayOff(false);
           setAbsenFromAttendance(true);
+          setBolongMinutes(calculateBolongMinutes(empLogs));
         } else {
           // Tidak ada data sama sekali → default libur (perilaku asli)
           setClockIn('09:00');
           setClockOut('19:00');
           setIsDayOff(true);
           setAbsenFromAttendance(false);
+          setBolongMinutes(0);
         }
       }
     }
@@ -339,6 +448,21 @@ const EmployeesView = () => {
   // mode normal, atau yang sudah dihapus (recycle bin) kalau showTrash aktif.
   const visibleDailyRecords = showTrash ? trashedOnly(employeeDailyRecords) : activeOnly(employeeDailyRecords);
 
+  // Urutkan riwayat input harian pakai dailySortKey terpilih
+  const sortedDailyRecords = applySort(visibleDailyRecords, dailySortKey, {
+    date: r => new Date(r.date),
+    name: r => employees.find(e => e.id === r.employeeId)?.name || '',
+    hours: r => r.hoursWorked || 0,
+  });
+
+  const dailyRecordSortOptions = [
+    { key: 'date-desc', label: 'Terbaru Dulu' },
+    { key: 'date-asc', label: 'Terlama Dulu' },
+    { key: 'name-asc', label: 'Nama Karyawan (A-Z)' },
+    { key: 'name-desc', label: 'Nama Karyawan (Z-A)' },
+    { key: 'hours-desc', label: 'Jam Kerja Terbanyak' },
+  ];
+
   const filteredRecordsForReport = useMemo(() => {
     return activeOnly(employeeDailyRecords).filter(r => toLocalMonthString(r.date) === reportMonth);
   }, [employeeDailyRecords, reportMonth]);
@@ -374,6 +498,40 @@ const EmployeesView = () => {
 
   const totalPayrollExpense = employeePerformance.reduce((sum, p) => sum + p.netPay, 0);
 
+  // Urutkan tabel performa & gaji pakai perfSortKey terpilih
+  const sortedEmployeePerformance = applySort(employeePerformance, perfSortKey, {
+    name: p => p.employee?.name || '',
+    netpay: p => p.netPay || 0,
+    hours: p => p.totalHours || 0,
+  });
+
+  const perfSortOptions = [
+    { key: 'name-asc', label: 'Nama (A-Z)' },
+    { key: 'name-desc', label: 'Nama (Z-A)' },
+    { key: 'netpay-desc', label: 'Gaji Bersih Terbesar' },
+    { key: 'hours-desc', label: 'Total Jam Terbanyak' },
+  ];
+
+  // Filter daftar karyawan (tab Kelola) berdasarkan status terpilih
+  const filteredEmployeesByStatus = empStatusFilter === 'semua'
+    ? employees
+    : employees.filter(e => getEmployeeStatus(e) === empStatusFilter);
+
+  // Urutkan daftar karyawan (tab Kelola) pakai empSortKey terpilih
+  const sortedEmployees = applySort(filteredEmployeesByStatus, empSortKey, {
+    name: e => e.name || '',
+    rate: e => e.hourlyRate || 0,
+    date: e => new Date(e.startDate),
+  });
+
+  const empListSortOptions = [
+    { key: 'name-asc', label: 'Nama (A-Z)' },
+    { key: 'name-desc', label: 'Nama (Z-A)' },
+    { key: 'rate-desc', label: 'Upah Tertinggi' },
+    { key: 'date-desc', label: 'Gabung Terbaru' },
+    { key: 'date-asc', label: 'Gabung Terlama' },
+  ];
+
   const renderInputTab = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full animate-in fade-in slide-in-from-right-4 duration-300">
       <Card padding="lg" className="lg:col-span-1 flex flex-col h-fit">
@@ -392,9 +550,15 @@ const EmployeesView = () => {
                 onChange={e => setDailyEmpId(e.target.value)}
               >
                 <option value="">Pilih Karyawan</option>
-                {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                ))}
+                {employees
+                  .filter(emp => getEmployeeStatus(emp) !== 'resign' || emp.id === dailyEmpId)
+                  .map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name}
+                      {getEmployeeStatus(emp) !== 'aktif' ? ` (${getEmployeeStatusInfo(getEmployeeStatus(emp)).label})` : ''}
+                    </option>
+                  ))
+                }
               </Select>
             </div>
             <div className="w-1/3">
@@ -438,6 +602,7 @@ const EmployeesView = () => {
               onChange={(val) => {
                 setIsDayOff(val);
                 setAbsenFromAttendance(false);
+                setBolongMinutes(0); // toggle manual → bukan lagi dari data absensi
                 if (val) {
                   setClockIn('00:00');
                   setClockOut('00:00');
@@ -454,6 +619,9 @@ const EmployeesView = () => {
               <div className="col-span-2">
                 <Alert type="callout" variant="info">
                   Jam terisi otomatis dari data absensi. Edit jika perlu koreksi.
+                  {bolongMinutes > 0 && (
+                    <> Jam kerja sudah dipotong <strong>{Math.round(bolongMinutes)} menit</strong> jam bolong.</>
+                  )}
                 </Alert>
               </div>
             )}
@@ -656,27 +824,34 @@ const EmployeesView = () => {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowTrash(v => !v)}
-              className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
             >
               {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(employeeDailyRecords).length})`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsDailySortOpen(true)}
+              className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
             </button>
             <Badge variant="neutral">{visibleDailyRecords.length} Catatan</Badge>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-          {visibleDailyRecords.length === 0 ? (
+          {sortedDailyRecords.length === 0 ? (
             <EmptyState
               className="h-full opacity-50"
               icon={showTrash ? <Trash2 className="w-12 h-12" /> : <Calendar className="w-12 h-12" />}
               title={showTrash ? 'Recycle bin kosong.' : 'Belum ada riwayat input karyawan.'}
             />
           ) : (
-            visibleDailyRecords.slice(0, 50).map(rec => {
+            sortedDailyRecords.slice(0, 50).map(rec => {
               const emp = employees.find(e => e.id === rec.employeeId);
               const addSum = rec.additions.reduce((s, a) => s + a.amount, 0);
               const dedSum = rec.deductions.reduce((s, d) => s + d.amount, 0);
               return (
-                <div key={rec.id} className="flex flex-col p-4 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-orange-200 dark:hover:border-orange-500/30 transition-all duration-200 animate-in slide-in-from-left-2">
+                <div key={rec.id} className="flex flex-col p-4 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-accent-200 dark:hover:border-accent-500/30 transition-all duration-200 animate-in slide-in-from-left-2">
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{emp ? emp.name : 'Karyawan (Dihapus)'}</p>
@@ -726,7 +901,7 @@ const EmployeesView = () => {
   const renderReportsTab = () => (
     <div className="space-y-6 h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
       <Card className="flex justify-between items-center">
-        <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PieChart className="w-5 h-5 text-orange-600 dark:text-orange-400" /> Rekap Penggajian</h3>
+        <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PieChart className="w-5 h-5 text-accent-600 dark:text-accent-400" /> Rekap Penggajian</h3>
         <div className="flex items-center gap-2">
           <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Bulan Laporan:</label>
           <div className="w-40">
@@ -754,6 +929,13 @@ const EmployeesView = () => {
       <Card padding="none" className="overflow-hidden">
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-between items-center">
           <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">Performa & Rincian Gaji Karyawan</h3>
+          <button
+            type="button"
+            onClick={() => setIsPerfSortOpen(true)}
+            className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
+          </button>
         </div>
         <div className="divide-y divide-slate-100 dark:divide-slate-800 overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[700px]">
@@ -768,10 +950,10 @@ const EmployeesView = () => {
               </tr>
             </thead>
             <tbody>
-              {employeePerformance.length === 0 ? (
+              {sortedEmployeePerformance.length === 0 ? (
                 <tr><td colSpan="6"><EmptyState size="sm" icon={<PieChart className="w-8 h-8" />} title="Tidak ada data penggajian pada bulan ini." /></td></tr>
               ) : (
-                employeePerformance.map(p => (
+                sortedEmployeePerformance.map(p => (
                   <tr key={p.employee.id} className="hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors">
                     <td className="p-4">
                       <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{p.employee.name}</p>
@@ -848,6 +1030,25 @@ const EmployeesView = () => {
               onChange={e => setEmpFormData({ ...empFormData, phone: e.target.value })}
               placeholder="Misal: 081234567890"
             />
+            <Select
+              label="Status Karyawan"
+              variant="muted"
+              value={empFormData.status || 'aktif'}
+              onChange={e => setEmpFormData({ ...empFormData, status: e.target.value })}
+            >
+              {EMPLOYEE_STATUS_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </Select>
+            {empFormData.status === 'resign' && (
+              <Input
+                type="date"
+                label="Tanggal Resign"
+                variant="muted"
+                value={empFormData.resignDate || ''}
+                onChange={e => setEmpFormData({ ...empFormData, resignDate: e.target.value })}
+              />
+            )}
             <div className="md:col-span-2">
               <Input
                 label="Alamat"
@@ -904,23 +1105,42 @@ const EmployeesView = () => {
         <div className="space-y-6">
           <Card className="flex justify-between items-center">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Briefcase className="w-5 h-5 text-slate-700 dark:text-slate-200" /> Daftar Karyawan</h3>
-            <Button
-              variant="dark"
-              icon={<Plus className="w-4 h-4" />}
-              onClick={() => {
-                setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString() });
-                setIsEditingEmp(true);
-              }}
-            >
-              Tambah Karyawan
-            </Button>
+            <div className="flex items-center gap-2">
+              <select
+                value={empStatusFilter}
+                onChange={e => setEmpStatusFilter(e.target.value)}
+                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 bg-transparent focus:outline-none"
+              >
+                <option value="semua">Semua Status</option>
+                {EMPLOYEE_STATUS_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setIsEmpSortOpen(true)}
+                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
+              </button>
+              <Button
+                variant="dark"
+                icon={<Plus className="w-4 h-4" />}
+                onClick={() => {
+                  setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString(), status: 'aktif', resignDate: '' });
+                  setIsEditingEmp(true);
+                }}
+              >
+                Tambah Karyawan
+              </Button>
+            </div>
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-10">
-            {employees.map(emp => (
+            {sortedEmployees.map(emp => (
               <Card key={emp.id} padding="lg" className="relative group hover:shadow-md transition-shadow duration-300">
                 <div className="absolute top-4 right-4 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                  <IconButton variant="edit" ghost onClick={() => { setEmpFormData(emp); setIsEditingEmp(true); }}>
+                  <IconButton variant="edit" ghost onClick={() => { setEmpFormData({ status: 'aktif', resignDate: '', ...emp }); setIsEditingEmp(true); }}>
                     <Edit3 className="w-4 h-4" />
                   </IconButton>
                   <IconButton variant="delete" ghost onClick={() => handleDeleteEmployee(emp.id)}>
@@ -929,18 +1149,26 @@ const EmployeesView = () => {
                 </div>
 
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-full flex items-center justify-center font-heading font-black text-xl">
+                  <div className="w-12 h-12 bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-full flex items-center justify-center font-heading font-black text-xl">
                     {emp.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base leading-tight pr-10">{emp.name}</h4>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Gabung: {new Date(emp.startDate).toLocaleDateString('id-ID')}</p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Badge size="sm" variant={getEmployeeStatusInfo(getEmployeeStatus(emp)).badgeVariant}>
+                        {getEmployeeStatusInfo(getEmployeeStatus(emp)).label}
+                      </Badge>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500">Gabung: {new Date(emp.startDate).toLocaleDateString('id-ID')}</p>
+                    </div>
                   </div>
                 </div>
 
                 <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-800 pt-3 text-sm">
                   <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400 font-medium">No. HP:</span><span className="font-semibold text-slate-700 dark:text-slate-200">{emp.phone || '-'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400 font-medium">Upah/Jam:</span><span className="font-bold text-orange-600 dark:text-orange-400">{formatRupiah(emp.hourlyRate)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400 font-medium">Upah/Jam:</span><span className="font-bold text-accent-600 dark:text-accent-400">{formatRupiah(emp.hourlyRate)}</span></div>
+                  {emp.status === 'resign' && emp.resignDate && (
+                    <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400 font-medium">Resign:</span><span className="font-semibold text-slate-700 dark:text-slate-200">{new Date(emp.resignDate).toLocaleDateString('id-ID')}</span></div>
+                  )}
                   <div className="flex flex-col mt-2 pt-2 border-t border-dashed border-slate-100 dark:border-slate-800">
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 mb-0.5">Alamat:</span>
                     <span className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">{emp.address || '-'}</span>
@@ -948,6 +1176,14 @@ const EmployeesView = () => {
                 </div>
               </Card>
             ))}
+            {sortedEmployees.length === 0 && employees.length > 0 && (
+              <EmptyState
+                className="col-span-full"
+                icon={<Users className="w-10 h-10" />}
+                title="Gak ada karyawan dengan status ini"
+                description="Coba pilih filter status lain di atas."
+              />
+            )}
             {employees.length === 0 && (
               <EmptyState
                 className="col-span-full"
@@ -959,7 +1195,7 @@ const EmployeesView = () => {
                     variant="dark"
                     icon={<Plus className="w-4 h-4" />}
                     onClick={() => {
-                      setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString() });
+                      setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString(), status: 'aktif', resignDate: '' });
                       setIsEditingEmp(true);
                     }}
                   >
@@ -992,6 +1228,28 @@ const EmployeesView = () => {
         {activeTab === 'manage' && renderManageTab()}
       </div>
       <PayslipModal />
+
+      <SortModal
+        isOpen={isDailySortOpen}
+        onClose={() => setIsDailySortOpen(false)}
+        value={dailySortKey}
+        onChange={setDailySortKey}
+        options={dailyRecordSortOptions}
+      />
+      <SortModal
+        isOpen={isPerfSortOpen}
+        onClose={() => setIsPerfSortOpen(false)}
+        value={perfSortKey}
+        onChange={setPerfSortKey}
+        options={perfSortOptions}
+      />
+      <SortModal
+        isOpen={isEmpSortOpen}
+        onClose={() => setIsEmpSortOpen(false)}
+        value={empSortKey}
+        onChange={setEmpSortKey}
+        options={empListSortOptions}
+      />
 
       <CategoryModal
         isOpen={catModalType === 'addition'}

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { 
+import {
   Award, BarChart3, Calendar, CircleMinus, ChevronRight, History, Package,
   ShoppingBag, Wallet, CircleDollarSign, TrendingUp, TrendingDown, Receipt
 } from 'lucide-react';
@@ -65,13 +65,13 @@ const ReportsView = () => {
     return expenses.filter(exp => isWithinDateRange(exp.date, dateFilter));
   }, [expenses, dateFilter, customStartDate, customEndDate]);
 
-  const totalRevenue    = filteredSales.reduce((sum, order) => sum + order.total, 0);
-  const totalHPP        = filteredSales.reduce((sum, order) => sum + order.hppTotal, 0);
+  const totalRevenue = filteredSales.reduce((sum, order) => sum + order.total, 0);
+  const totalHPP = filteredSales.reduce((sum, order) => sum + order.hppTotal, 0);
   const totalOtherIncome = filteredIncomes.reduce((sum, inc) => sum + inc.amount, 0);
-  const totalExpense    = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+  const totalExpense = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   const totalCombinedIncome = totalRevenue + totalOtherIncome;
-  const grossProfit     = totalRevenue - totalHPP;
-  const netProfit       = grossProfit + totalOtherIncome - totalExpense;
+  const grossProfit = totalRevenue - totalHPP;
+  const netProfit = grossProfit + totalOtherIncome - totalExpense;
 
   const salesByDate = useMemo(() => {
     const salesMap = {};
@@ -106,28 +106,28 @@ const ReportsView = () => {
     const maxVal = Math.max(...salesByDate.map(s => s.total), 10000);
     const width = 500;
     const height = 180;
-    const paddingLeft   = 55;
-    const paddingRight  = 15;
-    const paddingTop    = 15;
+    const paddingLeft = 55;
+    const paddingRight = 15;
+    const paddingTop = 15;
     const paddingBottom = 30;
     const points = salesByDate.map((item, index) => {
       const x = paddingLeft + (index / Math.max(salesByDate.length - 1, 1)) * (width - paddingLeft - paddingRight);
       const y = height - paddingBottom - (item.total / maxVal) * (height - paddingTop - paddingBottom);
       return { x, y, label: item.date, val: item.total };
     });
-    const linePath  = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-    const areaPath  = points.length > 0
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+    const areaPath = points.length > 0
       ? `${linePath} L ${points[points.length - 1].x} ${height - paddingBottom} L ${points[0].x} ${height - paddingBottom} Z`
       : '';
     return { points, linePath, areaPath, maxVal, width, height, paddingLeft, paddingRight, paddingTop, paddingBottom };
   }, [salesByDate]);
 
   /* ─────────────────────────────────────────────────────────────────────────
-     Warna aksen — orange-600 (#ea580c) sesuai design system
+     Warna aksen — accent-600 (#ea580c) sesuai design system
   ───────────────────────────────────────────────────────────────────────── */
-  const ACCENT      = '#ea580c'; // orange-600
+  const ACCENT = '#ea580c'; // accent-600
   const ACCENT_SOFT = '#ea580c'; // dipakai di area gradient juga
-  const GRID_LINE   = '#f1f5f9'; // slate-100
+  const GRID_LINE = '#f1f5f9'; // slate-100
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
@@ -169,7 +169,7 @@ const ReportsView = () => {
                 type="date"
                 value={customStartDate}
                 onChange={(e) => setCustomStartDate(e.target.value)}
-                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 text-slate-700 dark:text-slate-200"
+                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-500 text-slate-700 dark:text-slate-200"
               />
             </div>
             <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 mt-4" />
@@ -179,7 +179,7 @@ const ReportsView = () => {
                 type="date"
                 value={customEndDate}
                 onChange={(e) => setCustomEndDate(e.target.value)}
-                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 text-slate-700 dark:text-slate-200"
+                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-500 text-slate-700 dark:text-slate-200"
               />
             </div>
           </Card>
@@ -268,12 +268,12 @@ const ReportsView = () => {
             {/* Pengeluaran — orange accent untuk "biaya" */}
             <Card padding="lg" className="flex flex-col justify-center hover:shadow-md transition-shadow duration-200">
               <div className="flex items-center gap-2 mb-2">
-                <Receipt className="w-4 h-4 text-orange-500 dark:text-orange-400" />
-                <p className="text-[11px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-wider">
+                <Receipt className="w-4 h-4 text-accent-500 dark:text-accent-400" />
+                <p className="text-[11px] font-bold text-accent-500 dark:text-accent-400 uppercase tracking-wider">
                   Pengeluaran
                 </p>
               </div>
-              <h3 className="font-heading text-xl font-bold text-orange-600 dark:text-orange-400">
+              <h3 className="font-heading text-xl font-bold text-accent-600 dark:text-accent-400">
                 {formatRupiah(totalExpense)}
               </h3>
               <p className="text-[10px] text-slate-400 mt-1">{filteredExpenses.length} catatan biaya operasional</p>
@@ -282,52 +282,13 @@ const ReportsView = () => {
           </div>
         </div>
 
-        {/* ── RIWAYAT TRANSAKSI ────────────────────────────────────────────── */}
-        <Card padding="none" className="overflow-hidden flex flex-col mb-6">
-          {/* Section header */}
-          <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
-            <History className="w-4 h-4 text-slate-400" />
-            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
-              Riwayat Transaksi Penjualan
-            </h3>
-          </div>
-
-          <div className="divide-y divide-slate-50 dark:divide-slate-800/50 max-h-[220px] overflow-y-auto custom-scrollbar">
-            {filteredSales.length > 0 ? filteredSales.map((order) => (
-              <div
-                key={order.id}
-                className="px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors animate-in fade-in slide-in-from-left-2"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                      {order.id}
-                      <span className="font-normal text-slate-400"> — {order.customerName}</span>
-                    </p>
-                    <span className="text-[10px] text-slate-400 font-medium">
-                      {new Date(order.date).toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <p className="text-sm font-bold text-slate-900 dark:text-slate-50">
-                    {formatRupiah(order.total)}
-                  </p>
-                </div>
-              </div>
-            )) : (
-              <div className="py-8">
-                <EmptyState size="sm" title="Tidak ada transaksi pada periode ini" />
-              </div>
-            )}
-          </div>
-        </Card>
-
         {/* ── VISUALISASI GRAFIK ───────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pb-10">
 
           {/* Grafik 1: Tren Penjualan Harian */}
           <Card padding="lg" className="flex flex-col">
             <div className="flex items-center gap-2 mb-6">
-              <TrendingUp className="w-4 h-4 text-orange-500" />
+              <TrendingUp className="w-4 h-4 text-accent-500" />
               <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
                 Tren Penjualan Harian
               </h3>
@@ -342,7 +303,7 @@ const ReportsView = () => {
                 >
                   <defs>
                     <linearGradient id="areaGradOrange" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor={ACCENT_SOFT} stopOpacity="0.18" />
+                      <stop offset="0%" stopColor={ACCENT_SOFT} stopOpacity="0.18" />
                       <stop offset="100%" stopColor={ACCENT_SOFT} stopOpacity="0" />
                     </linearGradient>
                   </defs>
@@ -380,7 +341,7 @@ const ReportsView = () => {
                     <path d={lineChartData.areaPath} fill="url(#areaGradOrange)" />
                   )}
 
-                  {/* Line — orange-600 */}
+                  {/* Line — accent-600 */}
                   {lineChartData.linePath && (
                     <path
                       d={lineChartData.linePath}
@@ -431,7 +392,7 @@ const ReportsView = () => {
           {/* Grafik 2: Menu Paling Laris */}
           <Card padding="lg" className="flex flex-col">
             <div className="flex items-center gap-2 mb-6">
-              <Award className="w-4 h-4 text-orange-500" />
+              <Award className="w-4 h-4 text-accent-500" />
               <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
                 5 Menu Terlaris
               </h3>
@@ -442,11 +403,11 @@ const ReportsView = () => {
                 <div className="space-y-4 pr-1">
                   {bestSellers.map((item, idx) => {
                     const maxQty = Math.max(...bestSellers.map(b => b.qty), 1);
-                    const pct    = (item.qty / maxQty) * 100;
+                    const pct = (item.qty / maxQty) * 100;
 
                     /* Rank badge color — #1 pakai orange, lainnya netral */
                     const rankColor = idx === 0
-                      ? 'text-orange-500 dark:text-orange-400'
+                      ? 'text-accent-500 dark:text-accent-400'
                       : 'text-slate-400';
 
                     return (
@@ -463,10 +424,10 @@ const ReportsView = () => {
                           </span>
                         </div>
 
-                        {/* Bar — orange-500 mengikuti aksen design system */}
+                        {/* Bar — accent-500 mengikuti aksen design system */}
                         <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                           <div
-                            className="h-full rounded-full transition-all duration-500 ease-out bg-orange-500 dark:bg-orange-400"
+                            className="h-full rounded-full transition-all duration-500 ease-out bg-accent-500 dark:bg-accent-400"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -484,6 +445,46 @@ const ReportsView = () => {
           </Card>
 
         </div>
+
+        {/* ── RIWAYAT TRANSAKSI ────────────────────────────────────────────── */}
+        <Card padding="none" className="overflow-hidden flex flex-col mb-6">
+          {/* Section header */}
+          <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+            <History className="w-4 h-4 text-slate-400" />
+            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
+              Riwayat Transaksi Penjualan
+            </h3>
+          </div>
+
+          <div className="divide-y divide-slate-50 dark:divide-slate-800/50 max-h-[220px] overflow-y-auto custom-scrollbar">
+            {filteredSales.length > 0 ? filteredSales.map((order) => (
+              <div
+                key={order.id}
+                className="px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors animate-in fade-in slide-in-from-left-2"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                      {order.id}
+                      <span className="font-normal text-slate-400"> — {order.customerName}</span>
+                    </p>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      {new Date(order.date).toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-50">
+                    {formatRupiah(order.total)}
+                  </p>
+                </div>
+              </div>
+            )) : (
+              <div className="py-8">
+                <EmptyState size="sm" title="Tidak ada transaksi pada periode ini" />
+              </div>
+            )}
+          </div>
+        </Card>
+
       </div>
     </div>
   );

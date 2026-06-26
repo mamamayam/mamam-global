@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { History, Save, Trash2, TrendingDown, Pencil, X, Settings2, RotateCcw } from 'lucide-react';
+import { History, Save, Trash2, TrendingDown, Pencil, X, Settings2, RotateCcw, ArrowUpDown } from 'lucide-react';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import CategoryModal from '../../components/CategoryModal';
-import { Button, PageHeader, Card, Input, Select, Badge, IconButton, EmptyState } from '../../components/ui';
+import { Button, PageHeader, Card, Input, Select, Badge, IconButton, EmptyState, SortModal } from '../../components/ui';
+import { applySort } from '../../utils/sortUtils';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 
@@ -25,6 +26,8 @@ const ExpenseView = () => {
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
+  const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
+  const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
 
   // State untuk melacak data yang sedang diedit
   const [editingId, setEditingId] = useState(null);
@@ -142,6 +145,21 @@ const ExpenseView = () => {
 
   const filteredExpenses = (showTrash ? trashedOnly(expenses) : activeOnly(expenses)).filter(e => filterMonth === '' || toLocalMonthString(e.date) === filterMonth);
 
+  // Urutkan hasil filter pakai sortKey terpilih
+  const sortedExpenses = applySort(filteredExpenses, sortKey, {
+    date: e => new Date(e.date),
+    category: e => e.category || '',
+    amount: e => e.amount || 0,
+  });
+
+  const sortOptions = [
+    { key: 'date-desc', label: 'Terbaru Dulu' },
+    { key: 'date-asc', label: 'Terlama Dulu' },
+    { key: 'category-asc', label: 'Kategori (A-Z)' },
+    { key: 'category-desc', label: 'Kategori (Z-A)' },
+    { key: 'amount-desc', label: 'Nominal Terbesar' },
+  ];
+
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <PageHeader
@@ -201,12 +219,12 @@ const ExpenseView = () => {
                 label="Pilih Karyawan (Kasbon)"
                 value={selectedEmployeeId}
                 onChange={e => setSelectedEmployeeId(e.target.value)}
-                className="border-orange-200 dark:border-orange-500/30 focus:border-orange-500 dark:focus:border-orange-500"
+                className="border-accent-200 dark:border-accent-500/30 focus:border-accent-500 dark:focus:border-accent-500"
               >
                 <option value="">-- Pilih Karyawan --</option>
                 {employees && employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
               </Select>
-              <p className="text-[10px] text-orange-600 dark:text-orange-400 mt-1 italic">*Kasbon ini akan otomatis memotong gaji karyawan terpilih.</p>
+              <p className="text-[10px] text-accent-600 dark:text-accent-400 mt-1 italic">*Kasbon ini akan otomatis memotong gaji karyawan terpilih.</p>
             </div>
           )}
 
@@ -256,7 +274,7 @@ const ExpenseView = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowTrash(v => !v)}
-                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
               >
                 {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(expenses).length})`}
               </button>
@@ -274,6 +292,13 @@ const ExpenseView = () => {
                   }
                 </>
               )}
+              <button
+                type="button"
+                onClick={() => setIsSortOpen(true)}
+                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
+              </button>
             </div>
           </div>
           <div className="p-3 bg-red-50 dark:bg-red-500/10 border-b border-red-100 dark:border-red-500/20 flex justify-between items-center">
@@ -281,14 +306,14 @@ const ExpenseView = () => {
             <span className="text-sm font-black text-red-700 dark:text-red-300">{formatRupiah(filteredExpenses.reduce((s, e) => s + e.amount, 0))}</span>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-            {filteredExpenses.length === 0 ? (
+            {sortedExpenses.length === 0 ? (
               <EmptyState
                 icon={showTrash ? <Trash2 className="w-12 h-12" /> : <TrendingDown className="w-12 h-12" />}
                 title={showTrash ? 'Recycle bin kosong.' : 'Belum ada pengeluaran pada periode ini.'}
                 className="h-full animate-in fade-in duration-300"
               />
             ) : (
-              filteredExpenses.map(exp => {
+              sortedExpenses.map(exp => {
                 const isKasbon = exp.category === 'Kasbon Karyawan';
                 const empName = isKasbon && exp.employeeId && employees ? employees.find(e => e.id === exp.employeeId)?.name : null;
 
@@ -337,6 +362,14 @@ const ExpenseView = () => {
           </div>
         </Card>
       </div >
+
+      <SortModal
+        isOpen={isSortOpen}
+        onClose={() => setIsSortOpen(false)}
+        value={sortKey}
+        onChange={setSortKey}
+        options={sortOptions}
+      />
 
       <CategoryModal
         isOpen={isCategoryModalOpen}
