@@ -9,11 +9,11 @@ import { Alert, Button } from '../../components/ui';
 // ====== Daftar pilihan tema warna ======
 const COLOR_THEMES = [
   { id: 'orange', label: 'Orange', hex: '#ea580c' },
-  { id: 'blue',   label: 'Biru',   hex: '#4f46e5' },
-  { id: 'green',  label: 'Hijau',  hex: '#059669' },
-  { id: 'violet', label: 'Ungu',   hex: '#7c3aed' },
-  { id: 'rose',   label: 'Merah',  hex: '#e11d48' },
-  { id: 'teal',   label: 'Teal',   hex: '#0d9488' },
+  { id: 'blue', label: 'Biru', hex: '#4f46e5' },
+  { id: 'green', label: 'Hijau', hex: '#059669' },
+  { id: 'violet', label: 'Ungu', hex: '#7c3aed' },
+  { id: 'rose', label: 'Merah', hex: '#e11d48' },
+  { id: 'teal', label: 'Teal', hex: '#0d9488' },
 ];
 
 // =========================================================================
@@ -197,19 +197,11 @@ const SettingsView = () => {
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
 
-              {/* Profil Usaha */}
+              {/* === BARU: Nama & tagline sidebar === */}
               <div className="flex items-center gap-2 border-b pb-2">
                 <Store className="w-5 h-5 text-slate-700 dark:text-slate-200" />
-                <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Profil Usaha</h3>
+                <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Profil Aplikasi</h3>
               </div>
-              <TextInput
-                label="Nama Toko"
-                placeholder="Misal: Kedai Kopi Senja"
-                value={localSettings.storeName}
-                onChange={(val) => handleTextChange('storeName', val)}
-              />
-
-              {/* === BARU: Nama & tagline sidebar === */}
               <TextInput
                 label="Nama Aplikasi (Sidebar)"
                 placeholder="Misal: MAMAM AYAM"
@@ -223,6 +215,18 @@ const SettingsView = () => {
                 value={localSettings.appTagline}
                 onChange={(val) => handleTextChange('appTagline', val)}
                 helperText='Teks kecil di bawah nama, contoh: "POS System", "Manajemen Kasir".'
+              />
+
+              {/* Profil Usaha (Untuk Struk) */}
+              <div className="flex items-center gap-2 border-b pb-2">
+                <ReceiptText className="w-5 h-5 text-slate-700 dark:text-slate-200" />
+                <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Profil Struk</h3>
+              </div>
+              <TextInput
+                label="Nama Toko "
+                placeholder="Misal: Kedai Kopi Senja"
+                value={localSettings.storeName}
+                onChange={(val) => handleTextChange('storeName', val)}
               />
 
               <TextInput
