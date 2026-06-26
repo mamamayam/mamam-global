@@ -787,7 +787,7 @@ const EmployeesView = () => {
 
               {deductions.length > 0 && (
                 <div>
-                  <span className="text-[10px] font-bold text-red-500 dark:text-red-400 flex items-center gap-1 mb-1 mt-2"><Minus className="w-3 h-3" /> POTONGAN</span>
+                  <span className="text-[10px] font-bold text-accent-500 dark:text-accent-400 flex items-center gap-1 mb-1 mt-2"><Minus className="w-3 h-3" /> POTONGAN</span>
                   <div className="space-y-1.5">
                     {deductions.map((ded) => (
                       <div key={ded.id} className="flex justify-between items-center bg-white dark:bg-slate-900 p-2 border border-slate-100 dark:border-slate-800 rounded-lg shadow-sm text-xs">
@@ -797,7 +797,7 @@ const EmployeesView = () => {
                           {ded.note && <span className="text-slate-400 dark:text-slate-500 ml-1 text-[10px]">({ded.note})</span>}
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-red-500 dark:text-red-400">-{formatRupiah(ded.amount)}</span>
+                          <span className="font-bold text-accent-500 dark:text-accent-400">-{formatRupiah(ded.amount)}</span>
                           <IconButton variant="delete" size="sm" onClick={() => setDeductions(deductions.filter(d => d.id !== ded.id))}>
                             <Trash2 className="w-3 h-3" />
                           </IconButton>
@@ -885,7 +885,7 @@ const EmployeesView = () => {
                       {rec.additions.map((a, i) => <div key={i} className="text-[10px] text-slate-500 dark:text-slate-400">- {a.category} ({formatRupiah(a.amount)})</div>)}
                     </div>
                     <div>
-                      <span className="text-red-500 dark:text-red-400 font-bold block mb-1">Potongan: -{formatRupiah(dedSum)}</span>
+                      <span className="text-accent-500 dark:text-accent-400 font-bold block mb-1">Potongan: -{formatRupiah(dedSum)}</span>
                       {rec.deductions.map((d, i) => <div key={i} className="text-[10px] text-slate-500 dark:text-slate-400">- {d.category} ({formatRupiah(d.amount)})</div>)}
                     </div>
                   </div>
@@ -961,7 +961,7 @@ const EmployeesView = () => {
                     </td>
                     <td className="p-4 text-center font-semibold text-slate-700 dark:text-slate-200 text-sm">{p.totalHours}</td>
                     <td className="p-4 text-right font-bold text-green-600 dark:text-green-400 text-sm">+{formatRupiah(p.totalAdditions)}</td>
-                    <td className="p-4 text-right font-bold text-red-500 dark:text-red-400 text-sm">-{formatRupiah(p.totalDeductions)}</td>
+                    <td className="p-4 text-right font-bold text-accent-500 dark:text-accent-400 text-sm">-{formatRupiah(p.totalDeductions)}</td>
                     <td className="p-4 text-right font-black text-slate-900 dark:text-slate-50 text-sm">{formatRupiah(p.netPay)}</td>
                     <td className="p-4 text-center">
                       <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>
@@ -1149,7 +1149,7 @@ const EmployeesView = () => {
                 </div>
 
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-full flex items-center justify-center font-heading font-black text-xl">
+                  <div className="w-12 h-12 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-full flex items-center justify-center font-heading font-black text-xl">
                     {emp.name.charAt(0).toUpperCase()}
                   </div>
                   <div>

@@ -113,8 +113,8 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
         {/* Header Modal */}
         <div className="w-full flex justify-between items-center mb-2">
           <div className="flex items-center gap-2 text-slate-800 dark:text-slate-100">
-            {mode === 'verify' && <Lock className="w-4 h-4 text-orange-500 dark:text-orange-400" />}
-            {mode === 'super' && <ShieldAlert className="w-4 h-4 text-red-500 dark:text-red-400" />}
+            {mode === 'verify' && <Lock className="w-4 h-4 text-accent-500 dark:text-accent-400" />}
+            {mode === 'super' && <ShieldAlert className="w-4 h-4 text-accent-500 dark:text-accent-400" />}
             {mode === 'reset' && <Key className="w-4 h-4 text-blue-500 dark:text-blue-400" />}
 
             <span className="font-bold text-sm">
@@ -142,7 +142,7 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
             <div
               key={i}
               className={`w-4 h-4 rounded-full border-2 transition-all ${errorMessage
-                  ? 'border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10'
+                  ? 'border-red-300 dark:border-red-500/40 bg-accent-50 dark:bg-accent-500/10'
                   : mode === 'reset' && i < pinInput.length
                     ? 'bg-blue-500 dark:bg-blue-600 scale-110 border-blue-500 dark:border-blue-500'
                     : i < pinInput.length ? 'bg-slate-800 scale-110 border-slate-800 dark:border-slate-100' : 'bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-600'
@@ -162,7 +162,7 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
               {num}
             </button>
           ))}
-          <button onClick={handleClear} className="text-xs font-bold text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-2xl border border-transparent transition-colors">
+          <button onClick={handleClear} className="text-xs font-bold text-accent-500 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-2xl border border-transparent transition-colors">
             Clear
           </button>
           <button

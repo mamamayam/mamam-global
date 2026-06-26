@@ -61,7 +61,7 @@ const VariantSelectionModal = () => {
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg leading-tight">
               {editingCartItemId ? `Edit Varian: ${selectedMenuForVariant.name}` : selectedMenuForVariant.name}
             </h3>
-            <p className="text-sm font-bold text-orange-600 dark:text-orange-400">{formatRupiah(selectedMenuForVariant.price)}</p>
+            <p className="text-sm font-bold text-accent-600 dark:text-accent-400">{formatRupiah(selectedMenuForVariant.price)}</p>
           </div>
           <button onClick={handleCloseModal} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"><X className="w-5 h-5" /></button>
         </div>
@@ -80,19 +80,19 @@ const VariantSelectionModal = () => {
                     <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">{vg.name}</h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">Pilih maksimal {vg.maxSelection}</p>
                   </div>
-                  {vg.isRequired ? <span className="text-[10px] font-bold bg-orange-100 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400 px-2 py-1 rounded-md uppercase tracking-wider">Wajib</span> : <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-md uppercase tracking-wider">Opsional</span>}
+                  {vg.isRequired ? <span className="text-[10px] font-bold bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 px-2 py-1 rounded-md uppercase tracking-wider">Wajib</span> : <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-md uppercase tracking-wider">Opsional</span>}
                 </div>
                 <div className="p-2">
                   {vg.options.map(opt => {
                     const isSelected = currentSelections.includes(opt.id);
                     const isDisabled = !isSelected && isMaxReached;
                     return (
-                      <label key={opt.id} className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors duration-200 ${isSelected ? 'bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 shadow-sm' : 'hover:bg-slate-50 dark:hover:bg-slate-950 border border-transparent'} ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                      <label key={opt.id} className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors duration-200 ${isSelected ? 'bg-accent-50 dark:bg-accent-500/10 border border-orange-200 dark:border-orange-500/30 shadow-sm' : 'hover:bg-slate-50 dark:hover:bg-slate-950 border border-transparent'} ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
                         <div className="flex items-center gap-3">
-                          <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${isSelected ? 'bg-orange-600 dark:bg-orange-500 border-orange-600 dark:border-orange-500' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`}>
+                          <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${isSelected ? 'bg-accent-600 dark:bg-accent-500 border-orange-600 dark:border-orange-500' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`}>
                             {isSelected && <CheckCircle2 className="w-4 h-4 text-white animate-in zoom-in" />}
                           </div>
-                          <span className={`font-semibold text-sm ${isSelected ? 'text-orange-600 dark:text-orange-400' : 'text-slate-700 dark:text-slate-200'}`}>{opt.name}</span>
+                          <span className={`font-semibold text-sm ${isSelected ? 'text-accent-600 dark:text-accent-400' : 'text-slate-700 dark:text-slate-200'}`}>{opt.name}</span>
                         </div>
                         <span className="text-sm font-bold text-slate-500 dark:text-slate-400">{opt.extraPrice > 0 ? `+${formatRupiah(opt.extraPrice)}` : 'Gratis'}</span>
                         <input type="checkbox" className="hidden" checked={isSelected} disabled={isDisabled} onChange={() => handleToggleOption(vg.id, opt.id, vg.maxSelection)} />
@@ -106,7 +106,7 @@ const VariantSelectionModal = () => {
         </div>
 
         <div className="p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
-          <button onClick={() => isSelectionValid && handleSave()} disabled={!isSelectionValid} className="w-full py-3.5 rounded-xl bg-orange-600 dark:bg-orange-500 text-white font-bold disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-lg transition-all duration-300">
+          <button onClick={() => isSelectionValid && handleSave()} disabled={!isSelectionValid} className="w-full py-3.5 rounded-xl bg-accent-600 dark:bg-accent-500 text-white font-bold disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed hover:bg-accent-700 dark:hover:bg-accent-600 hover:shadow-lg transition-all duration-300">
             {editingCartItemId ? 'Simpan Perubahan Varian' : (isSelectionValid ? 'Tambah ke Keranjang' : 'Lengkapi Pilihan Wajib')}
           </button>
         </div>

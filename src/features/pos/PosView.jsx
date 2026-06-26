@@ -155,8 +155,8 @@ const PosView = () => {
                                     isActive
                                         ? 'border-transparent !shadow-md scale-[1.05]'
                                         : isSearching
-                                            ? '!bg-white dark:!bg-slate-900 !text-slate-400 dark:!text-slate-600 border-slate-200 dark:border-slate-700 opacity-50 hover:opacity-90 hover:!bg-orange-50 dark:hover:!bg-slate-800'
-                                            : '!bg-white dark:!bg-slate-900 !text-slate-600 dark:!text-slate-300 border-slate-200 dark:border-slate-700 hover:!bg-orange-50 dark:hover:!bg-slate-800 hover:border-orange-200 dark:hover:border-orange-500/40',
+                                            ? '!bg-white dark:!bg-slate-900 !text-slate-400 dark:!text-slate-600 border-slate-200 dark:border-slate-700 opacity-50 hover:opacity-90 hover:!bg-accent-50 dark:hover:!bg-slate-800'
+                                            : '!bg-white dark:!bg-slate-900 !text-slate-600 dark:!text-slate-300 border-slate-200 dark:border-slate-700 hover:!bg-accent-50 dark:hover:!bg-slate-800 hover:border-orange-200 dark:hover:border-orange-500/40',
                                 ].join(' ')}
                             >
                                 {cat}
@@ -168,7 +168,7 @@ const PosView = () => {
 
             {/* Info bar hasil pencarian */}
             {isSearching && (
-                <div className="px-4 py-2 bg-orange-50 dark:bg-orange-500/10 border-b border-orange-100 dark:border-orange-500/20 flex items-center gap-2 text-xs text-orange-700 dark:text-orange-400 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="px-4 py-2 bg-accent-50 dark:bg-accent-500/10 border-b border-orange-100 dark:border-orange-500/20 flex items-center gap-2 text-xs text-accent-700 dark:text-accent-400 animate-in fade-in slide-in-from-top-1 duration-200">
                     <Search className="w-3.5 h-3.5 shrink-0" />
                     <span>
                         <span className="font-bold">{filteredMenus.length}</span> menu ditemukan untuk{' '}
@@ -176,7 +176,7 @@ const PosView = () => {
                     </span>
                     <button
                         onClick={() => setSearchQuery('')}
-                        className="ml-auto text-orange-600 dark:text-orange-400 hover:underline font-semibold"
+                        className="ml-auto text-accent-600 dark:text-accent-400 hover:underline font-semibold"
                     >
                         Hapus
                     </button>
@@ -201,8 +201,8 @@ const PosView = () => {
                         >
                             <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-orange-50 dark:from-orange-500/10 to-orange-100 dark:to-orange-500/15 rounded-full flex items-center justify-center mb-2 md:mb-3 group-hover:scale-110 transition-transform duration-300">
                                 {menu.category === 'Minuman'
-                                    ? <Coffee className="w-6 h-6 md:w-8 md:h-8 text-orange-600 dark:text-orange-400" />
-                                    : <UtensilsCrossed className="w-6 h-6 md:w-8 md:h-8 text-orange-600 dark:text-orange-400" />
+                                    ? <Coffee className="w-6 h-6 md:w-8 md:h-8 text-accent-600 dark:text-accent-400" />
+                                    : <UtensilsCrossed className="w-6 h-6 md:w-8 md:h-8 text-accent-600 dark:text-accent-400" />
                                 }
                             </div>
                             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs md:text-sm mb-1 leading-tight">
@@ -216,7 +216,7 @@ const PosView = () => {
                                 </Badge>
                             )}
 
-                            <p className="text-orange-600 dark:text-orange-400 font-bold text-xs md:text-sm mt-auto">
+                            <p className="text-accent-600 dark:text-accent-400 font-bold text-xs md:text-sm mt-auto">
                                 {formatRupiah(menu.price)}
                             </p>
 
@@ -267,7 +267,7 @@ const PosView = () => {
                     <div className="relative">
                         <ShoppingCart className="w-5 h-5" />
                         {cart.length > 0 && (
-                            <span className="absolute -top-2.5 -right-2.5 bg-orange-600 dark:bg-orange-500 text-white text-[10px] font-bold rounded-full w-[18px] h-[18px] flex items-center justify-center border-2 border-slate-800 dark:border-slate-100 animate-in zoom-in duration-300">
+                            <span className="absolute -top-2.5 -right-2.5 bg-accent-600 dark:bg-accent-500 text-white text-[10px] font-bold rounded-full w-[18px] h-[18px] flex items-center justify-center border-2 border-slate-800 dark:border-slate-100 animate-in zoom-in duration-300">
                                 {cart.reduce((sum, item) => sum + item.qty, 0)}
                             </span>
                         )}

@@ -61,8 +61,8 @@ import { formatRupiah } from '../../utils/formatters';
 const HIGHLIGHT_TONES = {
   default: 'bg-slate-800 dark:bg-slate-700 text-white',
   success: 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-500/20',
-  danger:  'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-500/20',
-  orange:  'bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-100 dark:border-orange-500/20',
+  danger:  'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 border border-red-100 dark:border-red-500/20',
+  orange:  'bg-accent-50 dark:bg-accent-500/10 text-accent-700 dark:text-accent-400 border border-orange-100 dark:border-orange-500/20',
 };
 
 // Row dianggap "kosong" dan otomatis disembunyikan, kecuali alwaysShow.

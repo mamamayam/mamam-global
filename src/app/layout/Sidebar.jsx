@@ -16,7 +16,7 @@ export default function Sidebar({
 }) {
     // Ambil nama & tagline dari storeSettings
     const { storeSettings } = useAppContext();
-    const appName    = storeSettings?.appName    || 'MAMAM AYAM';
+    const appName = storeSettings?.appName || 'MAMAM AYAM';
     const appTagline = storeSettings?.appTagline || 'Ecosystem';
 
     return (
@@ -77,7 +77,7 @@ export default function Sidebar({
                                     () => setIsAdminMode(false)
                                 )
                             }
-                            className="w-full bg-red-500 dark:bg-red-600 text-white py-3 rounded-xl font-bold"
+                            size="full" // Menggunakan piringan ukuran bawaan komponen daripada w-full py-3
                         >
                             Keluar Admin
                         </Button>

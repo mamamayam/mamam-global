@@ -42,9 +42,9 @@ const VARIANTS = {
     hover:bg-blue-100 dark:hover:bg-blue-500/15
   `,
   delete: `
-    bg-red-50 dark:bg-red-500/10
-    text-red-600 dark:text-red-400
-    hover:bg-red-100 dark:hover:bg-red-500/15
+    bg-accent-50 dark:bg-accent-500/10
+    text-accent-600 dark:text-accent-400
+    hover:bg-accent-100 dark:hover:bg-accent-500/15
   `,
   neutral: `
     text-slate-400 dark:text-slate-500
@@ -71,8 +71,8 @@ const GHOST_VARIANTS = {
     hover:bg-blue-50 dark:hover:bg-blue-500/10
   `,
   delete: `
-    text-red-500 dark:text-red-400
-    hover:bg-red-50 dark:hover:bg-red-500/10
+    text-accent-500 dark:text-accent-400
+    hover:bg-accent-50 dark:hover:bg-accent-500/10
   `,
 };
 

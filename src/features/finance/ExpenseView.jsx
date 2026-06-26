@@ -164,7 +164,7 @@ const ExpenseView = () => {
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <PageHeader
         title="Pengeluaran"
-        icon={<TrendingDown className="w-6 h-6 text-red-500 dark:text-red-400" />}
+        icon={<TrendingDown className="w-6 h-6 text-accent-500 dark:text-accent-400" />}
       />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card padding="none" className="lg:col-span-1 p-5 space-y-4 h-fit transition-shadow duration-300 hover:shadow-md">
@@ -301,9 +301,9 @@ const ExpenseView = () => {
               </button>
             </div>
           </div>
-          <div className="p-3 bg-red-50 dark:bg-red-500/10 border-b border-red-100 dark:border-red-500/20 flex justify-between items-center">
-            <span className="text-xs font-bold text-red-700 dark:text-red-300">Total Periode Ini:</span>
-            <span className="text-sm font-black text-red-700 dark:text-red-300">{formatRupiah(filteredExpenses.reduce((s, e) => s + e.amount, 0))}</span>
+          <div className="p-3 bg-accent-50 dark:bg-accent-500/10 border-b border-red-100 dark:border-red-500/20 flex justify-between items-center">
+            <span className="text-xs font-bold text-accent-700 dark:text-accent-300">Total Periode Ini:</span>
+            <span className="text-sm font-black text-accent-700 dark:text-accent-300">{formatRupiah(filteredExpenses.reduce((s, e) => s + e.amount, 0))}</span>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
             {sortedExpenses.length === 0 ? (
@@ -330,7 +330,7 @@ const ExpenseView = () => {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <p className="font-bold text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-3 py-1.5 rounded-lg text-sm border border-red-100 dark:border-red-500/20">-{formatRupiah(exp.amount)}</p>
+                      <p className="font-bold text-accent-500 dark:text-accent-400 bg-accent-50 dark:bg-accent-500/10 px-3 py-1.5 rounded-lg text-sm border border-red-100 dark:border-red-500/20">-{formatRupiah(exp.amount)}</p>
                       {isAdminMode && (
                         <div className="flex gap-1">
                           {showTrash ? (

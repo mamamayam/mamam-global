@@ -37,7 +37,7 @@ const HomeView = () => {
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 flex items-center justify-center shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-accent-50 dark:bg-accent-500/10 text-accent-500 dark:text-accent-400 flex items-center justify-center shrink-0">
                         <TrendingDown className="w-6 h-6" />
                     </div>
                     <div>
@@ -60,7 +60,7 @@ const HomeView = () => {
                                 <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">#{order.id}</h3>
                                 <p className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(order.date).toLocaleString('id-ID')}</p>
                             </div>
-                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${order.paymentMethod === 'Ojol' ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-500/20' : 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-100 dark:border-green-500/20'}`}>
+                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${order.paymentMethod === 'Ojol' ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 border-orange-100 dark:border-orange-500/20' : 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-100 dark:border-green-500/20'}`}>
                                 {order.paymentMethod} {order.paymentMethod === 'Ojol' && `(${order.ojolName})`}
                             </span>
                         </div>

@@ -256,7 +256,7 @@ const HistoryView = () => {
                                     <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">#{order.id}</h3>
                                     <p className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(order.date).toLocaleString('id-ID')}</p>
                                 </div>
-                                <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${order.paymentMethod === 'Ojol' ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-500/20' : 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-100 dark:border-green-500/20'}`}>
+                                <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${order.paymentMethod === 'Ojol' ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 border-orange-100 dark:border-orange-500/20' : 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-100 dark:border-green-500/20'}`}>
                                     {order.paymentMethod} {order.paymentMethod === 'Ojol' && `(${order.ojolName})`}
                                 </span>
                             </div>
@@ -265,7 +265,7 @@ const HistoryView = () => {
                                 <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Pelanggan: {order.customerName}</p>
                                 <p className="text-xs text-slate-500 dark:text-slate-400">{order.items.length} Item • {order.orderType}</p>
                                 {order.paymentMethod === 'Ojol' && (
-                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">No. Order: <span className="text-orange-600 dark:text-orange-400">{order.orderNumber}</span></p>
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">No. Order: <span className="text-accent-600 dark:text-accent-400">{order.orderNumber}</span></p>
                                 )}
                             </div>
 
@@ -286,14 +286,14 @@ const HistoryView = () => {
                                                 <button onClick={() => handleRestore(order.id)} className="p-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 rounded-lg transition-colors" title="Kembalikan">
                                                     <RotateCcw className="w-4 h-4" />
                                                 </button>
-                                                <button onClick={() => handlePermanentDelete(order.id)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/15 rounded-lg transition-colors" title="Hapus Permanen">
+                                                <button onClick={() => handlePermanentDelete(order.id)} className="p-2 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-500/15 rounded-lg transition-colors" title="Hapus Permanen">
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
                                             </>
                                         )
                                     ) : (
                                         /* Di Riwayat Aktif: Semua role (Kasir & Admin) bisa melakukan hapus biasa (soft delete) */
-                                        <button onClick={() => handleDelete(order.id)} className="p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/15 rounded-lg transition-colors" title="Hapus ke Recycle Bin">
+                                        <button onClick={() => handleDelete(order.id)} className="p-2 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-500/15 rounded-lg transition-colors" title="Hapus ke Recycle Bin">
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     )}
@@ -321,7 +321,7 @@ const HistoryView = () => {
             <DetailModal
                 isOpen={!!detailOrder}
                 onClose={() => setDetailOrder(null)}
-                icon={<Receipt className="w-4 h-4 text-orange-500 dark:text-orange-400" />}
+                icon={<Receipt className="w-4 h-4 text-accent-500 dark:text-accent-400" />}
                 title={detailOrder && `#${detailOrder.id}`}
                 subtitle={detailOrder && new Date(detailOrder.date).toLocaleString('id-ID')}
                 badges={detailOrder ? [

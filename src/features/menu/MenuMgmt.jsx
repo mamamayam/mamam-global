@@ -150,7 +150,7 @@ const MenuManagement = () => {
                 <p className="text-sm italic text-slate-400 dark:text-slate-500">Belum ada grup varian. Tambahkan di menu Library Varian.</p>
               ) : (
                 variantGroups.map(vg => (
-                  <label key={vg.id} className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-all duration-200 ${formData.variantGroupIds.includes(vg.id) ? 'bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/30 shadow-sm' : 'bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                  <label key={vg.id} className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-all duration-200 ${formData.variantGroupIds.includes(vg.id) ? 'bg-accent-50 dark:bg-accent-500/10 border-orange-200 dark:border-orange-500/30 shadow-sm' : 'bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
                     <input type="checkbox" className="w-5 h-5 accent-orange-600 cursor-pointer" checked={formData.variantGroupIds.includes(vg.id)} onChange={() => toggleVariantGroup(vg.id)} />
                     <div className="flex-1">
                       <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{vg.name}</p>
@@ -284,7 +284,7 @@ const MenuManagement = () => {
 
                       {/* --- Info Kanan: Harga & Tombol Aksi --- */}
                       <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 border-t border-slate-50 dark:border-slate-800/50 sm:border-0 pt-2 sm:pt-0">
-                        <span className="font-bold text-orange-600 dark:text-orange-400 text-sm">
+                        <span className="font-bold text-accent-600 dark:text-accent-400 text-sm">
                           {formatRupiah(menu.price)}
                         </span>
 

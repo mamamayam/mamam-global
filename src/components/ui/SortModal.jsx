@@ -61,7 +61,7 @@ export default function SortModal({
               onClick={() => handleSelect(opt.key)}
               className={`w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-colors
                 ${active
-                  ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400'
+                  ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400'
                   : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
             >
               <span className="flex items-center gap-2.5">

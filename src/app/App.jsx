@@ -829,7 +829,7 @@ export default function App() {
         }} />
 
         {/* Logo / ikon app */}
-        <div className="w-16 h-16 rounded-3xl bg-orange-500 flex items-center justify-center shadow-lg shadow-orange-200">
+        <div className="w-16 h-16 rounded-3xl bg-accent-500 flex items-center justify-center shadow-lg shadow-orange-200">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 11l19-9-9 19-2-8-8-2z" />
           </svg>
@@ -856,9 +856,9 @@ export default function App() {
 
         {/* Titik animasi */}
         <div className="flex gap-1.5 mt-1">
-          <span className="dot1 w-2 h-2 rounded-full bg-orange-400 inline-block" />
-          <span className="dot2 w-2 h-2 rounded-full bg-orange-400 inline-block" />
-          <span className="dot3 w-2 h-2 rounded-full bg-orange-400 inline-block" />
+          <span className="dot1 w-2 h-2 rounded-full bg-accent-400 inline-block" />
+          <span className="dot2 w-2 h-2 rounded-full bg-accent-400 inline-block" />
+          <span className="dot3 w-2 h-2 rounded-full bg-accent-400 inline-block" />
         </div>
 
         {/* Info hemat kuota */}
@@ -925,7 +925,7 @@ export default function App() {
             {/* Toast "Ketuk sekali lagi untuk keluar" */}
             {showExitToast && (
               <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[200] pointer-events-none exit-toast animate-in fade-in slide-in-from-bottom-4 duration-300">
-                <div className="flex items-center gap-2 bg-orange-600/95 dark:bg-orange-500/95 text-white text-sm font-semibold px-5 py-3 rounded-full shadow-2xl backdrop-blur-sm border border-white/20 dark:border-orange-400/30 whitespace-nowrap">
+                <div className="flex items-center gap-2 bg-accent-600/95 dark:bg-accent-500/95 text-white text-sm font-semibold px-5 py-3 rounded-full shadow-2xl backdrop-blur-sm border border-white/20 dark:border-orange-400/30 whitespace-nowrap">
                   <span>Ketuk sekali lagi untuk keluar</span>
                 </div>
               </div>
@@ -969,7 +969,7 @@ export default function App() {
               size="sm"
               className="p-6 text-center"
             >
-              <div className="w-12 h-12 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
+              <div className="w-12 h-12 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg mb-2">Konfirmasi Tindakan</h3>
@@ -1035,7 +1035,7 @@ function SyncStatusBadge({ status }) {
 
   const cfg = status === 'ready'
     ? { bg: 'bg-emerald-500', text: 'Tersinkronisasi ✓' }
-    : { bg: 'bg-red-500', text: 'Sync gagal — data lokal' };
+    : { bg: 'bg-accent-500', text: 'Sync gagal — data lokal' };
 
   return (
     <div

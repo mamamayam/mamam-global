@@ -87,7 +87,7 @@ const CartDrawer = () => {
           </h2>
           <div className="flex gap-2">
             {cart.length > 0 && (
-              <button onClick={() => triggerConfirm('Hapus semua isi keranjang?', () => setCart([]))} className="p-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-full transition-colors" title="Kosongkan Keranjang">
+              <button onClick={() => triggerConfirm('Hapus semua isi keranjang?', () => setCart([]))} className="p-2 text-accent-500 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-full transition-colors" title="Kosongkan Keranjang">
                 <Trash2 className="w-5 h-5" />
               </button>
             )}
@@ -109,7 +109,7 @@ const CartDrawer = () => {
                   </h3>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {savedBills.map(bill => (
-                      <div key={bill.id} className="flex justify-between items-center p-3 border border-accent-100 dark:border-accent-500/20 rounded-xl bg-orange-50 dark:bg-accent-500/30">
+                      <div key={bill.id} className="flex justify-between items-center p-3 border border-accent-100 dark:border-accent-500/20 rounded-xl bg-accent-50 dark:bg-accent-500/30">
                         <div>
                           <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{bill.customerName}</p>
                           <p className="text-[10px] text-slate-500 dark:text-slate-400">{bill.cart.length} Item • {bill.date.toLocaleTimeString('id-ID')}</p>
@@ -170,7 +170,7 @@ const CartDrawer = () => {
                       <button
                         onClick={handleClearCustomer}
                         title="Hapus pilihan pelanggan"
-                        className="pb-2 text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors shrink-0"
+                        className="pb-2 text-slate-300 hover:text-accent-500 dark:text-slate-600 dark:hover:text-accent-400 transition-colors shrink-0"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -190,7 +190,7 @@ const CartDrawer = () => {
                       <button
                         onClick={handleClearCustomer}
                         title="Hapus nama pelanggan"
-                        className="absolute right-0 bottom-2 text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors"
+                        className="absolute right-0 bottom-2 text-slate-300 hover:text-accent-500 dark:text-slate-600 dark:hover:text-accent-400 transition-colors"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -200,7 +200,7 @@ const CartDrawer = () => {
 
                 {/* Fix Suggestion logic: Includes Phone numbers as well */}
                 {!isCustomerDropdownMode && customerName.trim() !== '' && !activeCustomer && activeOnly(customers).filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).length > 0 && (
-                  <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-300 bg-orange-50 dark:bg-accent-500/50 border border-accent-100 dark:border-accent-500/20 p-2 rounded-xl">
+                  <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-300 bg-accent-50 dark:bg-accent-500/50 border border-accent-100 dark:border-accent-500/20 p-2 rounded-xl">
                     <p className="text-[10px] font-bold text-accent-600 dark:text-accent-400 mb-1.5 flex items-center gap-1"><Info className="w-3 h-3" /> Maksud Anda pelanggan ini?</p>
                     <div className="space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar pr-1 relative z-10">
                       {activeOnly(customers).filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).map(sc => (
@@ -209,7 +209,7 @@ const CartDrawer = () => {
                             <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">{sc.name}</span>
                             <span className="text-[9px] font-medium text-slate-500 dark:text-slate-400">{sc.phone || 'Tidak ada No. HP'}</span>
                           </div>
-                          <span className="text-[10px] text-accent-600 dark:text-accent-400 font-bold bg-orange-50 dark:bg-accent-500/10 px-2 py-1 rounded-md border border-accent-200 dark:border-accent-500/30">Pilih</span>
+                          <span className="text-[10px] text-accent-600 dark:text-accent-400 font-bold bg-accent-50 dark:bg-accent-500/10 px-2 py-1 rounded-md border border-accent-200 dark:border-accent-500/30">Pilih</span>
                         </div>
                       ))}
                     </div>
@@ -270,7 +270,7 @@ const CartDrawer = () => {
                         }
                       }}
                       className={`py-2 px-3 text-sm rounded-xl font-bold transition-all duration-200 ${orderType === type
-                        ? 'bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 border border-accent-200 dark:border-accent-500/30 shadow-sm'
+                        ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 border border-accent-200 dark:border-accent-500/30 shadow-sm'
                         : 'bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border border-transparent hover:bg-slate-100 dark:hover:bg-slate-800'
                         }`}
                     >
@@ -311,7 +311,7 @@ const CartDrawer = () => {
                           </p>
                           <button
                             onClick={() => handleEditVariant(item)}
-                            className="p-1 bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded hover:bg-accent-100 dark:hover:bg-accent-500/20 transition-colors"
+                            className="p-1 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded hover:bg-accent-100 dark:hover:bg-accent-500/20 transition-colors"
                             title="Edit Varian"
                           >
                             <Edit3 className="w-3 h-3" />
@@ -436,7 +436,7 @@ const CartDrawer = () => {
               <div className="flex justify-between text-lg font-black text-slate-800 dark:text-slate-100 border-t border-slate-100 dark:border-slate-800 pt-2 mt-2"><span>Total Tagihan</span><span className="text-accent-600 dark:text-accent-400">{formatRupiah(getTotal())}</span></div>
             </div>
             <div className="flex gap-2">
-              <button onClick={handleOpenBill} className="flex-1 py-3.5 rounded-xl bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 font-bold border border-accent-200 dark:border-accent-500/30 shadow-sm hover:bg-accent-100 dark:hover:bg-accent-500/15 transition-all flex items-center justify-center gap-2 text-sm"><Save className="w-4 h-4" /> Simpan Bill</button>
+              <button onClick={handleOpenBill} className="flex-1 py-3.5 rounded-xl bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 font-bold border border-accent-200 dark:border-accent-500/30 shadow-sm hover:bg-accent-100 dark:hover:bg-accent-500/15 transition-all flex items-center justify-center gap-2 text-sm"><Save className="w-4 h-4" /> Simpan Bill</button>
               <button
                 onClick={() => setPaymentModal({
                   isOpen: true,

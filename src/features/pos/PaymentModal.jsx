@@ -121,12 +121,12 @@ const PaymentModal = () => {
         <div className="p-5 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-950">
           <div>
             <h2 className="font-heading text-lg font-bold text-slate-800 dark:text-slate-100">Pembayaran</h2>
-            {isSplitMode && <span className="text-[10px] bg-orange-100 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Mode Multi Payment</span>}
+            {isSplitMode && <span className="text-[10px] bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Mode Multi Payment</span>}
           </div>
           <div className="flex items-center gap-2">
             {orderType !== 'Ojol' && (
               !isSplitMode ? (
-                <button onClick={() => setPaymentModal({ ...paymentModal, isSplitMode: true })} className="p-2 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-500/15 transition-colors text-xs font-bold flex items-center gap-1"><SplitSquareHorizontal className="w-4 h-4" /> Split</button>
+                <button onClick={() => setPaymentModal({ ...paymentModal, isSplitMode: true })} className="p-2 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-lg hover:bg-accent-100 dark:hover:bg-accent-500/15 transition-colors text-xs font-bold flex items-center gap-1"><SplitSquareHorizontal className="w-4 h-4" /> Split</button>
               ) : (
                 <button onClick={() => setPaymentModal({ ...paymentModal, isSplitMode: false, splitPayments: [], amountPaid: '' })} className="p-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors text-xs font-bold">Batal Split</button>
               )
@@ -164,7 +164,7 @@ const PaymentModal = () => {
                     key={opt.id}
                     onClick={() => setPaymentModal({ ...paymentModal, method: opt.id, status: 'pending' })}
                     className={`flex flex-col items-center justify-center p-3 w-24 md:w-28 rounded-2xl border-2 transition-all duration-200 ${method === opt.id
-                      ? 'border-orange-600 dark:border-orange-500 bg-orange-600 dark:bg-orange-500 text-white shadow-md -translate-y-1'
+                      ? 'border-orange-600 dark:border-orange-500 bg-accent-600 dark:bg-accent-500 text-white shadow-md -translate-y-1'
                       : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700'
                       }`}
                   >
@@ -176,11 +176,11 @@ const PaymentModal = () => {
 
               {/* Logika input tambahan untuk metode Ojol */}
               {method === 'Ojol' && (
-                <div className="mb-6 p-4 border border-orange-200 dark:border-orange-500/30 bg-orange-50 dark:bg-orange-500/10 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="mb-6 p-4 border border-orange-200 dark:border-orange-500/30 bg-accent-50 dark:bg-accent-500/10 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">Pilih Aplikasi Ojol</label>
                   <div className="flex gap-2 mb-4">
                     {['Shopeefood', 'Grabfood', 'Gofood'].map((ojol) => (
-                      <button key={ojol} onClick={() => setPaymentModal({ ...paymentModal, ojolName: ojol })} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${ojolName === ojol ? 'bg-orange-600 dark:bg-orange-500 text-white border-orange-600 dark:border-orange-500 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-950'}`}>
+                      <button key={ojol} onClick={() => setPaymentModal({ ...paymentModal, ojolName: ojol })} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${ojolName === ojol ? 'bg-accent-600 dark:bg-accent-500 text-white border-orange-600 dark:border-orange-500 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-950'}`}>
                         {ojol}
                       </button>
                     ))}
@@ -202,15 +202,15 @@ const PaymentModal = () => {
 
                   <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
                     {quickCashOptions.map((amt, idx) => (
-                      <button key={idx} onClick={() => setPaymentModal({ ...paymentModal, amountPaid: amt.toString() })} className="whitespace-nowrap px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 hover:border-orange-400 dark:hover:border-orange-500/50 hover:bg-orange-50 dark:hover:bg-orange-500/10 hover:text-orange-600 dark:hover:text-orange-400 transition-all">
+                      <button key={idx} onClick={() => setPaymentModal({ ...paymentModal, amountPaid: amt.toString() })} className="whitespace-nowrap px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 hover:border-orange-400 dark:hover:border-orange-500/50 hover:bg-accent-50 dark:hover:bg-accent-500/10 hover:text-accent-600 dark:hover:text-accent-400 transition-all">
                         {amt === total ? 'Uang Pas' : formatRupiah(amt)}
                       </button>
                     ))}
                   </div>
 
-                  <div className={`p-4 rounded-xl border transition-colors duration-300 ${kembalian >= 0 ? 'bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30' : 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30'}`}>
+                  <div className={`p-4 rounded-xl border transition-colors duration-300 ${kembalian >= 0 ? 'bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30' : 'bg-accent-50 dark:bg-accent-500/10 border-red-200 dark:border-red-500/30'}`}>
                     <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Kembalian</p>
-                    <p className={`text-2xl font-black ${kembalian >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>{kembalian >= 0 ? formatRupiah(kembalian) : 'Uang Kurang'}</p>
+                    <p className={`text-2xl font-black ${kembalian >= 0 ? 'text-green-500 dark:text-green-400' : 'text-accent-500 dark:text-accent-400'}`}>{kembalian >= 0 ? formatRupiah(kembalian) : 'Uang Kurang'}</p>
                   </div>
                 </div>
               )}
@@ -222,7 +222,7 @@ const PaymentModal = () => {
                       <AlertCircle className="w-12 h-12 text-yellow-400 dark:text-yellow-400 mx-auto mb-3 animate-pulse" />
                       <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 mb-2">Menunggu Pembayaran {method}</h3>
                       <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">Pastikan pelanggan sudah transfer/scan sebelum menyelesaikan pesanan.</p>
-                      <button onClick={handleProcessPayment} className="w-full py-3.5 bg-white dark:bg-slate-900 border-2 border-orange-600 dark:border-orange-500 text-orange-600 dark:text-orange-400 font-bold rounded-xl hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors shadow-sm">Konfirmasi Pembayaran Diterima</button>
+                      <button onClick={handleProcessPayment} className="w-full py-3.5 bg-white dark:bg-slate-900 border-2 border-orange-600 dark:border-orange-500 text-accent-600 dark:text-accent-400 font-bold rounded-xl hover:bg-accent-50 dark:hover:bg-accent-500/10 transition-colors shadow-sm">Konfirmasi Pembayaran Diterima</button>
                     </>
                   ) : (
                     <>
@@ -244,7 +244,7 @@ const PaymentModal = () => {
                 </div>
                 <div className="flex justify-between items-center border-t border-slate-600 dark:border-slate-400 pt-2">
                   <span className="text-xs font-bold text-slate-300 dark:text-slate-600 uppercase tracking-wider">{splitRemaining > 0 ? 'Sisa Pembayaran' : 'Kembalian'}</span>
-                  <span className={`font-black text-2xl ${splitRemaining > 0 ? 'text-orange-400 dark:text-orange-300' : 'text-green-400 dark:text-green-400'}`}>
+                  <span className={`font-black text-2xl ${splitRemaining > 0 ? 'text-accent-400 dark:text-accent-300' : 'text-green-400 dark:text-green-400'}`}>
                     {splitRemaining > 0 ? formatRupiah(splitRemaining) : formatRupiah(Math.abs(splitRemaining))}
                   </span>
                 </div>
@@ -259,7 +259,7 @@ const PaymentModal = () => {
                         <span className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold px-2 py-1 rounded">{p.method}</span>
                         <span className="font-bold text-sm text-slate-800 dark:text-slate-100">{formatRupiah(p.amount)}</span>
                       </div>
-                      <button onClick={() => removeSplitPayment(idx)} className="p-1.5 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => removeSplitPayment(idx)} className="p-1.5 text-accent-500 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   ))}
                 </div>
@@ -270,7 +270,7 @@ const PaymentModal = () => {
                   <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tambah Pembayaran</h4>
                   <div className="flex gap-2">
                     {['Tunai', 'QRIS', 'Transfer'].map(m => (
-                      <button key={m} onClick={() => setPaymentModal({ ...paymentModal, method: m })} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${method === m ? 'bg-orange-50 dark:bg-orange-500/10 border-orange-600 dark:border-orange-500 text-orange-600 dark:text-orange-400' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950'}`}>{m}</button>
+                      <button key={m} onClick={() => setPaymentModal({ ...paymentModal, method: m })} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${method === m ? 'bg-accent-50 dark:bg-accent-500/10 border-orange-600 dark:border-orange-500 text-accent-600 dark:text-accent-400' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950'}`}>{m}</button>
                     ))}
                   </div>
                   <div className="flex gap-2">
@@ -292,13 +292,13 @@ const PaymentModal = () => {
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
           {!isSplitMode ? (
             (method === 'Tunai' || status === 'completed' ? (
-              <button onClick={handleProcessPayment} disabled={!isReadyToPay && method === 'Tunai'} className="w-full py-4 rounded-xl bg-orange-600 dark:bg-orange-500 text-white font-bold text-lg shadow-lg hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-xl hover:-translate-y-0.5 disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:shadow-none disabled:translate-y-0 transition-all duration-300 flex items-center justify-center gap-2">
+              <button onClick={handleProcessPayment} disabled={!isReadyToPay && method === 'Tunai'} className="w-full py-4 rounded-xl bg-accent-600 dark:bg-accent-500 text-white font-bold text-lg shadow-lg hover:bg-accent-700 dark:hover:bg-accent-600 hover:shadow-xl hover:-translate-y-0.5 disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:shadow-none disabled:translate-y-0 transition-all duration-300 flex items-center justify-center gap-2">
                 {method === 'Tunai' ? 'Selesai & Lanjutkan' : 'Selesaikan Transaksi'}
                 <Receipt className="w-5 h-5" />
               </button>
             ) : null)
           ) : (
-            <button onClick={handleProcessPayment} disabled={!isSplitReadyToPay} className="w-full py-4 rounded-xl bg-orange-600 dark:bg-orange-500 text-white font-bold text-lg shadow-lg hover:bg-orange-700 dark:hover:bg-orange-600 hover:shadow-xl hover:-translate-y-0.5 disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:shadow-none disabled:translate-y-0 transition-all duration-300 flex items-center justify-center gap-2">
+            <button onClick={handleProcessPayment} disabled={!isSplitReadyToPay} className="w-full py-4 rounded-xl bg-accent-600 dark:bg-accent-500 text-white font-bold text-lg shadow-lg hover:bg-accent-700 dark:hover:bg-accent-600 hover:shadow-xl hover:-translate-y-0.5 disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:shadow-none disabled:translate-y-0 transition-all duration-300 flex items-center justify-center gap-2">
               Selesaikan Transaksi <Receipt className="w-5 h-5" />
             </button>
           )}

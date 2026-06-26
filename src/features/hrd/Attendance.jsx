@@ -289,16 +289,16 @@ export default function Attendance() {
 
       {/* ── Auto-close warning ─────────────────────────────────────────────── */}
       {autoClosedEmployees.length > 0 && (
-        <div className="mb-4 border-2 border-red-500 bg-red-50 dark:bg-red-950/40 rounded-xl p-4">
+        <div className="mb-4 border-2 border-red-500 bg-accent-50 dark:bg-accent-950/40 rounded-xl p-4">
           <div className="flex items-start gap-3">
-            <div className="shrink-0 w-10 h-10 bg-red-100 dark:bg-red-900/60 rounded-full flex items-center justify-center">
-              <AlarmClock className="w-5 h-5 text-red-600 dark:text-red-400" />
+            <div className="shrink-0 w-10 h-10 bg-accent-100 dark:bg-accent-900/60 rounded-full flex items-center justify-center">
+              <AlarmClock className="w-5 h-5 text-accent-600 dark:text-accent-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-red-700 dark:text-red-400 text-sm">
+              <p className="font-bold text-accent-700 dark:text-accent-400 text-sm">
                 ⚠️ Absen Pulang Otomatis — Dicatat Jam {OUTLET_CLOSE_HOUR}:00
               </p>
-              <p className="text-xs text-red-600 dark:text-red-500 mt-0.5 mb-2">
+              <p className="text-xs text-accent-600 dark:text-accent-500 mt-0.5 mb-2">
                 Karyawan berikut tidak absen pulang sampai jam {AUTO_CLOSE_HOUR}:00, sehingga jam pulang dicatat otomatis
                 pukul <span className="font-semibold">{OUTLET_CLOSE_HOUR}:00</span> (jam tutup outlet).
                 Yang bertanda <span className="font-semibold italic">(jam bolong)</span> — pulang dicatat saat mereka keluar bolong karena tidak absen balik.
@@ -307,7 +307,7 @@ export default function Attendance() {
                 {autoClosedEmployees.map(({ name, fromBolong }) => (
                   <span
                     key={name}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-300 text-xs font-bold"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent-100 dark:bg-accent-900/60 text-accent-800 dark:text-accent-300 text-xs font-bold"
                   >
                     {name}
                     {fromBolong && <span className="font-normal opacity-70">(jam bolong)</span>}
@@ -318,7 +318,7 @@ export default function Attendance() {
             <button
               onClick={() => setAutoClosedEmployees([])}
               title="Tutup peringatan"
-              className="shrink-0 text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-300 transition-colors"
+              className="shrink-0 text-accent-400 hover:text-accent-600 dark:text-accent-500 dark:hover:text-accent-300 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>

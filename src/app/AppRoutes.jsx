@@ -70,14 +70,14 @@ class ViewErrorBoundary extends Component {
         if (this.state.hasError) {
             return (
                 <div className="flex-1 flex flex-col items-center justify-center p-8 text-center gap-4">
-                    <div className="w-16 h-16 bg-red-50 dark:bg-red-500/10 rounded-full flex items-center justify-center">
-                        <AlertCircle className="w-8 h-8 text-red-500 dark:text-red-400" />
+                    <div className="w-16 h-16 bg-accent-50 dark:bg-accent-500/10 rounded-full flex items-center justify-center">
+                        <AlertCircle className="w-8 h-8 text-accent-500 dark:text-accent-400" />
                     </div>
                     <div>
                         <h2 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">Halaman ini mengalami error</h2>
                         <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">Data kamu aman, hanya tampilan ini yang bermasalah.</p>
                         {this.state.error && (
-                            <p className="text-xs text-red-400 dark:text-red-400 font-mono bg-red-50 dark:bg-red-500/10 rounded px-3 py-1 mt-2 max-w-xs mx-auto break-all">
+                            <p className="text-xs text-accent-400 dark:text-accent-400 font-mono bg-accent-50 dark:bg-accent-500/10 rounded px-3 py-1 mt-2 max-w-xs mx-auto break-all">
                                 {this.state.error.message}
                             </p>
                         )}

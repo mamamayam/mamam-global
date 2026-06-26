@@ -9,8 +9,8 @@ const StockView = () => {
                     <Warehouse className="w-10 h-10" />
                 </div>
                 <h2 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100 mb-3">Stok Opname</h2>
-                <div className="bg-orange-50 dark:bg-orange-500/10 border border-orange-100 dark:border-orange-500/20 rounded-xl p-4 mb-6">
-                    <p className="text-orange-800 dark:text-orange-300 text-sm font-medium leading-relaxed">
+                <div className="bg-accent-50 dark:bg-accent-500/10 border border-orange-100 dark:border-orange-500/20 rounded-xl p-4 mb-6">
+                    <p className="text-accent-800 dark:text-accent-300 text-sm font-medium leading-relaxed">
                         Fitur Stock Opname belum tersedia pada versi ini.
                     </p>
                 </div>

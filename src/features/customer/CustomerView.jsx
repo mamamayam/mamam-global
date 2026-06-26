@@ -262,7 +262,7 @@ const CustomerView = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-accent-100 dark:border-accent-500/20">{c.points} Poin</span>
+                      <span className="bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-accent-100 dark:border-accent-500/20">{c.points} Poin</span>
 
                       {showTrashCustomers ? (
                         <>
@@ -275,7 +275,7 @@ const CustomerView = () => {
                           </button>
                           <button
                             onClick={() => handlePermanentDeleteCustomer(c.id)}
-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
                             title="Hapus Permanen"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -295,7 +295,7 @@ const CustomerView = () => {
                           {/* Perbaikan Utama: onClick menggunakan Arrow Function agar tidak trigger instan */}
                           <button
                             onClick={() => handleDeleteCustomer(c.id)}
-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
                             title="Hapus Pelanggan"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -317,9 +317,9 @@ const CustomerView = () => {
             <Card padding="none" className="p-6 animate-in fade-in slide-in-from-right-4 duration-300 max-w-2xl space-y-6 ease-out">
               <div className="flex items-center gap-2 border-b pb-3"><Info className="w-5 h-5 text-accent-600 dark:text-accent-400" /><h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base">Aturan Poin & Ketentuan Reward</h3></div>
               <div className="space-y-4">
-                <div className="flex gap-3"><div className="w-6 h-6 bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-sm">1</div><div><h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-0.5">Cara Mendapatkan Poin</h4><p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Pelanggan terdaftar akan mendapatkan <strong className="text-accent-600 dark:text-accent-400">1 Poin untuk setiap transaksi kelipatan Rp 10.000</strong> dari total tagihan bersih (setelah diskon).</p></div></div>
-                <div className="flex gap-3"><div className="w-6 h-6 bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-sm">2</div><div><h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-0.5">Nilai Tukar Poin</h4><p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Setiap <strong className="text-yellow-500 dark:text-yellow-400">1 Poin bernilai Rp 100</strong> potongan belanja langsung. Poin dapat langsung dikurangi dari total tagihan pada keranjang belanja saat checkout.</p></div></div>
-                <div className="flex gap-3"><div className="w-6 h-6 bg-orange-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-sm">3</div><div><h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-0.5">Syarat Pelanggan & Member</h4><p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Pastikan nama pelanggan yang diinput pada saat transaksi di kasir sesuai dengan database member agar poin otomatis terhitung.</p></div></div>
+                <div className="flex gap-3"><div className="w-6 h-6 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-sm">1</div><div><h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-0.5">Cara Mendapatkan Poin</h4><p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Pelanggan terdaftar akan mendapatkan <strong className="text-accent-600 dark:text-accent-400">1 Poin untuk setiap transaksi kelipatan Rp 10.000</strong> dari total tagihan bersih (setelah diskon).</p></div></div>
+                <div className="flex gap-3"><div className="w-6 h-6 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-sm">2</div><div><h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-0.5">Nilai Tukar Poin</h4><p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Setiap <strong className="text-yellow-500 dark:text-yellow-400">1 Poin bernilai Rp 100</strong> potongan belanja langsung. Poin dapat langsung dikurangi dari total tagihan pada keranjang belanja saat checkout.</p></div></div>
+                <div className="flex gap-3"><div className="w-6 h-6 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-sm">3</div><div><h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm mb-0.5">Syarat Pelanggan & Member</h4><p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Pastikan nama pelanggan yang diinput pada saat transaksi di kasir sesuai dengan database member agar poin otomatis terhitung.</p></div></div>
               </div>
               <div className="bg-yellow-50 dark:bg-yellow-500/10 p-4 rounded-xl border border-yellow-100 dark:border-yellow-500/20 shadow-sm"><p className="text-xs text-yellow-800 dark:text-yellow-300 font-medium leading-relaxed"><strong>💡 Info Kasir:</strong> Anda dapat membantu pelanggan menukarkan poin mereka secara fleksibel melalui kolom "Klaim Poin" yang disediakan sejajar dengan voucher di keranjang pesanan.</p></div>
             </Card>
@@ -465,8 +465,8 @@ const CustomerView = () => {
                           <RotateCcw className="w-4 h-4" />
                         </button>
                         <button onClick={() => handlePermanentDeleteVoucher(v.id)}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400
-            hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400
+            hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
                           title="Hapus Permanen"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -483,8 +483,8 @@ const CustomerView = () => {
                         </button>
 
                         <button onClick={() => handleDeleteVoucher(v.id)}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400
-            hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400
+            hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
                           title="Hapus Voucher"
                         >
                           <Trash2 className="w-4 h-4" />

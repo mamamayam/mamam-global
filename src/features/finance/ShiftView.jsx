@@ -344,13 +344,13 @@ const ShiftView = () => {
             <div className="flex justify-between"><span>Saldo Awal (Modal)</span> <span>{formatRupiah(closedShiftData.stats.initialCash)}</span></div>
             <div className="flex justify-between"><span>Penjualan Tunai</span> <span>{formatRupiah(closedShiftData.stats.cashSales)}</span></div>
             <div className="flex justify-between"><span>Pemasukan Lain</span> <span>{formatRupiah(closedShiftData.stats.cashIncomes)}</span></div>
-            <div className="flex justify-between text-red-500 dark:text-red-400 print:text-black"><span>Pengeluaran Kasir</span> <span>-{formatRupiah(closedShiftData.stats.cashExpenses)}</span></div>
+            <div className="flex justify-between text-accent-500 dark:text-accent-400 print:text-black"><span>Pengeluaran Kasir</span> <span>-{formatRupiah(closedShiftData.stats.cashExpenses)}</span></div>
           </div>
 
           <div className="space-y-1.5 text-xs print:text-black">
             <div className="flex justify-between font-bold"><span>Total Seharusnya di Dompet</span> <span>{formatRupiah(closedShiftData.stats.expectedCash)}</span></div>
             <div className="flex justify-between font-bold"><span>Saldo Aktual</span> <span>{formatRupiah(closedShiftData.actualCash)}</span></div>
-            <div className={`flex justify-between font-bold pt-2 mt-2 border-t border-slate-200 dark:border-slate-700 print:border-black ${closedShiftData.difference < 0 ? 'text-red-500 dark:text-red-400' : closedShiftData.difference > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'}`}>
+            <div className={`flex justify-between font-bold pt-2 mt-2 border-t border-slate-200 dark:border-slate-700 print:border-black ${closedShiftData.difference < 0 ? 'text-accent-500 dark:text-accent-400' : closedShiftData.difference > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'}`}>
               <span>{closedShiftData.difference < 0 ? 'SELISIH MINUS' : closedShiftData.difference > 0 ? 'SELISIH LEBIH' : 'BALANCE (PAS)'}</span>
               <span>{formatRupiah(closedShiftData.difference)}</span>
             </div>
@@ -472,7 +472,7 @@ const ShiftView = () => {
               </div>
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
                 <span className="text-sm text-slate-500 dark:text-slate-400">Pengeluaran Kasir</span>
-                <span className="font-bold text-red-600 dark:text-red-400">-{formatRupiah(shiftStats?.cashExpenses)}</span>
+                <span className="font-bold text-accent-600 dark:text-accent-400">-{formatRupiah(shiftStats?.cashExpenses)}</span>
               </div>
               <div className="flex justify-between items-center pt-2">
                 <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Saldo Akhir</span>
@@ -547,9 +547,9 @@ const ShiftView = () => {
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-1">Total Kas Seharusnya</p>
             <h4 className="font-heading text-base md:text-lg font-black text-slate-800 dark:text-slate-100">{formatRupiah(rekapShiftStats.totalExpected)}</h4>
           </Card>
-          <Card padding="sm" className={`flex flex-col justify-center ${rekapShiftStats.totalDifference < 0 ? 'bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/20' : rekapShiftStats.totalDifference > 0 ? 'bg-green-50 dark:bg-green-500/10 border-green-100 dark:border-green-500/20' : ''}`}>
+          <Card padding="sm" className={`flex flex-col justify-center ${rekapShiftStats.totalDifference < 0 ? 'bg-accent-50 dark:bg-accent-500/10 border-red-100 dark:border-red-500/20' : rekapShiftStats.totalDifference > 0 ? 'bg-green-50 dark:bg-green-500/10 border-green-100 dark:border-green-500/20' : ''}`}>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-1">Total Selisih (Short/Over)</p>
-            <h4 className={`font-heading text-base md:text-lg font-black ${rekapShiftStats.totalDifference < 0 ? 'text-red-600 dark:text-red-400' : rekapShiftStats.totalDifference > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'}`}>{formatRupiah(rekapShiftStats.totalDifference)}</h4>
+            <h4 className={`font-heading text-base md:text-lg font-black ${rekapShiftStats.totalDifference < 0 ? 'text-accent-600 dark:text-accent-400' : rekapShiftStats.totalDifference > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'}`}>{formatRupiah(rekapShiftStats.totalDifference)}</h4>
           </Card>
         </div>
 
@@ -609,7 +609,7 @@ const ShiftView = () => {
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mb-1">Selisih</p>
-                        <p className={`font-black text-sm ${shift.difference < 0 ? 'text-red-500 dark:text-red-400' : shift.difference > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'}`}>
+                        <p className={`font-black text-sm ${shift.difference < 0 ? 'text-accent-500 dark:text-accent-400' : shift.difference > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'}`}>
                           {shift.difference > 0 ? '+' : ''}{formatRupiah(shift.difference)}
                         </p>
                       </div>
@@ -781,7 +781,7 @@ const ShiftView = () => {
                     const previewExpected = editingShift.stats.expectedCash + (Number(editInitialCashInput) - editingShift.stats.initialCash);
                     const previewDifference = Number(editActualCashInput) - previewExpected;
                     return (
-                      <p className={`font-black text-lg ${previewDifference < 0 ? 'text-red-500 dark:text-red-400' :
+                      <p className={`font-black text-lg ${previewDifference < 0 ? 'text-accent-500 dark:text-accent-400' :
                         previewDifference > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'
                         }`}>
                         {formatRupiah(previewDifference)}

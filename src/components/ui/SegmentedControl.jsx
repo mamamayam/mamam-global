@@ -11,10 +11,10 @@
  * Props:
  *   options   Array<{ value, label, tone? }>
  *             tone: 'orange' | 'green' | 'red' | 'red-soft'  (default: 'orange')
- *               orange    → solid bg-orange-600, teks putih
+ *               orange    → solid bg-accent-600, teks putih
  *               green     → solid bg-green-600, teks putih
- *               red       → solid bg-red-500, teks putih
- *               red-soft  → bg-red-50 + border, teks merah (lebih subtle)
+ *               red       → solid bg-accent-500, teks putih
+ *               red-soft  → bg-accent-50 + border, teks merah (lebih subtle)
  *   value     value yang sedang aktif
  *   onChange  (value) => void
  *   size      'sm' | 'md'   (default: 'md')
@@ -44,7 +44,7 @@
 
 const ACTIVE_TONES = {
   orange: `
-    bg-orange-600 dark:bg-orange-500 text-white
+    bg-accent-600 dark:bg-accent-500 text-white
     border-orange-600 dark:border-orange-500
     shadow-sm
   `,
@@ -54,12 +54,12 @@ const ACTIVE_TONES = {
     shadow-sm
   `,
   red: `
-    bg-red-500 dark:bg-red-600 text-white
+    bg-accent-500 dark:bg-accent-600 text-white
     border-red-500 dark:border-red-600
     shadow-sm
   `,
   'red-soft': `
-    bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400
+    bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400
     border-red-200 dark:border-red-500/30
   `,
 };

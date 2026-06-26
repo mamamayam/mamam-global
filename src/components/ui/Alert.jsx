@@ -44,12 +44,12 @@ import { AlertCircle, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 // ── Color tokens ─────────────────────────────────────────────────────────────
 const COLORS = {
   error: {
-    bg:         'bg-red-50    dark:bg-red-500/10',
+    bg:         'bg-accent-50    dark:bg-accent-500/10',
     border:     'border-red-100  dark:border-red-500/20',
     borderB:    'border-red-100  dark:border-red-500/20',
-    text:       'text-red-500    dark:text-red-400',
-    textStrong: 'text-red-700    dark:text-red-300',
-    icon:       'text-red-500    dark:text-red-400',
+    text:       'text-accent-500    dark:text-accent-400',
+    textStrong: 'text-accent-700    dark:text-accent-300',
+    icon:       'text-accent-500    dark:text-accent-400',
   },
   success: {
     bg:         'bg-green-50   dark:bg-green-500/10',
@@ -60,12 +60,12 @@ const COLORS = {
     icon:       'text-green-600   dark:text-green-400',
   },
   warning: {
-    bg:         'bg-orange-50  dark:bg-orange-500/10',
+    bg:         'bg-accent-50  dark:bg-accent-500/10',
     border:     'border-orange-200 dark:border-orange-500/30',
     borderB:    'border-orange-200 dark:border-orange-500/30',
-    text:       'text-orange-600  dark:text-orange-400',
-    textStrong: 'text-orange-700  dark:text-orange-300',
-    icon:       'text-orange-500  dark:text-orange-400',
+    text:       'text-accent-600  dark:text-accent-400',
+    textStrong: 'text-accent-700  dark:text-accent-300',
+    icon:       'text-accent-500  dark:text-accent-400',
   },
   info: {
     bg:         'bg-blue-50    dark:bg-blue-500/10',

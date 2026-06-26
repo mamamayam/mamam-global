@@ -219,7 +219,7 @@ const IncomeView = () => {
             </div>
           </div>
           <div className="p-3 bg-green-50 dark:bg-green-500/10 border-b border-green-100 dark:border-green-500/20 flex justify-between items-center">
-            <span className="text-xs font-bold text-red-700 dark:text-red-300">Total Periode Ini:</span>
+            <span className="text-xs font-bold text-accent-700 dark:text-accent-300">Total Periode Ini:</span>
             <span className="text-sm font-black text-green-700 dark:text-green-300">{formatRupiah(filteredIncomes.reduce((s, e) => s + e.amount, 0))}</span>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">

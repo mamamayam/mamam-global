@@ -76,7 +76,7 @@ function useDragReorder(onReorder) {
 // Class helper buat styling item pas lagi di-drag / jadi target drop
 function getDragRowClass(isDragging, isDropTarget, baseClass, idleClass) {
   if (isDragging) return `${baseClass} opacity-50 ring-2 ring-orange-400 z-10`;
-  if (isDropTarget) return `${baseClass} border-orange-400 bg-orange-50/60 dark:bg-orange-500/10`;
+  if (isDropTarget) return `${baseClass} border-orange-400 bg-accent-50/60 dark:bg-accent-500/10`;
   return `${baseClass} ${idleClass}`;
 }
 

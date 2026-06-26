@@ -158,7 +158,7 @@ const PayslipModal = () => {
                         <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top text-right text-green-600 dark:text-green-400 print:text-black">
                           {item.in > 0 ? formatRupiah(item.in) : '-'}
                         </td>
-                        <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top text-right text-red-600 dark:text-red-400 print:text-black">
+                        <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top text-right text-accent-600 dark:text-accent-400 print:text-black">
                           {item.out > 0 ? formatRupiah(item.out) : '-'}
                         </td>
                       </tr>
@@ -186,7 +186,7 @@ const PayslipModal = () => {
               </div>
               <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-700 print:border-gray-300">
                 <span>Total Potongan</span>
-                <span className="font-bold text-red-600 dark:text-red-400 print:text-black">(-) {formatRupiah(data.totalDeductions)}</span>
+                <span className="font-bold text-accent-600 dark:text-accent-400 print:text-black">(-) {formatRupiah(data.totalDeductions)}</span>
               </div>
               <div className="flex justify-between py-3 mt-2 border-t-2 border-slate-800 dark:border-slate-100 print:border-black text-base font-black uppercase">
                 <span>TOTAL DITERIMA</span>

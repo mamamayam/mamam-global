@@ -33,8 +33,8 @@ import { X } from 'lucide-react';
 
 const Z_LEVELS = {
   modal: 'z-[60]',
-  top:   'z-[100]',
-  pin:   'z-[300]',
+  top: 'z-[100]',
+  pin: 'z-[300]',
 };
 
 const SIZES = {
@@ -58,8 +58,8 @@ export default function Modal({
 }) {
   if (!isOpen) return null;
 
-  const zClass   = Z_LEVELS[zLevel] ?? Z_LEVELS.modal;
-  const sizeClass = SIZES[size]     ?? SIZES.sm;
+  const zClass = Z_LEVELS[zLevel] ?? Z_LEVELS.modal;
+  const sizeClass = SIZES[size] ?? SIZES.sm;
 
   const handleBackdrop = () => { if (closeOnBackdrop && onClose) onClose(); };
 
@@ -89,7 +89,7 @@ export default function Modal({
               {onClose && (
                 <button
                   onClick={onClose}
-                  className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 dark:text-slate-500 hover:bg-accent-100 dark:hover:bg-accent-500/20 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>

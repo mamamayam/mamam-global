@@ -393,7 +393,7 @@ const SettingsView = () => {
                   <button
                     type="button"
                     onClick={handleDisconnectPrinter}
-                    className="p-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                    className="p-2 text-accent-500 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
                     title="Putuskan Printer"
                   >
                     <Unplug className="w-5 h-5" />

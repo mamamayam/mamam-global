@@ -55,7 +55,7 @@ function FieldWrapper({ label, error, hint, children }) {
         </label>
       )}
       {children}
-      {error && <p className="text-xs text-red-500 dark:text-red-400 font-medium">{error}</p>}
+      {error && <p className="text-xs text-accent-500 dark:text-accent-400 font-medium">{error}</p>}
       {hint && !error && <p className="text-xs text-slate-400 dark:text-slate-500">{hint}</p>}
     </div>
   );

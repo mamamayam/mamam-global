@@ -57,7 +57,7 @@ function SortableCategoryItem({
             className={`flex items-center p-3 transition-colors
                 border-b border-slate-100 dark:border-slate-800 last:border-0
                 ${isDragging
-                    ? 'bg-orange-50 dark:bg-orange-950/20 shadow-lg relative z-10 rounded-xl opacity-90'
+                    ? 'bg-accent-50 dark:bg-accent-950/20 shadow-lg relative z-10 rounded-xl opacity-90'
                     : 'hover:bg-white dark:hover:bg-slate-900'
                 }`}
         >
@@ -176,7 +176,7 @@ const CategoryModal = ({
             {/* Header */}
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 px-6 pt-6 pb-4 mb-5 shrink-0">
                 <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg flex items-center gap-2">
-                    <Layers className="w-5 h-5 text-orange-500 dark:text-orange-400" />
+                    <Layers className="w-5 h-5 text-accent-500 dark:text-accent-400" />
                     {title}
                 </h3>
                 <button

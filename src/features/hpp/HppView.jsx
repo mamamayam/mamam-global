@@ -65,7 +65,7 @@ const BahanBakuView = () => {
             <PageHeader
                 title="Database Bahan Baku Pasar"
                 subtitle="Kelola acuan harga bahan baku dasar murni dari pasar disini."
-                icon={<Package className="w-6 h-6 text-orange-600 dark:text-orange-400" />}
+                icon={<Package className="w-6 h-6 text-accent-600 dark:text-accent-400" />}
                 className="mb-2"
                 action={!isEditing && (
                     <Button icon={<Plus className="w-4 h-4" />} onClick={() => setIsEditing(true)}>
@@ -151,9 +151,9 @@ const BahanBakuView = () => {
                                     const isUpdatedToday = rm.lastUpdated && new Date(rm.lastUpdated).toDateString() === new Date().toDateString();
                                     return (
                                         <tr key={rm.id} className="hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors group">
-                                            <td className="p-4 font-bold text-slate-800 dark:text-slate-100 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">{rm.name}</td>
+                                            <td className="p-4 font-bold text-slate-800 dark:text-slate-100 group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">{rm.name}</td>
                                             <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">{rm.unit}</td>
-                                            <td className="p-4 font-black text-orange-600 dark:text-orange-400">{formatRupiah(rm.price)}</td>
+                                            <td className="p-4 font-black text-accent-600 dark:text-accent-400">{formatRupiah(rm.price)}</td>
                                             <td className="p-4">
                                                 <div className="flex items-center gap-1.5">
                                                     <Clock className={`w-3.5 h-3.5 ${isUpdatedToday ? 'text-green-500 dark:text-green-400' : 'text-slate-400 dark:text-slate-500'}`} />
@@ -295,7 +295,7 @@ const BahanSetengahJadiView = () => {
             <PageHeader
                 title="Bahan Setengah Jadi (Prep)"
                 subtitle="Buat bahan olahan (misal: Bumbu Dasar, Ayam Ungkep) untuk dipakai di Kalkulator HPP."
-                icon={<Beaker className="w-6 h-6 text-orange-600 dark:text-orange-400" />}
+                icon={<Beaker className="w-6 h-6 text-accent-600 dark:text-accent-400" />}
                 className="mb-2"
                 action={!isEditing && (
                     <Button icon={<Plus className="w-4 h-4" />} onClick={() => setIsEditing(true)}>
@@ -393,13 +393,13 @@ const BahanSetengahJadiView = () => {
 
                                             <div className="col-span-10 sm:col-span-3 md:col-span-2">
                                                 {index === 0 && <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 text-center uppercase">Biaya</label>}
-                                                <div className="p-3 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-xl text-sm text-orange-700 dark:text-orange-300 font-bold text-center truncate">
+                                                <div className="p-3 bg-accent-50 dark:bg-accent-500/10 border border-orange-200 dark:border-orange-500/30 rounded-xl text-sm text-accent-700 dark:text-accent-300 font-bold text-center truncate">
                                                     {formatRupiah(getIngredientCost(ing))}
                                                 </div>
                                             </div>
 
                                             <div className={`col-span-2 sm:col-span-1 md:col-span-1 flex justify-center ${index === 0 ? 'md:pt-6' : ''}`}>
-                                                <button onClick={() => handleRemoveIngredient(ing.id)} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors" title="Hapus Bahan"><Trash2 className="w-5 h-5" /></button>
+                                                <button onClick={() => handleRemoveIngredient(ing.id)} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-accent-500 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-xl transition-colors" title="Hapus Bahan"><Trash2 className="w-5 h-5" /></button>
                                             </div>
                                         </div>
                                     ))}
@@ -448,11 +448,11 @@ const BahanSetengahJadiView = () => {
                             <div className="h-px bg-slate-800 my-3"></div>
                             <div className="flex justify-between items-center text-slate-300 dark:text-slate-600">
                                 <span>Total Keseluruhan (1 Batch):</span>
-                                <span className="font-bold text-orange-400 dark:text-orange-300">{formatRupiah(totalIngredientCost + Number(laborCost) + Number(overheadCost))}</span>
+                                <span className="font-bold text-accent-400 dark:text-accent-300">{formatRupiah(totalIngredientCost + Number(laborCost) + Number(overheadCost))}</span>
                             </div>
                             <div className="flex justify-between items-center text-slate-300 dark:text-slate-600">
                                 <span>Menghasilkan (Yield):</span>
-                                <span className="font-bold text-orange-400 dark:text-orange-300 bg-orange-950 dark:bg-orange-950/50 px-2 py-0.5 rounded border border-orange-900 dark:border-orange-500/40">{yieldQty || 0} {resultUnit || 'Unit'}</span>
+                                <span className="font-bold text-accent-400 dark:text-accent-300 bg-accent-950 dark:bg-accent-950/50 px-2 py-0.5 rounded border border-orange-900 dark:border-orange-500/40">{yieldQty || 0} {resultUnit || 'Unit'}</span>
                             </div>
                         </div>
 
@@ -510,7 +510,7 @@ const BahanSetengahJadiView = () => {
                                             const originalPrep = semiFinished.find(s => s.id === prep.id);
                                             return (
                                                 <tr key={prep.id} className="hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors group">
-                                                    <td className="p-4 font-bold text-slate-800 dark:text-slate-100 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">{prep.name.replace(' [Prep]', '')} <Badge variant="orange" size="sm" className="ml-2">PREP</Badge></td>
+                                                    <td className="p-4 font-bold text-slate-800 dark:text-slate-100 group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">{prep.name.replace(' [Prep]', '')} <Badge variant="orange" size="sm" className="ml-2">PREP</Badge></td>
                                                     <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">{prep.unit}</td>
                                                     <td className="p-4 font-black text-green-600 dark:text-green-400">{formatRupiah(prep.price)}</td>
                                                     <td className="p-4 text-slate-500 dark:text-slate-400 font-medium text-sm">
@@ -719,7 +719,7 @@ const KalkulatorHppView = () => {
                             <div>
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="block text-sm font-bold text-slate-600 dark:text-slate-300">Kategori</label>
-                                    <button onClick={() => setIsCategoryModalOpen(true)} className="text-xs text-orange-600 dark:text-orange-400 font-bold hover:underline flex items-center gap-1 transition-colors">
+                                    <button onClick={() => setIsCategoryModalOpen(true)} className="text-xs text-accent-600 dark:text-accent-400 font-bold hover:underline flex items-center gap-1 transition-colors">
                                         <Edit3 className="w-3.5 h-3.5" /> Kelola Kategori
                                     </button>
                                 </div>
@@ -794,11 +794,11 @@ const KalkulatorHppView = () => {
 
                                     <div className="col-span-10 sm:col-span-3 md:col-span-2">
                                         {index === 0 && <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 text-center uppercase">Biaya Komposisi</label>}
-                                        <div className="p-3 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-xl text-sm text-orange-700 dark:text-orange-300 font-bold text-center truncate">{formatRupiah(getIngredientCost(ing))}</div>
+                                        <div className="p-3 bg-accent-50 dark:bg-accent-500/10 border border-orange-200 dark:border-orange-500/30 rounded-xl text-sm text-accent-700 dark:text-accent-300 font-bold text-center truncate">{formatRupiah(getIngredientCost(ing))}</div>
                                     </div>
 
                                     <div className={`col-span-2 sm:col-span-1 md:col-span-1 flex justify-center ${index === 0 ? 'md:pt-8' : ''}`}>
-                                        <button onClick={() => handleRemoveIngredient(ing.id)} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors"><Trash2 className="w-5 h-5" /></button>
+                                        <button onClick={() => handleRemoveIngredient(ing.id)} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-accent-500 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-xl transition-colors"><Trash2 className="w-5 h-5" /></button>
                                     </div>
                                 </div>
                             ))}
@@ -808,18 +808,18 @@ const KalkulatorHppView = () => {
                             <Button variant="ghost" icon={<Plus className="w-4 h-4" />} onClick={handleAddIngredient}>Tambah Komposisi</Button>
                         </div>
 
-                        <div className="bg-orange-50 dark:bg-orange-500/10 p-5 rounded-2xl border border-orange-200 dark:border-orange-500/30 flex flex-col gap-3 text-sm mt-5">
+                        <div className="bg-accent-50 dark:bg-accent-500/10 p-5 rounded-2xl border border-orange-200 dark:border-orange-500/30 flex flex-col gap-3 text-sm mt-5">
                             <div className="flex justify-between items-center border-b border-orange-200 dark:border-orange-500/60 pb-3">
-                                <span className="text-orange-800 dark:text-orange-300 font-bold">Total Estimasi Berat / Volume:</span>
-                                <span className="text-base font-black text-orange-900 dark:text-orange-200">{totalWeight} <span className="text-xs text-orange-800 dark:text-orange-300 font-bold">Gram/ml</span></span>
+                                <span className="text-accent-800 dark:text-accent-300 font-bold">Total Estimasi Berat / Volume:</span>
+                                <span className="text-base font-black text-accent-900 dark:text-accent-200">{totalWeight} <span className="text-xs text-accent-800 dark:text-accent-300 font-bold">Gram/ml</span></span>
                             </div>
                             <div className="flex justify-between items-center border-b border-orange-200 dark:border-orange-500/60 pb-3">
-                                <span className="text-orange-800 dark:text-orange-300 font-bold">Total Biaya Komposisi Bahan (Murni):</span>
-                                <span className="text-base font-black text-orange-900 dark:text-orange-200">{formatRupiah(totalIngredientCost)}</span>
+                                <span className="text-accent-800 dark:text-accent-300 font-bold">Total Biaya Komposisi Bahan (Murni):</span>
+                                <span className="text-base font-black text-accent-900 dark:text-accent-200">{formatRupiah(totalIngredientCost)}</span>
                             </div>
                             <div className="flex justify-between items-center pt-1">
-                                <span className="text-orange-900 dark:text-orange-200 font-black">HPP Bahan per Gram/ml:</span>
-                                <span className="text-base font-black text-orange-600 dark:text-orange-400">{formatRupiah(totalWeight > 0 ? totalIngredientCost / totalWeight : 0)}</span>
+                                <span className="text-accent-900 dark:text-accent-200 font-black">HPP Bahan per Gram/ml:</span>
+                                <span className="text-base font-black text-accent-600 dark:text-accent-400">{formatRupiah(totalWeight > 0 ? totalIngredientCost / totalWeight : 0)}</span>
                             </div>
                         </div>
                     </Card>
@@ -868,7 +868,7 @@ const KalkulatorHppView = () => {
                                 <div className="h-px bg-slate-800 my-3"></div>
                                 <div className="flex justify-between items-center bg-slate-800/60 p-3 rounded-xl border border-slate-700 dark:border-slate-300">
                                     <span className="font-bold text-slate-300 dark:text-slate-600 text-xs uppercase tracking-wider">TOTAL HPP PER PORSI</span>
-                                    <span className="text-lg font-black text-orange-400 dark:text-orange-300">{formatRupiah(totalHppPerUnit)}</span>
+                                    <span className="text-lg font-black text-accent-400 dark:text-accent-300">{formatRupiah(totalHppPerUnit)}</span>
                                 </div>
                             </div>
 
@@ -880,7 +880,7 @@ const KalkulatorHppView = () => {
                                 {totalWeight > 0 && (
                                     <div className="flex justify-between items-center text-sm text-slate-300 dark:text-slate-600 pt-2 border-t border-slate-700 dark:border-slate-300">
                                         <span className="font-bold">Total HPP per Gram/ml:</span>
-                                        <span className="font-black text-orange-400 dark:text-orange-300 bg-orange-950 dark:bg-orange-950/50 px-2 py-1 rounded-md border border-orange-900 dark:border-orange-500/50">
+                                        <span className="font-black text-accent-400 dark:text-accent-300 bg-accent-950 dark:bg-accent-950/50 px-2 py-1 rounded-md border border-orange-900 dark:border-orange-500/50">
                                             {formatRupiah((totalHppPerUnit * yld) / totalWeight)}
                                         </span>
                                     </div>
@@ -890,11 +890,11 @@ const KalkulatorHppView = () => {
                             <div className="space-y-4 pt-4 border-t border-slate-800 dark:border-slate-100">
                                 <div className="flex justify-between items-center text-sm">
                                     <span className="font-bold text-slate-300 dark:text-slate-600">Target Profit Margin (%)</span>
-                                    <span className="font-black text-orange-400 dark:text-orange-300 text-base bg-orange-950 dark:bg-orange-950/50 px-3 py-1 rounded-lg border border-orange-900 dark:border-orange-500/50">{marginPercent}%</span>
+                                    <span className="font-black text-accent-400 dark:text-accent-300 text-base bg-accent-950 dark:bg-accent-950/50 px-3 py-1 rounded-lg border border-orange-900 dark:border-orange-500/50">{marginPercent}%</span>
                                 </div>
                                 <input type="range" min="5" max="95" className="w-full accent-orange-600 cursor-pointer h-2 bg-slate-700 dark:bg-slate-300 rounded-lg appearance-none" value={marginPercent} onChange={e => setMarginPercent(Number(e.target.value))} />
                                 <div className="grid grid-cols-4 gap-2 mt-2">
-                                    {[20, 35, 50, 70].map(m => <button key={m} onClick={() => setMarginPercent(m)} className={`py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${marginPercent === m ? 'bg-orange-600 dark:bg-orange-500 text-white shadow-md' : 'bg-slate-800 text-slate-400 dark:text-slate-500 hover:bg-slate-700 hover:text-white dark:hover:text-slate-900'}`}>{m}%</button>)}
+                                    {[20, 35, 50, 70].map(m => <button key={m} onClick={() => setMarginPercent(m)} className={`py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${marginPercent === m ? 'bg-accent-600 dark:bg-accent-500 text-white shadow-md' : 'bg-slate-800 text-slate-400 dark:text-slate-500 hover:bg-slate-700 hover:text-white dark:hover:text-slate-900'}`}>{m}%</button>)}
                                 </div>
                             </div>
 
@@ -915,11 +915,11 @@ const KalkulatorHppView = () => {
                                 <span className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest text-center mb-4">ANALISA KEUNTUNGAN AKTUAL</span>
                                 <div className="flex justify-between items-center text-sm">
                                     <span className="text-slate-400 dark:text-slate-500 font-medium">Estimasi Laba / Porsi:</span>
-                                    <span className={`font-black text-base ${actualProfitValue >= 0 ? 'text-green-400 dark:text-green-400' : 'text-red-400 dark:text-red-400'}`}>{formatRupiah(actualProfitValue)}</span>
+                                    <span className={`font-black text-base ${actualProfitValue >= 0 ? 'text-green-400 dark:text-green-400' : 'text-accent-400 dark:text-accent-400'}`}>{formatRupiah(actualProfitValue)}</span>
                                 </div>
                                 <div className="flex justify-between items-center text-sm">
                                     <span className="text-slate-400 dark:text-slate-500 font-medium">Profit Margin Aktual:</span>
-                                    <span className={`font-black text-base px-2 py-0.5 rounded-md ${actualProfitPercent >= 0 ? 'bg-green-950 dark:bg-green-950/30 text-green-400 dark:text-green-400' : 'bg-red-950 dark:bg-red-950/30 text-red-400 dark:text-red-400'}`}>{actualProfitPercent.toFixed(1)}%</span>
+                                    <span className={`font-black text-base px-2 py-0.5 rounded-md ${actualProfitPercent >= 0 ? 'bg-green-950 dark:bg-green-950/30 text-green-400 dark:text-green-400' : 'bg-accent-950 dark:bg-accent-950/30 text-accent-400 dark:text-accent-400'}`}>{actualProfitPercent.toFixed(1)}%</span>
                                 </div>
                             </div>
 
@@ -996,7 +996,7 @@ const LibraryHppView = () => {
             <PageHeader
                 title="Katalog Library Menu (Final)"
                 subtitle="Daftar menu dengan total HPP terhitung otomatis berdasarkan harga bahan baku pasar & bahan setengah jadi terbaru."
-                icon={<BookOpen className="w-6 h-6 text-orange-600 dark:text-orange-400" />}
+                icon={<BookOpen className="w-6 h-6 text-accent-600 dark:text-accent-400" />}
                 className="border-b border-slate-200 dark:border-slate-700 pb-5"
             />
 
@@ -1058,7 +1058,7 @@ const LibraryHppView = () => {
                                                         </div>
                                                     </div>
 
-                                                    <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg leading-tight mb-4 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">{item.name}</h4>
+                                                    <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg leading-tight mb-4 group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">{item.name}</h4>
 
                                                     <div className="space-y-3 mb-5">
                                                         <Card variant="muted" padding="sm" className="flex justify-between items-center text-sm">
@@ -1069,11 +1069,11 @@ const LibraryHppView = () => {
                                                         <div className="flex justify-between items-end text-sm p-1">
                                                             <div>
                                                                 <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Harga Jual</span>
-                                                                <span className="font-black text-orange-600 dark:text-orange-400 text-base">{formatRupiah(item.finalPrice)}</span>
+                                                                <span className="font-black text-accent-600 dark:text-accent-400 text-base">{formatRupiah(item.finalPrice)}</span>
                                                             </div>
                                                             <div className="text-right">
                                                                 <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Margin Saat Ini</span>
-                                                                <span className={`font-black text-sm px-2 py-1 rounded-md ${isMarginDanger ? 'bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400' : 'bg-green-100 dark:bg-green-500/15 text-green-700 dark:text-green-300'}`}>
+                                                                <span className={`font-black text-sm px-2 py-1 rounded-md ${isMarginDanger ? 'bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400' : 'bg-green-100 dark:bg-green-500/15 text-green-700 dark:text-green-300'}`}>
                                                                     {item.actualMarginPercent.toFixed(1)}%
                                                                 </span>
                                                             </div>
@@ -1082,7 +1082,7 @@ const LibraryHppView = () => {
                                                 </div>
 
                                                 {isMarginDanger && (
-                                                    <div className="mt-2 pt-3 border-t border-red-100 dark:border-red-500/20 flex items-start gap-2 text-red-600 dark:text-red-400">
+                                                    <div className="mt-2 pt-3 border-t border-red-100 dark:border-red-500/20 flex items-start gap-2 text-accent-600 dark:text-accent-400">
                                                         <TrendingDown className="w-4 h-4 shrink-0 mt-0.5" />
                                                         <p className="text-[11px] font-bold leading-relaxed">Margin kritis! Periksa kembali harga bahan baku / prep Anda.</p>
                                                     </div>

@@ -165,7 +165,7 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
       <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-3xl p-5 pb-8" style={{ animation: 'slideUp 0.25s ease' }}>
         <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-5" />
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-accent-500/10 flex items-center justify-center text-xl">
+          <div className="w-10 h-10 rounded-xl bg-accent-50 dark:bg-accent-500/10 flex items-center justify-center text-xl">
             {exportType === 'json' ? '📦' : '📊'}
           </div>
           <div>
@@ -196,7 +196,7 @@ function DateRangeModal({ onClose, onConfirm, exportType }) {
         )}
 
         {hasRange && (
-          <div className="bg-orange-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/30 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
+          <div className="bg-accent-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/30 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
             <Calendar className="w-4 h-4 text-accent-500 dark:text-accent-400 shrink-0" />
             <p className="text-xs text-accent-700 dark:text-accent-300 font-semibold">{startDate || '∞'} — {endDate || '∞'}</p>
           </div>
@@ -243,7 +243,7 @@ function ImportModal({ type, onClose, onConfirm }) {
         <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-5" />
 
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-accent-500/10 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-accent-50 dark:bg-accent-500/10 flex items-center justify-center">
             <FileUp className="w-5 h-5 text-accent-500 dark:text-accent-400" />
           </div>
           <div>
@@ -258,7 +258,7 @@ function ImportModal({ type, onClose, onConfirm }) {
           onDrop={e => { e.preventDefault(); setDragOver(false); setFile(e.dataTransfer.files[0]); }}
           onClick={() => !file && inputRef.current?.click()}
           className={`border-2 border-dashed rounded-2xl p-6 text-center mb-4 cursor-pointer transition-all
-            ${dragOver ? 'border-accent-400 bg-orange-50 dark:bg-accent-500/10' : file ? 'border-green-400 bg-green-50 dark:bg-green-500/10' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-accent-300 dark:hover:border-accent-500/50'}`}
+            ${dragOver ? 'border-accent-400 bg-accent-50 dark:bg-accent-500/10' : file ? 'border-green-400 bg-green-50 dark:bg-green-500/10' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-accent-300 dark:hover:border-accent-500/50'}`}
         >
           {file ? (
             <div className="flex items-center gap-3">
@@ -287,7 +287,7 @@ function ImportModal({ type, onClose, onConfirm }) {
         <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Mode Import</p>
         <div className="grid grid-cols-2 gap-2 mb-4">
           <button onClick={() => handleModeChange('merge')}
-            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'merge' ? 'border-accent-500 bg-orange-50 dark:bg-accent-500/10' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
+            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'merge' ? 'border-accent-500 bg-accent-50 dark:bg-accent-500/10' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
           >
             <p className="text-base mb-1">🔗</p>
             <p className={`font-bold text-xs ${mode === 'merge' ? 'text-accent-600 dark:text-accent-400' : 'text-slate-700 dark:text-slate-300'}`}>Gabungkan</p>
@@ -295,26 +295,26 @@ function ImportModal({ type, onClose, onConfirm }) {
             {mode === 'merge' && <p className="text-xs text-accent-500 dark:text-accent-400 font-bold mt-1">✓ Aman — direkomendasikan</p>}
           </button>
           <button onClick={() => handleModeChange('replace')}
-            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'replace' ? 'border-red-400 bg-red-50 dark:bg-red-500/10' : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
+            className={`p-3 rounded-xl border-2 text-left transition-all ${mode === 'replace' ? 'border-red-400 bg-accent-50 dark:bg-accent-500/10' : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}
           >
             <p className="text-base mb-1">🔄</p>
-            <p className={`font-bold text-xs ${mode === 'replace' ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>Timpa Semua</p>
+            <p className={`font-bold text-xs ${mode === 'replace' ? 'text-accent-600 dark:text-accent-400' : 'text-slate-400 dark:text-slate-500'}`}>Timpa Semua</p>
             <p className="text-xs text-slate-400 dark:text-slate-500">Hapus data lama</p>
           </button>
         </div>
 
         {mode === 'replace' && (
-          <div className="bg-red-50 dark:bg-red-500/10 border-2 border-red-200 dark:border-red-500/30 rounded-xl p-4 mb-4 space-y-3">
+          <div className="bg-accent-50 dark:bg-accent-500/10 border-2 border-red-200 dark:border-red-500/30 rounded-xl p-4 mb-4 space-y-3">
             <div className="flex gap-2 items-start">
-              <AlertTriangle className="w-4 h-4 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
-              <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed">
+              <AlertTriangle className="w-4 h-4 text-accent-500 dark:text-accent-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-accent-700 dark:text-accent-300 leading-relaxed">
                 <strong>Peringatan!</strong> Mode ini akan menghapus SELURUH data lokal dan menggantinya dengan isi file import.
                 Tindakan ini tidak bisa dibatalkan.
               </p>
             </div>
             <div>
-              <p className="text-xs font-bold text-red-500 dark:text-red-400 mb-1.5">
-                Ketik <span className="bg-red-100 dark:bg-red-500/20 px-1.5 py-0.5 rounded font-mono">TIMPA</span> untuk konfirmasi:
+              <p className="text-xs font-bold text-accent-500 dark:text-accent-400 mb-1.5">
+                Ketik <span className="bg-accent-100 dark:bg-accent-500/20 px-1.5 py-0.5 rounded font-mono">TIMPA</span> untuk konfirmasi:
               </p>
               <input
                 type="text"
@@ -332,7 +332,7 @@ function ImportModal({ type, onClose, onConfirm }) {
           className={`w-full py-4 rounded-xl font-black text-sm transition-all
             ${canSubmit
               ? mode === 'replace'
-                ? 'bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-500 text-white shadow-lg shadow-red-200 dark:shadow-none'
+                ? 'bg-accent-500 dark:bg-accent-600 hover:bg-accent-600 dark:hover:bg-accent-500 text-white shadow-lg shadow-red-200 dark:shadow-none'
                 : 'bg-accent-600 dark:bg-accent-500 hover:bg-accent-700 dark:hover:bg-accent-600 text-white shadow-lg shadow-accent-200 dark:shadow-none'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'}`}
         >
@@ -349,7 +349,7 @@ function ActionItem({ icon: Icon, label, sublabel, onClick, loading, done, iconB
   return (
     <button onClick={loading || done ? undefined : onClick}
       className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-all
-        ${done ? 'border-green-200 dark:border-green-500/40 bg-green-50 dark:bg-green-500/10' : loading ? 'border-accent-200 dark:border-accent-500/40 bg-orange-50 dark:bg-accent-500/10' : 'border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-accent-200 dark:hover:border-accent-500/50 hover:bg-orange-50 dark:hover:bg-accent-500/10'}`}
+        ${done ? 'border-green-200 dark:border-green-500/40 bg-green-50 dark:bg-green-500/10' : loading ? 'border-accent-200 dark:border-accent-500/40 bg-accent-50 dark:bg-accent-500/10' : 'border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-accent-200 dark:hover:border-accent-500/50 hover:bg-accent-50 dark:hover:bg-accent-500/10'}`}
     >
       <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${done ? 'bg-green-100 dark:bg-green-500/15' : iconBgClass}`}>
         {loading ? <RefreshCw className="w-5 h-5 text-accent-500 animate-spin" />
@@ -582,7 +582,7 @@ const BackupView = ({ onBack }) => {
 
       {toast && (
         <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl text-white text-sm font-bold shadow-xl whitespace-nowrap
-          ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'}`} style={{ animation: 'fadeInDown 0.2s ease' }}>
+          ${toast.type === 'error' ? 'bg-accent-500' : 'bg-green-500'}`} style={{ animation: 'fadeInDown 0.2s ease' }}>
           {toast.msg}
         </div>
       )}
@@ -667,7 +667,7 @@ const BackupView = ({ onBack }) => {
                 </button>
 
                 {/* 2. Sync Manual Sekarang */}
-                <button onClick={handleManualSync} disabled={isSyncing || isRestoring || !supabaseReady} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${isSyncing ? 'border-accent-500 bg-orange-50 dark:bg-accent-500/10 text-accent-700 dark:text-accent-300' : 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'}`}>
+                <button onClick={handleManualSync} disabled={isSyncing || isRestoring || !supabaseReady} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${isSyncing ? 'border-accent-500 bg-accent-50 dark:bg-accent-500/10 text-accent-700 dark:text-accent-300' : 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'}`}>
                   {isSyncing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CloudUpload className="w-5 h-5" />}
                   <p className="text-[10px] font-bold leading-tight">Manual<br />Sekarang</p>
                   <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${isSyncing ? 'bg-accent-500 text-white' : 'bg-indigo-500 text-white'}`}>{isSyncing ? 'SYNC' : 'TAP'}</div>
@@ -713,7 +713,7 @@ const BackupView = ({ onBack }) => {
             <ActionItem icon={FileJson} label="Export Data (JSON)" sublabel="Backup dengan pilihan rentang tanggal"
               badge="Range" onClick={() => setDateRangeModal('json')}
               loading={loadingState['exportJson']} done={doneState['exportJson']}
-              iconBgClass="bg-orange-50 dark:bg-accent-500/10" iconColorClass="text-accent-500 dark:text-accent-400" />
+              iconBgClass="bg-accent-50 dark:bg-accent-500/10" iconColorClass="text-accent-500 dark:text-accent-400" />
             <ActionItem icon={Sheet} label="Export ke Excel" sublabel="Laporan transaksi dengan filter tanggal"
               badge="Range" onClick={() => setDateRangeModal('excel')}
               loading={loadingState['exportExcel']} done={doneState['exportExcel']}
@@ -727,7 +727,7 @@ const BackupView = ({ onBack }) => {
           <ActionItem icon={FileUp} label="Import dari JSON" sublabel="Pulihkan data dari file backup lokal"
             onClick={() => setImportModal('json')}
             loading={loadingState['importJson']} done={doneState['importJson']}
-            iconBgClass="bg-orange-50 dark:bg-accent-500/10" iconColorClass="text-accent-500 dark:text-accent-400" />
+            iconBgClass="bg-accent-50 dark:bg-accent-500/10" iconColorClass="text-accent-500 dark:text-accent-400" />
         </div>
 
       </div>

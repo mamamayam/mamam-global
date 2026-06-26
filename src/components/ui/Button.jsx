@@ -39,9 +39,10 @@
  */
 
 const VARIANTS = {
+  // Ganti semua 'orange' menjadi 'accent'
   primary: `
-    bg-orange-600 dark:bg-orange-500 text-white
-    hover:bg-orange-700 dark:hover:bg-orange-600
+    bg-accent-600 dark:bg-accent-500 text-white
+    hover:bg-accent-700 dark:hover:bg-accent-600
     hover:shadow-md hover:-translate-y-0.5
     shadow-sm
   `,
@@ -50,8 +51,8 @@ const VARIANTS = {
     hover:bg-slate-200 dark:hover:bg-slate-700
   `,
   danger: `
-    bg-red-500 dark:bg-red-600 text-white
-    hover:bg-red-600 dark:hover:bg-red-500
+    bg-accent-500 dark:bg-accent-600 text-white
+    hover:bg-accent-600 dark:hover:bg-accent-500
     hover:shadow-md hover:-translate-y-0.5
     shadow-sm
   `,
@@ -67,15 +68,16 @@ const VARIANTS = {
     hover:shadow-md hover:-translate-y-0.5
     shadow-sm
   `,
+  // Ganti semua 'orange' menjadi 'accent'
   ghost: `
-    bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400
-    border border-orange-200 dark:border-orange-500/30
-    hover:bg-orange-100 dark:hover:bg-orange-500/15
+    bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400
+    border border-accent-200 dark:border-accent-500/30
+    hover:bg-accent-100 dark:hover:bg-accent-500/15
   `,
   'ghost-danger': `
-    bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400
+    bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400
     border border-red-200 dark:border-red-500/30
-    hover:bg-red-100 dark:hover:bg-red-500/15
+    hover:bg-accent-100 dark:hover:bg-accent-500/15
   `,
   'ghost-success': `
     bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400
