@@ -138,10 +138,12 @@ const IncomeView = () => {
 
           <Input
             type="number"
-            label="Nominal (Rp)"
+            label="Nominal"
+            icon={<span className="font-bold">Rp</span>}
             value={amount}
             onChange={e => setAmount(e.target.value)}
             placeholder="0"
+            className="text-lg font-bold"
           />
 
           <div>
@@ -166,7 +168,7 @@ const IncomeView = () => {
             label="Catatan Tambahan"
             value={note}
             onChange={e => setNote(e.target.value)}
-            placeholder="Contoh: Modal kembalian pagi"
+            placeholder="Contoh: Tambahan Kas"
           />
 
           <Button
@@ -198,7 +200,7 @@ const IncomeView = () => {
                     onChange={e => setFilterMonth(e.target.value)}
                     className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
                   />
-                  {filterMonth && 
+                  {filterMonth &&
                     <Button
                       size="xs"
                       variant="secondary"

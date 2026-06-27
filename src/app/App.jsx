@@ -3,6 +3,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { usePersistState } from '../hook/usePersistState';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
 import { AppContext, useAppContext } from '../context/AppContext';
+import { usePosStore } from '../store/usePosStore';
 import { Modal, Button } from '../components/ui';
 import PinModal from '../auth/PinModal';
 import AppRoutes from '../app/AppRoutes';
@@ -372,16 +373,22 @@ export default function App() {
   const [reportDateRange, setReportDateRange] = useState({ start: getBulanIniStart(), end: new Date().toISOString().split('T')[0] });
   const [activePreset, setActivePreset] = useState('bulan_ini');
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Semua');
-  const [cart, setCart] = useState([]);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-
-  const [selectedMenuForVariant, setSelectedMenuForVariant] = useState(null);
-  const [variantSelectedOptions, setVariantSelectedOptions] = useState({});
-  const [editingCartItemId, setEditingCartItemId] = useState(null);
-
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const searchQuery = usePosStore((state) => state.searchQuery);
+  const setSearchQuery = usePosStore((state) => state.setSearchQuery);
+  const selectedCategory = usePosStore((state) => state.selectedCategory);
+  const setSelectedCategory = usePosStore((state) => state.setSelectedCategory);
+  const selectedMenuForVariant = usePosStore((state) => state.selectedMenuForVariant);
+  const setSelectedMenuForVariant = usePosStore((state) => state.setSelectedMenuForVariant);
+  const cart = usePosStore((state) => state.cart);
+  const setCart = usePosStore((state) => state.setCart);
+  const isCartOpen = usePosStore((state) => state.isCartOpen);
+  const setIsCartOpen = usePosStore((state) => state.setIsCartOpen);
+  const variantSelectedOptions = usePosStore((state) => state.variantSelectedOptions);
+  const setVariantSelectedOptions = usePosStore((state) => state.setVariantSelectedOptions);
+  const editingCartItemId = usePosStore((state) => state.editingCartItemId);
+  const setEditingCartItemId = usePosStore((state) => state.setEditingCartItemId);
+  const isCategoryModalOpen = usePosStore((state) => state.isCategoryModalOpen);
+  const setIsCategoryModalOpen = usePosStore((state) => state.setIsCategoryModalOpen);
 
   const [paymentModal, setPaymentModal] = useState({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending', ojolName: '', orderNumber: '' });
   const [receiptModal, setReceiptModal] = useState({ isOpen: false, data: null });
@@ -461,29 +468,7 @@ export default function App() {
     else if (preset === 'bulan_berjalan') setReportDateRange({ start: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0], end: todayStr });
   };
 
-  const addToCart = (menu, selectedOptions = {}) => {
-    let extraPriceTotal = 0, variantNames = [], selectedVariantDetails = [];
-
-    Object.entries(selectedOptions).forEach(([groupId, optionIds]) => {
-      const group = variantGroups.find(g => g.id === groupId);
-      if (group) {
-        optionIds.forEach(optId => {
-          const opt = group.options.find(o => o.id === optId);
-          if (opt) { extraPriceTotal += opt.extraPrice; variantNames.push(opt.name); selectedVariantDetails.push({ groupId, optionId: opt.id, name: opt.name, price: opt.extraPrice }); }
-        });
-      }
-    });
-
-    const price = menu.price + extraPriceTotal;
-    const variantNameStr = variantNames.join(', ');
-    const optionKeys = selectedVariantDetails.map(v => v.optionId).sort().join('-');
-    const cartItemId = optionKeys ? `${menu.id}-${optionKeys}` : menu.id;
-
-    const existingItem = cart.find(item => item.cartItemId === cartItemId);
-    if (existingItem) setCart(cart.map(item => item.cartItemId === cartItemId ? { ...item, qty: item.qty + 1 } : item));
-    else setCart([...cart, { cartItemId, menuId: menu.id, name: menu.name, variantName: variantNameStr, price, qty: 1, hpp: menu.hpp, note: '', variantSelectedOptions: selectedOptions }]);
-    setSelectedMenuForVariant(null);
-  };
+  const addToCart = usePosStore((state) => state.addToCart);
 
   const updateCartItemVariants = (oldCartItemId, newVariants) => {
     setCart(cart.map(item => {

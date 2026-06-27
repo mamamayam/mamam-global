@@ -1,18 +1,22 @@
 import React from "react";
+import { usePosStore } from '../../store/usePosStore';
 import { useAppContext } from '../../context/AppContext';
 import { X, CheckCircle2 } from 'lucide-react';
 
 const VariantSelectionModal = () => {
+  // ─── AMBIL DARI ZUSTAND ───
+  const selectedMenuForVariant = usePosStore((state) => state.selectedMenuForVariant);
+  const setSelectedMenuForVariant = usePosStore((state) => state.setSelectedMenuForVariant);
+  const variantSelectedOptions = usePosStore((state) => state.variantSelectedOptions);
+  const setVariantSelectedOptions = usePosStore((state) => state.setVariantSelectedOptions);
+  const editingCartItemId = usePosStore((state) => state.editingCartItemId);
+  const setEditingCartItemId = usePosStore((state) => state.setEditingCartItemId);
+
+  // ─── AMBIL DARI CONTEXT ───
   const { 
-    selectedMenuForVariant, 
-    setSelectedMenuForVariant, 
     variantGroups, 
     formatRupiah, 
     addToCart, 
-    variantSelectedOptions, 
-    setVariantSelectedOptions,
-    editingCartItemId,
-    setEditingCartItemId,
     updateCartItemVariants
   } = useAppContext();
 

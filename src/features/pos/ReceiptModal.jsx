@@ -1,4 +1,6 @@
 import React from "react";
+// Lo bisa panggil usePosStore di sini nanti kalau receiptModal ikut dipindah ke Zustand
+// import { usePosStore } from '../../store/usePosStore'; 
 import { useAppContext } from "../../context/AppContext";
 import { Printer, Share2 } from "lucide-react";
 import { isNativePlatform, printNativeBluetooth } from '../../library/printer.js';
@@ -8,18 +10,15 @@ import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const ReceiptModal = () => {
-    // 1. TAMBAHKAN 'customers' DI SINI UNTUK MEMANGGIL DATABASE PELANGGAN
+    // ─── AMBIL DARI CONTEXT ───
     const { receiptModal, setReceiptModal, storeSettings, formatRupiah, printReceipt, customers } = useAppContext();
 
     if (!receiptModal.isOpen || !receiptModal.data) return null;
     const { data, kembalian } = receiptModal;
 
-    // --- LOGIKA OPEN BILL ---
     const isOpenBill = data.status === 'OPEN' || data.status === 'UNPAID';
 
-    // 2. CARI DATA PELANGGAN DI DATABASE BERDASARKAN NAMA & AMBIL SISA POINNYA
     const matchedCustomer = customers?.find(c => c.name === data.customerName);
-    // Asumsi properti poin pelanggan di database bernama "points" (sesuaikan jika namanya "poin" atau lainnya)
     const sisaPoin = matchedCustomer ? matchedCustomer.points : (data.customerPoints || 0);
     const pointsUsed = (data.pointDiscount || 0) / 100;
 
@@ -131,7 +130,6 @@ const ReceiptModal = () => {
                                     <span>{data.customerName}</span>
                                 </div>
 
-                                {/* TAMPILKAN SISA POIN DARI DATABASE DI SINI */}
                                 <div className="text-center my-3 py-2 border-y border-dashed border-gray-500 dark:border-slate-400">
                                     <div className="text-[10px] font-bold text-gray-600 dark:text-gray-300">SISA POIN ANDA</div>
                                     <div className="text-2xl font-black text-black dark:text-white">
@@ -233,11 +231,8 @@ const ReceiptModal = () => {
                     </div>
                 </div>
 
-
-
                 <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 rounded-b-xl flex flex-col gap-2 no-print relative z-20">
                     <div className="flex gap-2">
-                        {/* 3. TERUSKAN NILAI sisaPoin KE FUNGSI PRINTER */}
                         <button onClick={async () => { if (isNativePlatform()) { await printNativeBluetooth(data, storeSettings, kembalian, sisaPoin); } else { printReceipt(); } }} className="flex-1 py-3 rounded-lg bg-slate-800 text-white font-bold shadow-sm hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
                             <Printer className="w-4 h-4" /> Cetak
                         </button>

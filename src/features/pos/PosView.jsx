@@ -1,16 +1,29 @@
 import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react';
-import { useAppContext } from '../../context/AppContext';
 import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package, Star, X } from 'lucide-react';
 import CartDrawer from '../pos/CartDrawer';
 import PaymentModal from './PaymentModal';
 import VariantSelectionModal from './VariantSelectionModal';
 import { Badge, EmptyState, Button } from '../../components/ui';
 
+// 1. IMPORT STORE ZUSTAND
+import { usePosStore } from '../../store/usePosStore'; 
+// 2. IMPORT CONTEXT LAMA (Hanya untuk fungsi & data statis)
+import { useAppContext } from '../../context/AppContext';
+
 const PosView = () => {
+    // ─── AMBIL DARI ZUSTAND (Granular / Dipisah-pisah) ───
+    const searchQuery = usePosStore((state) => state.searchQuery);
+    const setSearchQuery = usePosStore((state) => state.setSearchQuery);
+    const selectedCategory = usePosStore((state) => state.selectedCategory);
+    const setSelectedCategory = usePosStore((state) => state.setSelectedCategory);
+    const cart = usePosStore((state) => state.cart);
+    const setIsCartOpen = usePosStore((state) => state.setIsCartOpen);
+    const setSelectedMenuForVariant = usePosStore((state) => state.setSelectedMenuForVariant);
+    const setVariantSelectedOptions = usePosStore((state) => state.setVariantSelectedOptions);
+
+    // ─── AMBIL DARI CONTEXT LAMA (Fungsi/Data statis yang belum dipindah) ───
     const {
-        menus, searchQuery, setSearchQuery, selectedCategory, setSelectedCategory,
-        setSelectedMenuForVariant, setVariantSelectedOptions, addToCart, formatRupiah,
-        setIsCartOpen, cart, getTotal, currentShift, triggerAlert,
+        menus, addToCart, formatRupiah, getTotal, currentShift, triggerAlert,
         salesHistory, setCurrentView
     } = useAppContext();
 
@@ -55,8 +68,6 @@ const PosView = () => {
     );
 
     // ─── Filter menu ─────────────────────────────────────────────────────────
-    // Saat ada query → cari di SELURUH menu (abaikan kategori).
-    // Saat tidak ada query → filter berdasarkan kategori yang dipilih.
     const isSearching = Boolean(searchQuery.trim());
 
     const filteredMenus = useMemo(() => {
@@ -72,7 +83,6 @@ const PosView = () => {
 
     // ─── Ganti kategori dengan transisi fade-slide ──────────────────────────
     const handleCategoryClick = useCallback((cat) => {
-        // Tidak ada yang berubah → tidak perlu animasi
         if (cat === selectedCategory && !searchQuery.trim()) return;
         setGridVisible(false);
         setTimeout(() => {
@@ -127,7 +137,6 @@ const PosView = () => {
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                     />
-                    {/* Tombol X — muncul saat ada teks */}
                     {isSearching && (
                         <button
                             onClick={() => setSearchQuery('')}
@@ -209,7 +218,6 @@ const PosView = () => {
                                 {menu.name}
                             </h3>
 
-                            {/* Badge kategori — hanya muncul saat pencarian lintas kategori */}
                             {isSearching && (
                                 <Badge variant="neutral" className="mb-1">
                                     {menu.category}
@@ -220,14 +228,12 @@ const PosView = () => {
                                 {formatRupiah(menu.price)}
                             </p>
 
-                            {/* Indikator varian */}
                             {menu.variantGroupIds.length > 0 && (
                                 <div className="absolute top-2 right-2">
                                     <span className="w-2 h-2 rounded-full bg-yellow-400 dark:bg-yellow-500 block" />
                                 </div>
                             )}
 
-                            {/* Bintang favorit */}
                             {(selectedCategory !== 'Favorit' || isSearching) && (menuOrderCounts[menu.id] || 0) > 0 && (
                                 <div className="absolute top-2 left-2">
                                     <Star className="w-3.5 h-3.5 text-yellow-400 dark:text-yellow-500 fill-yellow-400 dark:fill-yellow-500" />
@@ -237,7 +243,6 @@ const PosView = () => {
                     ))}
                 </div>
 
-                {/* Empty state: tab Favorit kosong */}
                 {filteredMenus.length === 0 && selectedCategory === 'Favorit' && !isSearching && (
                     <EmptyState
                         icon={<Star className="w-12 h-12" />}
@@ -247,7 +252,6 @@ const PosView = () => {
                     />
                 )}
 
-                {/* Empty state: pencarian/kategori tidak ada hasil */}
                 {filteredMenus.length === 0 && (selectedCategory !== 'Favorit' || isSearching) && (
                     <EmptyState
                         icon={<Package className="w-12 h-12" />}

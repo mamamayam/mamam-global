@@ -232,7 +232,7 @@ const ExpenseView = () => {
             label="Catatan Tambahan"
             value={note}
             onChange={e => setNote(e.target.value)}
-            placeholder="Contoh: Modal kembalian pagi"
+            placeholder="Contoh: Saos BBQ Delmonte"
           />
 
           <div>

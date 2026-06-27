@@ -1,5 +1,6 @@
 import React, { useState, useEffect} from "react";
 import { useAppContext } from "../../context/AppContext";
+import { usePosStore } from '../../store/usePosStore';
 import { activeOnly } from "../../utils/softDelete";
 import {
   ShoppingCart,
@@ -17,9 +18,26 @@ import {
 } from 'lucide-react';
 
 const CartDrawer = () => {
+
+  const cart = usePosStore((state) => state.cart);
+  const setCart = usePosStore((state) => state.setCart);
+  const isCartOpen = usePosStore((state) => state.isCartOpen);
+  const setIsCartOpen = usePosStore((state) => state.setIsCartOpen);
+  const setSelectedMenuForVariant = usePosStore((state) => state.setSelectedMenuForVariant);
+  const setVariantSelectedOptions = usePosStore((state) => state.setVariantSelectedOptions);
+  const setEditingCartItemId = usePosStore((state) => state.setEditingCartItemId);
+
   // Tambahan: Destructure 'setCustomers' dari appContext
-  const { menus, setSelectedMenuForVariant, setVariantSelectedOptions, setEditingCartItemId,
-    setCurrentView, isCartOpen, setIsCartOpen, cart, setCart, savedBills, triggerConfirm, formatRupiah, activeCustomer, customerName, setCustomerName, isCustomerDropdownMode, setIsCustomerDropdownMode, customers, setCustomers, orderType, setOrderType, deliveryFee, setDeliveryFee, customDeliveryFee, setCustomDeliveryFee, updateCartQty, updateCartItemNote, voucherInputCode, setVoucherInputCode, vouchers, appliedVoucher, setAppliedVoucher, getSubtotal, triggerAlert, pointsToRedeem, setPointsToRedeem, getPointDiscount, manualDiscount, setManualDiscount, getManualDiscountAmount, storeSettings, getDiscount, getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill } = useAppContext();
+  const { 
+    menus, setCurrentView, savedBills, triggerConfirm, formatRupiah, activeCustomer, 
+    customerName, setCustomerName, isCustomerDropdownMode, setIsCustomerDropdownMode, 
+    customers, setCustomers, orderType, setOrderType, deliveryFee, setDeliveryFee, 
+    customDeliveryFee, setCustomDeliveryFee, updateCartQty, updateCartItemNote, 
+    voucherInputCode, setVoucherInputCode, vouchers, appliedVoucher, setAppliedVoucher, 
+    getSubtotal, triggerAlert, pointsToRedeem, setPointsToRedeem, getPointDiscount, 
+    manualDiscount, setManualDiscount, getManualDiscountAmount, storeSettings, getDiscount, 
+    getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill 
+  } = useAppContext();
 
   // Tambahan: Local state untuk input nomor HP pelanggan baru via Kasir
   const [newCustomerPhone, setNewCustomerPhone] = useState('');

@@ -43,24 +43,24 @@ export function usePersistState(key, defaultValue, options = {}) {
   const { syncMode, tableKey = key, syncReadyPromise } = options;
 
   const [state, setStateInternal] = useState(defaultValue);
-  const [isLoading, setIsLoading]  = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   // FIX BUG 3 & 4: Gunakan ref terpisah untuk:
   //  - isLoadedRef: apakah load pertama sudah selesai (ganti isFirstLoad)
   //  - prevStateRef: nilai state sebelumnya untuk diffArrays
   //  - isRemoteUpdateRef: apakah setState dipicu oleh update dari device lain
   //    (kalau iya, JANGAN push balik ke Supabase → infinite loop)
-  const isLoadedRef      = useRef(false);
-  const isMounted        = useRef(true);
-  const prevStateRef     = useRef(defaultValue);
-  const isRemoteUpdate   = useRef(false);
+  const isLoadedRef = useRef(false);
+  const isMounted = useRef(true);
+  const prevStateRef = useRef(defaultValue);
+  const isRemoteUpdate = useRef(false);
 
   // FIX ANTI OVERWRITE: Ref pelindung agar data lokal lama tidak langsung di-push saat pertama dibuka
   const isFirstEffectPassAfterLoad = useRef(true);
 
   // Load dari DB saat pertama mount
   useEffect(() => {
-    isMounted.current  = true;
+    isMounted.current = true;
     isLoadedRef.current = false;
     isFirstEffectPassAfterLoad.current = true; // Reset flag setiap kali key di-load balik
     setIsLoading(true);
@@ -77,7 +77,7 @@ export function usePersistState(key, defaultValue, options = {}) {
     return () => {
       isMounted.current = false;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   // Save ke DB + push ke Supabase setiap kali state berubah,
@@ -95,23 +95,21 @@ export function usePersistState(key, defaultValue, options = {}) {
       return;
     }
 
-    // Simpan ke Dexie
-    saveData(key, state);
-
-    // Kalau update datang dari device lain (via onTransactionUpsert/onConfigUpdate),
-    // jangan push balik ke Supabase — sudah ada di sana, dan ini akan bikin loop
+    // Kalau update dari remote, jangan overwrite Dexie lokal
     if (isRemoteUpdate.current) {
       isRemoteUpdate.current = false;
-      prevStateRef.current   = state;
-      return;
+      prevStateRef.current = state;
+      return;                         // ← return DULU
     }
+
+    saveData(key, state);             // ← baru save ke Dexie (local user change only)
 
     if (syncMode === 'transaction') {
       // FIX BUG 4: prevStateRef sudah diupdate di load effect,
       // dan akan kita update lagi di sini setelah diff
       const { upserts, deletes } = diffArrays(prevStateRef.current, state);
       for (const item of upserts) pushTransactionUpsert(tableKey, item, syncReadyPromise);
-      for (const id of deletes)   pushTransactionDelete(tableKey, id,   syncReadyPromise);
+      for (const id of deletes) pushTransactionDelete(tableKey, id, syncReadyPromise);
     } else if (syncMode === 'live') {
       // Live state (currentShift, dkk) — push INSTAN ke Supabase tiap berubah.
       // Lihat LIVE_STATE_KEYS di storage/syncKeys.js.
@@ -122,7 +120,7 @@ export function usePersistState(key, defaultValue, options = {}) {
     // runAutoSync() (manual / safety-net 21:00). Lihat storage/realtimeSync.js.
 
     prevStateRef.current = state;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, isLoading]);
 
   /**
