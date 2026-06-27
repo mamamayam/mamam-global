@@ -30,11 +30,12 @@ const TYPE_OPTIONS = [
   { value: 'semua', label: 'Semua Tipe' },
   { value: 'masuk', label: 'Masuk' },
   { value: 'bolong', label: 'Jam Bolong' },
+  { value: 'masuk_lagi', label: 'Masuk Lagi' },
   { value: 'keluar', label: 'Pulang' },
 ];
 
-const TYPE_LABEL = { masuk: 'Masuk', keluar: 'Pulang', bolong: 'Jam Bolong' };
-const TYPE_VARIANT = { masuk: 'success', keluar: 'neutral', bolong: 'warning' };
+const TYPE_LABEL = { masuk: 'Masuk', keluar: 'Pulang', bolong: 'Mulai Bolong', masuk_lagi: 'Masuk Lagi' };
+const TYPE_VARIANT = { masuk: 'success', keluar: 'neutral', bolong: 'warning', masuk_lagi: 'success' };
 
 const SORT_OPTIONS = [
   { key: 'date-desc', label: 'Terbaru Dulu' },
@@ -101,7 +102,10 @@ export default function Attendance() {
       return recs[recs.length - 1];
     };
 
-    const toAutoCloseMasuk = employees.filter(emp => getLastRecord(emp.id)?.type === 'masuk');
+    const toAutoCloseMasuk = employees.filter(emp => {
+      const lastType = getLastRecord(emp.id)?.type;
+      return lastType === 'masuk' || lastType === 'masuk_lagi';
+    });
     const toAutoCloseBolong = employees.filter(emp => getLastRecord(emp.id)?.type === 'bolong');
 
     if (toAutoCloseMasuk.length === 0 && toAutoCloseBolong.length === 0) return;
@@ -154,12 +158,29 @@ export default function Attendance() {
     const records = todayActive
       .filter(r => r.employeeId === emp.id)
       .sort((a, b) => new Date(a.date) - new Date(b.date));
+    
     const lastRecord = records[records.length - 1];
     const bolongRecords = records.filter(r => r.type === 'bolong');
+    const masukLagiRecords = records.filter(r => r.type === 'masuk_lagi');
+    
+    const bolong = bolongRecords[bolongRecords.length - 1];
+    const masukLagi = masukLagiRecords[masukLagiRecords.length - 1];
+
+    // Menghitung durasi bolong untuk ditampilkan di keterangan
+    let durasiBolongText = '';
+    if (bolong && masukLagi && new Date(masukLagi.date) > new Date(bolong.date)) {
+      const diffMins = Math.round((new Date(masukLagi.date) - new Date(bolong.date)) / 60000);
+      const h = Math.floor(diffMins / 60);
+      const m = diffMins % 60;
+      durasiBolongText = `(${h}j ${m}m)`;
+    }
+
     return {
       employee: emp,
       masuk: records.find(r => r.type === 'masuk'),
-      bolong: bolongRecords[bolongRecords.length - 1],
+      bolong,
+      masukLagi,
+      durasiBolongText,
       keluar: records.find(r => r.type === 'keluar'),
       lastRecord,
     };
@@ -350,7 +371,7 @@ export default function Attendance() {
           />
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {employeeStatuses.map(({ employee, masuk, bolong, keluar, lastRecord }) => (
+            {employeeStatuses.map(({ employee, masuk, bolong, masukLagi, durasiBolongText, keluar, lastRecord }) => (
               <div key={employee.id} className="flex flex-col">
                 <div className="p-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -360,6 +381,8 @@ export default function Attendance() {
                     <p className="text-xs text-slate-400 dark:text-slate-500">
                       {masuk ? `Masuk ${fmtTime(masuk.date)}` : 'Belum absen masuk'}
                       {bolong && ` · Bolong ${fmtTime(bolong.date)}`}
+                      {masukLagi && ` - ${fmtTime(masukLagi.date)} `}
+                      {durasiBolongText && <span className="text-amber-500 font-medium">{durasiBolongText}</span>}
                       {keluar && ` · Pulang ${fmtTime(keluar.date)}`}
                       {keluar?.isAutoClose && (
                         <span className={`ml-1 font-medium ${keluar.isFromBolong ? 'text-accent-400' : 'text-amber-500'}`}>
@@ -435,6 +458,7 @@ export default function Attendance() {
                       >
                         <option value="masuk">Masuk</option>
                         <option value="bolong">Jam Bolong</option>
+                        <option value="masuk-lagi">Masuk Lagi</option>
                         <option value="keluar">Keluar</option>
                       </select>
                       <input

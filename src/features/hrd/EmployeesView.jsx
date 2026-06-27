@@ -57,10 +57,12 @@ function formatTimeFromDate(isoStr) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-// === Konstanta aturan jam kerja & lembur ===
-const OVERTIME_THRESHOLD_MINUTES = 19 * 60 + 30; // 19:30 — mulai dihitung lembur otomatis
-const OVERTIME_RATE_PER_30MIN = 5000;            // Rp per 30 menit lembur setelah 19:30
-const SIANG_SHIFT_START_MINUTES = 11 * 60;       // jam masuk >= 11:00 dianggap shift siang (tidak dapat Bonus Full Time)
+// === Konstanta aturan jam kerja & lembur (sesuai SOP tertulis) ===
+const WORK_START_MINUTES = 9 * 60;                              // 09:00 — jam kerja standar mulai
+const WORK_END_MINUTES = 19 * 60;                                // 19:00 — jam kerja standar selesai
+const EARLY_OVERTIME_THRESHOLD_MINUTES = WORK_START_MINUTES - 30; // 08:30 — masuk di jam ini/lebih awal kena lembur awal
+const OVERTIME_THRESHOLD_MINUTES = WORK_END_MINUTES + 30;        // 19:30 — keluar di jam ini/lebih lambat kena lembur akhir
+const OVERTIME_RATE_PER_30MIN = 5000;                            // Rp per kelipatan 30 menit lembur (awal & akhir)
 
 // "HH:MM" → total menit dari tengah malam.
 function timeStrToMinutes(timeStr) {
@@ -81,12 +83,19 @@ function getClockOutMinutesContinuous(clockInStr, clockOutStr) {
 // satu hari (sudah diurutkan ascending by date). Tiap record 'bolong' jadi
 // awal jeda; jeda berakhir di record berikutnya, baik itu 'masuk' lagi
 // (balik kerja) atau 'keluar' (lupa absen balik, sampai hari ditutup).
-function calculateBolongMinutes(sortedLogs) {
+// Kalau 'bolong' itu record TERAKHIR (belum ada masuk/keluar lagi setelahnya —
+// karyawan masih "bolong" pas data ini dibaca), jeda ditutup pakai
+// `fallbackEndDate` (biasanya jam keluar standar/fallback hari itu) supaya
+// gak hilang gak terhitung.
+function calculateBolongMinutes(sortedLogs, fallbackEndDate = null) {
   let totalMinutes = 0;
-  for (let i = 0; i < sortedLogs.length - 1; i++) {
+  for (let i = 0; i < sortedLogs.length; i++) {
     if (sortedLogs[i].type === 'bolong') {
+      const nextLog = sortedLogs[i + 1];
+      const gapEndDate = nextLog ? new Date(nextLog.date) : fallbackEndDate;
+      if (!gapEndDate) continue; // gak ada cara nutup jeda, abaikan
       const gapStart = new Date(sortedLogs[i].date).getTime();
-      const gapEnd = new Date(sortedLogs[i + 1].date).getTime();
+      const gapEnd = gapEndDate.getTime();
       totalMinutes += Math.max(0, (gapEnd - gapStart) / 60000);
     }
   }
@@ -114,6 +123,16 @@ function getEmployeeStatus(emp) {
 function getEmployeeStatusInfo(status) {
   return EMPLOYEE_STATUS_OPTIONS.find(s => s.value === status) || EMPLOYEE_STATUS_OPTIONS[0];
 }
+
+// === Kategori yang sengaja gak ditampilin di dropdown Tambahan/Potongan ===
+// Dicocokkan via .includes() ke nama kategori (case-insensitive), bukan ID,
+// jadi kalau nama kategori ini di-rename lewat "Kelola Kategori", filter di
+// bawah bisa diam-diam gak ngenain lagi — cek manual kalau rename kategori ini.
+// Lembur: 100% otomatis dihitung dari jam absen (lihat efek "Bonus Lembur" di
+// atas), jadi input manual sengaja dihilangkan biar gak dobel bayar.
+const LEMBUR_CATEGORY_KEYWORD = 'lembur';
+// Kasbon: dicatat dari ExpensesView, bukan dari form Input Harian ini.
+const KASBON_CATEGORY_KEYWORD = 'kasbon';
 
 
 // =========================================================================
@@ -166,7 +185,6 @@ const EmployeesView = () => {
   const [adjCategory, setAdjCategory] = useState('');
   const [adjAmount, setAdjAmount] = useState('');
   const [adjNote, setAdjNote] = useState('');
-  const [overtimeHours, setOvertimeHours] = useState('');
   const [adjPaymentMethod, setAdjPaymentMethod] = useState('Tunai');
 
   // Hitung otomatis jumlah jam kerja setiap kali jam masuk/keluar/status libur
@@ -183,19 +201,24 @@ const EmployeesView = () => {
     }
   }, [clockIn, clockOut, isDayOff, bolongMinutes]);
 
-  // 1. AUTO BONUS FULL TIME (Jika jam kerja >= 10, kecuali shift siang)
+  // 1. AUTO BONUS FULL TIME
+  // Sesuai SOP tertulis: hanya diberikan jika absen masuk selambat-lambatnya
+  // 09:00 DAN absen keluar paling cepat 19:00. Gak ada pengecualian shift
+  // siang lagi (sebelumnya ada, sekarang udah di-drop sesuai SOP terbaru).
   useEffect(() => {
-    if (!dailyEmpId) return;
+    if (!dailyEmpId || isDayOff || !clockIn || !clockOut) {
+      setAdditions(prev => prev.filter(a => a.category !== 'Bonus Full Time'));
+      return;
+    }
     const emp = employees.find(e => e.id === dailyEmpId);
     if (!emp) return;
 
     const bonusAmount = emp.fullTimeBonus || 0;
-    // Shift siang (jam masuk >= 11:00) tidak dapat Bonus Full Time walaupun
-    // jam kerja tembus 10 jam — shift ini dapat Bonus Lembur sendiri (lihat efek di bawah).
-    const isShiftSiang = clockIn ? timeStrToMinutes(clockIn) >= SIANG_SHIFT_START_MINUTES : false;
+    const outMinutes = getClockOutMinutesContinuous(clockIn, clockOut);
+    const isEligibleForBonus = timeStrToMinutes(clockIn) <= WORK_START_MINUTES &&
+                                outMinutes >= WORK_END_MINUTES;
 
-    // Jika kerja 10 jam atau lebih, upah bonusnya ada, dan bukan shift siang
-    if (Number(hoursWorked) >= 10 && bonusAmount > 0 && !isShiftSiang) {
+    if (isEligibleForBonus && bonusAmount > 0) {
       setAdditions(prev => {
         // Cek apakah bonus sudah masuk biar tidak duplikat
         const hasBonus = prev.some(a => a.category === 'Bonus Full Time');
@@ -204,59 +227,68 @@ const EmployeesView = () => {
             id: Date.now() + Math.random(),
             category: 'Bonus Full Time',
             amount: Number(bonusAmount),
-            note: '(10 jam)',
+            note: '(Masuk ≤ 09:00 & Pulang ≥ 19:00)',
             expenseRecorded: false
           }];
         }
         return prev;
       });
     } else {
-      // Jam kerja < 10, atau shift siang, atau upah bonus belum diset → tarik kembali bonusnya
+      // Syarat gak terpenuhi, atau upah bonus belum diset → tarik kembali bonusnya
       setAdditions(prev => prev.filter(a => a.category !== 'Bonus Full Time'));
     }
-  }, [hoursWorked, dailyEmpId, employees, clockIn]);
+  }, [clockIn, clockOut, isDayOff, dailyEmpId, employees]);
 
-  // 1B. AUTO BONUS LEMBUR (jam keluar lewat dari 19:30 → Rp5.000 / 30 menit)
-  // Berlaku untuk semua shift, termasuk shift siang yang tidak dapat Bonus Full Time.
+  // 1B. AUTO BONUS LEMBUR (Rp 5.000 / kelipatan 30 menit)
+  // Sesuai SOP tertulis: lembur dihitung kalau masuk <= 08:30 (lembur awal)
+  // DAN/ATAU keluar >= 19:30 (lembur akhir) — keduanya independen, bisa kena
+  // dua-duanya sekaligus. Kelipatan 30 menit dihitung dari jam kerja standar
+  // (09:00 / 19:00), bukan dari threshold 08:30/19:30 itu sendiri.
   useEffect(() => {
     if (!dailyEmpId || isDayOff || !clockIn || !clockOut) {
       setAdditions(prev => prev.filter(a => a.category !== 'Bonus Lembur'));
       return;
     }
 
+    const inMinutes = timeStrToMinutes(clockIn);
     const outMinutes = getClockOutMinutesContinuous(clockIn, clockOut);
-    const overtimeMinutes = Math.max(0, outMinutes - OVERTIME_THRESHOLD_MINUTES);
-    const blocks = Math.floor(overtimeMinutes / 30);
-    const lemburAmount = blocks * OVERTIME_RATE_PER_30MIN;
+
+    // Lembur AWAL: masuk <= 08:30
+    let earlyOvertimeMinutes = 0;
+    if (inMinutes <= EARLY_OVERTIME_THRESHOLD_MINUTES) {
+      earlyOvertimeMinutes = WORK_START_MINUTES - inMinutes; // selisih dari jam 09:00
+    }
+
+    // Lembur AKHIR: keluar >= 19:30
+    let lateOvertimeMinutes = 0;
+    if (outMinutes >= OVERTIME_THRESHOLD_MINUTES) {
+      lateOvertimeMinutes = outMinutes - WORK_END_MINUTES; // selisih dari jam 19:00
+    }
+
+    const earlyBlocks = Math.floor(earlyOvertimeMinutes / 30);
+    const lateBlocks = Math.floor(lateOvertimeMinutes / 30);
+    const totalBlocks = earlyBlocks + lateBlocks;
+    const lemburAmount = totalBlocks * OVERTIME_RATE_PER_30MIN;
 
     setAdditions(prev => {
       const withoutAuto = prev.filter(a => a.category !== 'Bonus Lembur');
       if (lemburAmount > 0) {
+        // Catatan detail biar kelihatan lembur dari sisi mana
+        const notes = [];
+        if (earlyBlocks > 0) notes.push(`Awal ${earlyBlocks * 30}m`);
+        if (lateBlocks > 0) notes.push(`Akhir ${lateBlocks * 30}m`);
+
         return [...withoutAuto, {
           id: Date.now() + Math.random(),
           category: 'Bonus Lembur',
           amount: lemburAmount,
-          note: `(${blocks * 30} menit setelah 19:30)`,
+          note: `(${notes.join(', ')})`,
           expenseRecorded: false
         }];
       }
       return withoutAuto;
     });
   }, [clockIn, clockOut, isDayOff, dailyEmpId]);
-
-  // 2. AUTO HITUNG UANG LEMBUR
-  useEffect(() => {
-    // Mengecek apakah kategori yang dipilih bernama "Lembur"
-    if (adjCategory.toLowerCase() === 'lembur') {
-      const emp = employees.find(e => e.id === dailyEmpId);
-      if (emp && overtimeHours) {
-        // Otomatis ubah Nominal = Jam Lembur * Upah per Jam
-        setAdjAmount(Number(overtimeHours) * (emp.hourlyRate || 0));
-      } else {
-        setAdjAmount('');
-      }
-    }
-  }, [overtimeHours, adjCategory, dailyEmpId, employees]);
 
   // --- STATE UNTUK TAB: REKAP LAPORAN ---
   const [reportMonth, setReportMonth] = useState(toLocalMonthString());
@@ -266,10 +298,10 @@ const EmployeesView = () => {
     if (!empFormData.name || empFormData.hourlyRate <= 0) return triggerAlert('Nama dan Upah per jam harus diisi dengan benar!');
 
     if (empFormData.id) {
-      setEmployees(employees.map(e => e.id === empFormData.id ? empFormData : e));
+      setEmployees(prev => prev.map(e => e.id === empFormData.id ? empFormData : e));
       triggerAlert('Data Karyawan berhasil diupdate.');
     } else {
-      setEmployees([...employees, { ...empFormData, id: `EMP-${Date.now()}` }]);
+      setEmployees(prev => [...prev, { ...empFormData, id: `EMP-${Date.now()}` }]);
       triggerAlert('Karyawan baru berhasil ditambahkan.');
     }
     setIsEditingEmp(false);
@@ -278,7 +310,7 @@ const EmployeesView = () => {
 
   const handleDeleteEmployee = (id) => {
     triggerConfirm('Yakin ingin menghapus data karyawan ini? Data riwayat mungkin akan kehilangan referensi.', () => {
-      setEmployees(employees.filter(e => e.id !== id));
+      setEmployees(prev => prev.filter(e => e.id !== id));
       triggerAlert('Karyawan dihapus.');
     });
   };
@@ -294,10 +326,27 @@ const EmployeesView = () => {
         setIsEditRecordMode(true);
         setCurrentRecordId(existingRecord.id);
         const wasOff = existingRecord.isDayOff || false;
-        setClockIn(wasOff ? '00:00' : (existingRecord.clockIn && existingRecord.clockIn !== '-' ? existingRecord.clockIn : '09:00'));
-        setClockOut(wasOff ? '00:00' : (existingRecord.clockOut && existingRecord.clockOut !== '-' ? existingRecord.clockOut : '19:00'));
+        const loadedClockIn = wasOff ? '00:00' : (existingRecord.clockIn && existingRecord.clockIn !== '-' ? existingRecord.clockIn : '09:00');
+        const loadedClockOut = wasOff ? '00:00' : (existingRecord.clockOut && existingRecord.clockOut !== '-' ? existingRecord.clockOut : '19:00');
+        setClockIn(loadedClockIn);
+        setClockOut(loadedClockOut);
         setHoursWorked(existingRecord.hoursWorked || '');
-        setBolongMinutes(0); // jam kerja record lama sudah final, gak perlu dipotong ulang
+        // PENTING: jangan hardcode ke 0. Effect hitung jam kerja di atas bakal
+        // jalan ulang begitu clockIn/clockOut/bolongMinutes berubah (termasuk
+        // gara-gara load ini), dan effect itu gak tau record ini udah final.
+        // Kalau bolongMinutes dipaksa 0, hasil hitung ulangnya = jam mentah
+        // (tanpa potongan bolong) — beda dari yang tersimpan, lalu malah
+        // ke-overwrite balik ke storage begitu tombol "Simpan Jam Kerja" diklik. Jadi di
+        // sini bolongMinutes direkonstruksi mundur dari selisih jam mentah vs
+        // hoursWorked yang tersimpan, biar hasil hitung ulangnya tetap sama
+        // kayak yang sudah ada (gak berubah cuma gara-gara dibuka).
+        if (!wasOff && loadedClockIn && loadedClockOut) {
+          const rawHours = calculateHoursFromTimes(loadedClockIn, loadedClockOut);
+          const savedHours = Number(existingRecord.hoursWorked) || 0;
+          setBolongMinutes(Math.max(0, (rawHours - savedHours) * 60));
+        } else {
+          setBolongMinutes(0);
+        }
         setIsDayOff(wasOff);
         setAdditions(existingRecord.additions || []);
         setDeductions(existingRecord.deductions || []);
@@ -326,7 +375,11 @@ const EmployeesView = () => {
           setClockOut(keluarStr);
           setIsDayOff(false);
           setAbsenFromAttendance(true);
-          setBolongMinutes(calculateBolongMinutes(empLogs));
+          // Fallback penutup jeda kalau 'bolong' terakhir belum ketutup record
+          // apapun (karyawan masih "bolong") — pakai jam keluar (asli/fallback)
+          // di tanggal yang sama, konsisten sama asumsi clockOut di atas.
+          const bolongFallbackEnd = new Date(`${dailyDate}T${keluarStr}:00`);
+          setBolongMinutes(calculateBolongMinutes(empLogs, bolongFallbackEnd));
         } else {
           // Tidak ada data sama sekali → default libur (perilaku asli)
           setClockIn('09:00');
@@ -339,12 +392,91 @@ const EmployeesView = () => {
     }
   }, [dailyEmpId, dailyDate, employeeDailyRecords, activeTab, attendanceLog]);
 
+  // --- SIMPAN ABSEN (manual, lewat tombol — terpisah dari additions/deductions) ---
+  // additions/deductions di record yang sama TIDAK disentuh sama sekali di sini —
+  // itu murni urusan tombol "Simpan Perubahan" di card Tambahan & Potongan.
+  const handleSaveAttendance = () => {
+    if (!dailyEmpId) return triggerAlert('Pilih karyawan terlebih dahulu!');
+    if (!dailyDate) return triggerAlert('Pilih tanggal input!');
+    if (hoursWorked === '' || hoursWorked === undefined) return triggerAlert('Jam kerja belum kehitung, cek jam masuk/keluar.');
+
+    const nextClockIn = isDayOff ? '' : clockIn;
+    const nextClockOut = isDayOff ? '' : clockOut;
+    const nextHours = isDayOff ? 0 : (Number(hoursWorked) || 0);
+
+    const existing = employeeDailyRecords.find(
+      r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate
+    );
+
+    // Sudah identik dengan yang tersimpan? Gak usah nulis ulang.
+    if (existing &&
+        existing.isDayOff === isDayOff &&
+        existing.clockIn === nextClockIn &&
+        existing.clockOut === nextClockOut &&
+        existing.hoursWorked === nextHours) {
+      return triggerAlert('Tidak ada perubahan jam kerja.');
+    }
+
+    if (existing) {
+      setEmployeeDailyRecords(prev => prev.map(r => r.id === existing.id
+        ? { ...r, isDayOff, clockIn: nextClockIn, clockOut: nextClockOut, hoursWorked: nextHours }
+        : r
+      ));
+    } else {
+      const newRecord = {
+        id: `REC-${Date.now()}`,
+        employeeId: dailyEmpId,
+        date: new Date(dailyDate),
+        dateStr: dailyDate,
+        isDayOff,
+        clockIn: nextClockIn,
+        clockOut: nextClockOut,
+        hoursWorked: nextHours,
+        additions: [],
+        deductions: []
+      };
+      setEmployeeDailyRecords(prev => [newRecord, ...prev]);
+      setIsEditRecordMode(true);
+      setCurrentRecordId(newRecord.id);
+    }
+
+    triggerAlert('Jam kerja tersimpan!');
+  };
+
+  // Karyawan ini udah ada record 'masuk' di attendanceLog buat tanggal yang
+  // dipilih? Dicek langsung ke attendanceLog (ground truth), bukan ke state
+  // form (isDayOff/absenFromAttendance) — soalnya state form bisa berubah-ubah
+  // pas toggle Masuk/Libur, tapi attendanceLog gak ikut berubah. Dipakai buat
+  // nge-block toggle ke Libur kalau orangnya udah absen masuk (lihat toggle di
+  // bawah) — biar gak ke-reset balik ke jam default pas Libur→Masuk lagi.
+  const hasAttendanceMasuk = useMemo(() => {
+    if (!dailyEmpId || !dailyDate) return false;
+    return activeOnly(attendanceLog ?? []).some(
+      r => r.employeeId === dailyEmpId && r.dateStr === dailyDate && r.type === 'masuk'
+    );
+  }, [dailyEmpId, dailyDate, attendanceLog]);
+
+  // Indikator: ada perubahan additions/deductions (termasuk bonus otomatis
+  // Full Time / Lembur) yang belum ke-klik "Simpan Perubahan". Jam kerja punya
+  // tombol simpannya sendiri ("Simpan Jam Kerja") — keduanya sengaja independen,
+  // ini cuma reminder visual khusus buat sisi additions/deductions biar gak
+  // ketinggalan kesimpen pas ganti karyawan/tanggal sebelum sempat klik simpan.
+  const hasUnsavedAdjustments = useMemo(() => {
+    if (!dailyEmpId || !dailyDate) return false;
+    const existing = employeeDailyRecords.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
+    const savedAdditions = existing?.additions || [];
+    const savedDeductions = existing?.deductions || [];
+    if (additions.length !== savedAdditions.length || deductions.length !== savedDeductions.length) return true;
+    return JSON.stringify(additions) !== JSON.stringify(savedAdditions) ||
+           JSON.stringify(deductions) !== JSON.stringify(savedDeductions);
+  }, [additions, deductions, dailyEmpId, dailyDate, employeeDailyRecords]);
+
   const handleAddAdjustment = () => {
     if (!adjCategory) return triggerAlert('Pilih kategori terlebih dahulu!');
     if (!adjAmount || Number(adjAmount) <= 0) return triggerAlert('Masukkan nominal yang valid!');
 
     const newItem = {
-      id: Date.now(),
+      id: Date.now() + Math.random(),
       category: adjCategory,
       amount: Number(adjAmount),
       note: adjNote,
@@ -353,16 +485,19 @@ const EmployeesView = () => {
     };
 
     if (adjType === 'addition') {
-      setAdditions([...additions, newItem]);
+      setAdditions(prev => [...prev, newItem]);
     } else {
-      setDeductions([...deductions, newItem]);
+      setDeductions(prev => [...prev, newItem]);
     }
 
     setAdjAmount('');
     setAdjNote('');
-    setOvertimeHours('');
   };
 
+  // Simpan MANUAL — sekarang cuma nyentuh additions/deductions. Field absen
+  // (isDayOff/clockIn/clockOut/hoursWorked) punya tombol "Simpan Jam Kerja"
+  // sendiri (handleSaveAttendance di atas), jadi di sini gak perlu (dan gak
+  // boleh) ditimpa lagi — dua tombol, dua tanggung jawab yang independen.
   const handleSaveDailyRecord = () => {
     if (!dailyEmpId) return triggerAlert('Pilih karyawan terlebih dahulu!');
     if (!dailyDate) return triggerAlert('Pilih tanggal input!');
@@ -371,17 +506,15 @@ const EmployeesView = () => {
     const validDeductions = deductions.filter(d => d.category && d.amount > 0);
     const empName = employees.find(e => e.id === dailyEmpId)?.name || 'Karyawan';
 
-    // Integrasi Pengeluaran (Kasbon manual via form daily di-log sbg pengeluaran)
+    // Integrasi Pengeluaran: potongan Tunai (selain Kasbon — Kasbon sekarang dicatat
+    // langsung dari ExpensesView, bukan dari sini lagi) tetap di-log juga sbg pengeluaran kas.
     const generatedExpenses = [];
     const updatedDeductions = validDeductions.map(d => {
       if (d.paymentMethod === 'Tunai' && !d.expenseRecorded) {
-        let expCategory = 'Lain-lain';
-        if (d.category.toLowerCase().includes('kasbon')) expCategory = 'Kasbon Karyawan';
-
         generatedExpenses.push({
           id: `EXP-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
           amount: d.amount,
-          category: expCategory,
+          category: 'Lain-lain',
           note: `Potongan ${empName} (${d.category})${d.note ? ' - ' + d.note : ''}`,
           date: new Date(dailyDate),
           paymentMethod: 'Tunai',
@@ -397,44 +530,59 @@ const EmployeesView = () => {
       setExpenses([...generatedExpenses, ...expenses]);
     }
 
-    const recordData = {
-      id: isEditRecordMode ? currentRecordId : `REC-${Date.now()}`,
-      employeeId: dailyEmpId,
-      date: new Date(dailyDate),
-      dateStr: dailyDate,
-      isDayOff: isDayOff, // <-- Simpan status libur
-      clockIn: isDayOff ? '' : clockIn,   // <-- Kosongkan jam jika libur
-      clockOut: isDayOff ? '' : clockOut, // <-- Kosongkan jam jika libur
-      hoursWorked: isDayOff ? 0 : (Number(hoursWorked) || 0),
-      additions: validAdditions,
-      deductions: updatedDeductions
-    };
+    setEmployeeDailyRecords(prev => {
+      const existing = prev.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
 
-    if (isEditRecordMode) {
-      setEmployeeDailyRecords(employeeDailyRecords.map(r => r.id === currentRecordId ? recordData : r));
-      triggerAlert('Data harian berhasil diubah!');
-    } else {
-      setEmployeeDailyRecords([recordData, ...employeeDailyRecords]);
-      triggerAlert('Data harian berhasil disimpan!');
-    }
+      if (existing) {
+        return prev.map(r => r.id === existing.id
+          ? { ...r, additions: validAdditions, deductions: updatedDeductions }
+          : r
+        );
+      }
+
+      // Fallback: kalau entah kenapa belum ada record absen sama sekali (mis. hoursWorked
+      // belum sempat kehitung), bikin record baru dari kondisi absen yang ada di form saat ini.
+      const newRecord = {
+        id: `REC-${Date.now()}`,
+        employeeId: dailyEmpId,
+        date: new Date(dailyDate),
+        dateStr: dailyDate,
+        isDayOff,
+        clockIn: isDayOff ? '' : clockIn,
+        clockOut: isDayOff ? '' : clockOut,
+        hoursWorked: isDayOff ? 0 : (Number(hoursWorked) || 0),
+        additions: validAdditions,
+        deductions: updatedDeductions
+      };
+      setIsEditRecordMode(true);
+      setCurrentRecordId(newRecord.id);
+      return [newRecord, ...prev];
+    });
+
+    triggerAlert('Perubahan tambahan & potongan berhasil disimpan!');
   };
 
   const handleDeleteDailyRecord = (id) => {
     triggerConfirm('Hapus catatan harian ini?', () => {
-      setEmployeeDailyRecords(employeeDailyRecords.map(r => r.id === id ? markDeleted(r) : r));
+      setEmployeeDailyRecords(prev => prev.map(r => r.id === id ? markDeleted(r) : r));
       triggerAlert('Catatan dihapus!');
-      setDailyEmpId('');
+      // Cuma reset form Input Harian kalau yang dihapus emang record yang
+      // lagi dibuka di form itu — kalau hapus record LAIN langsung dari list
+      // (yang gak sedang dibuka), form yang sedang dipakai gak boleh keganggu.
+      if (id === currentRecordId) {
+        setDailyEmpId('');
+      }
     });
   };
 
   const handleRestoreDailyRecord = (id) => {
-    setEmployeeDailyRecords(employeeDailyRecords.map(r => r.id === id ? restoreItem(r) : r));
+    setEmployeeDailyRecords(prev => prev.map(r => r.id === id ? restoreItem(r) : r));
     triggerAlert('Catatan dipulihkan!');
   };
 
   const handlePermanentDeleteDailyRecord = (id) => {
     triggerConfirm('Hapus permanen catatan ini? Tindakan ini tidak bisa dibatalkan', () => {
-      setEmployeeDailyRecords(employeeDailyRecords.filter(r => r.id !== id));
+      setEmployeeDailyRecords(prev => prev.filter(r => r.id !== id));
       // Langsung kirim delete ke Supabase saat ini juga — gak nunggu siklus
       // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
       pushTransactionDelete('employeeDailyRecords', id).catch(err =>
@@ -474,7 +622,7 @@ const EmployeesView = () => {
         const emp = employees.find(e => e.id === rec.employeeId);
         perf[rec.employeeId] = {
           employee: emp || { name: 'Karyawan Dihapus', hourlyRate: 0 },
-          totalHours: 0, totalAdditions: 0, totalDeductions: 0, netPay: 0, records: []
+          totalHours: 0, totalAdditions: 0, totalDeductions: 0, totalKasbon: 0, netPay: 0, records: []
         };
       }
       const data = perf[rec.employeeId];
@@ -482,11 +630,33 @@ const EmployeesView = () => {
       data.totalHours += rec.hoursWorked;
 
       const addSum = rec.additions.reduce((sum, a) => sum + a.amount, 0);
-      const dedSum = rec.deductions.reduce((sum, d) => sum + d.amount, 0);
+      // Kasbon legacy (kalau ada record lama yg masih nyimpen potongan kategori Kasbon)
+      // sengaja DIKELUARIN dari sini, karena sumber Kasbon sekarang full dari Expenses
+      // di bawah — biar gak dobel hitung buat bulan-bulan lama.
+      const dedSum = rec.deductions
+        .filter(d => !d.category?.toLowerCase().includes(KASBON_CATEGORY_KEYWORD))
+        .reduce((sum, d) => sum + d.amount, 0);
 
       data.totalAdditions += addSum;
       data.totalDeductions += dedSum;
     });
+
+    // Kasbon Karyawan sekarang diinput dari ExpensesView, bukan dari form Input Harian lagi.
+    // Ditarik langsung dari `expenses`, difilter per karyawan & bulan laporan, lalu ikut
+    // motong gaji bersih di sini.
+    activeOnly(expenses ?? [])
+      .filter(exp => exp.category === 'Kasbon Karyawan' && exp.employeeId && toLocalMonthString(exp.date) === reportMonth)
+      .forEach(exp => {
+        if (!perf[exp.employeeId]) {
+          const emp = employees.find(e => e.id === exp.employeeId);
+          if (!emp) return; // kasbon nyantol ke karyawan yang datanya udah gak ada
+          perf[exp.employeeId] = {
+            employee: emp, totalHours: 0, totalAdditions: 0, totalDeductions: 0, totalKasbon: 0, netPay: 0, records: []
+          };
+        }
+        perf[exp.employeeId].totalKasbon += exp.amount;
+        perf[exp.employeeId].totalDeductions += exp.amount;
+      });
 
     Object.values(perf).forEach(p => {
       const basicPay = p.totalHours * p.employee.hourlyRate;
@@ -494,7 +664,7 @@ const EmployeesView = () => {
     });
 
     return Object.values(perf);
-  }, [filteredRecordsForReport, employees]);
+  }, [filteredRecordsForReport, employees, expenses, reportMonth]);
 
   const totalPayrollExpense = employeePerformance.reduce((sum, p) => sum + p.netPay, 0);
 
@@ -534,10 +704,11 @@ const EmployeesView = () => {
 
   const renderInputTab = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full animate-in fade-in slide-in-from-right-4 duration-300">
-      <Card padding="lg" className="lg:col-span-1 flex flex-col h-fit">
+      <div className="lg:col-span-1 flex flex-col gap-6">
+      <Card padding="lg" className="flex flex-col h-fit">
         <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
           <Calendar className="w-5 h-5 text-slate-800 dark:text-slate-100" />
-          <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Form Input Harian</h3>
+          <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Absen</h3>
         </div>
 
         <div className="space-y-4">
@@ -582,12 +753,6 @@ const EmployeesView = () => {
             </Alert>
           )}
 
-          {isEditRecordMode && (
-            <Alert type="callout" variant="info">
-              Data sudah ada, mengubah data yang ada.
-            </Alert>
-          )}
-
           {/* Toggle Masuk / Libur */}
           <div>
             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
@@ -596,10 +761,18 @@ const EmployeesView = () => {
             <SegmentedControl
               options={[
                 { value: false, label: 'Masuk', tone: 'green' },
-                { value: true, label: 'Libur', tone: 'red' },
+                { value: true, label: 'Libur', tone: 'red', disabled: hasAttendanceMasuk },
               ]}
               value={isDayOff}
+              disabled={hasAttendanceMasuk && !isDayOff}
               onChange={(val) => {
+                // Safety net: meskipun opsi "Libur" udah ke-disable di atas,
+                // tetep di-block juga di sini biar gak ada jalan tembus —
+                // kalau udah absen masuk, jam yang ke-isi dari attendanceLog
+                // gak boleh ke-reset jadi jam default cuma gara-gara toggle.
+                if (val && hasAttendanceMasuk) {
+                  return triggerAlert('Karyawan ini sudah absen masuk hari ini, gak bisa ditandai Libur.');
+                }
                 setIsDayOff(val);
                 setAbsenFromAttendance(false);
                 setBolongMinutes(0); // toggle manual → bukan lagi dari data absensi
@@ -612,6 +785,11 @@ const EmployeesView = () => {
                 }
               }}
             />
+            {hasAttendanceMasuk && (
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">
+                Karyawan ini sudah absen masuk hari ini, jadi gak bisa ditandai Libur.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -653,13 +831,21 @@ const EmployeesView = () => {
             className="opacity-75 cursor-not-allowed"
           />
 
-          <Card padding="md" className="mt-4">
-            <div className="flex items-center gap-2 mb-4">
-              <Wallet className="w-5 h-5 text-green-600 dark:text-green-400" />
-              <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">Tambahan & Potongan</h4>
-            </div>
+          {dailyEmpId && dailyDate && (
+            <Button variant="primary" size="full" className="mt-1" icon={<Save className="w-4 h-4" />} onClick={handleSaveAttendance}>
+              Simpan Jam Kerja
+            </Button>
+          )}
+        </div>
+      </Card>
 
-            <div className="space-y-4">
+      <Card padding="lg" className="flex flex-col h-fit">
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <Wallet className="w-5 h-5 text-green-600 dark:text-green-400" />
+          <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Tambahan & Potongan</h3>
+        </div>
+
+        <div className="space-y-4">
               <SegmentedControl
                 options={[
                   { value: 'addition', label: 'Penghasilan (+)', tone: 'green' },
@@ -689,37 +875,35 @@ const EmployeesView = () => {
                 >
                   <option value="">Pilih Kategori</option>
                   {adjType === 'addition'
-                    ? [...new Set(additionCategories)].map(c => <option key={c} value={c}>{c}</option>)
-                    : [...new Set(deductionCategories)].map(c => <option key={c} value={c}>{c}</option>)
+                    // Lembur disengaja gak ditampilin di sini — sudah 100% otomatis
+                    // dihitung dari jam absen (lihat "Bonus Lembur"), biar gak dobel bayar.
+                    ? [...new Set(additionCategories)].filter(c => !c.toLowerCase().includes(LEMBUR_CATEGORY_KEYWORD)).map(c => <option key={c} value={c}>{c}</option>)
+                    // Kasbon Karyawan disengaja gak ditampilin di sini — diinput langsung dari ExpensesView.
+                    : [...new Set(deductionCategories)].filter(c => !c.toLowerCase().includes(KASBON_CATEGORY_KEYWORD)).map(c => <option key={c} value={c}>{c}</option>)
                   }
                 </Select>
               </div>
 
-              {adjCategory.toLowerCase() === 'lembur' && (
-                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-                  <Input
-                    type="number"
-                    step="any"
-                    min="0"
-                    label="Total Jam Lembur"
-                    variant="muted"
-                    placeholder="Contoh: 2.5"
-                    value={overtimeHours}
-                    onChange={(e) => setOvertimeHours(e.target.value)}
-                  />
-                </div>
+              {adjType === 'deduction' && (
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 -mt-1">
+                  Kasbon karyawan? Input dari halaman <span className="font-bold">Pengeluaran</span>, bukan di sini.
+                </p>
+              )}
+
+              {adjType === 'addition' && (
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 -mt-1">
+                  Lembur karyawan? Sudah otomatis terhitung dari jam absen, gak perlu input manual di sini.
+                </p>
               )}
 
               <Input
                 type="number"
-                label={adjCategory.toLowerCase() === 'lembur' ? 'Nominal Lembur' : 'Nominal'}
+                label="Nominal"
                 variant="muted"
                 icon={<span className="font-bold">Rp</span>}
                 placeholder="0"
                 value={adjAmount}
                 onChange={(e) => setAdjAmount(e.target.value)}
-                readOnly={adjCategory.toLowerCase() === 'lembur'}
-                className={adjCategory.toLowerCase() === 'lembur' ? 'opacity-80 cursor-not-allowed' : ''}
               />
 
               {adjType === 'deduction' && (
@@ -756,8 +940,6 @@ const EmployeesView = () => {
               >
                 {adjType === 'addition' ? 'Tambah Penghasilan' : 'Tambah Potongan'}
               </Button>
-            </div>
-          </Card>
 
           {(additions.length > 0 || deductions.length > 0) && (
             <Card variant="muted" padding="sm" className="space-y-3">
@@ -775,7 +957,7 @@ const EmployeesView = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-green-600 dark:text-green-400">+{formatRupiah(add.amount)}</span>
-                          <IconButton variant="delete" size="sm" onClick={() => setAdditions(additions.filter(a => a.id !== add.id))}>
+                          <IconButton variant="delete" size="sm" onClick={() => setAdditions(prev => prev.filter(a => a.id !== add.id))}>
                             <Trash2 className="w-3 h-3" />
                           </IconButton>
                         </div>
@@ -787,7 +969,7 @@ const EmployeesView = () => {
 
               {deductions.length > 0 && (
                 <div>
-                  <span className="text-[10px] font-bold text-accent-500 dark:text-accent-400 flex items-center gap-1 mb-1 mt-2"><Minus className="w-3 h-3" /> POTONGAN</span>
+                  <span className="text-[10px] font-bold text-red-500 dark:text-red-400 flex items-center gap-1 mb-1 mt-2"><Minus className="w-3 h-3" /> POTONGAN</span>
                   <div className="space-y-1.5">
                     {deductions.map((ded) => (
                       <div key={ded.id} className="flex justify-between items-center bg-white dark:bg-slate-900 p-2 border border-slate-100 dark:border-slate-800 rounded-lg shadow-sm text-xs">
@@ -797,8 +979,8 @@ const EmployeesView = () => {
                           {ded.note && <span className="text-slate-400 dark:text-slate-500 ml-1 text-[10px]">({ded.note})</span>}
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-accent-500 dark:text-accent-400">-{formatRupiah(ded.amount)}</span>
-                          <IconButton variant="delete" size="sm" onClick={() => setDeductions(deductions.filter(d => d.id !== ded.id))}>
+                          <span className="font-bold text-red-500 dark:text-red-400">-{formatRupiah(ded.amount)}</span>
+                          <IconButton variant="delete" size="sm" onClick={() => setDeductions(prev => prev.filter(d => d.id !== ded.id))}>
                             <Trash2 className="w-3 h-3" />
                           </IconButton>
                         </div>
@@ -810,11 +992,18 @@ const EmployeesView = () => {
             </Card>
           )}
 
+          {hasUnsavedAdjustments && (
+            <Alert type="callout" variant="warning">
+              Ada tambahan/potongan (termasuk bonus otomatis) yang belum disimpan. Klik "Simpan Perubahan" di bawah biar gak hilang kalau ganti karyawan/tanggal.
+            </Alert>
+          )}
+
           <Button variant="primary" size="full" className="mt-4" icon={<Save className="w-4 h-4" />} onClick={handleSaveDailyRecord}>
-            {isEditRecordMode ? 'Simpan Perubahan' : 'Simpan Data Harian'}
+            Simpan Perubahan
           </Button>
         </div>
       </Card>
+      </div>
 
       <Card padding="none" className="lg:col-span-2 flex flex-col h-[650px]">
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
@@ -824,14 +1013,14 @@ const EmployeesView = () => {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowTrash(v => !v)}
-              className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
+              className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >
               {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(employeeDailyRecords).length})`}
             </button>
             <button
               type="button"
               onClick={() => setIsDailySortOpen(true)}
-              className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+              className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
             >
               <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
             </button>
@@ -851,7 +1040,7 @@ const EmployeesView = () => {
               const addSum = rec.additions.reduce((s, a) => s + a.amount, 0);
               const dedSum = rec.deductions.reduce((s, d) => s + d.amount, 0);
               return (
-                <div key={rec.id} className="flex flex-col p-4 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-accent-200 dark:hover:border-accent-500/30 transition-all duration-200 animate-in slide-in-from-left-2">
+                <div key={rec.id} className="flex flex-col p-4 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-orange-200 dark:hover:border-orange-500/30 transition-all duration-200 animate-in slide-in-from-left-2">
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{emp ? emp.name : 'Karyawan (Dihapus)'}</p>
@@ -885,7 +1074,7 @@ const EmployeesView = () => {
                       {rec.additions.map((a, i) => <div key={i} className="text-[10px] text-slate-500 dark:text-slate-400">- {a.category} ({formatRupiah(a.amount)})</div>)}
                     </div>
                     <div>
-                      <span className="text-accent-500 dark:text-accent-400 font-bold block mb-1">Potongan: -{formatRupiah(dedSum)}</span>
+                      <span className="text-red-500 dark:text-red-400 font-bold block mb-1">Potongan: -{formatRupiah(dedSum)}</span>
                       {rec.deductions.map((d, i) => <div key={i} className="text-[10px] text-slate-500 dark:text-slate-400">- {d.category} ({formatRupiah(d.amount)})</div>)}
                     </div>
                   </div>
@@ -901,7 +1090,7 @@ const EmployeesView = () => {
   const renderReportsTab = () => (
     <div className="space-y-6 h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
       <Card className="flex justify-between items-center">
-        <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PieChart className="w-5 h-5 text-accent-600 dark:text-accent-400" /> Rekap Penggajian</h3>
+        <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PieChart className="w-5 h-5 text-orange-600 dark:text-orange-400" /> Rekap Penggajian</h3>
         <div className="flex items-center gap-2">
           <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Bulan Laporan:</label>
           <div className="w-40">
@@ -932,7 +1121,7 @@ const EmployeesView = () => {
           <button
             type="button"
             onClick={() => setIsPerfSortOpen(true)}
-            className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+            className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
           >
             <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
           </button>
@@ -961,7 +1150,7 @@ const EmployeesView = () => {
                     </td>
                     <td className="p-4 text-center font-semibold text-slate-700 dark:text-slate-200 text-sm">{p.totalHours}</td>
                     <td className="p-4 text-right font-bold text-green-600 dark:text-green-400 text-sm">+{formatRupiah(p.totalAdditions)}</td>
-                    <td className="p-4 text-right font-bold text-accent-500 dark:text-accent-400 text-sm">-{formatRupiah(p.totalDeductions)}</td>
+                    <td className="p-4 text-right font-bold text-red-500 dark:text-red-400 text-sm">-{formatRupiah(p.totalDeductions)}</td>
                     <td className="p-4 text-right font-black text-slate-900 dark:text-slate-50 text-sm">{formatRupiah(p.netPay)}</td>
                     <td className="p-4 text-center">
                       <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>
@@ -1075,7 +1264,7 @@ const EmployeesView = () => {
             />
             <Input
               type="number"
-              label="Bonus Full Time >= 10 Jam (Rp)"
+              label="Bonus Full Time (Masuk ≤09:00 & Pulang ≥19:00) (Rp)"
               variant="muted"
               icon={<span className="font-bold">Rp</span>}
               value={empFormData.fullTimeBonus === 0 ? "" : empFormData.fullTimeBonus}
@@ -1109,7 +1298,7 @@ const EmployeesView = () => {
               <select
                 value={empStatusFilter}
                 onChange={e => setEmpStatusFilter(e.target.value)}
-                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 bg-transparent focus:outline-none"
+                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 bg-transparent focus:outline-none"
               >
                 <option value="semua">Semua Status</option>
                 {EMPLOYEE_STATUS_OPTIONS.map(opt => (
@@ -1119,7 +1308,7 @@ const EmployeesView = () => {
               <button
                 type="button"
                 onClick={() => setIsEmpSortOpen(true)}
-                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
               >
                 <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>
@@ -1149,7 +1338,7 @@ const EmployeesView = () => {
                 </div>
 
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-full flex items-center justify-center font-heading font-black text-xl">
+                  <div className="w-12 h-12 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-full flex items-center justify-center font-heading font-black text-xl">
                     {emp.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
@@ -1165,7 +1354,7 @@ const EmployeesView = () => {
 
                 <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-800 pt-3 text-sm">
                   <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400 font-medium">No. HP:</span><span className="font-semibold text-slate-700 dark:text-slate-200">{emp.phone || '-'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400 font-medium">Upah/Jam:</span><span className="font-bold text-accent-600 dark:text-accent-400">{formatRupiah(emp.hourlyRate)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400 font-medium">Upah/Jam:</span><span className="font-bold text-orange-600 dark:text-orange-400">{formatRupiah(emp.hourlyRate)}</span></div>
                   {emp.status === 'resign' && emp.resignDate && (
                     <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400 font-medium">Resign:</span><span className="font-semibold text-slate-700 dark:text-slate-200">{new Date(emp.resignDate).toLocaleDateString('id-ID')}</span></div>
                   )}
