@@ -1,13 +1,26 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../../context/AppContext';
 import { formatRupiah } from '../../../utils/formatters';
-import { Card, IconButton, PageHeader, EmptyState, Badge } from '../../../components/ui';
-import { BookOpen, Search, X, Edit3, Trash2, TrendingDown } from 'lucide-react';
+import { Card, IconButton, PageHeader, EmptyState, Badge, SortModal } from '../../../components/ui';
+import { applySort } from '../../../utils/sortUtils';
+import { BookOpen, Search, X, Edit3, Trash2, TrendingDown, ArrowUpDown } from 'lucide-react';
 
 const LibraryHppView = () => {
     const { hppLibrary, setHppLibrary, availableMaterials, categories, triggerConfirm, setEditingRecipe, setActiveTab } = useAppContext();
 
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortKey, setSortKey] = useState('name-asc'); // gabungan field-direction, dipasangin ke applySort
+    const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
+
+    // Daftar opsi urutan buat SortModal — key = "field-direction"
+    const sortOptions = [
+        { key: 'name-asc', label: 'Nama Menu (A-Z)' },
+        { key: 'name-desc', label: 'Nama Menu (Z-A)' },
+        { key: 'price-desc', label: 'Harga Jual Tertinggi' },
+        { key: 'price-asc', label: 'Harga Jual Terendah' },
+        { key: 'margin-desc', label: 'Margin Terbesar' },
+        { key: 'margin-asc', label: 'Margin Terkecil' },
+    ];
 
     const handleDelete = (id) => {
         triggerConfirm('Yakin ingin menghapus resep menu ini dari Library?', () => {
@@ -58,25 +71,36 @@ const LibraryHppView = () => {
                 className="border-b border-slate-200 dark:border-slate-700 pb-5"
             />
 
-            {/* Input Pencarian */}
-            <div className="relative w-full sm:w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
-                <input
-                    type="text"
-                    placeholder="Cari menu..."
-                    className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                {searchQuery && (
-                    <button
-                        onClick={() => setSearchQuery('')}
-                        aria-label="Hapus pencarian"
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                )}
+            {/* Input Pencarian & Tombol Urutkan */}
+            <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
+                    <input
+                        type="text"
+                        placeholder="Cari menu..."
+                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            aria-label="Hapus pencarian"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => setIsSortOpen(true)}
+                    className="w-full sm:w-48 flex items-center justify-between gap-2 pl-4 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-orange-300 dark:hover:border-orange-500/40 transition-colors text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+                >
+                    <span className="truncate">{sortOptions.find(o => o.key === sortKey)?.label || 'Urutkan'}</span>
+                    <ArrowUpDown className="text-slate-400 dark:text-slate-500 w-4 h-4 shrink-0" />
+                </button>
             </div>
 
             {hppLibrary.length === 0 ? (
@@ -94,6 +118,13 @@ const LibraryHppView = () => {
                         );
                         if (!items || items.length === 0) return null;
 
+                        // Urutkan item dalam kategori ini pakai sortKey terpilih ("name-asc", "price-desc", dst)
+                        const sortedItems = applySort(items, sortKey, {
+                            name: i => i.name || '',
+                            price: i => i.finalPrice || 0,
+                            margin: i => i.actualMarginPercent || 0,
+                        });
+
                         return (
                             <div key={category} className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                 <div className="flex items-center gap-3">
@@ -103,7 +134,7 @@ const LibraryHppView = () => {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                                    {items.map(item => {
+                                    {sortedItems.map(item => {
                                         const isMarginDanger = item.actualMarginPercent < (item.marginPercent / 2);
                                         return (
                                             <Card key={item.id} padding="lg" className="relative group hover:shadow-md transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between">
@@ -154,6 +185,14 @@ const LibraryHppView = () => {
                     })}
                 </div>
             )}
+
+            <SortModal
+                isOpen={isSortOpen}
+                onClose={() => setIsSortOpen(false)}
+                value={sortKey}
+                onChange={setSortKey}
+                options={sortOptions}
+            />
         </div>
     );
 };

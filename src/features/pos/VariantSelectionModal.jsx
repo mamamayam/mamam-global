@@ -11,23 +11,28 @@ const VariantSelectionModal = () => {
   const setVariantSelectedOptions = usePosStore((state) => state.setVariantSelectedOptions);
   const editingCartItemId = usePosStore((state) => state.editingCartItemId);
   const setEditingCartItemId = usePosStore((state) => state.setEditingCartItemId);
+  // addToCart diambil dari store, BUKAN dari context
+  const addToCart = usePosStore((state) => state.addToCart);
 
   // ─── AMBIL DARI CONTEXT ───
-  const { 
-    variantGroups, 
-    formatRupiah, 
-    addToCart, 
-    updateCartItemVariants
+  const {
+    variantGroups,
+    formatRupiah,
+    updateCartItemVariants,
   } = useAppContext();
 
   if (!selectedMenuForVariant) return null;
-  const menuVariants = variantGroups.filter(vg => selectedMenuForVariant.variantGroupIds.includes(vg.id));
+
+  const menuVariants = variantGroups.filter(vg =>
+    selectedMenuForVariant.variantGroupIds.includes(vg.id)
+  );
 
   const handleToggleOption = (groupId, optionId, maxSelection) => {
     setVariantSelectedOptions(prev => {
       const currentGroupSelections = prev[groupId] || [];
-      if (currentGroupSelections.includes(optionId)) return { ...prev, [groupId]: currentGroupSelections.filter(id => id !== optionId) };
-      else {
+      if (currentGroupSelections.includes(optionId)) {
+        return { ...prev, [groupId]: currentGroupSelections.filter(id => id !== optionId) };
+      } else {
         if (maxSelection === 1) return { ...prev, [groupId]: [optionId] };
         else if (currentGroupSelections.length < maxSelection) return { ...prev, [groupId]: [...currentGroupSelections, optionId] };
         else return prev;
@@ -43,16 +48,21 @@ const VariantSelectionModal = () => {
   const handleCloseModal = () => {
     setSelectedMenuForVariant(null);
     setVariantSelectedOptions({});
-    setEditingCartItemId(null); 
+    setEditingCartItemId(null);
   };
 
   const handleSave = () => {
+    if (!isSelectionValid) return;
+
     if (editingCartItemId) {
       updateCartItemVariants(editingCartItemId, variantSelectedOptions);
       setEditingCartItemId(null);
       setSelectedMenuForVariant(null);
     } else {
-      addToCart(selectedMenuForVariant, variantSelectedOptions);
+      // Pass variantGroups agar addToCart bisa kalkulasi extraPrice & variantName
+      addToCart(selectedMenuForVariant, variantSelectedOptions, variantGroups);
+      setSelectedMenuForVariant(null);
+      setVariantSelectedOptions({});
     }
   };
 
@@ -65,13 +75,24 @@ const VariantSelectionModal = () => {
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg leading-tight">
               {editingCartItemId ? `Edit Varian: ${selectedMenuForVariant.name}` : selectedMenuForVariant.name}
             </h3>
-            <p className="text-sm font-bold text-accent-600 dark:text-accent-400">{formatRupiah(selectedMenuForVariant.price)}</p>
+            <p className="text-sm font-bold text-accent-600 dark:text-accent-400">
+              {formatRupiah(selectedMenuForVariant.price)}
+            </p>
           </div>
-          <button onClick={handleCloseModal} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"><X className="w-5 h-5" /></button>
+          <button
+            onClick={handleCloseModal}
+            className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         <div className="p-5 overflow-y-auto flex-1 space-y-6 bg-slate-50 dark:bg-slate-950/50">
-          {menuVariants.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400 italic text-center py-4">Tidak ada variasi untuk menu ini.</p>}
+          {menuVariants.length === 0 && (
+            <p className="text-sm text-slate-500 dark:text-slate-400 italic text-center py-4">
+              Tidak ada variasi untuk menu ini.
+            </p>
+          )}
 
           {menuVariants.map(vg => {
             const currentSelections = variantSelectedOptions[vg.id] || [];
@@ -84,22 +105,40 @@ const VariantSelectionModal = () => {
                     <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">{vg.name}</h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">Pilih maksimal {vg.maxSelection}</p>
                   </div>
-                  {vg.isRequired ? <span className="text-[10px] font-bold bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 px-2 py-1 rounded-md uppercase tracking-wider">Wajib</span> : <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-md uppercase tracking-wider">Opsional</span>}
+                  {vg.isRequired
+                    ? <span className="text-[10px] font-bold bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 px-2 py-1 rounded-md uppercase tracking-wider">Wajib</span>
+                    : <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-md uppercase tracking-wider">Opsional</span>
+                  }
                 </div>
                 <div className="p-2">
                   {vg.options.map(opt => {
                     const isSelected = currentSelections.includes(opt.id);
                     const isDisabled = !isSelected && isMaxReached;
                     return (
-                      <label key={opt.id} className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors duration-200 ${isSelected ? 'bg-accent-50 dark:bg-accent-500/10 border border-orange-200 dark:border-orange-500/30 shadow-sm' : 'hover:bg-slate-50 dark:hover:bg-slate-950 border border-transparent'} ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                      <label
+                        key={opt.id}
+                        className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors duration-200 
+                          ${isSelected ? 'bg-accent-50 dark:bg-accent-500/10 border border-orange-200 dark:border-orange-500/30 shadow-sm' : 'hover:bg-slate-50 dark:hover:bg-slate-950 border border-transparent'} 
+                          ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
                         <div className="flex items-center gap-3">
                           <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${isSelected ? 'bg-accent-600 dark:bg-accent-500 border-orange-600 dark:border-orange-500' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`}>
                             {isSelected && <CheckCircle2 className="w-4 h-4 text-white animate-in zoom-in" />}
                           </div>
-                          <span className={`font-semibold text-sm ${isSelected ? 'text-accent-600 dark:text-accent-400' : 'text-slate-700 dark:text-slate-200'}`}>{opt.name}</span>
+                          <span className={`font-semibold text-sm ${isSelected ? 'text-accent-600 dark:text-accent-400' : 'text-slate-700 dark:text-slate-200'}`}>
+                            {opt.name}
+                          </span>
                         </div>
-                        <span className="text-sm font-bold text-slate-500 dark:text-slate-400">{opt.extraPrice > 0 ? `+${formatRupiah(opt.extraPrice)}` : 'Gratis'}</span>
-                        <input type="checkbox" className="hidden" checked={isSelected} disabled={isDisabled} onChange={() => handleToggleOption(vg.id, opt.id, vg.maxSelection)} />
+                        <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
+                          {opt.extraPrice > 0 ? `+${formatRupiah(opt.extraPrice)}` : 'Gratis'}
+                        </span>
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          onChange={() => handleToggleOption(vg.id, opt.id, vg.maxSelection)}
+                        />
                       </label>
                     );
                   })}
@@ -110,8 +149,15 @@ const VariantSelectionModal = () => {
         </div>
 
         <div className="p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
-          <button onClick={() => isSelectionValid && handleSave()} disabled={!isSelectionValid} className="w-full py-3.5 rounded-xl bg-accent-600 dark:bg-accent-500 text-white font-bold disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed hover:bg-accent-700 dark:hover:bg-accent-600 hover:shadow-lg transition-all duration-300">
-            {editingCartItemId ? 'Simpan Perubahan Varian' : (isSelectionValid ? 'Tambah ke Keranjang' : 'Lengkapi Pilihan Wajib')}
+          <button
+            onClick={handleSave}
+            disabled={!isSelectionValid}
+            className="w-full py-3.5 rounded-xl bg-accent-600 dark:bg-accent-500 text-white font-bold disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed hover:bg-accent-700 dark:hover:bg-accent-600 hover:shadow-lg transition-all duration-300"
+          >
+            {editingCartItemId
+              ? 'Simpan Perubahan Varian'
+              : (isSelectionValid ? 'Tambah ke Keranjang' : 'Lengkapi Pilihan Wajib')
+            }
           </button>
         </div>
       </div>

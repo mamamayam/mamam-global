@@ -362,8 +362,6 @@ export default function App() {
   // --- STATES APLIKASI ---
   const [appliedVoucher, setAppliedVoucher] = useState(null);
   const [voucherInputCode, setVoucherInputCode] = useState('');
-  const [pointsToRedeem, setPointsToRedeem] = useState(0);
-  const [manualDiscount, setManualDiscount] = useState({ type: 'fixed', value: 0 });
   const [isCustomerDropdownMode, setIsCustomerDropdownMode] = useState(false);
 
   const getBulanIniStart = () => {
@@ -389,6 +387,19 @@ export default function App() {
   const setEditingCartItemId = usePosStore((state) => state.setEditingCartItemId);
   const isCategoryModalOpen = usePosStore((state) => state.isCategoryModalOpen);
   const setIsCategoryModalOpen = usePosStore((state) => state.setIsCategoryModalOpen);
+  const customerName = usePosStore((state) => state.customerName);
+  const setCustomerName = usePosStore((state) => state.setCustomerName);
+  const orderType = usePosStore((state) => state.orderType);
+  const setOrderType = usePosStore((state) => state.setOrderType);
+  const deliveryFee = usePosStore((state) => state.deliveryFee);
+  const setDeliveryFee = usePosStore((state) => state.setDeliveryFee);
+  const customDeliveryFee = usePosStore((state) => state.customDeliveryFee);
+  const setCustomDeliveryFee = usePosStore((state) => state.setCustomDeliveryFee);
+  const manualDiscount = usePosStore((state) => state.manualDiscount);
+  const setManualDiscount = usePosStore((state) => state.setManualDiscount);
+  const pointsToRedeem = usePosStore((state) => state.pointsToRedeem);
+  const setPointsToRedeem = usePosStore((state) => state.setPointsToRedeem);
+  const resetDraft = usePosStore((state) => state.resetDraft);
 
   const [paymentModal, setPaymentModal] = useState({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending', ojolName: '', orderNumber: '' });
   const [receiptModal, setReceiptModal] = useState({ isOpen: false, data: null });
@@ -396,11 +407,6 @@ export default function App() {
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null });
 
   const [payslipModal, setPayslipModal] = useState({ isOpen: false, data: null, month: '' });
-
-  const [customerName, setCustomerName] = useState('');
-  const [orderType, setOrderType] = useState('Takeaway');
-  const [deliveryFee, setDeliveryFee] = useState(0);
-  const [customDeliveryFee, setCustomDeliveryFee] = useState('');
 
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
@@ -467,8 +473,6 @@ export default function App() {
     else if (preset === 'bulan_ini') setReportDateRange({ start: new Date(d.getFullYear(), d.getMonth(), d.getDate() - 29).toISOString().split('T')[0], end: todayStr });
     else if (preset === 'bulan_berjalan') setReportDateRange({ start: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0], end: todayStr });
   };
-
-  const addToCart = usePosStore((state) => state.addToCart);
 
   const updateCartItemVariants = (oldCartItemId, newVariants) => {
     setCart(cart.map(item => {
@@ -615,7 +619,6 @@ export default function App() {
     getRoundingAdjustment,
     isAdminMode,
     cart, setCart,
-    addToCart,
     updateCartQty,
     updateCartItemNote,
     isCartOpen, setIsCartOpen,
@@ -628,6 +631,8 @@ export default function App() {
     variantCategories, setVariantCategories,
     variantSelectedOptions, setVariantSelectedOptions,
     isSidebarOpen,
+
+    resetDraft,
 
     vouchers, setVouchers,
     savedBills, setSavedBills,
@@ -745,7 +750,6 @@ export default function App() {
     : menuItems.filter(item =>
       ['dompet', 'absensi', 'riwayat', 'pengeluaran', 'pemasukan', 'menu', 'varian', 'backup'].includes(item.id)
     );
-
 
   useEffect(() => {
     // 1. Buat variabel untuk menyimpan handle listener

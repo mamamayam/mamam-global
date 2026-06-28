@@ -2,13 +2,16 @@ import React, { useState, useMemo } from 'react';
 import { getIngredientCost } from '../../../utils/hppUtils';
 import { useAppContext } from '../../../context/AppContext';
 import { formatRupiah } from '../../../utils/formatters';
-import { Card, Button, IconButton, PageHeader, EmptyState, Input, Badge } from '../../../components/ui';
-import { Beaker, Plus, X, Search, Edit3, Trash2, Save } from 'lucide-react';
+import { Card, Button, IconButton, PageHeader, EmptyState, Input, Badge, SortModal } from '../../../components/ui';
+import { applySort } from '../../../utils/sortUtils';
+import { Beaker, Plus, X, Search, Edit3, Trash2, Save, ArrowUpDown } from 'lucide-react';
 
 const BahanSetengahJadiView = () => {
     const { rawMaterials, semiFinished, setSemiFinished, triggerAlert, triggerConfirm, availableMaterials } = useAppContext();
     const [isEditing, setIsEditing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortKey, setSortKey] = useState('name-asc'); // gabungan field-direction, dipasangin ke applySort
+    const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
 
     const [prepId, setPrepId] = useState('');
     const [prepName, setPrepName] = useState('');
@@ -19,6 +22,16 @@ const BahanSetengahJadiView = () => {
     const [ingredients, setIngredients] = useState([
         { id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }
     ]);
+
+    // Daftar opsi urutan buat SortModal — key = "field-direction"
+    const sortOptions = [
+        { key: 'name-asc', label: 'Nama Prep (A-Z)' },
+        { key: 'name-desc', label: 'Nama Prep (Z-A)' },
+        { key: 'price-desc', label: 'HPP Live Tertinggi' },
+        { key: 'price-asc', label: 'HPP Live Terendah' },
+        { key: 'lastUpdated-desc', label: 'Baru Diupdate' },
+        { key: 'lastUpdated-asc', label: 'Lama Diupdate' },
+    ];
 
     const handleAddIngredient = () => setIngredients([...ingredients, { id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
     const handleRemoveIngredient = (id) => setIngredients(ingredients.length > 1 ? ingredients.filter(ing => ing.id !== id) : [{ id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
@@ -113,6 +126,13 @@ const BahanSetengahJadiView = () => {
     const livePrepCostPerUnit = (totalIngredientCost + (Number(laborCost) || 0) + (Number(overheadCost) || 0)) / Math.max(1, Number(yieldQty) || 1);
 
     const filteredPreps = availableMaterials.filter(m => m.isPrep && m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    // Urutkan hasil filter pakai sortKey terpilih ("name-asc", "price-desc", dst)
+    const sortedPreps = applySort(filteredPreps, sortKey, {
+        name: prep => (prep.name || '').replace(' [Prep]', ''),
+        price: prep => prep.price || 0,
+        lastUpdated: prep => prep.lastUpdated ? new Date(prep.lastUpdated) : new Date(0),
+    });
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
@@ -294,24 +314,35 @@ const BahanSetengahJadiView = () => {
                 </div>
             ) : (
                 <>
-                    <div className="relative w-full sm:w-72 mb-5">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
-                        <input
-                            type="text"
-                            placeholder="Cari bahan setengah jadi..."
-                            className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                        {searchQuery && (
-                            <button
-                                onClick={() => setSearchQuery('')}
-                                aria-label="Hapus pencarian"
-                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        )}
+                    <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                        <div className="relative w-full sm:w-72">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
+                            <input
+                                type="text"
+                                placeholder="Cari bahan setengah jadi..."
+                                className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    aria-label="Hapus pencarian"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => setIsSortOpen(true)}
+                            className="w-full sm:w-48 flex items-center justify-between gap-2 pl-4 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-orange-300 dark:hover:border-orange-500/40 transition-colors text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+                        >
+                            <span className="truncate">{sortOptions.find(o => o.key === sortKey)?.label || 'Urutkan'}</span>
+                            <ArrowUpDown className="text-slate-400 dark:text-slate-500 w-4 h-4 shrink-0" />
+                        </button>
                     </div>
 
                     <Card padding="none" className="overflow-hidden">
@@ -327,10 +358,10 @@ const BahanSetengahJadiView = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                                    {filteredPreps.length === 0 ? (
+                                    {sortedPreps.length === 0 ? (
                                         <tr><td colSpan="5"><EmptyState size="sm" title="Belum ada data bahan setengah jadi" /></td></tr>
                                     ) : (
-                                        filteredPreps.map((prep) => {
+                                        sortedPreps.map((prep) => {
                                             const originalPrep = semiFinished.find(s => s.id === prep.id);
                                             return (
                                                 <tr key={prep.id} className="hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors group">
@@ -352,6 +383,14 @@ const BahanSetengahJadiView = () => {
                             </table>
                         </div>
                     </Card>
+
+                    <SortModal
+                        isOpen={isSortOpen}
+                        onClose={() => setIsSortOpen(false)}
+                        value={sortKey}
+                        onChange={setSortKey}
+                        options={sortOptions}
+                    />
                 </>
             )}
         </div>

@@ -142,6 +142,7 @@ const ShiftView = () => {
       startTime: new Date(),
       initialCash: Number(initialCashInput)
     };
+    setCurrentShift(newShift);    
     pushLiveState('currentShift', newShift).catch(err => 
       console.warn('Gagal push manual :', err)
     );

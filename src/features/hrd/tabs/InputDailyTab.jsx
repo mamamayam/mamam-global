@@ -6,7 +6,7 @@ import CategoryModal from '../../../components/CategoryModal';
 import { applySort } from '../../../utils/sortUtils';
 import { activeOnly, trashedOnly, markDeleted, restoreItem } from '../../../utils/softDelete';
 import { pushTransactionDelete } from '../../../storage/realtimeSync';
-import { Calendar, Wallet, Plus, Trash2, Save, History, Clock, Edit3, Settings2, ArrowUpDown } from 'lucide-react';
+import { Calendar, Wallet, Plus, Trash2, Save, History, Clock, Edit3, Settings2, ArrowUpDown, Eye, EyeOff } from 'lucide-react';
 import {
   WORK_START_MINUTES, WORK_END_MINUTES, EARLY_OVERTIME_THRESHOLD_MINUTES, OVERTIME_THRESHOLD_MINUTES, OVERTIME_RATE_PER_30MIN,
   LEMBUR_CATEGORY_KEYWORD, KASBON_CATEGORY_KEYWORD,
@@ -21,6 +21,53 @@ const StatField = ({ label, value, highlight }) => (
     <p className={`text-sm font-bold ${highlight ? 'text-green-700' : 'text-slate-700'}`}>{value || '-'}</p>
   </div>
 );
+
+// Helper murni: hitung status absensi dari attendanceLog untuk 1 karyawan & 1 tanggal.
+// Dipisah jadi function sendiri (bukan inline di useEffect) supaya bisa dipakai ulang
+// untuk SEMUA karyawan sekaligus (auto-sync), bukan cuma karyawan yang dipilih di dropdown.
+const computeAttendanceFromLogs = (employeeId, dateStr, logs) => {
+  const todayStr = toLocalDateString();
+  const isPast7PM = (dateStr < todayStr) || (dateStr === todayStr && new Date().getHours() >= 19);
+
+  const empLogs = activeOnly(logs ?? [])
+    .filter(r => r.employeeId === employeeId && r.dateStr === dateStr)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const hasMasuk = empLogs.some(r => r.type === 'masuk');
+
+  let status = '';
+  let cIn = '';
+  let cOut = '';
+  let cBolong = 0;
+  let cHours = 0;
+  let cDayOff = false;
+
+  if (hasMasuk) {
+    status = 'Hadir';
+    const masukRec = empLogs.find(r => r.type === 'masuk');
+    const keluarRec = [...empLogs].reverse().find(r => r.type === 'keluar');
+
+    cIn = formatTimeFromDate(masukRec.date);
+    if (keluarRec) {
+      cOut = formatTimeFromDate(keluarRec.date);
+      const bolongFallbackEnd = new Date(`${dateStr}T${cOut}:00`);
+      cBolong = calculateBolongMinutes(empLogs, bolongFallbackEnd);
+      const rawHours = calculateHoursFromTimes(cIn, cOut);
+      const netHours = Number((rawHours - (cBolong / 60)).toFixed(4));
+      cHours = netHours > 0 ? Math.ceil(netHours * 10) / 10 : 0;
+    } else {
+      cBolong = calculateBolongMinutes(empLogs, new Date());
+      cOut = '';
+    }
+  } else if (isPast7PM) {
+    status = 'Libur';
+    cDayOff = true;
+  } else {
+    status = 'Belum Absen';
+  }
+
+  return { status, clockIn: cIn, clockOut: cOut, bolongMinutes: cBolong, hoursWorked: cHours, isDayOff: cDayOff, hasMasuk };
+};
 
 const InputDailyTab = () => {
   const { employees, triggerAlert, triggerConfirm, employeeDailyRecords, setEmployeeDailyRecords, additionCategories, setAdditionCategories, deductionCategories, setDeductionCategories, expenses, setExpenses, attendanceLog } = useAppContext();
@@ -42,6 +89,7 @@ const InputDailyTab = () => {
   const [showTrash, setShowTrash] = useState(false);
   const [dailySortKey, setDailySortKey] = useState('date-desc');
   const [isDailySortOpen, setIsDailySortOpen] = useState(false);
+  const [expandedRecordId, setExpandedRecordId] = useState(null);
 
   const [adjType, setAdjType] = useState('addition');
   const [adjCategory, setAdjCategory] = useState('');
@@ -147,6 +195,64 @@ const InputDailyTab = () => {
       }
     });
   }, [attendanceStatus, isDayOff, clockIn, clockOut, hoursWorked, bolongMinutes, dailyEmpId, dailyDate, setEmployeeDailyRecords]);
+
+  // 2b. FIX BUG: Auto-Sync Absensi untuk SEMUA karyawan yang sudah ada rekaman 'masuk' di tanggal terpilih.
+  // Sebelumnya, data absen Hadir cuma kebawa ke pembukuan kalau karyawan itu kebetulan
+  // sedang dipilih di dropdown (lihat effect di atas). Sekarang berjalan otomatis untuk semua karyawan,
+  // independen dari dailyEmpId / dropdown (dropdown sekarang cuma dipakai untuk Tambahan & Potongan).
+  useEffect(() => {
+    if (!dailyDate) return;
+
+    const employeeIdsWithMasuk = [...new Set(
+      activeOnly(attendanceLog ?? [])
+        .filter(r => r.dateStr === dailyDate && r.type === 'masuk')
+        .map(r => r.employeeId)
+    )];
+
+    if (employeeIdsWithMasuk.length === 0) return;
+
+    setEmployeeDailyRecords(prev => {
+      let next = prev;
+      let changed = false;
+
+      employeeIdsWithMasuk.forEach(empId => {
+        const result = computeAttendanceFromLogs(empId, dailyDate, attendanceLog);
+        const prevExisting = next.find(r => !r.deletedAt && r.employeeId === empId && r.dateStr === dailyDate);
+
+        const isSame = prevExisting &&
+          prevExisting.isDayOff === result.isDayOff &&
+          prevExisting.clockIn === result.clockIn &&
+          prevExisting.clockOut === result.clockOut &&
+          prevExisting.hoursWorked === result.hoursWorked &&
+          (prevExisting.bolongMinutes || 0) === result.bolongMinutes;
+
+        if (isSame) return; // Jika sama persis, abaikan
+
+        changed = true;
+        if (prevExisting) {
+          next = next.map(r => r.id === prevExisting.id ? {
+            ...r, isDayOff: result.isDayOff, clockIn: result.clockIn, clockOut: result.clockOut, hoursWorked: result.hoursWorked, bolongMinutes: result.bolongMinutes
+          } : r);
+        } else {
+          next = [{
+            id: `REC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            employeeId: empId,
+            date: new Date(dailyDate),
+            dateStr: dailyDate,
+            isDayOff: result.isDayOff,
+            clockIn: result.clockIn,
+            clockOut: result.clockOut,
+            hoursWorked: result.hoursWorked,
+            bolongMinutes: result.bolongMinutes,
+            additions: [],
+            deductions: []
+          }, ...next];
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [attendanceLog, dailyDate, setEmployeeDailyRecords]);
 
   // 3. Muat Data Tambahan & Potongan dari pembukuan saat tanggal / Karyawan berganti
   useEffect(() => {
@@ -276,6 +382,12 @@ const InputDailyTab = () => {
   const visibleDailyRecords = showTrash ? trashedOnly(employeeDailyRecords) : activeOnly(employeeDailyRecords);
   const sortedDailyRecords = applySort(visibleDailyRecords, dailySortKey, { date: r => new Date(r.date), name: r => employees.find(e => e.id === r.employeeId)?.name || '', hours: r => r.hoursWorked || 0 });
 
+  const attendanceOverview = useMemo(() => {
+    return employees
+      .filter(emp => getEmployeeStatus(emp) !== 'resign')
+      .map(emp => ({ ...emp, _attendance: computeAttendanceFromLogs(emp.id, dailyDate, attendanceLog) }));
+  }, [employees, dailyDate, attendanceLog]);
+
   const formatRupiah = (amount) => `Rp${Number(amount || 0).toLocaleString('id-ID')}`;
 
   const formatJam = (hours) => {
@@ -289,35 +401,28 @@ const InputDailyTab = () => {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full animate-in fade-in slide-in-from-right-4 duration-300">
       <div className="lg:col-span-1 flex flex-col gap-6">
 
-        {/* CARD ABSENSI (READ-ONLY) */}
+        {/* CARD ABSENSI (AUTOMATIC, SEMUA KARYAWAN) */}
         <Card padding="lg" className="flex flex-col h-fit relative overflow-hidden">
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
             <Calendar className="w-5 h-5 text-slate-800" />
             <h3 className="font-heading font-bold flex-1">Data Absensi</h3>
-            {attendanceStatus === 'Hadir' && <Badge variant="success">Hadir</Badge>}
-            {attendanceStatus === 'Libur' && <Badge variant="neutral">Libur</Badge>}
-            {attendanceStatus === 'Belum Absen' && <Badge variant="warning">Belum Absen</Badge>}
           </div>
           <div className="space-y-4">
-            <div className="flex gap-2">
-              <Select label="Karyawan" variant="muted" value={dailyEmpId} onChange={e => setDailyEmpId(e.target.value)} className="flex-1">
-                <option value="">Pilih Karyawan</option>
-                {employees.filter(emp => getEmployeeStatus(emp) !== 'resign' || emp.id === dailyEmpId).map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                ))}
-              </Select>
-              <Input type="date" label="Tanggal" variant="muted" value={dailyDate} onChange={e => setDailyDate(e.target.value)} className="w-1/3" />
-            </div>
+            <Input type="date" label="Tanggal" variant="muted" value={dailyDate} onChange={e => setDailyDate(e.target.value)} />
 
-            <div className="grid grid-cols-2 gap-4">
-              <StatField label="Jam Masuk" value={clockIn} />
-              <StatField label="Jam Keluar" value={clockOut} />
+            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-0.5">
+              {attendanceOverview.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-3">Belum ada data karyawan.</p>
+              ) : attendanceOverview.map(emp => (
+                <div key={emp.id} className="flex items-center justify-between gap-2 p-2.5 rounded-lg border border-slate-100 bg-slate-50/60">
+                  <span className="text-sm font-semibold text-slate-700 truncate">{emp.name}</span>
+                  {emp._attendance.status === 'Hadir' && <Badge variant="success">Hadir</Badge>}
+                  {emp._attendance.status === 'Libur' && <Badge variant="neutral">Libur</Badge>}
+                  {emp._attendance.status === 'Belum Absen' && <Badge variant="warning">Belum Absen</Badge>}
+                </div>
+              ))}
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <StatField label="Jam Bolong (Jam)" value={bolongMinutes === 0 ? '0,0' : (bolongMinutes / 60).toFixed(1).replace('.', ',')} />
-              <StatField label="Total Jam Kerja" value={formatJam(hoursWorked) || '0,0'} highlight />
-            </div>
+            <p className="text-[11px] text-slate-400">Absen tersinkron otomatis dari attendance untuk semua karyawan. Rincian jam masuk, keluar, jam bolong & total jam kerja bisa dilihat lewat ikon mata di Riwayat Input.</p>
           </div>
         </Card>
 
@@ -325,6 +430,15 @@ const InputDailyTab = () => {
         <Card padding="lg" className="flex flex-col h-fit">
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100"><Wallet className="w-5 h-5 text-green-600" /><h3 className="font-heading font-bold">Tambahan & Potongan</h3></div>
           <div className="space-y-4">
+            <div>
+              <Select label="Karyawan" variant="muted" value={dailyEmpId} onChange={e => setDailyEmpId(e.target.value)}>
+                <option value="">Pilih Karyawan</option>
+                {employees.filter(emp => getEmployeeStatus(emp) !== 'resign' || emp.id === dailyEmpId).map(emp => (
+                  <option key={emp.id} value={emp.id}>{emp.name}</option>
+                ))}
+              </Select>
+              {dailyEmpId && <p className="text-[11px] text-slate-400 mt-1.5">Untuk tanggal: <span className="font-bold text-slate-600">{dailyDate}</span></p>}
+            </div>
             <SegmentedControl options={[{ value: 'addition', label: 'Penghasilan (+)', tone: 'green' }, { value: 'deduction', label: 'Potongan (-)', tone: 'red' }]} value={adjType} onChange={(val) => { setAdjType(val); setAdjCategory(''); }} />
             <div>
               <label className="flex justify-between text-xs font-bold text-slate-500 mb-1.5">Kategori <Button type="button" size="xs" variant="secondary" onClick={() => setCatModalType(adjType)} icon={<Settings2 className="w-3 h-3" />}>Kelola</Button></label>
@@ -402,20 +516,43 @@ const InputDailyTab = () => {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {sortedDailyRecords.slice(0, 50).map(rec => (
-            <div key={rec.id} className="flex flex-col p-4 border border-slate-100 rounded-xl">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <p className="font-bold text-sm">{employees.find(e => e.id === rec.employeeId)?.name}</p>
-                  <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {rec.dateStr} • {formatJam(rec.hoursWorked)} Jam</p>
+          {sortedDailyRecords.slice(0, 50).map(rec => {
+            const isExpanded = expandedRecordId === rec.id;
+            return (
+              <div key={rec.id} className="flex flex-col p-4 border border-slate-100 rounded-xl">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-bold text-sm truncate">{employees.find(e => e.id === rec.employeeId)?.name}</p>
+                      <button type="button" onClick={() => setExpandedRecordId(isExpanded ? null : rec.id)} className="shrink-0 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors" title="Lihat Detail Absensi">
+                        {isExpanded ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {rec.dateStr} • {formatJam(rec.hoursWorked)} Jam</p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    {!showTrash && <IconButton variant="edit" onClick={() => { setDailyEmpId(rec.employeeId); setDailyDate(rec.dateStr); }}><Edit3 className="w-4 h-4" /></IconButton>}
+                    <IconButton variant="delete" onClick={() => { setEmployeeDailyRecords(prev => prev.map(r => r.id === rec.id ? markDeleted(r) : r)) }}><Trash2 className="w-4 h-4" /></IconButton>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  {!showTrash && <IconButton variant="edit" onClick={() => { setDailyEmpId(rec.employeeId); setDailyDate(rec.dateStr); }}><Edit3 className="w-4 h-4" /></IconButton>}
-                  <IconButton variant="delete" onClick={() => { setEmployeeDailyRecords(prev => prev.map(r => r.id === rec.id ? markDeleted(r) : r)) }}><Trash2 className="w-4 h-4" /></IconButton>
-                </div>
+
+                {isExpanded && (
+                  <div className="mt-1 pt-3 border-t border-slate-100">
+                    {rec.isDayOff ? (
+                      <p className="text-xs text-slate-400 text-center py-2">Tidak ada data absensi (Libur).</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <StatField label="Jam Masuk" value={rec.clockIn} />
+                        <StatField label="Jam Keluar" value={rec.clockOut} />
+                        <StatField label="Jam Bolong (Jam)" value={!rec.bolongMinutes ? '0,0' : (rec.bolongMinutes / 60).toFixed(1).replace('.', ',')} />
+                        <StatField label="Total Jam Kerja" value={formatJam(rec.hoursWorked) || '0,0'} highlight />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
 

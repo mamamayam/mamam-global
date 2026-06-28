@@ -1,14 +1,27 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../../context/AppContext';
 import { formatRupiah } from '../../../utils/formatters';
-import { Card, Button, IconButton, PageHeader, EmptyState, Input } from '../../../components/ui';
-import { Package, Plus, X, Search, Clock, Edit3, Trash2, Save } from 'lucide-react';
+import { Card, Button, IconButton, PageHeader, EmptyState, Input, SortModal } from '../../../components/ui';
+import { applySort } from '../../../utils/sortUtils';
+import { Package, Plus, X, Search, Clock, Edit3, Trash2, Save, ArrowUpDown } from 'lucide-react';
 
 const BahanBakuView = () => {
     const { rawMaterials, setRawMaterials, triggerAlert, triggerConfirm } = useAppContext();
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState({ id: '', name: '', unit: '', price: '' });
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortKey, setSortKey] = useState('name-asc'); // gabungan field-direction, dipasangin ke applySort
+    const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
+
+    // Daftar opsi urutan buat SortModal — key = "field-direction"
+    const sortOptions = [
+        { key: 'name-asc', label: 'Nama (A-Z)' },
+        { key: 'name-desc', label: 'Nama (Z-A)' },
+        { key: 'price-desc', label: 'Harga Tertinggi' },
+        { key: 'price-asc', label: 'Harga Terendah' },
+        { key: 'lastUpdated-desc', label: 'Baru Diupdate' },
+        { key: 'lastUpdated-asc', label: 'Lama Diupdate' },
+    ];
 
     const handleSave = () => {
         if (!formData.name || !formData.unit || !formData.price) {
@@ -46,6 +59,13 @@ const BahanBakuView = () => {
     };
 
     const filteredMaterials = rawMaterials.filter(rm => rm.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    // Urutkan hasil filter pakai sortKey terpilih ("name-asc", "price-desc", dst)
+    const sortedMaterials = applySort(filteredMaterials, sortKey, {
+        name: rm => rm.name || '',
+        price: rm => rm.price || 0,
+        lastUpdated: rm => rm.lastUpdated ? new Date(rm.lastUpdated) : new Date(0),
+    });
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
@@ -97,24 +117,35 @@ const BahanBakuView = () => {
                     </div>
                 </Card>
             ) : (
-                <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
-                    <input
-                        type="text"
-                        placeholder="Cari bahan baku..."
-                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    {searchQuery && (
-                        <button
-                            onClick={() => setSearchQuery('')}
-                            aria-label="Hapus pencarian"
-                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
-                    )}
+                <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="relative w-full sm:w-72">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
+                        <input
+                            type="text"
+                            placeholder="Cari bahan baku..."
+                            className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                aria-label="Hapus pencarian"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setIsSortOpen(true)}
+                        className="w-full sm:w-48 flex items-center justify-between gap-2 pl-4 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-orange-300 dark:hover:border-orange-500/40 transition-colors text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+                    >
+                        <span className="truncate">{sortOptions.find(o => o.key === sortKey)?.label || 'Urutkan'}</span>
+                        <ArrowUpDown className="text-slate-400 dark:text-slate-500 w-4 h-4 shrink-0" />
+                    </button>
                 </div>
             )}
 
@@ -131,10 +162,10 @@ const BahanBakuView = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                            {filteredMaterials.length === 0 ? (
+                            {sortedMaterials.length === 0 ? (
                                 <tr><td colSpan="5"><EmptyState size="sm" title="Belum ada data bahan baku" /></td></tr>
                             ) : (
-                                filteredMaterials.map((rm) => {
+                                sortedMaterials.map((rm) => {
                                     const isUpdatedToday = rm.lastUpdated && new Date(rm.lastUpdated).toDateString() === new Date().toDateString();
                                     return (
                                         <tr key={rm.id} className="hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors group">
@@ -161,6 +192,14 @@ const BahanBakuView = () => {
                     </table>
                 </div>
             </Card>
+
+            <SortModal
+                isOpen={isSortOpen}
+                onClose={() => setIsSortOpen(false)}
+                value={sortKey}
+                onChange={setSortKey}
+                options={sortOptions}
+            />
         </div>
     );
 };

@@ -57,3 +57,8 @@ export function splitExpired(list, retentionDays = 30) {
   });
   return { keep, expired };
 }
+
+export function purgeByIds(list, ids) {
+  const idSet = new Set(ids);
+  return (list || []).filter(item => !idSet.has(item.id));
+}

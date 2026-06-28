@@ -109,7 +109,7 @@ const PosView = () => {
             setSelectedMenuForVariant(menu);
             setVariantSelectedOptions({});
         } else {
-            addToCart(menu);
+            addToCart(menu, {}, variantGroups);
         }
     }, [currentShift, triggerAlert, setCurrentView, setSelectedMenuForVariant, setVariantSelectedOptions, addToCart]);
 

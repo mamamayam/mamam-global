@@ -1,16 +1,16 @@
 import React from "react";
-import { usePosStore } from '../../store/usePosStore'; 
-import { useAppContext } from '../../context/AppContext'; 
+import { usePosStore } from '../../store/usePosStore';
+import { useAppContext } from '../../context/AppContext';
 import { generateUUID } from '../../utils/formatters';
-import { 
-  SplitSquareHorizontal, 
-  X, 
-  Wallet, 
-  QrCode, 
-  CreditCard, 
-  AlertCircle, 
-  CheckCircle2, 
-  Trash2, 
+import {
+  SplitSquareHorizontal,
+  X,
+  Wallet,
+  QrCode,
+  CreditCard,
+  AlertCircle,
+  CheckCircle2,
+  Trash2,
   Receipt,
   Motorbike
 } from "lucide-react";
@@ -22,15 +22,15 @@ const PaymentModal = () => {
   const setIsCartOpen = usePosStore((state) => state.setIsCartOpen);
 
   // ─── AMBIL DARI CONTEXT ───
-  const { 
-    paymentModal, setOrderType, setPaymentModal, getTotal, getRoundedTotal, 
-    getRoundingAdjustment, formatRupiah, activeCustomer, pointsToRedeem, 
-    customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount, 
-    manualDiscount, setManualDiscount, getManualDiscountAmount, customerName, 
-    orderType, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount, 
-    deliveryFee, salesHistory, setSalesHistory, setCustomerName, setAppliedVoucher, 
-    setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings, 
-    triggerAlert, navigate 
+  const {
+    paymentModal, setOrderType, setPaymentModal, getTotal, getRoundedTotal,
+    getRoundingAdjustment, formatRupiah, activeCustomer, pointsToRedeem,
+    customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount,
+    manualDiscount, setManualDiscount, getManualDiscountAmount, customerName,
+    orderType, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount,
+    deliveryFee, salesHistory, setSalesHistory, setCustomerName, setAppliedVoucher,
+    setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings,
+    triggerAlert, navigate
   } = useAppContext();
 
   if (!paymentModal.isOpen) return null;
@@ -85,7 +85,7 @@ const PaymentModal = () => {
     // 2. PROSES PENAMBAHAN POIN BARU (BERLAKU UNTUK SINGLE & SPLIT)
     const pointsEarned = Math.floor(total / 10000);
     if (pointsEarned > 0) {
-      const registeredCustomer = activeCustomer 
+      const registeredCustomer = activeCustomer
         ? updatedCustomers.find(c => c.id === activeCustomer.id)
         : updatedCustomers.find(c => c.name.toLowerCase() === newOrder.customerName.toLowerCase());
 
@@ -100,14 +100,10 @@ const PaymentModal = () => {
     // Reset State POS & Selesaikan Transaksi
     setSalesHistory([newOrder, ...salesHistory]);
     setPaymentModal({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending' });
-    setIsCartOpen(false); 
-    setCart([]); 
-    setCustomerName(''); 
-    setAppliedVoucher(null); 
-    setVoucherInputCode(''); 
-    setPointsToRedeem(0); 
-    setOrderType('Takeaway'); 
-    setManualDiscount({ type: 'fixed', value: 0 });
+    resetDraft();           // wipe cart + customerName + orderType + deliveryFee + manualDiscount + pointsToRedeem sekaligus
+    setIsCartOpen(false);
+    setAppliedVoucher(null);  // tetap dari context, tidak dipersist
+    setVoucherInputCode('');
 
     setReceiptModal({ isOpen: true, data: newOrder, kembalian: isSplitMode ? splitKembalian : (method === 'Tunai' ? kembalian : 0) });
 

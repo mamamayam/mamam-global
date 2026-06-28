@@ -20,3 +20,4 @@ export { default as EmptyState }       from './EmptyState';
 export { default as Badge }            from './Badge';
 export { default as SegmentedControl } from './SegmentedControl';
 export { default as Alert }            from './Alert';
+export { default as BulkSelectBar }    from './BulkSelectBar';

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { X, History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw, ArrowUpDown, Eye } from 'lucide-react';
 import { formatRupiah } from '../../utils/formatters';
-import { PageHeader, Card, Button, DetailModal, SortModal } from '../../components/ui';
+import { useBulkSelect } from '../../hook/useBulkSelect';
+import { BulkSelectBar, PageHeader, Card, Button, DetailModal, SortModal } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
@@ -111,9 +112,23 @@ const HistoryView = () => {
         type: o => o.orderType || '',
     });
 
+    const { selectedIds, allSelected: allVisibleSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedHistory);
+
     const handleDelete = (id) => {
         triggerConfirm('Pindahkan riwayat pesanan ini ke Recycle Bin?', () => {
             setSalesHistory(salesHistory.map(order => order.id === id ? markDeleted(order) : order));
+        });
+    };
+
+    const handleDeleteSelected = () => {
+        const ids = [...selectedIds];
+        if (ids.length === 0) return;
+        triggerConfirm(`Hapus PERMANEN ${ids.length} riwayat pesanan terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+            setSalesHistory(salesHistory.filter(order => !selectedIds.has(order.id)));
+            ids.forEach(id => pushTransactionDelete('salesHistory', id).catch(err =>
+                console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+            ));
+            resetSelection();
         });
     };
 
@@ -145,12 +160,13 @@ const HistoryView = () => {
                     <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => setShowTrash(v => !v)}
+                        onClick={() => { setShowTrash(v => !v); resetSelection(); }}
                     >
                         {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(salesHistory).length})`}
                     </Button>
                 )}
             </div>
+
 
             {/* CONTAINER UTAMA FILTER*/}
             <div className="flex-shrink-0 w-full flex flex-col gap-4 mb-6">
@@ -246,15 +262,36 @@ const HistoryView = () => {
 
             </div>
 
+            {/* HAPUS TERPILIH/HAPUS SEMUA*/}
+            {showTrash && isAdminMode && (
+                <BulkSelectBar
+                    count={count}
+                    total={sortedHistory.length}
+                    allSelected={allVisibleSelected}
+                    onToggleAll={toggleSelectAll}
+                    onDeleteSelected={handleDeleteSelected}
+                />
+            )}
+
             {/* Grid Riwayat Pesanan */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20">
                 {sortedHistory.length > 0 ? (
                     sortedHistory.map(order => (
                         <div key={order.id} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-4 relative flex flex-col hover:shadow-md transition-shadow">
                             <div className="flex justify-between items-start mb-3 border-b border-dashed border-slate-200 dark:border-slate-700 pb-3">
-                                <div>
-                                    <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">#{order.id}</h3>
-                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(order.date).toLocaleString('id-ID')}</p>
+                                <div className="flex items-start gap-2">
+                                    {showTrash && isAdminMode && (
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.has(order.id)}
+                                            onChange={() => toggleSelectOne(order.id)}
+                                            className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                                        />
+                                    )}
+                                    <div>
+                                        <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">#{order.id}</h3>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(order.date).toLocaleString('id-ID')}</p>
+                                    </div>
                                 </div>
                                 <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${order.paymentMethod === 'Ojol' ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 border-orange-100 dark:border-orange-500/20' : 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-100 dark:border-green-500/20'}`}>
                                     {order.paymentMethod} {order.paymentMethod === 'Ojol' && `(${order.ojolName})`}
