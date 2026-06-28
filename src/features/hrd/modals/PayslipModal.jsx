@@ -13,6 +13,7 @@ const PayslipModal = () => {
   const { data, month } = payslipModal;
 
   const basicPay = data.totalHours * data.employee.hourlyRate;
+  const overtimePay = data.overtimePay || 0;
 
   const monthLabel = new Date(`${month}-01`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
 
@@ -97,7 +98,7 @@ const PayslipModal = () => {
 
       <div className="bg-white dark:bg-slate-900 rounded-lg w-full max-w-[800px] shadow-2xl relative font-sans text-sm animate-in zoom-in-95 duration-300 ease-out print:shadow-none print:w-[210mm] print:max-w-none my-8 flex flex-col max-h-[90vh] print:max-h-none print:my-0">
         <div id="payslip-content" className="p-8 print:p-0 overflow-y-auto custom-scrollbar flex-1">
-          
+
           <div className="text-center border-b-2 border-slate-300 dark:border-slate-600 pb-6 mb-6 print:pb-4 print:mb-4">
             <h2 className="text-2xl font-black uppercase tracking-widest text-slate-800 dark:text-slate-100 mb-2 print:text-black">SLIP GAJI KARYAWAN</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 font-bold print:text-black">MAMAM AYAM</p>
@@ -112,6 +113,13 @@ const PayslipModal = () => {
             </div>
             <div className="text-right">
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Total Jam Kerja</span> <span className="font-bold">: {data.totalHours} Jam</span></div>
+              {/* TAMBAHAN BARIS LEMBUR */}
+              {overtimePay > 0 && (
+                <div className="flex justify-between text-sm mb-2 text-orange-600 font-semibold">
+                  <span>Uang Lembur ({((data.totalOvertimeMinutes || 0) / 60).toFixed(1).replace('.', ',')} jam)</span>
+                  <span>{formatRupiah(overtimePay)}</span>
+                </div>
+              )}
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Upah per Jam</span> <span className="font-bold">: {formatRupiah(data.employee.hourlyRate)}</span></div>
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Bonus Full Time</span> <span className="font-bold">: {formatRupiah(data.employee.fullTimeBonus || 0)}</span></div>
             </div>
@@ -141,7 +149,7 @@ const PayslipModal = () => {
                     rec.additions.forEach(a => items.push({ desc: a.category + (a.note ? ` (${a.note})` : ''), in: a.amount, out: 0 }));
                     // Tambahkan Pengeluaran / Potongan
                     rec.deductions.forEach(d => items.push({ desc: d.category + (d.note ? ` (${d.note})` : ''), in: 0, out: d.amount }));
-                    
+
                     if (items.length === 0) return null;
 
                     return items.map((item, j) => (
@@ -196,16 +204,16 @@ const PayslipModal = () => {
           </div>
 
           <div className="flex justify-between mt-16 text-sm text-center text-slate-800 dark:text-slate-100 print:text-black">
-             <div className="w-1/3">
-               <p>Penerima,</p>
-               <br /><br /><br /><br />
-               <p className="font-bold underline">({data.employee.name})</p>
-             </div>
-             <div className="w-1/3">
-               <p>Mengetahui,</p>
-               <br /><br /><br /><br />
-               <p className="font-bold underline">( HRD / Manajemen )</p>
-             </div>
+            <div className="w-1/3">
+              <p>Penerima,</p>
+              <br /><br /><br /><br />
+              <p className="font-bold underline">({data.employee.name})</p>
+            </div>
+            <div className="w-1/3">
+              <p>Mengetahui,</p>
+              <br /><br /><br /><br />
+              <p className="font-bold underline">( HRD / Manajemen )</p>
+            </div>
           </div>
 
         </div>

@@ -84,8 +84,8 @@ const S = StyleSheet.create({
   // Lebar kolom tabel
   colDate: { width: '22%' },
   colDesc: { width: '38%' },
-  colIn:   { width: '20%' },
-  colOut:  { width: '20%' },
+  colIn: { width: '20%' },
+  colOut: { width: '20%' },
 
   th: {
     padding: '5px 4px',
@@ -167,6 +167,7 @@ const S = StyleSheet.create({
 
 const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
   const basicPay = data.totalHours * data.employee.hourlyRate;
+  const overtimePay = data.overtimePay || 0;
   const sortedRecords = [...data.records].sort((a, b) => new Date(a.date) - new Date(b.date));
   const totalHariKerja = sortedRecords.filter(r => r.hoursWorked > 0).length;
 
@@ -211,9 +212,9 @@ const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
         <View style={S.infoSection}>
           <View>
             {[
-              ['Nama',            data.employee.name],
-              ['Posisi',          'Karyawan'],
-              ['Hari Kerja Masuk',`${totalHariKerja} Hari`],
+              ['Nama', data.employee.name],
+              ['Posisi', 'Karyawan'],
+              ['Hari Kerja Masuk', `${totalHariKerja} Hari`],
             ].map(([label, value]) => (
               <View key={label} style={S.infoRow}>
                 <Text style={S.infoLabel}>{label}</Text>
@@ -225,7 +226,7 @@ const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
           <View>
             {[
               ['Total Jam Kerja', `${data.totalHours} Jam`],
-              ['Upah per Jam',    formatRupiah(data.employee.hourlyRate)],
+              ['Upah per Jam', formatRupiah(data.employee.hourlyRate)],
               ['Bonus Full Time', formatRupiah(data.employee.fullTimeBonus || 0)],
             ].map(([label, value]) => (
               <View key={label} style={S.infoRow}>
@@ -245,8 +246,8 @@ const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
           <View style={S.tableHeaderRow}>
             <View style={[S.colDate, S.th]}><Text>Tanggal & Jam</Text></View>
             <View style={[S.colDesc, S.th]}><Text>Keterangan</Text></View>
-            <View style={[S.colIn,   S.th]}><Text style={{ textAlign: 'right' }}>Pemasukan (+)</Text></View>
-            <View style={[S.colOut,  S.thLast]}><Text style={{ textAlign: 'right' }}>Pengeluaran (-)</Text></View>
+            <View style={[S.colIn, S.th]}><Text style={{ textAlign: 'right' }}>Pemasukan (+)</Text></View>
+            <View style={[S.colOut, S.thLast]}><Text style={{ textAlign: 'right' }}>Pengeluaran (-)</Text></View>
           </View>
 
           {/* Baris data */}
@@ -300,6 +301,17 @@ const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
               <Text>Total Tambahan</Text>
               <Text style={{ fontFamily: 'Helvetica-Bold', color: '#16a34a' }}>(+) {formatRupiah(data.totalAdditions)}</Text>
             </View>
+            {/* TAMBAHAN KODE BARU: Baris Uang Lembur di Dokumen PDF */}
+            {overtimePay > 0 && (
+              <View style={S.summaryRow}>
+                <Text style={{ color: '#e67e22', fontFamily: 'Helvetica-Bold' }}>
+                  Uang Lembur ({((data.totalOvertimeMinutes || 0) / 60).toFixed(1).replace('.', ',')} jam)
+                </Text>
+                <Text style={{ color: '#e67e22', fontFamily: 'Helvetica-Bold' }}>
+                  {formatRupiah(overtimePay)}
+                </Text>
+              </View>
+            )}
             <View style={S.summaryRow}>
               <Text>Total Potongan</Text>
               <Text style={{ fontFamily: 'Helvetica-Bold', color: '#dc2626' }}>(-) {formatRupiah(data.totalDeductions)}</Text>

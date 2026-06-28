@@ -14,8 +14,8 @@ import {
 } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 
-const AUTO_CLOSE_HOUR = 21;
-const OUTLET_CLOSE_HOUR = 19;
+const AUTO_CLOSE_HOUR = 21; // Sistem mendeteksi kelalaian jika sudah lewat jam 21:00
+const OUTLET_CLOSE_HOUR = 19; // Jam pulang otomatis yang akan dicatat (Jam 19:00)
 
 const LOG_FILTER_TABS = [
   { id: 'hari-ini', label: 'Hari Ini' },
@@ -45,16 +45,6 @@ const SORT_OPTIONS = [
   { key: 'type-asc', label: 'Tipe Absen (A-Z)' },
 ];
 
-/**
- * Attendance — rekap & riwayat absensi untuk owner/admin.
- *
- * Section 1 — Status Hari Ini: status live semua karyawan (masuk/bolong/pulang)
- *   + koreksi manual (admin mode).
- *
- * Section 2 — Riwayat Log Absen: semua record `attendanceLog` dengan filter
- *   periode, tipe, karyawan, sort, dan search — mirip HistoryView pesanan.
- *   Admin bisa soft-delete dan restore dari sini.
- */
 export default function Attendance() {
   const { employees, attendanceLog, setAttendanceLog, isAdminMode, triggerConfirm } = useAppContext();
 
@@ -84,7 +74,7 @@ export default function Attendance() {
     return () => clearInterval(tick);
   }, []);
 
-  // Auto-close jam 21:00 — insert record keluar bagi karyawan yang lupa absen
+  // Auto-close jam 21:00 — otomatis insert record keluar pukul 19:00 bagi karyawan yang lupa absen pulang
   useEffect(() => {
     const nowDate = new Date(now);
     if (nowDate.getHours() < AUTO_CLOSE_HOUR) return;
@@ -158,21 +148,28 @@ export default function Attendance() {
     const records = todayActive
       .filter(r => r.employeeId === emp.id)
       .sort((a, b) => new Date(a.date) - new Date(b.date));
-    
+
     const lastRecord = records[records.length - 1];
     const bolongRecords = records.filter(r => r.type === 'bolong');
     const masukLagiRecords = records.filter(r => r.type === 'masuk_lagi');
-    
+
     const bolong = bolongRecords[bolongRecords.length - 1];
     const masukLagi = masukLagiRecords[masukLagiRecords.length - 1];
+    const keluarRecord = records.find(r => r.type === 'keluar');
 
-    // Menghitung durasi bolong untuk ditampilkan di keterangan
     let durasiBolongText = '';
     if (bolong && masukLagi && new Date(masukLagi.date) > new Date(bolong.date)) {
       const diffMins = Math.round((new Date(masukLagi.date) - new Date(bolong.date)) / 60000);
       const h = Math.floor(diffMins / 60);
       const m = diffMins % 60;
       durasiBolongText = `(${h}j ${m}m)`;
+    }
+
+    let isLembur = false;
+    if (keluarRecord) {
+      const outDate = new Date(keluarRecord.date);
+      const outMins = outDate.getHours() * 60 + outDate.getMinutes();
+      if (outMins >= 1170) isLembur = true; // 1170 = 19:30
     }
 
     return {
@@ -183,14 +180,12 @@ export default function Attendance() {
       durasiBolongText,
       keluar: records.find(r => r.type === 'keluar'),
       lastRecord,
+      isLembur,
     };
   }), [employees, todayActive]);
 
   const sudahMasukCount = employeeStatuses.filter(s => s.masuk).length;
 
-  // ─── History helpers ────────────────────────────────────────────────────────
-
-  // Daftar karyawan unik di seluruh log (termasuk yang sudah tidak aktif)
   const uniqueLogEmployees = useMemo(() => {
     const map = new Map();
     attendanceLog.forEach(r => {
@@ -250,10 +245,7 @@ export default function Attendance() {
         type: r => r.type || '',
       }
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseLogSource, dateFilter, customStartDate, customEndDate, typeFilter, empFilter, sortKey, searchTerm]);
-
-  // ─── Handlers ───────────────────────────────────────────────────────────────
 
   const handleDeleteRecord = (id) =>
     setAttendanceLog(prev => prev.map(r => r.id === id ? markDeleted(r) : r));
@@ -265,10 +257,7 @@ export default function Attendance() {
     triggerConfirm(
       'Hapus record absen ini secara permanen? Tindakan ini tidak bisa dibatalkan.',
       () => {
-        // 1. Hapus dari local state (layar langsung update)
         setAttendanceLog(prev => prev.filter(r => r.id !== id));
-
-        // 2. Hapus dari Supabase cloud (background, tidak blokir UI)
         pushTransactionDelete('attendanceLog', id).catch(err =>
           console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
         );
@@ -298,8 +287,6 @@ export default function Attendance() {
 
   const trashedCount = trashedOnly(attendanceLog).length;
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6">
       <PageHeader
@@ -308,7 +295,6 @@ export default function Attendance() {
         icon={<Fingerprint className="w-6 h-6" />}
       />
 
-      {/* ── Auto-close warning ─────────────────────────────────────────────── */}
       {autoClosedEmployees.length > 0 && (
         <div className="mb-4 border-2 border-red-500 bg-accent-50 dark:bg-accent-950/40 rounded-xl p-4">
           <div className="flex items-start gap-3">
@@ -321,7 +307,7 @@ export default function Attendance() {
               </p>
               <p className="text-xs text-accent-600 dark:text-accent-500 mt-0.5 mb-2">
                 Karyawan berikut tidak absen pulang sampai jam {AUTO_CLOSE_HOUR}:00, sehingga jam pulang dicatat otomatis
-                pukul <span className="font-semibold">{OUTLET_CLOSE_HOUR}:00</span> (jam tutup outlet).
+                pukul <span className="font-semibold">{OUTLET_CLOSE_HOUR}:00</span> (jam tutup outlet). Admin bisa melakukan pengeditan secara manual jika diperlukan.
                 Yang bertanda <span className="font-semibold italic">(jam bolong)</span> — pulang dicatat saat mereka keluar bolong karena tidak absen balik.
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -354,7 +340,6 @@ export default function Attendance() {
         </Alert>
       )}
 
-      {/* ── Status Hari Ini ────────────────────────────────────────────────── */}
       <Card padding="none" className="mb-6 overflow-hidden">
         <div className="p-4 border-b border-slate-100 dark:border-slate-800">
           <h3 className="font-bold text-sm text-slate-700 dark:text-slate-200 flex items-center gap-2">
@@ -371,7 +356,7 @@ export default function Attendance() {
           />
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {employeeStatuses.map(({ employee, masuk, bolong, masukLagi, durasiBolongText, keluar, lastRecord }) => (
+            {employeeStatuses.map(({ isLembur, employee, masuk, bolong, masukLagi, durasiBolongText, keluar, lastRecord }) => (
               <div key={employee.id} className="flex flex-col">
                 <div className="p-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -393,6 +378,7 @@ export default function Attendance() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {isLembur && <Badge variant="warning">Lembur</Badge>} {/* Munculkan indikator lembur */}
                     {(masuk?.photoUrl || keluar?.photoUrl) && (
                       <a
                         href={keluar?.photoUrl || masuk?.photoUrl}
@@ -444,7 +430,6 @@ export default function Attendance() {
                   </div>
                 </div>
 
-                {/* Panel koreksi manual */}
                 {isAdminMode && editEmployeeId === employee.id && (
                   <div className="px-4 pb-4 bg-slate-50 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-800">
                     <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider pt-3 mb-2">
@@ -458,7 +443,7 @@ export default function Attendance() {
                       >
                         <option value="masuk">Masuk</option>
                         <option value="bolong">Jam Bolong</option>
-                        <option value="masuk-lagi">Masuk Lagi</option>
+                        <option value="masuk_lagi">Masuk Lagi</option>
                         <option value="keluar">Keluar</option>
                       </select>
                       <input
@@ -488,7 +473,6 @@ export default function Attendance() {
         )}
       </Card>
 
-      {/* ── Riwayat Log Absen ──────────────────────────────────────────────── */}
       <div className="mb-10">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-sm text-slate-700 dark:text-slate-200 flex items-center gap-2">
@@ -505,7 +489,6 @@ export default function Attendance() {
           )}
         </div>
 
-        {/* Filter Row 1 — periode */}
         <Card className="flex items-center gap-2 overflow-x-auto scrollbar-hide mb-3 p-3">
           <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 mr-1" />
           {LOG_FILTER_TABS.map(tab => (
@@ -521,7 +504,6 @@ export default function Attendance() {
           ))}
         </Card>
 
-        {/* Rentang tanggal kustom */}
         {dateFilter === 'kustom' && (
           <Card className="flex items-center gap-2 p-3 mb-3 max-w-fit">
             <div className="flex flex-col">
@@ -548,9 +530,7 @@ export default function Attendance() {
           </Card>
         )}
 
-        {/* Filter Row 2 — karyawan, tipe, sort, search */}
         <Card className="flex flex-col sm:flex-row gap-3 mb-3 p-4">
-          {/* Karyawan */}
           <div className="relative w-full sm:w-52">
             <select
               value={empFilter}
@@ -565,7 +545,6 @@ export default function Attendance() {
             <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
           </div>
 
-          {/* Tipe */}
           <div className="relative w-full sm:w-44">
             <select
               value={typeFilter}
@@ -577,7 +556,6 @@ export default function Attendance() {
             <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
           </div>
 
-          {/* Sort */}
           <button
             type="button"
             onClick={() => setIsSortOpen(true)}
@@ -587,7 +565,6 @@ export default function Attendance() {
             <ArrowUpDown className="text-slate-400 dark:text-slate-500 w-4 h-4 shrink-0" />
           </button>
 
-          {/* Search */}
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
             <input
@@ -600,7 +577,6 @@ export default function Attendance() {
           </div>
         </Card>
 
-        {/* Log list */}
         <Card padding="none" className="overflow-hidden">
           {filteredLogs.length === 0 ? (
             <EmptyState
@@ -618,7 +594,6 @@ export default function Attendance() {
                   key={r.id}
                   className="p-3.5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
                 >
-                  {/* Nama + tanggal/jam */}
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate leading-snug">
                       {r.employeeName}
@@ -628,7 +603,6 @@ export default function Attendance() {
                     </p>
                   </div>
 
-                  {/* Badge & actions */}
                   <div className="flex items-center gap-2 shrink-0">
                     {r.photoUrl && (
                       <a

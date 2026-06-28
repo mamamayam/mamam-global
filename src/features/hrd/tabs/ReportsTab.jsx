@@ -23,37 +23,43 @@ const ReportsTab = () => {
     filteredRecordsForReport.forEach(rec => {
       if (!perf[rec.employeeId]) {
         const emp = employees.find(e => e.id === rec.employeeId);
-        perf[rec.employeeId] = { employee: emp || { name: 'Karyawan Dihapus', hourlyRate: 0 }, totalHours: 0, totalAdditions: 0, totalDeductions: 0, totalKasbon: 0, netPay: 0, records: [] };
+        perf[rec.employeeId] = { 
+          employee: emp || { name: 'Karyawan Dihapus', hourlyRate: 0 }, 
+          totalHours: 0, 
+          totalOvertimeMinutes: 0, 
+          totalAdditions: 0, 
+          totalDeductions: 0, 
+          totalKasbon: 0, 
+          netPay: 0, 
+          records: [] 
+        };
       }
       const data = perf[rec.employeeId];
       data.records.push(rec);
       data.totalHours += rec.hoursWorked;
-
-      const addSum = rec.additions.reduce((sum, a) => sum + a.amount, 0);
-      const dedSum = rec.deductions.filter(d => !d.category?.toLowerCase().includes(KASBON_CATEGORY_KEYWORD)).reduce((sum, d) => sum + d.amount, 0);
-
-      data.totalAdditions += addSum;
-      data.totalDeductions += dedSum;
+      data.totalOvertimeMinutes += (rec.overtimeMinutes || 0);
+      
+      // Mengambil tambahan & potongan manual dari record harian
+      data.totalAdditions += (rec.additions || []).reduce((sum, a) => sum + a.amount, 0);
+      data.totalDeductions += (rec.deductions || []).reduce((sum, d) => sum + d.amount, 0);
     });
 
-    activeOnly(expenses ?? [])
-      .filter(exp => exp.category === 'Kasbon Karyawan' && exp.employeeId && toLocalMonthString(exp.date) === reportMonth)
-      .forEach(exp => {
-        if (!perf[exp.employeeId]) {
-          const emp = employees.find(e => e.id === exp.employeeId);
-          if (!emp) return;
-          perf[exp.employeeId] = { employee: emp, totalHours: 0, totalAdditions: 0, totalDeductions: 0, totalKasbon: 0, netPay: 0, records: [] };
-        }
-        perf[exp.employeeId].totalKasbon += exp.amount;
-        perf[exp.employeeId].totalDeductions += exp.amount;
-      });
+    // KODE BARU: Hitung nominal lembur kelipatan 30 menit & kalkulasi Gaji Bersih
+    Object.values(perf).forEach(data => {
+      // Kelipatan 30 menit dikali Rp 5.000
+      const nominalLembur = Math.floor((data.totalOvertimeMinutes || 0) / 30) * 5000;
+      data.overtimePay = nominalLembur; // Simpan variabel ini untuk dipakai di Payslip
 
-    Object.values(perf).forEach(p => {
-      p.netPay = (p.totalHours * p.employee.hourlyRate) + p.totalAdditions - p.totalDeductions;
+      // Otomatis tambahkan nominal lembur ke dalam Total Tambahan karyawan
+      data.totalAdditions += nominalLembur;
+
+      // Hitung total akhir gaji bersih
+      const basicPay = data.totalHours * data.employee.hourlyRate;
+      data.netPay = basicPay + data.totalAdditions - data.totalDeductions;
     });
 
     return Object.values(perf);
-  }, [filteredRecordsForReport, employees, expenses, reportMonth]);
+  }, [filteredRecordsForReport, employees]);
 
   const totalPayrollExpense = employeePerformance.reduce((sum, p) => sum + p.netPay, 0);
 
@@ -100,7 +106,13 @@ const ReportsTab = () => {
           <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                <th className="p-4">Nama Karyawan</th><th className="p-4 text-center">Total Jam</th><th className="p-4 text-right">Tambahan</th><th className="p-4 text-right">Potongan</th><th className="p-4 text-right">Gaji Bersih (Net)</th><th className="p-4 text-center">Aksi</th>
+                <th className="p-4">Nama Karyawan</th>
+                <th className="p-4 text-center">Total Jam</th>
+                <th className="p-4 text-center">Lembur</th> {/* Tambahan kolom baru */}
+                <th className="p-4 text-right">Tambahan</th>
+                <th className="p-4 text-right">Potongan</th>
+                <th className="p-4 text-right">Gaji Bersih (Net)</th>
+                <th className="p-4 text-center">Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -111,6 +123,9 @@ const ReportsTab = () => {
                   <tr key={p.employee.id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-4"><p className="font-bold text-sm text-slate-800">{p.employee.name}</p></td>
                     <td className="p-4 text-center font-semibold text-slate-700 text-sm">{p.totalHours}</td>
+                    <td className="p-4 text-center font-semibold text-orange-500 text-sm">
+                      {p.totalOvertimeMinutes > 0 ? `${(p.totalOvertimeMinutes / 60).toFixed(1).replace('.', ',')} Jam` : '-'}
+                    </td>
                     <td className="p-4 text-right font-bold text-green-600 text-sm">+{formatRupiah(p.totalAdditions)}</td>
                     <td className="p-4 text-right font-bold text-red-500 text-sm">-{formatRupiah(p.totalDeductions)}</td>
                     <td className="p-4 text-right font-black text-slate-900 text-sm">{formatRupiah(p.netPay)}</td>
@@ -124,7 +139,7 @@ const ReportsTab = () => {
           </table>
         </div>
       </Card>
-      
+
       <SortModal isOpen={isPerfSortOpen} onClose={() => setIsPerfSortOpen(false)} value={perfSortKey} onChange={setPerfSortKey} options={perfSortOptions} />
     </div>
   );
