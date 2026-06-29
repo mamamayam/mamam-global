@@ -4,13 +4,13 @@ import { toLocalDateString } from '../../../utils/formatters';
 import { Card, Button, Input, Select, IconButton, Badge, EmptyState, SortModal } from '../../../components/ui';
 import { applySort } from '../../../utils/sortUtils';
 import { Plus, Edit3, Trash2, Briefcase, Users, ArrowUpDown, ChevronLeft } from 'lucide-react';
-import { EMPLOYEE_STATUS_OPTIONS, getEmployeeStatus, getEmployeeStatusInfo } from '../utils/payrollLogic';
+import { EMPLOYEE_STATUS_OPTIONS, getEmployeeStatus, getEmployeeStatusInfo, OVERTIME_RATE_PER_30MIN } from '../utils/payrollLogic';
 
 const ManageEmployeesTab = () => {
   const { employees, setEmployees, formatRupiah, triggerAlert, triggerConfirm } = useAppContext();
 
   const [isEditingEmp, setIsEditingEmp] = useState(false);
-  const [empFormData, setEmpFormData] = useState({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString(), status: 'aktif', resignDate: '' });
+  const [empFormData, setEmpFormData] = useState({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, overtimeRate30: OVERTIME_RATE_PER_30MIN, startDate: toLocalDateString(), status: 'aktif', resignDate: '' });
   const [empSortKey, setEmpSortKey] = useState('name-asc');
   const [isEmpSortOpen, setIsEmpSortOpen] = useState(false);
   const [empStatusFilter, setEmpStatusFilter] = useState('semua');
@@ -18,15 +18,20 @@ const ManageEmployeesTab = () => {
   const handleSaveEmployee = () => {
     if (!empFormData.name || empFormData.hourlyRate <= 0) return triggerAlert('Nama dan Upah per jam harus diisi dengan benar!');
 
-    if (empFormData.id) {
-      setEmployees(prev => prev.map(e => e.id === empFormData.id ? empFormData : e));
+    const payload = {
+      ...empFormData,
+      overtimeRate30: Number(empFormData.overtimeRate30) > 0 ? Number(empFormData.overtimeRate30) : OVERTIME_RATE_PER_30MIN,
+    };
+
+    if (payload.id) {
+      setEmployees(prev => prev.map(e => e.id === payload.id ? payload : e));
       triggerAlert('Data Karyawan berhasil diupdate.');
     } else {
-      setEmployees(prev => [...prev, { ...empFormData, id: `EMP-${Date.now()}` }]);
+      setEmployees(prev => [...prev, { ...payload, id: `EMP-${Date.now()}` }]);
       triggerAlert('Karyawan baru berhasil ditambahkan.');
     }
     setIsEditingEmp(false);
-    setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString(), status: 'aktif', resignDate: '' });
+    setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, overtimeRate30: OVERTIME_RATE_PER_30MIN, startDate: toLocalDateString(), status: 'aktif', resignDate: '' });
   };
 
   const handleDeleteEmployee = (id) => {
@@ -78,6 +83,7 @@ const ManageEmployeesTab = () => {
             </div>
             <Input type="number" label="Upah per Jam (Rp)" variant="muted" icon={<span className="font-bold">Rp</span>} value={empFormData.hourlyRate || ""} onChange={e => setEmpFormData({ ...empFormData, hourlyRate: e.target.value ? Number(e.target.value) : "" })} />
             <Input type="number" label="Bonus Full Time (Rp)" variant="muted" icon={<span className="font-bold">Rp</span>} value={empFormData.fullTimeBonus || ""} onChange={e => setEmpFormData({ ...empFormData, fullTimeBonus: e.target.value ? Number(e.target.value) : "" })} />
+            <Input type="number" label="Tarif Lembur per 30 Menit (Rp)" variant="muted" icon={<span className="font-bold">Rp</span>} value={empFormData.overtimeRate30 ?? OVERTIME_RATE_PER_30MIN} onChange={e => setEmpFormData({ ...empFormData, overtimeRate30: e.target.value ? Number(e.target.value) : "" })} />
             <Input type="date" label="Mulai Kerja" variant="muted" value={empFormData.startDate} onChange={e => setEmpFormData({ ...empFormData, startDate: e.target.value })} />
           </div>
           <Button variant="primary" size="lg" onClick={handleSaveEmployee}>Simpan Data Karyawan</Button>
@@ -94,7 +100,7 @@ const ManageEmployeesTab = () => {
               <button type="button" onClick={() => setIsEmpSortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5">
                 <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>
-              <Button variant="dark" icon={<Plus className="w-4 h-4" />} onClick={() => { setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, startDate: toLocalDateString(), status: 'aktif', resignDate: '' }); setIsEditingEmp(true); }}>
+              <Button variant="dark" icon={<Plus className="w-4 h-4" />} onClick={() => { setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, overtimeRate30: OVERTIME_RATE_PER_30MIN, startDate: toLocalDateString(), status: 'aktif', resignDate: '' }); setIsEditingEmp(true); }}>
                 Tambah Karyawan
               </Button>
             </div>
@@ -104,7 +110,7 @@ const ManageEmployeesTab = () => {
             {sortedEmployees.map(emp => (
               <Card key={emp.id} padding="lg" className="relative group hover:shadow-md transition-shadow duration-300">
                 <div className="absolute top-4 right-4 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                  <IconButton variant="edit" ghost onClick={() => { setEmpFormData({ status: 'aktif', resignDate: '', ...emp }); setIsEditingEmp(true); }}><Edit3 className="w-4 h-4" /></IconButton>
+                  <IconButton variant="edit" ghost onClick={() => { setEmpFormData({ status: 'aktif', resignDate: '', overtimeRate30: OVERTIME_RATE_PER_30MIN, ...emp }); setIsEditingEmp(true); }}><Edit3 className="w-4 h-4" /></IconButton>
                   <IconButton variant="delete" ghost onClick={() => handleDeleteEmployee(emp.id)}><Trash2 className="w-4 h-4" /></IconButton>
                 </div>
                 <div className="flex items-center gap-3 mb-4">
@@ -118,6 +124,7 @@ const ManageEmployeesTab = () => {
                 </div>
                 <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-800 pt-3 text-sm">
                   <div className="flex justify-between"><span className="text-slate-500 font-medium">Upah/Jam:</span><span className="font-bold text-orange-600">{formatRupiah(emp.hourlyRate)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 font-medium">Lembur/30m:</span><span className="font-bold text-orange-600">{formatRupiah(emp.overtimeRate30 || OVERTIME_RATE_PER_30MIN)}</span></div>
                 </div>
               </Card>
             ))}

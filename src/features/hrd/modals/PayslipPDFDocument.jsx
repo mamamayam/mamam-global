@@ -181,9 +181,21 @@ const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
         out: 0,
       });
     }
-    rec.additions?.forEach(a =>
-      items.push({ desc: a.category + (a.note ? ` (${a.note})` : ''), in: a.amount, out: 0 })
-    );
+    if (rec.overtimeMinutes > 0 && data.overtimeRate) {
+      const dailyOvertimePay = Math.floor(rec.overtimeMinutes / 30) * data.overtimeRate;
+      if (dailyOvertimePay > 0) {
+        items.push({
+          desc: `Uang Lembur (${(rec.overtimeMinutes / 60).toFixed(1).replace('.', ',')} jam)`,
+          in: dailyOvertimePay,
+          out: 0,
+        });
+      }
+    }
+    rec.additions
+      ?.filter(a => !(a.category || '').toLowerCase().includes('lembur'))
+      .forEach(a =>
+        items.push({ desc: a.category + (a.note ? ` (${a.note})` : ''), in: a.amount, out: 0 })
+      );
     rec.deductions?.forEach(d =>
       items.push({ desc: d.category + (d.note ? ` (${d.note})` : ''), in: 0, out: d.amount })
     );
@@ -227,6 +239,7 @@ const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
             {[
               ['Total Jam Kerja', `${data.totalHours} Jam`],
               ['Upah per Jam', formatRupiah(data.employee.hourlyRate)],
+              ['Lembur per 30 Menit', formatRupiah(data.overtimeRate || 0)],
               ['Bonus Full Time', formatRupiah(data.employee.fullTimeBonus || 0)],
             ].map(([label, value]) => (
               <View key={label} style={S.infoRow}>

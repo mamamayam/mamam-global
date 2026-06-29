@@ -19,7 +19,7 @@ const PayslipModal = () => {
 
   const handleSharePDF = async () => {
     try {
-      // Generate PDF murni dari JSX — teks asli, bukan gambar
+      // Generate PDF
       const blob = await pdf(
         <PayslipPDFDocument
           data={data}
@@ -121,6 +121,7 @@ const PayslipModal = () => {
                 </div>
               )}
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Upah per Jam</span> <span className="font-bold">: {formatRupiah(data.employee.hourlyRate)}</span></div>
+              <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Lembur per 30 Menit</span> <span className="font-bold">: {formatRupiah(data.overtimeRate || 0)}</span></div>
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Bonus Full Time</span> <span className="font-bold">: {formatRupiah(data.employee.fullTimeBonus || 0)}</span></div>
             </div>
           </div>
@@ -145,8 +146,17 @@ const PayslipModal = () => {
                     if (rec.hoursWorked > 0) {
                       items.push({ desc: `Upah Jam Kerja (${rec.hoursWorked} Jam)`, in: rec.hoursWorked * data.employee.hourlyRate, out: 0 });
                     }
-                    // Tambahkan Pemasukan Tambahan
-                    rec.additions.forEach(a => items.push({ desc: a.category + (a.note ? ` (${a.note})` : ''), in: a.amount, out: 0 }));
+                    // Uang Lembur per hari ini — dihitung dari overtimeMinutes + tarif lembur karyawan
+                    if (rec.overtimeMinutes > 0 && data.overtimeRate) {
+                      const dailyOvertimePay = Math.floor(rec.overtimeMinutes / 30) * data.overtimeRate;
+                      if (dailyOvertimePay > 0) {
+                        items.push({ desc: `Uang Lembur (${(rec.overtimeMinutes / 60).toFixed(1).replace('.', ',')} jam)`, in: dailyOvertimePay, out: 0 });
+                      }
+                    }
+                    // Tambahkan Pemasukan Tambahan (kecuali Bonus Lembur, sudah dihitung di atas)
+                    rec.additions
+                      .filter(a => !(a.category || '').toLowerCase().includes('lembur'))
+                      .forEach(a => items.push({ desc: a.category + (a.note ? ` (${a.note})` : ''), in: a.amount, out: 0 }));
                     // Tambahkan Pengeluaran / Potongan
                     rec.deductions.forEach(d => items.push({ desc: d.category + (d.note ? ` (${d.note})` : ''), in: 0, out: d.amount }));
 

@@ -4,6 +4,18 @@ export const EARLY_OVERTIME_THRESHOLD_MINUTES = WORK_START_MINUTES - 30;
 export const OVERTIME_THRESHOLD_MINUTES = WORK_END_MINUTES + 30;
 export const OVERTIME_RATE_PER_30MIN = 5000;
 
+// Tarif lembur per 30 menit milik karyawan (diisi di Manajemen Karyawan).
+// Kalau karyawan belum punya tarif sendiri, fallback ke tarif default di atas (Rp5.000/30 menit).
+export function getOvertimeRate(emp) {
+  const rate = Number(emp?.overtimeRate30);
+  return rate > 0 ? rate : OVERTIME_RATE_PER_30MIN;
+}
+
+// Nominal uang lembur = jumlah blok 30 menit (dibulatkan ke bawah) x tarif per 30 menit.
+export function calculateOvertimePay(overtimeMinutes, ratePer30Min) {
+  return Math.floor((overtimeMinutes || 0) / 30) * ratePer30Min;
+}
+
 export const LEMBUR_CATEGORY_KEYWORD = 'lembur';
 export const KASBON_CATEGORY_KEYWORD = 'kasbon';
 

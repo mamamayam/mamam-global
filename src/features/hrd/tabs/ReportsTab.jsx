@@ -4,8 +4,8 @@ import { toLocalMonthString } from '../../../utils/formatters';
 import { Card, Button, Input, EmptyState, SortModal } from '../../../components/ui';
 import { applySort } from '../../../utils/sortUtils';
 import { activeOnly } from '../../../utils/softDelete';
-import { PieChart, Printer, Calendar, ChevronRight, ArrowUpDown } from 'lucide-react';
-import { KASBON_CATEGORY_KEYWORD } from '../utils/payrollLogic';
+import { PieChart, Printer, Calendar, ChevronRight, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { KASBON_CATEGORY_KEYWORD, LEMBUR_CATEGORY_KEYWORD, getOvertimeRate, calculateOvertimePay } from '../utils/payrollLogic';
 
 const ReportsTab = () => {
   const { employees, employeeDailyRecords, expenses, setPayslipModal, formatRupiah } = useAppContext();
@@ -13,6 +13,7 @@ const ReportsTab = () => {
   const [reportMonth, setReportMonth] = useState(toLocalMonthString());
   const [perfSortKey, setPerfSortKey] = useState('name-asc');
   const [isPerfSortOpen, setIsPerfSortOpen] = useState(false);
+  const [expandedEmpId, setExpandedEmpId] = useState(null);
 
   const filteredRecordsForReport = useMemo(() => {
     return activeOnly(employeeDailyRecords).filter(r => toLocalMonthString(r.date) === reportMonth);
@@ -31,23 +32,43 @@ const ReportsTab = () => {
           totalDeductions: 0, 
           totalKasbon: 0, 
           netPay: 0, 
-          records: [] 
+          records: [],
+          overtimeByDay: [],
         };
       }
       const data = perf[rec.employeeId];
       data.records.push(rec);
-      data.totalHours += rec.hoursWorked;
+
+      // Bulatkan ke atas per hari dulu (1 desimal), baru diakumulasi ke total bulanan
+      // — sama persis seperti perhitungan lembur (akumulasi per hari, bukan per bulan).
+      const hoursForDay = Math.ceil((rec.hoursWorked || 0) * 10 - 1e-9) / 10;
+      data.totalHours += hoursForDay;
       data.totalOvertimeMinutes += (rec.overtimeMinutes || 0);
-      
+
+      if (rec.overtimeMinutes > 0) {
+        data.overtimeByDay.push({ dateStr: rec.dateStr, overtimeMinutes: rec.overtimeMinutes });
+      }
+
       // Mengambil tambahan & potongan manual dari record harian
-      data.totalAdditions += (rec.additions || []).reduce((sum, a) => sum + a.amount, 0);
+      // "Bonus Lembur" dikecualikan di sini — nominalnya dihitung ulang di bawah pakai tarif
+      // lembur personal karyawan (Manajemen Karyawan), supaya tidak dobel hitung dengan overtimePay.
+      data.totalAdditions += (rec.additions || [])
+        .filter(a => !(a.category || '').toLowerCase().includes(LEMBUR_CATEGORY_KEYWORD))
+        .reduce((sum, a) => sum + a.amount, 0);
       data.totalDeductions += (rec.deductions || []).reduce((sum, d) => sum + d.amount, 0);
     });
 
-    // KODE BARU: Hitung nominal lembur kelipatan 30 menit & kalkulasi Gaji Bersih
+    // Hitung nominal lembur per hari dulu (floor per hari, bukan floor total bulanan),
+    // baru ditotal — supaya rincian per hari SELALU sama dengan total bulanan (tidak ada selisih).
     Object.values(perf).forEach(data => {
-      // Kelipatan 30 menit dikali Rp 5.000
-      const nominalLembur = Math.floor((data.totalOvertimeMinutes || 0) / 30) * 5000;
+      const overtimeRate = getOvertimeRate(data.employee);
+
+      data.overtimeByDay = data.overtimeByDay
+        .sort((a, b) => new Date(a.dateStr) - new Date(b.dateStr))
+        .map(d => ({ ...d, pay: calculateOvertimePay(d.overtimeMinutes, overtimeRate) }));
+
+      const nominalLembur = data.overtimeByDay.reduce((sum, d) => sum + d.pay, 0);
+      data.overtimeRate = overtimeRate; // Tarif/30 menit, dipakai juga di Payslip
       data.overtimePay = nominalLembur; // Simpan variabel ini untuk dipakai di Payslip
 
       // Otomatis tambahkan nominal lembur ke dalam Total Tambahan karyawan
@@ -120,19 +141,47 @@ const ReportsTab = () => {
                 <tr><td colSpan="6"><EmptyState size="sm" icon={<PieChart className="w-8 h-8" />} title="Tidak ada data penggajian pada bulan ini." /></td></tr>
               ) : (
                 sortedEmployeePerformance.map(p => (
-                  <tr key={p.employee.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4"><p className="font-bold text-sm text-slate-800">{p.employee.name}</p></td>
-                    <td className="p-4 text-center font-semibold text-slate-700 text-sm">{p.totalHours}</td>
-                    <td className="p-4 text-center font-semibold text-orange-500 text-sm">
-                      {p.totalOvertimeMinutes > 0 ? `${(p.totalOvertimeMinutes / 60).toFixed(1).replace('.', ',')} Jam` : '-'}
-                    </td>
-                    <td className="p-4 text-right font-bold text-green-600 text-sm">+{formatRupiah(p.totalAdditions)}</td>
-                    <td className="p-4 text-right font-bold text-red-500 text-sm">-{formatRupiah(p.totalDeductions)}</td>
-                    <td className="p-4 text-right font-black text-slate-900 text-sm">{formatRupiah(p.netPay)}</td>
-                    <td className="p-4 text-center">
-                      <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>Cetak Slip</Button>
-                    </td>
-                  </tr>
+                  <React.Fragment key={p.employee.id}>
+                    <tr className="hover:bg-slate-50 transition-colors">
+                      <td className="p-4"><p className="font-bold text-sm text-slate-800">{p.employee.name}</p></td>
+                      <td className="p-4 text-center font-semibold text-slate-700 text-sm">{p.totalHours.toFixed(1).replace('.', ',')}</td>
+                      <td className="p-4 text-center font-semibold text-orange-500 text-sm">
+                        {p.totalOvertimeMinutes > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedEmpId(expandedEmpId === p.employee.id ? null : p.employee.id)}
+                            className="inline-flex items-center gap-1 hover:underline"
+                            title="Lihat rincian lembur per hari"
+                          >
+                            {(p.totalOvertimeMinutes / 60).toFixed(1).replace('.', ',')} Jam
+                            <ChevronDown className={`w-3 h-3 transition-transform ${expandedEmpId === p.employee.id ? 'rotate-180' : ''}`} />
+                          </button>
+                        ) : '-'}
+                      </td>
+                      <td className="p-4 text-right font-bold text-green-600 text-sm">+{formatRupiah(p.totalAdditions)}</td>
+                      <td className="p-4 text-right font-bold text-red-500 text-sm">-{formatRupiah(p.totalDeductions)}</td>
+                      <td className="p-4 text-right font-black text-slate-900 text-sm">{formatRupiah(p.netPay)}</td>
+                      <td className="p-4 text-center">
+                        <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>Cetak Slip</Button>
+                      </td>
+                    </tr>
+                    {expandedEmpId === p.employee.id && (
+                      <tr className="bg-orange-50/40">
+                        <td colSpan="7" className="p-4">
+                          <p className="text-xs font-bold text-slate-500 mb-2">Rincian Lembur Harian — {p.employee.name} (Rp{p.overtimeRate.toLocaleString('id-ID')}/30 menit)</p>
+                          <div className="flex flex-wrap gap-2">
+                            {p.overtimeByDay.map(d => (
+                              <span key={d.dateStr} className="text-xs bg-white border border-orange-200 rounded-lg px-2.5 py-1.5">
+                                <span className="font-semibold text-slate-700">{d.dateStr}</span>
+                                <span className="text-orange-600 font-bold ml-1.5">{(d.overtimeMinutes / 60).toFixed(1).replace('.', ',')} jam</span>
+                                <span className="text-slate-400 ml-1.5">({formatRupiah(d.pay)})</span>
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))
               )}
             </tbody>
