@@ -12,6 +12,7 @@ import { useAppContext } from '../../context/AppContext';
 
 const PosView = () => {
     // ─── AMBIL DARI ZUSTAND (Granular / Dipisah-pisah) ───
+   const addToCart = usePosStore((state) => state.addToCart);
     const searchQuery = usePosStore((state) => state.searchQuery);
     const setSearchQuery = usePosStore((state) => state.setSearchQuery);
     const selectedCategory = usePosStore((state) => state.selectedCategory);
@@ -23,8 +24,8 @@ const PosView = () => {
 
     // ─── AMBIL DARI CONTEXT LAMA (Fungsi/Data statis yang belum dipindah) ───
     const {
-        menus, addToCart, formatRupiah, getTotal, currentShift, triggerAlert,
-        salesHistory, setCurrentView
+        menus, formatRupiah, getTotal, currentShift, triggerAlert,
+        salesHistory, setCurrentView, variantGroups
     } = useAppContext();
 
     const categoryTabsRef = useRef(null);
@@ -111,7 +112,7 @@ const PosView = () => {
         } else {
             addToCart(menu, {}, variantGroups);
         }
-    }, [currentShift, triggerAlert, setCurrentView, setSelectedMenuForVariant, setVariantSelectedOptions, addToCart]);
+    }, [currentShift, triggerAlert, setCurrentView, setSelectedMenuForVariant, setVariantSelectedOptions, addToCart, variantGroups]);
 
     return (
         <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 relative animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">

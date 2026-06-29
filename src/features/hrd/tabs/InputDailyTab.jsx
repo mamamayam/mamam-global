@@ -267,6 +267,21 @@ const InputDailyTab = () => {
     triggerAlert(hasAdjustments ? 'Perubahan berhasil diupdate!' : 'Data berhasil disimpan!');
   };
 
+  /* ── Handler Delete / Move to Trash ── */
+  const handleDeleteRecord = (rec) => {
+    if (showTrash) {
+      // Jika berada di Recycle Bin, konfirmasi sebelum hapus permanen
+      triggerConfirm('Apakah Anda yakin ingin menghapus permanen data ini? Tindakan ini tidak dapat dibatalkan.', () => {
+        setEmployeeDailyRecords(prev => prev.filter(r => r.id !== rec.id));
+        triggerAlert('Data berhasil dihapus secara permanen!');
+      });
+    } else {
+      // Jika di riwayat biasa, lakukan soft delete (pindah ke trash)
+      setEmployeeDailyRecords(prev => prev.map(r => r.id === rec.id ? markDeleted(r) : r));
+      triggerAlert('Data berhasil dipindahkan ke Recycle Bin!');
+    }
+  };
+
   /* ── Handler Modal Edit ── */
   const handleOpenEdit = (rec) => {
     setEditingRecord(rec);
@@ -557,7 +572,11 @@ const InputDailyTab = () => {
                                   <Edit3 className="w-3.5 h-3.5" />
                                 </IconButton>
                               )}
-                              <IconButton variant="delete" onClick={() => setEmployeeDailyRecords(prev => prev.map(r => r.id === rec.id ? markDeleted(r) : r))}>
+                              <IconButton 
+                                variant="delete" 
+                                onClick={() => handleDeleteRecord(rec)}
+                                title={showTrash ? "Hapus Permanen" : "Hapus ke Recycle Bin"}
+                              >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </IconButton>
                             </div>

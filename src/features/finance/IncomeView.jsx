@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { TrendingUp, History, Save, Trash2, Pencil, X, Settings2, ChevronDown, RotateCcw, ArrowUpDown } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
@@ -19,6 +19,14 @@ const IncomeView = () => {
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
+
+
+  const activeTotal = useMemo(() => {
+    return activeOnly(incomes)
+      .filter(inc => filterMonth === '' || toLocalMonthString(inc.date) === filterMonth)
+      .reduce((s, e) => s + e.amount, 0);
+  }, [incomes, filterMonth]);
+
 
   // State pelacak data edit
   const [editingId, setEditingId] = useState(null);
@@ -222,7 +230,9 @@ const IncomeView = () => {
           </div>
           <div className="p-3 bg-green-50 dark:bg-green-500/10 border-b border-green-100 dark:border-green-500/20 flex justify-between items-center">
             <span className="text-xs font-bold text-accent-700 dark:text-accent-300">Total Periode Ini:</span>
-            <span className="text-sm font-black text-green-700 dark:text-green-300">{formatRupiah(filteredIncomes.reduce((s, e) => s + e.amount, 0))}</span>
+            <span className="text-sm font-black text-green-700 dark:text-green-300">
+              {formatRupiah(activeTotal)}
+            </span>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
             {sortedIncomes.length === 0 ? (

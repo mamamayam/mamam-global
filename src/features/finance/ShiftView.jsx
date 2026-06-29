@@ -108,7 +108,7 @@ const ShiftView = () => {
     const start = currentShift.startTime;
 
     // Penjualan Tunai
-    const shiftSales = salesHistory.filter(s => new Date(s.date) >= start);
+    const shiftSales = activeOnly(salesHistory).filter(s => new Date(s.date) >= start);
     let cashSalesTotal = 0;
     shiftSales.forEach(sale => {
       if (sale.paymentMethod === 'Tunai') cashSalesTotal += sale.total;

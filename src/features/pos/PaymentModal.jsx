@@ -30,7 +30,7 @@ const PaymentModal = () => {
     orderType, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount,
     deliveryFee, salesHistory, setSalesHistory, setCustomerName, setAppliedVoucher,
     setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings,
-    triggerAlert, navigate
+    triggerAlert, navigate, resetDraft
   } = useAppContext();
 
   if (!paymentModal.isOpen) return null;

@@ -14,15 +14,15 @@ const HistoryView = () => {
     // State Filter
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFilter, setDateFilter] = useState('semua');
-    const [orderTypeFilter, setOrderTypeFilter] = useState('semua'); // State baru untuk Tipe Order
-    const [sortKey, setSortKey] = useState('date-desc'); // gabungan field-direction, dipasangin ke applySort
-    const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
+    const [orderTypeFilter, setOrderTypeFilter] = useState('semua');
+    const [sortKey, setSortKey] = useState('date-desc');
+    const [isSortOpen, setIsSortOpen] = useState(false);
 
     // State khusus untuk rentang tanggal kustom
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
-    const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
-    const [detailOrder, setDetailOrder] = useState(null); // order yang sedang dibuka di Detail Modal
+    const [showTrash, setShowTrash] = useState(false);
+    const [detailOrder, setDetailOrder] = useState(null);
 
     // Daftar opsi tab periode tanggal
     const filterTabs = [
@@ -34,7 +34,7 @@ const HistoryView = () => {
         { id: 'kustom', label: 'Pilih Tanggal' }
     ];
 
-    // Daftar opsi urutan buat SortModal — key = "field-direction"
+    // Daftar opsi urutan buat SortModal
     const sortOptions = [
         { key: 'date-desc', label: 'Terbaru Dulu' },
         { key: 'date-asc', label: 'Terlama Dulu' },
@@ -86,26 +86,22 @@ const HistoryView = () => {
         }
     };
 
-    // Logika Filter Gabungan (Pencarian Teks + Periode Tanggal + Tipe Order)
+    // Logika Filter Gabungan
     const filteredHistory = visibleSalesHistory.filter(order => {
         const searchLower = searchTerm.toLowerCase();
 
-        // 1. Filter Teks (Mencakup ID, No Order, ATAU Nama Pelanggan)
         const matchesSearch =
             (order.id && String(order.id).toLowerCase().includes(searchLower)) ||
             (order.orderNumber && String(order.orderNumber).toLowerCase().includes(searchLower)) ||
             (order.customerName && String(order.customerName).toLowerCase().includes(searchLower));
 
-        // 2. Filter Tanggal
         const matchesDate = isWithinDateRange(order.date, dateFilter);
-
-        // 3. Filter Tipe Order
         const matchesOrderType = orderTypeFilter === 'semua' || order.orderType === orderTypeFilter;
 
         return matchesSearch && matchesDate && matchesOrderType;
     });
 
-    // Urutkan hasil filter pakai sortKey terpilih ("date-desc", "name-asc", dst)
+    // Urutkan hasil filter
     const sortedHistory = applySort(filteredHistory, sortKey, {
         date: o => new Date(o.date),
         name: o => o.customerName || '',
@@ -114,12 +110,24 @@ const HistoryView = () => {
 
     const { selectedIds, allSelected: allVisibleSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedHistory);
 
+    // Hapus Tunggal (Pindah ke Recycle Bin)
     const handleDelete = (id) => {
         triggerConfirm('Pindahkan riwayat pesanan ini ke Recycle Bin?', () => {
             setSalesHistory(salesHistory.map(order => order.id === id ? markDeleted(order) : order));
         });
     };
 
+    // Hapus Banyak SEKALIGUS (Pindah ke Recycle Bin) -> INI FUNGSI BARU
+    const handleBulkSoftDelete = () => {
+        const ids = [...selectedIds];
+        if (ids.length === 0) return;
+        triggerConfirm(`Pindahkan ${ids.length} riwayat pesanan terpilih ke Recycle Bin?`, () => {
+            setSalesHistory(salesHistory.map(order => selectedIds.has(order.id) ? markDeleted(order) : order));
+            resetSelection();
+        });
+    };
+
+    // Hapus Banyak SEKALIGUS (Permanen di Recycle Bin)
     const handleDeleteSelected = () => {
         const ids = [...selectedIds];
         if (ids.length === 0) return;
@@ -139,8 +147,6 @@ const HistoryView = () => {
     const handlePermanentDelete = (id) => {
         triggerConfirm('Hapus PERMANEN riwayat pesanan ini? Tindakan ini tidak bisa dibatalkan.', () => {
             setSalesHistory(salesHistory.filter(order => order.id !== id));
-            // Langsung kirim delete ke Supabase saat ini juga, gak nunggu siklus
-            // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
             pushTransactionDelete('salesHistory', id).catch(err =>
                 console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
             );
@@ -155,7 +161,6 @@ const HistoryView = () => {
                     title={showTrash ? 'Recycle Bin' : 'Riwayat Pesanan'}
                     icon={<History className="w-6 h-6 text-green-500 dark:text-green-400" />}
                 />
-                {/* Tombol Recycle Bin hanya muncul untuk Admin */}
                 {isAdminMode && (
                     <Button
                         size="sm"
@@ -167,11 +172,8 @@ const HistoryView = () => {
                 )}
             </div>
 
-
             {/* CONTAINER UTAMA FILTER*/}
             <div className="flex-shrink-0 w-full flex flex-col gap-4 mb-6">
-
-                {/* Card 1: Tab Filter Periode Tanggal */}
                 <Card className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
                     <Calendar className="text-slate-400 dark:text-slate-500 w-5 h-5 flex-shrink-0 mr-1" />
                     {filterTabs.map(tab => (
@@ -187,7 +189,6 @@ const HistoryView = () => {
                     ))}
                 </Card>
 
-                {/* Card 3: Input Khusus Tanggal Kustom */}
                 {dateFilter === 'kustom' && (
                     <Card className="flex items-center gap-2 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl max-w-fit shadow-sm">
                         <div className="flex flex-col">
@@ -212,9 +213,7 @@ const HistoryView = () => {
                     </Card>
                 )}
 
-                {/* Card 2: Dropdown Filter Tipe Order, Sort Waktu & Input Pencarian */}
                 <Card className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto p-4">
-                    {/* Dropdown Filter Tipe Order */}
                     <div className="relative w-full sm:w-48">
                         <select
                             className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
@@ -229,7 +228,6 @@ const HistoryView = () => {
                         <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
                     </div>
 
-                    {/* Tombol Urutkan — buka SortModal (bottom sheet) */}
                     <button
                         type="button"
                         onClick={() => setIsSortOpen(true)}
@@ -239,7 +237,6 @@ const HistoryView = () => {
                         <ArrowUpDown className="text-slate-400 dark:text-slate-500 w-4 h-4 shrink-0" />
                     </button>
 
-                    {/* Input Pencarian */}
                     <div className="relative w-full sm:w-72">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
                         <input
@@ -249,7 +246,6 @@ const HistoryView = () => {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
-                        {/* Tombol X — muncul saat ada teks */}
                         <button
                             onClick={() => setSearchTerm('')}
                             aria-label="Hapus pencarian"
@@ -259,35 +255,36 @@ const HistoryView = () => {
                         </button>
                     </div>
                 </Card>
-
             </div>
 
-            {/* HAPUS TERPILIH/HAPUS SEMUA*/}
-            {showTrash && isAdminMode && (
-                <BulkSelectBar
-                    count={count}
-                    total={sortedHistory.length}
-                    allSelected={allVisibleSelected}
-                    onToggleAll={toggleSelectAll}
-                    onDeleteSelected={handleDeleteSelected}
-                />
+            {/* BULK SELECT BAR - SEKARANG SELALU MUNCUL KALAU ADA DATA */}
+            {sortedHistory.length > 0 && (
+                <div className="mb-4">
+                    <BulkSelectBar
+                        count={count}
+                        total={sortedHistory.length}
+                        allSelected={allVisibleSelected}
+                        onToggleAll={toggleSelectAll}
+                        // Fungsi dinamis: Kalau di Trash hapus permanen, kalau di luar Trash pindah ke Recycle Bin
+                        onDeleteSelected={showTrash ? handleDeleteSelected : handleBulkSoftDelete}
+                    />
+                </div>
             )}
 
             {/* Grid Riwayat Pesanan */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20">
                 {sortedHistory.length > 0 ? (
                     sortedHistory.map(order => (
-                        <div key={order.id} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-4 relative flex flex-col hover:shadow-md transition-shadow">
+                        <div key={order.id} className={`bg-white dark:bg-slate-900 rounded-2xl shadow-sm border p-4 relative flex flex-col hover:shadow-md transition-shadow ${selectedIds.has(order.id) ? 'border-orange-500 ring-1 ring-orange-500' : 'border-slate-100 dark:border-slate-800'}`}>
                             <div className="flex justify-between items-start mb-3 border-b border-dashed border-slate-200 dark:border-slate-700 pb-3">
                                 <div className="flex items-start gap-2">
-                                    {showTrash && isAdminMode && (
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedIds.has(order.id)}
-                                            onChange={() => toggleSelectOne(order.id)}
-                                            className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
-                                        />
-                                    )}
+                                    {/* CHECKBOX SEKARANG SELALU MUNCUL */}
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedIds.has(order.id)}
+                                        onChange={() => toggleSelectOne(order.id)}
+                                        className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                                    />
                                     <div>
                                         <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">#{order.id}</h3>
                                         <p className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(order.date).toLocaleString('id-ID')}</p>
@@ -317,7 +314,6 @@ const HistoryView = () => {
                                     </button>
 
                                     {showTrash ? (
-                                        /* Di Recycle Bin: Hanya Admin yang bisa melihat tombol Restore dan Hapus Permanen */
                                         isAdminMode && (
                                             <>
                                                 <button onClick={() => handleRestore(order.id)} className="p-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 rounded-lg transition-colors" title="Kembalikan">
@@ -329,7 +325,6 @@ const HistoryView = () => {
                                             </>
                                         )
                                     ) : (
-                                        /* Di Riwayat Aktif: Semua role (Kasir & Admin) bisa melakukan hapus biasa (soft delete) */
                                         <button onClick={() => handleDelete(order.id)} className="p-2 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-500/15 rounded-lg transition-colors" title="Hapus ke Recycle Bin">
                                             <Trash2 className="w-4 h-4" />
                                         </button>

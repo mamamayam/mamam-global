@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
+import { activeOnly } from '../../utils/softDelete';
 import {
   Award, BarChart3, Calendar, CircleMinus, ChevronRight, History, Package,
   ShoppingBag, Wallet, CircleDollarSign, TrendingUp, TrendingDown, Receipt
@@ -54,15 +55,15 @@ const ReportsView = () => {
   };
 
   const filteredSales = useMemo(() => {
-    return salesHistory.filter(order => isWithinDateRange(order.date, dateFilter));
+    return activeOnly(salesHistory).filter(order => isWithinDateRange(order.date, dateFilter));
   }, [salesHistory, dateFilter, customStartDate, customEndDate]);
 
   const filteredIncomes = useMemo(() => {
-    return incomes.filter(inc => isWithinDateRange(inc.date, dateFilter));
+    return activeOnly(incomes).filter(inc => isWithinDateRange(inc.date, dateFilter));
   }, [incomes, dateFilter, customStartDate, customEndDate]);
 
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(exp => isWithinDateRange(exp.date, dateFilter));
+    return activeOnly(expenses).filter(exp => isWithinDateRange(exp.date, dateFilter));
   }, [expenses, dateFilter, customStartDate, customEndDate]);
 
   const totalRevenue = filteredSales.reduce((sum, order) => sum + order.total, 0);
