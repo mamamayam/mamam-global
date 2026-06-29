@@ -1,18 +1,85 @@
 import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react';
-import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package, Star, X } from 'lucide-react';
+import { GripHorizontal, Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package, Star, X, ChevronLeft, ChevronRight, Settings2, Check } from 'lucide-react';
 import CartDrawer from '../pos/CartDrawer';
 import PaymentModal from './PaymentModal';
 import VariantSelectionModal from './VariantSelectionModal';
 import { Badge, EmptyState, Button } from '../../components/ui';
 
 // 1. IMPORT STORE ZUSTAND
-import { usePosStore } from '../../store/usePosStore'; 
-// 2. IMPORT CONTEXT LAMA (Hanya untuk fungsi & data statis)
+import { usePosStore } from '../../store/usePosStore';
+// 2. IMPORT CONTEXT LAMA
 import { useAppContext } from '../../context/AppContext';
+
+// ─── Hook drag & drop reorder HORIZONTAL (Khusus Tab Kategori) ───
+function useHorizontalDragReorder(onReorder) {
+    const [dragId, setDragId] = useState(null);
+    const [overId, setOverId] = useState(null);
+    const overIdRef = useRef(null);
+    const itemRefs = useRef({});
+
+    const registerRef = useCallback((id) => (el) => {
+        if (el) itemRefs.current[id] = el;
+        else delete itemRefs.current[id];
+    }, []);
+
+    const startDrag = useCallback((id) => (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try { e.target.setPointerCapture?.(e.pointerId); } catch (_) { }
+        overIdRef.current = id;
+        setDragId(id);
+        setOverId(id);
+    }, []);
+
+    useEffect(() => {
+        if (dragId === null) return;
+        const getX = (e) => (e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX);
+
+        const handleMove = (e) => {
+            const x = getX(e);
+            if (x == null) return;
+            let closestId = null;
+            let closestDist = Infinity;
+            Object.entries(itemRefs.current).forEach(([id, el]) => {
+                if (!el) return;
+                const rect = el.getBoundingClientRect();
+                // Hitung titik tengah elemen secara horizontal
+                const mid = rect.left + rect.width / 2;
+                const dist = Math.abs(x - mid);
+                if (dist < closestDist) { closestDist = dist; closestId = id; }
+            });
+            if (closestId !== null && closestId !== overIdRef.current) {
+                overIdRef.current = closestId;
+                setOverId(closestId);
+            }
+        };
+
+        const finishDrag = () => {
+            const finalOverId = overIdRef.current;
+            if (dragId !== null && finalOverId !== null && dragId !== finalOverId) {
+                onReorder(dragId, finalOverId);
+            }
+            setDragId(null);
+            setOverId(null);
+            overIdRef.current = null;
+        };
+
+        window.addEventListener('pointermove', handleMove);
+        window.addEventListener('pointerup', finishDrag);
+        window.addEventListener('pointercancel', finishDrag);
+        return () => {
+            window.removeEventListener('pointermove', handleMove);
+            window.removeEventListener('pointerup', finishDrag);
+            window.removeEventListener('pointercancel', finishDrag);
+        };
+    }, [dragId, onReorder]);
+
+    return { dragId, overId, registerRef, startDrag };
+}
 
 const PosView = () => {
     // ─── AMBIL DARI ZUSTAND (Granular / Dipisah-pisah) ───
-   const addToCart = usePosStore((state) => state.addToCart);
+    const addToCart = usePosStore((state) => state.addToCart);
     const searchQuery = usePosStore((state) => state.searchQuery);
     const setSearchQuery = usePosStore((state) => state.setSearchQuery);
     const selectedCategory = usePosStore((state) => state.selectedCategory);
@@ -22,16 +89,43 @@ const PosView = () => {
     const setSelectedMenuForVariant = usePosStore((state) => state.setSelectedMenuForVariant);
     const setVariantSelectedOptions = usePosStore((state) => state.setVariantSelectedOptions);
 
-    // ─── AMBIL DARI CONTEXT LAMA (Fungsi/Data statis yang belum dipindah) ───
+    // ─── AMBIL DARI CONTEXT LAMA ───
     const {
         menus, formatRupiah, getTotal, currentShift, triggerAlert,
         salesHistory, setCurrentView, variantGroups
     } = useAppContext();
 
+    const [draggedIdx, setDraggedIdx] = useState(null);
+
+    const handleDragStart = (e, index) => {
+        setDraggedIdx(index);
+        e.dataTransfer.effectAllowed = "move";
+    };
+
+    const handleDragOver = (e, index) => {
+        e.preventDefault(); // Wajib agar bisa di-drop
+    };
+
+    const handleDrop = (e, index) => {
+        e.preventDefault();
+        if (draggedIdx === null || draggedIdx === index) return;
+
+        const newTabs = [...tabs];
+        const draggedItem = newTabs[draggedIdx];
+
+        newTabs.splice(draggedIdx, 1);
+        newTabs.splice(index, 0, draggedItem);
+
+        setTabs(newTabs);
+        setDraggedIdx(null);
+    };
+
+    const [isReorderMode, setIsReorderMode] = useState(false);
+
     const categoryTabsRef = useRef(null);
     const [gridVisible, setGridVisible] = useState(true);
 
-    // ─── Statistik order ────────────────────────────────────────────────────
+    // ─── Statistik order (untuk favorit) ────────────────────────────────────
     const menuOrderCounts = useMemo(() => {
         const counts = {};
         salesHistory.forEach(order =>
@@ -42,23 +136,55 @@ const PosView = () => {
         return counts;
     }, [salesHistory]);
 
-    // Hitung total order per kategori untuk sorting tab
-    const categoryOrderCounts = useMemo(() => {
-        const counts = {};
-        menus.forEach(m => {
-            counts[m.category] = (counts[m.category] || 0) + (menuOrderCounts[m.id] || 0);
+    // ─── Manajemen Urutan Kategori (Bisa di-drag) ──────────────────────────
+    const [tabs, setTabs] = useState(['Favorit', 'Semua']);
+
+    const moveTab = (index, direction) => {
+        const newTabs = [...tabs];
+        const newIndex = index + direction;
+        if (newIndex >= 0 && newIndex < newTabs.length) {
+            [newTabs[index], newTabs[newIndex]] = [newTabs[newIndex], newTabs[index]];
+            setTabs(newTabs);
+        }
+    };
+
+    // Sinkronisasi kategori baru tanpa merusak urutan yang sudah diatur pengguna
+    useEffect(() => {
+        const base = ['Favorit', 'Semua'];
+        const activeCats = [...new Set(menus.map(m => m.category).filter(Boolean))];
+
+        setTabs(prev => {
+            const valid = [...base, ...activeCats];
+            // Hapus yang sudah tidak ada
+            let updated = prev.filter(c => valid.includes(c));
+            // Tambahkan yang baru di belakang
+            const missing = valid.filter(c => !updated.includes(c));
+            if (missing.length > 0) {
+                updated = [...updated, ...missing];
+            }
+            if (updated.length !== prev.length || updated.some((v, i) => v !== prev[i])) {
+                return updated;
+            }
+            return prev;
         });
-        return counts;
-    }, [menus, menuOrderCounts]);
+    }, [menus]);
 
-    // ─── Daftar kategori diurutkan berdasarkan popularitas ──────────────────
-    const categories = useMemo(() => {
-        const raw = [...new Set(menus.map(m => m.category))];
-        raw.sort((a, b) => (categoryOrderCounts[b] || 0) - (categoryOrderCounts[a] || 0));
-        return ['Favorit', 'Semua', ...raw];
-    }, [menus, categoryOrderCounts]);
+    // Fungsi Reorder untuk Drag & Drop
+    const handleReorderTab = useCallback((draggedId, overId) => {
+        setTabs(prev => {
+            const list = [...prev];
+            const fromIdx = list.indexOf(draggedId);
+            const toIdx = list.indexOf(overId);
+            if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
+            const [moved] = list.splice(fromIdx, 1);
+            list.splice(toIdx, 0, moved);
+            return list;
+        });
+    }, []);
 
-    // ─── Menu favorit ────────────────────────────────────────────────────────
+    const tabDrag = useHorizontalDragReorder(handleReorderTab);
+
+    // ─── Menu favorit & Filter Menu ─────────────────────────────────────────
     const FAVORITE_LIMIT = 12;
     const favoriteMenus = useMemo(() =>
         [...menus]
@@ -68,7 +194,6 @@ const PosView = () => {
         [menus, menuOrderCounts]
     );
 
-    // ─── Filter menu ─────────────────────────────────────────────────────────
     const isSearching = Boolean(searchQuery.trim());
 
     const filteredMenus = useMemo(() => {
@@ -82,7 +207,7 @@ const PosView = () => {
         );
     }, [menus, favoriteMenus, selectedCategory, searchQuery]);
 
-    // ─── Ganti kategori dengan transisi fade-slide ──────────────────────────
+    // ─── Ganti kategori ─────────────────────────────────────────────────────
     const handleCategoryClick = useCallback((cat) => {
         if (cat === selectedCategory && !searchQuery.trim()) return;
         setGridVisible(false);
@@ -93,13 +218,12 @@ const PosView = () => {
         }, 170);
     }, [selectedCategory, searchQuery, setSelectedCategory, setSearchQuery]);
 
-    // Auto-scroll tab aktif ke tengah layar
     useEffect(() => {
         const el = categoryTabsRef.current?.querySelector('[data-active="true"]');
         el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     }, [selectedCategory]);
 
-    // ─── Klik menu ───────────────────────────────────────────────────────────
+    // ─── Klik menu ──────────────────────────────────────────────────────────
     const handleMenuClick = useCallback((menu) => {
         if (!currentShift) {
             triggerAlert('Peringatan: Dompet belum dibuka. Harap buka dompet terlebih dahulu di menu "Dompet Kasir".');
@@ -115,13 +239,12 @@ const PosView = () => {
     }, [currentShift, triggerAlert, setCurrentView, setSelectedMenuForVariant, setVariantSelectedOptions, addToCart, variantGroups]);
 
     return (
-        <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 relative animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
+        <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 relative">
 
-            {/* Banner peringatan shift */}
             {!currentShift && (
                 <Badge variant="danger" className="w-full justify-center py-2 text-xs font-bold gap-2">
                     <AlertCircle className="w-4 h-4" />
-                    Shift Kasir belum dibuka! Transaksi tidak akan masuk ke laporan Shift ini.
+                    Shift Kasir belum dibuka! Transaksi tidak masuk laporan Shift ini.
                 </Badge>
             )}
 
@@ -141,55 +264,71 @@ const PosView = () => {
                     {isSearching && (
                         <button
                             onClick={() => setSearchQuery('')}
-                            aria-label="Hapus pencarian"
-                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200 animate-in zoom-in duration-150"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
                         >
                             <X className="w-4 h-4" />
                         </button>
                     )}
                 </div>
 
-                {/* Tab kategori */}
-                <div ref={categoryTabsRef} className="flex overflow-x-auto hide-scrollbar gap-2 p-2 snap-x">
-                    {categories.map(cat => {
-                        const isActive = selectedCategory === cat && !isSearching;
-                        return (
-                            <Button
-                                key={cat}
-                                data-active={isActive}
-                                onClick={() => handleCategoryClick(cat)}
-                                variant={isActive ? 'primary' : 'secondary'}
-                                size="sm"
-                                className={[
-                                    'snap-center shrink-0 !rounded-full !font-semibold !px-5 !py-2 !text-sm border',
-                                    isActive
-                                        ? 'border-transparent !shadow-md scale-[1.05]'
-                                        : isSearching
-                                            ? '!bg-white dark:!bg-slate-900 !text-slate-400 dark:!text-slate-600 border-slate-200 dark:border-slate-700 opacity-50 hover:opacity-90 hover:!bg-accent-50 dark:hover:!bg-slate-800'
-                                            : '!bg-white dark:!bg-slate-900 !text-slate-600 dark:!text-slate-300 border-slate-200 dark:border-slate-700 hover:!bg-accent-50 dark:hover:!bg-slate-800 hover:border-orange-200 dark:hover:border-orange-500/40',
-                                ].join(' ')}
-                            >
-                                {cat}
-                            </Button>
-                        );
-                    })}
+                {/* Tab kategori (Draggable & Lebih Besar di HP) */}
+                <div className="flex items-center gap-2 mt-3">
+                    <div ref={categoryTabsRef} className="flex-1 flex overflow-x-auto hide-scrollbar gap-2 p-1 snap-x">
+                        {tabs.map((cat, idx) => {
+                            const isActive = selectedCategory === cat && !isSearching;
+                            const isDragging = draggedIdx === idx;
+
+                            return (
+                                <button
+                                    key={cat}
+                                    draggable={isReorderMode}
+                                    onDragStart={(e) => handleDragStart(e, idx)}
+                                    onDragOver={(e) => handleDragOver(e, idx)}
+                                    onDrop={(e) => handleDrop(e, idx)}
+                                    onDragEnd={() => setDraggedIdx(null)}
+                                    onClick={() => !isReorderMode && handleCategoryClick(cat)}
+                                    className={`
+                        shrink-0 rounded-full font-bold border transition-all 
+                        whitespace-nowrap select-none flex items-center gap-2
+                        
+                        {/* UTAMA: Ukuran besar di HP, normal di PC */}
+                        px-6 py-3.5 text-base md:px-5 md:py-2.5 md:text-sm
+                        
+                        ${isActive
+                                            ? 'bg-orange-600 text-white border-transparent shadow-md'
+                                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200'
+                                        } 
+                        ${isReorderMode
+                                            ? 'cursor-grab active:cursor-grabbing hover:bg-slate-50 dark:hover:bg-slate-700 border-dashed border-2 border-slate-400'
+                                            : 'cursor-pointer'
+                                        }
+                        ${isDragging ? 'opacity-40 scale-95 shadow-inner' : 'opacity-100'}
+                    `}
+                                >
+                                    {isReorderMode && <GripHorizontal className="w-5 h-5 md:w-4 md:h-4 text-slate-400" />}
+                                    {cat}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Tombol toggle mode reorder (Ikut membesar di HP) */}
+                    <button
+                        onClick={() => setIsReorderMode(!isReorderMode)}
+                        className={`rounded-xl border transition-colors shrink-0 p-3.5 md:p-2.5 ${isReorderMode
+                            ? 'bg-accent-600 text-white border-accent-600'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 text-slate-600'
+                            }`}
+                    >
+                        {isReorderMode ? <Check size={22} className="md:w-5 md:h-5" /> : <Settings2 size={22} className="md:w-5 md:h-5" />}
+                    </button>
                 </div>
             </div>
 
-            {/* Info bar hasil pencarian */}
             {isSearching && (
-                <div className="px-4 py-2 bg-accent-50 dark:bg-accent-500/10 border-b border-orange-100 dark:border-orange-500/20 flex items-center gap-2 text-xs text-accent-700 dark:text-accent-400 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="px-4 py-2 bg-accent-50 border-b border-orange-100 flex items-center gap-2 text-xs text-accent-700 animate-in fade-in">
                     <Search className="w-3.5 h-3.5 shrink-0" />
-                    <span>
-                        <span className="font-bold">{filteredMenus.length}</span> menu ditemukan untuk{' '}
-                        <span className="font-bold">"{searchQuery}"</span>
-                    </span>
-                    <button
-                        onClick={() => setSearchQuery('')}
-                        className="ml-auto text-accent-600 dark:text-accent-400 hover:underline font-semibold"
-                    >
-                        Hapus
-                    </button>
+                    <span><span className="font-bold">{filteredMenus.length}</span> menu ditemukan untuk "{searchQuery}"</span>
                 </div>
             )}
 
@@ -218,48 +357,22 @@ const PosView = () => {
                             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs md:text-sm mb-1 leading-tight">
                                 {menu.name}
                             </h3>
-
-                            {isSearching && (
-                                <Badge variant="neutral" className="mb-1">
-                                    {menu.category}
-                                </Badge>
-                            )}
-
+                            {isSearching && <Badge variant="neutral" className="mb-1">{menu.category}</Badge>}
                             <p className="text-accent-600 dark:text-accent-400 font-bold text-xs md:text-sm mt-auto">
                                 {formatRupiah(menu.price)}
                             </p>
-
                             {menu.variantGroupIds.length > 0 && (
-                                <div className="absolute top-2 right-2">
-                                    <span className="w-2 h-2 rounded-full bg-yellow-400 dark:bg-yellow-500 block" />
-                                </div>
-                            )}
-
-                            {(selectedCategory !== 'Favorit' || isSearching) && (menuOrderCounts[menu.id] || 0) > 0 && (
-                                <div className="absolute top-2 left-2">
-                                    <Star className="w-3.5 h-3.5 text-yellow-400 dark:text-yellow-500 fill-yellow-400 dark:fill-yellow-500" />
-                                </div>
+                                <div className="absolute top-2 right-2"><span className="w-2 h-2 rounded-full bg-yellow-400 dark:bg-yellow-500 block" /></div>
                             )}
                         </div>
                     ))}
                 </div>
 
                 {filteredMenus.length === 0 && selectedCategory === 'Favorit' && !isSearching && (
-                    <EmptyState
-                        icon={<Star className="w-12 h-12" />}
-                        title="Belum ada menu favorit"
-                        description="Menu yang sering dipesan akan otomatis muncul di sini"
-                        className="mt-10 animate-in fade-in duration-300"
-                    />
+                    <EmptyState icon={<Star className="w-12 h-12" />} title="Belum ada menu favorit" className="mt-10 animate-in fade-in duration-300" />
                 )}
-
                 {filteredMenus.length === 0 && (selectedCategory !== 'Favorit' || isSearching) && (
-                    <EmptyState
-                        icon={<Package className="w-12 h-12" />}
-                        title="Menu tidak ditemukan"
-                        description={isSearching ? 'Coba kata kunci yang berbeda' : undefined}
-                        className="mt-10 animate-in fade-in duration-300"
-                    />
+                    <EmptyState icon={<Package className="w-12 h-12" />} title="Menu tidak ditemukan" className="mt-10 animate-in fade-in duration-300" />
                 )}
             </div>
 
