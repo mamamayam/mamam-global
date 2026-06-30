@@ -10,9 +10,10 @@ import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/s
 import { isSupabaseConfigured } from '../../storage/syncClient';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 import {
-  Card, Button, PageHeader, EmptyState, Badge, IconButton, Alert, SortModal,
+  Card, Button, PageHeader, EmptyState, Badge, IconButton, Alert, SortModal, BulkSelectBar,
 } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
+import { useBulkSelect } from '../../hook/useBulkSelect';
 
 const AUTO_CLOSE_HOUR = 21; // Sistem mendeteksi kelalaian jika sudah lewat jam 21:00
 const OUTLET_CLOSE_HOUR = 19; // Jam pulang otomatis yang akan dicatat (Jam 19:00)
@@ -46,7 +47,7 @@ const SORT_OPTIONS = [
 ];
 
 export default function Attendance() {
-  const { employees, attendanceLog, setAttendanceLog, isAdminMode, triggerConfirm } = useAppContext();
+  const { employees, attendanceLog, setAttendanceLog, isAdminMode, triggerConfirm, currentShift } = useAppContext();
 
   const [now, setNow] = useState(() => Date.now());
   const [autoClosedEmployees, setAutoClosedEmployees] = useState([]);
@@ -136,6 +137,15 @@ export default function Attendance() {
       ...toAutoCloseBolong.map(e => ({ name: e.name, fromBolong: true })),
     ]);
   }, [now, attendanceLog, employees, setAttendanceLog]);
+
+  // Dompet (shift kasir) yang masih kebuka dari hari sebelumnya — kemungkinan lupa ditutup.
+  // Numpang di "now" yang udah tick tiap detik di atas, biar tetep update live
+  // tanpa perlu bikin interval baru.
+  const isShiftCarriedOver = useMemo(() => {
+    if (!currentShift) return false;
+    const start = new Date(currentShift.startTime);
+    return start.toDateString() !== new Date(now).toDateString();
+  }, [currentShift, now]);
 
   const todayStr = toLocalDateString();
 
@@ -265,6 +275,33 @@ export default function Attendance() {
     );
   };
 
+  // Daftar log yang benar-benar tampil di tabel (dibatasi 300 baris terbaru)
+  const visibleLogs = filteredLogs.slice(0, 300);
+
+  // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih"
+  const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(visibleLogs);
+
+  const handleBulkSoftDelete = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Pindahkan ${ids.length} record absen terpilih ke Recycle Bin?`, () => {
+      setAttendanceLog(prev => prev.map(r => selectedIds.has(r.id) ? markDeleted(r) : r));
+      resetSelection();
+    });
+  };
+
+  const handleBulkPermanentDelete = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Hapus PERMANEN ${ids.length} record absen terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+      setAttendanceLog(prev => prev.filter(r => !selectedIds.has(r.id)));
+      ids.forEach(id => pushTransactionDelete('attendanceLog', id).catch(err =>
+        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+      ));
+      resetSelection();
+    });
+  };
+
   const handleAddManualRecord = (employeeId, employeeName) => {
     if (!editTime) return;
     const [h, m] = editTime.split(':').map(Number);
@@ -294,6 +331,24 @@ export default function Attendance() {
         subtitle={`${sudahMasukCount} dari ${employees.length} karyawan sudah absen masuk hari ini`}
         icon={<Fingerprint className="w-6 h-6" />}
       />
+
+      {currentShift && isShiftCarriedOver && (
+        <div className="mb-4 border-2 border-red-500 bg-accent-50 dark:bg-accent-950/40 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 w-10 h-10 bg-accent-100 dark:bg-accent-900/60 rounded-full flex items-center justify-center">
+              <AlertTriangle className="w-5 h-5 text-accent-600 dark:text-accent-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-accent-700 dark:text-accent-400 text-sm">
+                ⚠️ Dompet Belum Ditutup dari Hari Sebelumnya
+              </p>
+              <p className="text-xs text-accent-600 dark:text-accent-500 mt-0.5">
+                Dompet {currentShift.id} masih kebuka sejak {new Date(currentShift.startTime).toLocaleString('id-ID')}. Cek menu Manajemen Dompet untuk segera ditutup sebelum transaksi hari ini kecampur sama shift lama.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {autoClosedEmployees.length > 0 && (
         <div className="mb-4 border-2 border-red-500 bg-accent-50 dark:bg-accent-950/40 rounded-xl p-4">
@@ -481,7 +536,7 @@ export default function Attendance() {
           </h3>
           {isAdminMode && (
             <button
-              onClick={() => setShowHistoryTrash(v => !v)}
+              onClick={() => { setShowHistoryTrash(v => !v); resetSelection(); }}
               className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
             >
               {showHistoryTrash ? '← Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
@@ -577,6 +632,18 @@ export default function Attendance() {
           </div>
         </Card>
 
+        {isAdminMode && visibleLogs.length > 0 && (
+          <div className="mb-3">
+            <BulkSelectBar
+              count={count}
+              total={visibleLogs.length}
+              allSelected={allSelected}
+              onToggleAll={toggleSelectAll}
+              onDeleteSelected={showHistoryTrash ? handleBulkPermanentDelete : handleBulkSoftDelete}
+            />
+          </div>
+        )}
+
         <Card padding="none" className="overflow-hidden">
           {filteredLogs.length === 0 ? (
             <EmptyState
@@ -589,11 +656,19 @@ export default function Attendance() {
             />
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredLogs.slice(0, 300).map(r => (
+              {visibleLogs.map(r => (
                 <div
                   key={r.id}
-                  className="p-3.5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+                  className={`p-3.5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${isAdminMode && selectedIds.has(r.id) ? 'bg-orange-50/60 dark:bg-orange-500/5' : ''}`}
                 >
+                  {isAdminMode && (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(r.id)}
+                      onChange={() => toggleSelectOne(r.id)}
+                      className="w-4 h-4 rounded accent-orange-500 cursor-pointer shrink-0"
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate leading-snug">
                       {r.employeeName}

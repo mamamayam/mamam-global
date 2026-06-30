@@ -1,4 +1,14 @@
 import { Capacitor } from '@capacitor/core';
+import { Preferences } from '@capacitor/preferences';
+
+const ANDROID_12_THRESHOLD = 12;
+
+// Sama persis logic-nya kayak di useBluetoothPermission.js
+const isAndroid12Plus = () => {
+    const m = navigator.userAgent.match(/Android\s([0-9.]+)/);
+    const version = m ? parseFloat(m[1]) : null;
+    return version !== null && version >= ANDROID_12_THRESHOLD;
+};
 
 const ensureBluetoothPermissions = () => {
     return new Promise((resolve) => {
@@ -7,6 +17,15 @@ const ensureBluetoothPermissions = () => {
             resolve(true); // bukan native / plugin belum siap, lanjut aja
             return;
         }
+
+        // BLUETOOTH_CONNECT & BLUETOOTH_SCAN cuma exist mulai Android 12 (API 31).
+        // Di Android 11 ke bawah, minta 2 izin ini PASTI gagal/ditolak karena
+        // permission-nya sendiri gak dikenal di OS tsb — jadi skip aja, gak perlu diminta.
+        if (!isAndroid12Plus()) {
+            resolve(true);
+            return;
+        }
+
         permissions.requestPermissions(
             ['android.permission.BLUETOOTH_CONNECT', 'android.permission.BLUETOOTH_SCAN'],
             (status) => resolve(!!status.hasPermission),
@@ -161,8 +180,9 @@ export const printNativeBluetooth = async (data, storeSettings, kembalian, sisaP
         return false;
     }
 
-    const savedAddress = localStorage.getItem('my_printer_mac');
-    const savedName = localStorage.getItem('my_printer_name');
+    // ✅ Baca dari Capacitor Preferences (key harus sama dengan usePrinterStorage.js)
+    const { value: savedAddress } = await Preferences.get({ key: 'printer_mac' });
+    const { value: savedName }    = await Preferences.get({ key: 'printer_name' });
 
     if (!savedAddress) {
         alert('Printer belum diatur! Silakan pergi ke menu Pengaturan > Scan Printer Bluetooth terlebih dahulu.');
@@ -199,8 +219,9 @@ export const printNativeBluetooth = async (data, storeSettings, kembalian, sisaP
                         }, 500); // <-- Jeda 500 milidetik
                     },
                     (err) => {
-                        localStorage.removeItem('my_printer_mac');
-                        localStorage.removeItem('my_printer_name');
+                        // ✅ Hapus dari Preferences (bukan localStorage)
+                        Preferences.remove({ key: 'printer_mac' });
+                        Preferences.remove({ key: 'printer_name' });
                         alert(`Gagal terhubung ke Printer "${savedName}". Pastikan printernya nyala!\n\nError: ${err}`);
                         resolve(false);
                     }
@@ -226,8 +247,9 @@ export const printShiftNativeBluetooth = async (shiftData, storeSettings) => {
         return false;
     }
 
-    const savedAddress = localStorage.getItem('my_printer_mac');
-    const savedName = localStorage.getItem('my_printer_name');
+    // ✅ Baca dari Capacitor Preferences (key harus sama dengan usePrinterStorage.js)
+    const { value: savedAddress } = await Preferences.get({ key: 'printer_mac' });
+    const { value: savedName }    = await Preferences.get({ key: 'printer_name' });
 
     if (!savedAddress) {
         alert('Printer belum diatur! Silakan pergi ke menu Pengaturan > Scan Printer Bluetooth terlebih dahulu.');
@@ -264,8 +286,9 @@ export const printShiftNativeBluetooth = async (shiftData, storeSettings) => {
                         }, 500); // <-- Jeda napas setelah connect
                     },
                     (err) => {
-                        localStorage.removeItem('my_printer_mac');
-                        localStorage.removeItem('my_printer_name');
+                        // ✅ Hapus dari Preferences (bukan localStorage)
+                        Preferences.remove({ key: 'printer_mac' });
+                        Preferences.remove({ key: 'printer_name' });
                         alert(`Gagal terhubung ke Printer "${savedName}". Pastikan printernya nyala!\n\nError: ${err}`);
                         resolve(false);
                     }

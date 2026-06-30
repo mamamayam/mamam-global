@@ -72,11 +72,94 @@ export function calculateBolongMinutes(sortedLogs, fallbackEndDate = null) {
     if (sortedLogs[i].type === 'bolong') {
       const nextLog = sortedLogs[i + 1];
       const gapEndDate = nextLog ? new Date(nextLog.date) : fallbackEndDate;
-      if (!gapEndDate) continue; 
+      if (!gapEndDate) continue;
       const gapStart = new Date(sortedLogs[i].date).getTime();
       const gapEnd = gapEndDate.getTime();
       totalMinutes += Math.max(0, (gapEnd - gapStart) / 60000);
     }
   }
   return totalMinutes;
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/*  AUTO ADJUSTMENT (Bonus Full Time & Bonus Lembur)                */
+/*                                                                   */
+/*  Dipindahin ke sini (dari InputDailyTab) supaya jadi SATU sumber  */
+/*  kebenaran yang bisa dipanggil dari mana aja: auto-sync absensi,  */
+/*  modal edit manual, ataupun form input manual — hasilnya selalu  */
+/*  konsisten gak peduli jalur datanya dari mana.                    */
+/* ═══════════════════════════════════════════════════════════════ */
+
+// Kategori adjustment yang dihitung otomatis oleh sistem (bukan input manual admin).
+// Item dengan kategori ini gak boleh dihapus manual lewat UI (lihat isAuto check di AdjRow).
+export const AUTO_ADJUSTMENT_CATEGORIES = ['Bonus Full Time', 'Bonus Lembur'];
+
+/**
+ * Hitung ulang item adjustment otomatis (Bonus Full Time & Bonus Lembur)
+ * berdasarkan data absensi (clockIn/clockOut/overtimeMinutes/isDayOff) dan
+ * konfigurasi karyawan (fullTimeBonus, overtimeRate30).
+ *
+ * Pure function — gak nyimpen state, gak peduli record-nya berasal dari mana
+ * (auto-sync, edit manual, dst). Selalu menghitung ulang dari data kanonik.
+ *
+ * @param {object} record - minimal punya: isDayOff, clockIn, clockOut, overtimeMinutes
+ * @param {object} emp - data karyawan, minimal punya: fullTimeBonus, overtimeRate30
+ * @returns {Array} array item adjustment otomatis (bisa kosong kalau gak eligible)
+ */
+export function computeAutoAdjustments(record, emp) {
+  const items = [];
+  if (!record || record.isDayOff || !record.clockIn || !record.clockOut || !emp) {
+    return items;
+  }
+
+  // Bonus Full Time: masuk ≤ jam mulai kerja & pulang ≥ jam tutup kerja.
+  const bonusAmount = Number(emp.fullTimeBonus) || 0;
+  const outMinutesContinuous = getClockOutMinutesContinuous(record.clockIn, record.clockOut);
+  const eligibleFullTime =
+    timeStrToMinutes(record.clockIn) <= WORK_START_MINUTES &&
+    outMinutesContinuous >= WORK_END_MINUTES;
+
+  if (eligibleFullTime && bonusAmount > 0) {
+    items.push({
+      id: `auto-fulltime-${record.employeeId || 'x'}-${record.dateStr || 'x'}`,
+      category: 'Bonus Full Time',
+      amount: bonusAmount,
+      note: '(Masuk ≤ 09:00 & Pulang ≥ 19:00)',
+      expenseRecorded: false,
+    });
+  }
+
+  // Bonus Lembur: dihitung per blok 30 menit dari overtimeMinutes.
+  const totalBlocks = Math.floor((record.overtimeMinutes || 0) / 30);
+  if (totalBlocks > 0) {
+    const overtimeRate = getOvertimeRate(emp);
+    items.push({
+      id: `auto-lembur-${record.employeeId || 'x'}-${record.dateStr || 'x'}`,
+      category: 'Bonus Lembur',
+      amount: totalBlocks * overtimeRate,
+      note: `(${totalBlocks * 30} menit · Rp${overtimeRate.toLocaleString('id-ID')}/30m)`,
+      expenseRecorded: false,
+    });
+  }
+
+  return items;
+}
+
+/**
+ * Gabungkan item manual yang sudah ada (kasbon, bonus custom dari admin, dll)
+ * dengan item otomatis yang dihitung ULANG dari data terkini. Item auto yang
+ * lama (kalau ada, dari hitungan sebelumnya) selalu dibuang dulu lalu diganti
+ * yang baru — jadi idempotent, aman dipanggil berkali-kali dari mana pun.
+ *
+ * @param {Array} existingAdditions - additions yang sudah ada (manual + auto lama)
+ * @param {object} record - data absensi terkini, lihat computeAutoAdjustments
+ * @param {object} emp - data karyawan terkini
+ * @returns {Array} additions final (manual asli + auto terbaru)
+ */
+export function mergeAutoAdjustments(existingAdditions, record, emp) {
+  const manualOnly = (existingAdditions || []).filter(
+    a => !AUTO_ADJUSTMENT_CATEGORIES.includes(a.category)
+  );
+  const freshAutoItems = computeAutoAdjustments(record, emp);
+  return [...manualOnly, ...freshAutoItems];
 }

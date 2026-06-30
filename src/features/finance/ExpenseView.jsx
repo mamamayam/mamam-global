@@ -3,10 +3,11 @@ import { useAppContext } from '../../context/AppContext';
 import { History, Save, Trash2, TrendingDown, Pencil, X, Settings2, RotateCcw, ArrowUpDown } from 'lucide-react';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import CategoryModal from '../../components/CategoryModal';
-import { Button, PageHeader, Card, Input, Select, Badge, IconButton, EmptyState, SortModal } from '../../components/ui';
+import { Button, PageHeader, Card, Input, Select, Badge, IconButton, EmptyState, SortModal, BulkSelectBar } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
+import { useBulkSelect } from '../../hook/useBulkSelect';
 
 const ExpenseView = () => {
   const {
@@ -166,6 +167,34 @@ const ExpenseView = () => {
     { key: 'amount-desc', label: 'Nominal Terbesar' },
   ];
 
+  // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih"
+  const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedExpenses);
+
+  // Hapus Banyak SEKALIGUS (Pindah ke Recycle Bin)
+  const handleBulkSoftDelete = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Pindahkan ${ids.length} catatan pengeluaran terpilih ke Recycle Bin?`, () => {
+      setExpenses(expenses.map(e => selectedIds.has(e.id) ? markDeleted(e) : e));
+      resetSelection();
+      triggerAlert('Catatan terpilih dipindahkan ke Recycle Bin.');
+    });
+  };
+
+  // Hapus Banyak SEKALIGUS (Permanen di Recycle Bin)
+  const handleBulkPermanentDelete = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Hapus PERMANEN ${ids.length} catatan pengeluaran terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+      setExpenses(expenses.filter(e => !selectedIds.has(e.id)));
+      ids.forEach(id => pushTransactionDelete('expenses', id).catch(err =>
+        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+      ));
+      resetSelection();
+      triggerAlert('Catatan terpilih dihapus permanen.');
+    });
+  };
+
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <PageHeader
@@ -279,7 +308,7 @@ const ExpenseView = () => {
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Pengeluaran'}</h3>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowTrash(v => !v)}
+                onClick={() => { setShowTrash(v => !v); resetSelection(); }}
                 className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
               >
                 {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(expenses).length})`}
@@ -313,6 +342,17 @@ const ExpenseView = () => {
               {formatRupiah(activeTotal)}
             </span>
           </div>
+          {isAdminMode && sortedExpenses.length > 0 && (
+            <div className="px-4 pt-3">
+              <BulkSelectBar
+                count={count}
+                total={sortedExpenses.length}
+                allSelected={allSelected}
+                onToggleAll={toggleSelectAll}
+                onDeleteSelected={showTrash ? handleBulkPermanentDelete : handleBulkSoftDelete}
+              />
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
             {sortedExpenses.length === 0 ? (
               <EmptyState
@@ -326,16 +366,26 @@ const ExpenseView = () => {
                 const empName = isKasbon && exp.employeeId && employees ? employees.find(e => e.id === exp.employeeId)?.name : null;
 
                 return (
-                  <div key={exp.id} className="flex justify-between items-center p-3.5 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700 transition-all duration-200 animate-in slide-in-from-left-2 duration-300">
-                    <div className="flex-1 pr-4">
-                      <p className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
-                        {exp.category}
-                        <Badge variant="neutral">{new Date(exp.date).toLocaleDateString('id-ID')}</Badge>
-                        {exp.paymentMethod === 'Non-Tunai' && <Badge variant="info">Bank</Badge>}
-                      </p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                        {isKasbon && empName ? `[${empName}] ` : ''}{exp.note || 'Tanpa catatan'}
-                      </p>
+                  <div key={exp.id} className={`flex justify-between items-center p-3.5 border rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700 transition-all duration-200 animate-in slide-in-from-left-2 duration-300 ${isAdminMode && selectedIds.has(exp.id) ? 'border-orange-500 ring-1 ring-orange-500' : 'border-slate-100 dark:border-slate-800'}`}>
+                    <div className="flex items-start gap-2 flex-1 pr-4">
+                      {isAdminMode && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(exp.id)}
+                          onChange={() => toggleSelectOne(exp.id)}
+                          className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <p className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
+                          {exp.category}
+                          <Badge variant="neutral">{new Date(exp.date).toLocaleDateString('id-ID')}</Badge>
+                          {exp.paymentMethod === 'Non-Tunai' && <Badge variant="info">Bank</Badge>}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                          {isKasbon && empName ? `[${empName}] ` : ''}{exp.note || 'Tanpa catatan'}
+                        </p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <p className="font-bold text-accent-500 dark:text-accent-400 bg-accent-50 dark:bg-accent-500/10 px-3 py-1.5 rounded-lg text-sm border border-red-100 dark:border-red-500/20">-{formatRupiah(exp.amount)}</p>

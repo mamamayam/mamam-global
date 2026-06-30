@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useAppContext } from '../../../context/AppContext';
 import { toLocalDateString } from '../../../utils/formatters';
-import { Card, Button, Input, Select, IconButton, Badge, SegmentedControl, Alert, SortModal } from '../../../components/ui';
+import { Card, Button, Input, Select, IconButton, Badge, SegmentedControl, Alert, SortModal, BulkSelectBar } from '../../../components/ui';
 import CategoryModal from '../../../components/CategoryModal';
 import { activeOnly, trashedOnly, markDeleted } from '../../../utils/softDelete';
+import { useBulkSelect } from '../../../hook/useBulkSelect';
 import {
   Wallet, Plus, Trash2, Save, History, Clock, Edit3, Settings2,
   ArrowUpDown, Eye, EyeOff, X, ChevronDown, ChevronRight, User,
@@ -12,11 +13,9 @@ import {
   WORK_START_MINUTES, WORK_END_MINUTES, EARLY_OVERTIME_THRESHOLD_MINUTES, OVERTIME_THRESHOLD_MINUTES,
   LEMBUR_CATEGORY_KEYWORD, KASBON_CATEGORY_KEYWORD,
   getEmployeeStatus, calculateHoursFromTimes, formatTimeFromDate, timeStrToMinutes,
-  getClockOutMinutesContinuous, calculateBolongMinutes,
-  getOvertimeRate, calculateOvertimePay,
+  calculateBolongMinutes, getOvertimeRate, calculateOvertimePay,
+  AUTO_ADJUSTMENT_CATEGORIES, mergeAutoAdjustments,
 } from '../utils/payrollLogic';
-
-const AUTO_ADJUSTMENT_CATEGORIES = ['Bonus Full Time', 'Bonus Lembur'];
 
 const StatField = ({ label, value, highlight }) => (
   <div className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5">
@@ -151,39 +150,64 @@ const InputDailyTab = () => {
     return r && (r.additions?.length > 0 || r.deductions?.length > 0);
   }, [dailyEmpId, dailyDate, employeeDailyRecords]);
 
-  /* ── Effect 1: Auto-sync absensi → employeeDailyRecords ── */
+  /* ── Effect 1: Auto-sync absensi → employeeDailyRecords ──
+     Nyimak SEMUA tanggal yang ada di attendanceLog (bukan cuma dailyDate
+     yang sedang dibuka di form), dan langsung ngitung + nempelin Bonus
+     Full Time / Bonus Lembur via mergeAutoAdjustments. Ini satu-satunya
+     sumber kebenaran sync data, jadi gak peduli datanya masuk dari absensi
+     auto, web app karyawan, atau record dibuat manual — begitu masuk ke
+     attendanceLog, record + bonusnya langsung kebentuk/keupdate sendiri,
+     tanpa nunggu admin buka tanggal itu di form atau pencet Simpan.
+     Juga ikut nyimak `employees` supaya kalau fullTimeBonus/overtimeRate30
+     diubah di Kelola Karyawan, bonus yang udah tersimpan ikut ke-update. */
   useEffect(() => {
-    if (!dailyDate || !attendanceLog) return;
-    const allEmpIds = [...new Set(activeOnly(attendanceLog).filter(r => r.dateStr === dailyDate).map(r => r.employeeId))];
-    if (allEmpIds.length === 0) return;
+    if (!attendanceLog) return;
+    const activeLogs = activeOnly(attendanceLog);
+    if (activeLogs.length === 0) return;
+
+    const pairsMap = new Map();
+    activeLogs.forEach(r => {
+      pairsMap.set(`${r.employeeId}|${r.dateStr}`, { employeeId: r.employeeId, dateStr: r.dateStr });
+    });
 
     setEmployeeDailyRecords(prev => {
       let next = [...prev]; let changed = false;
-      allEmpIds.forEach(empId => {
-        const result = computeAttendanceFromLogs(empId, dailyDate, attendanceLog);
+      pairsMap.forEach(({ employeeId: empId, dateStr }) => {
+        const result = computeAttendanceFromLogs(empId, dateStr, attendanceLog);
         if (result.status === 'Belum Absen' && !result.isDayOff) return;
-        const prevIndex = next.findIndex(r => !r.deletedAt && r.employeeId === empId && r.dateStr === dailyDate);
+        const emp = employees.find(e => e.id === empId);
+        const prevIndex = next.findIndex(r => !r.deletedAt && r.employeeId === empId && r.dateStr === dateStr);
         const prevExisting = prevIndex >= 0 ? next[prevIndex] : null;
+
+        const baseFields = { isDayOff: result.isDayOff, clockIn: result.clockIn, clockOut: result.clockOut, hoursWorked: result.hoursWorked, bolongMinutes: result.bolongMinutes, overtimeMinutes: result.overtimeMinutes };
+        const recordSnapshot = { ...prevExisting, ...baseFields, employeeId: empId, dateStr };
+        const recalculatedAdditions = mergeAutoAdjustments(prevExisting?.additions, recordSnapshot, emp);
+
         const isSame = prevExisting &&
-          prevExisting.isDayOff === result.isDayOff &&
-          prevExisting.clockIn === result.clockIn &&
-          prevExisting.clockOut === result.clockOut &&
-          prevExisting.hoursWorked === result.hoursWorked &&
-          (prevExisting.bolongMinutes || 0) === result.bolongMinutes &&
-          (prevExisting.overtimeMinutes || 0) === result.overtimeMinutes;
+          prevExisting.isDayOff === baseFields.isDayOff &&
+          prevExisting.clockIn === baseFields.clockIn &&
+          prevExisting.clockOut === baseFields.clockOut &&
+          prevExisting.hoursWorked === baseFields.hoursWorked &&
+          (prevExisting.bolongMinutes || 0) === baseFields.bolongMinutes &&
+          (prevExisting.overtimeMinutes || 0) === baseFields.overtimeMinutes &&
+          JSON.stringify(prevExisting.additions || []) === JSON.stringify(recalculatedAdditions);
         if (isSame) return;
+
         changed = true;
         if (prevExisting) {
-          next[prevIndex] = { ...prevExisting, isDayOff: result.isDayOff, clockIn: result.clockIn, clockOut: result.clockOut, hoursWorked: result.hoursWorked, bolongMinutes: result.bolongMinutes, overtimeMinutes: result.overtimeMinutes };
+          next[prevIndex] = { ...prevExisting, ...baseFields, additions: recalculatedAdditions };
         } else {
-          next.unshift({ id: `REC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, employeeId: empId, date: new Date(dailyDate), dateStr: dailyDate, isDayOff: result.isDayOff, clockIn: result.clockIn, clockOut: result.clockOut, hoursWorked: result.hoursWorked, bolongMinutes: result.bolongMinutes, overtimeMinutes: result.overtimeMinutes, additions: [], deductions: [] });
+          next.unshift({ id: `REC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, employeeId: empId, date: new Date(dateStr), dateStr, ...baseFields, additions: recalculatedAdditions, deductions: [] });
         }
       });
       return changed ? next : prev;
     });
-  }, [attendanceLog, dailyDate, setEmployeeDailyRecords]);
+  }, [attendanceLog, employees, setEmployeeDailyRecords]);
 
-  /* ── Effect 2: Load adj dari record yang sudah ada ── */
+  /* ── Effect 2: Load adj dari record yang sudah ada ──
+     Record yang dimuat ke sini udah pasti termasuk Bonus Full Time/Lembur
+     yang fresh (dari Effect 1 di atas) — form ini sekarang cuma dipakai
+     buat nambah/edit item MANUAL (kasbon, bonus custom, dll). */
   useEffect(() => {
     if (dailyEmpId && dailyDate) {
       const r = employeeDailyRecords.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
@@ -193,41 +217,6 @@ const InputDailyTab = () => {
       setAdditions([]); setDeductions([]);
     }
   }, [dailyEmpId, dailyDate, employeeDailyRecords]);
-
-  /* ── Effect 3: Auto Bonus Full Time ── */
-  useEffect(() => {
-    if (!dailyEmpId || !dailyDate) return;
-    const empRecord = employeeDailyRecords.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
-    if (!empRecord || empRecord.isDayOff || !empRecord.clockIn || !empRecord.clockOut) {
-      return setAdditions(prev => prev.filter(a => a.category !== 'Bonus Full Time'));
-    }
-    const emp = employees.find(e => e.id === dailyEmpId);
-    if (!emp) return;
-    const bonusAmount = emp.fullTimeBonus || 0;
-    const outMinutes = getClockOutMinutesContinuous(empRecord.clockIn, empRecord.clockOut);
-    const eligible = timeStrToMinutes(empRecord.clockIn) <= WORK_START_MINUTES && outMinutes >= WORK_END_MINUTES;
-    if (eligible && bonusAmount > 0) {
-      setAdditions(prev => prev.some(a => a.category === 'Bonus Full Time') ? prev : [...prev, { id: Date.now() + Math.random(), category: 'Bonus Full Time', amount: Number(bonusAmount), note: '(Masuk ≤ 09:00 & Pulang ≥ 19:00)', expenseRecorded: false }]);
-    } else {
-      setAdditions(prev => prev.filter(a => a.category !== 'Bonus Full Time'));
-    }
-  }, [dailyEmpId, dailyDate, employeeDailyRecords, employees]);
-
-  /* ── Effect 4: Auto Bonus Lembur ── */
-  useEffect(() => {
-    if (!dailyEmpId || !dailyDate) return;
-    const empRecord = employeeDailyRecords.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
-    if (!empRecord || empRecord.isDayOff || !empRecord.clockIn || !empRecord.clockOut) {
-      return setAdditions(prev => prev.filter(a => a.category !== 'Bonus Lembur'));
-    }
-    const emp = employees.find(e => e.id === dailyEmpId);
-    if (!emp) return;
-    const totalBlocks = Math.floor((empRecord.overtimeMinutes || 0) / 30);
-    if (totalBlocks <= 0) return setAdditions(prev => prev.filter(a => a.category !== 'Bonus Lembur'));
-    const overtimeRate = getOvertimeRate(emp);
-    const lemburAmount = totalBlocks * overtimeRate;
-    setAdditions(prev => [...prev.filter(a => a.category !== 'Bonus Lembur'), { id: Date.now() + Math.random(), category: 'Bonus Lembur', amount: lemburAmount, note: `(${totalBlocks * 30} menit · Rp${overtimeRate.toLocaleString('id-ID')}/30m)`, expenseRecorded: false }]);
-  }, [dailyEmpId, dailyDate, employeeDailyRecords, employees]);
 
   /* ── Handler Form Utama ── */
   const handleAddAdjustment = () => {
@@ -246,9 +235,9 @@ const InputDailyTab = () => {
 
   const handleSaveDailyRecord = () => {
     if (!dailyEmpId || !dailyDate) return triggerAlert('Pilih karyawan & tanggal terlebih dahulu!');
-    const validAdditions = additions.filter(a => a.category && a.amount > 0);
     const validDeductions = deductions.filter(d => d.category && d.amount > 0);
-    const empName = employees.find(e => e.id === dailyEmpId)?.name || 'Karyawan';
+    const emp = employees.find(e => e.id === dailyEmpId);
+    const empName = emp?.name || 'Karyawan';
     const generatedExpenses = [];
     const updatedDeductions = validDeductions.map(d => {
       if (d.paymentMethod === 'Tunai' && !d.expenseRecorded) {
@@ -258,11 +247,20 @@ const InputDailyTab = () => {
       return d;
     });
     if (generatedExpenses.length > 0) setExpenses([...generatedExpenses, ...expenses]);
+    const validAdditions = additions.filter(a => a.category && a.amount > 0);
     setEmployeeDailyRecords(prev => {
       const existing = prev.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
-      if (existing) return prev.map(r => r.id === existing.id ? { ...r, additions: validAdditions, deductions: updatedDeductions } : r);
+      // Hitung ulang auto-adjustment (Bonus Full Time/Lembur) dari data absensi
+      // terkini—jaga-jaga kalau Effect 1 belum sempat jalan duluan. Item manual
+      // (additions dari state form) digabung, item auto lama otomatis diganti baru.
+      if (existing) {
+        const finalAdditions = mergeAutoAdjustments(validAdditions, existing, emp);
+        return prev.map(r => r.id === existing.id ? { ...r, additions: finalAdditions, deductions: updatedDeductions } : r);
+      }
       const computed = computeAttendanceFromLogs(dailyEmpId, dailyDate, attendanceLog);
-      return [{ id: `REC-${Date.now()}`, employeeId: dailyEmpId, date: new Date(dailyDate), dateStr: dailyDate, isDayOff: computed.isDayOff, clockIn: computed.clockIn, clockOut: computed.clockOut, hoursWorked: computed.hoursWorked, bolongMinutes: computed.bolongMinutes, overtimeMinutes: computed.overtimeMinutes, additions: validAdditions, deductions: updatedDeductions }, ...prev];
+      const newRecordBase = { employeeId: dailyEmpId, dateStr: dailyDate, isDayOff: computed.isDayOff, clockIn: computed.clockIn, clockOut: computed.clockOut, hoursWorked: computed.hoursWorked, bolongMinutes: computed.bolongMinutes, overtimeMinutes: computed.overtimeMinutes };
+      const finalAdditions = mergeAutoAdjustments(validAdditions, newRecordBase, emp);
+      return [{ id: `REC-${Date.now()}`, date: new Date(dailyDate), ...newRecordBase, additions: finalAdditions, deductions: updatedDeductions }, ...prev];
     });
     triggerAlert(hasAdjustments ? 'Perubahan berhasil diupdate!' : 'Data berhasil disimpan!');
   };
@@ -309,7 +307,8 @@ const InputDailyTab = () => {
 
   const handleSaveEdit = () => {
     if (!editingRecord) return;
-    const empName = employees.find(e => e.id === editingRecord.employeeId)?.name || 'Karyawan';
+    const emp = employees.find(e => e.id === editingRecord.employeeId);
+    const empName = emp?.name || 'Karyawan';
     const validAdditions = editAdditions.filter(a => a.category && a.amount > 0);
     const validDeductions = editDeductions.filter(d => d.category && d.amount > 0);
     const generatedExpenses = [];
@@ -321,7 +320,10 @@ const InputDailyTab = () => {
       return d;
     });
     if (generatedExpenses.length > 0) setExpenses([...generatedExpenses, ...expenses]);
-    setEmployeeDailyRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, additions: validAdditions, deductions: updatedDeductions } : r));
+    // Sama seperti handleSaveDailyRecord: hitung ulang Bonus Full Time/Lembur dari
+    // data absensi yang tersimpan di record ini, jangan cuma percaya additions lama.
+    const finalAdditions = mergeAutoAdjustments(validAdditions, editingRecord, emp);
+    setEmployeeDailyRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, additions: finalAdditions, deductions: updatedDeductions } : r));
     triggerAlert('Perubahan berhasil disimpan!');
     handleCloseEdit();
   };
@@ -368,6 +370,32 @@ const InputDailyTab = () => {
 
     return grouped;
   }, [employeeDailyRecords, showTrash, dailySortKey, employees]);
+
+  // Daftar flat semua record yang sedang tampil (lintas semua grup karyawan, termasuk yang collapsed)
+  const allVisibleRecords = useMemo(() => groupedRecords.flatMap(g => g.records), [groupedRecords]);
+
+  // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih"
+  const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(allVisibleRecords);
+
+  const handleBulkSoftDelete = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Pindahkan ${ids.length} data input terpilih ke Recycle Bin?`, () => {
+      setEmployeeDailyRecords(prev => prev.map(r => selectedIds.has(r.id) ? markDeleted(r) : r));
+      resetSelection();
+      triggerAlert('Data terpilih dipindahkan ke Recycle Bin.');
+    });
+  };
+
+  const handleBulkPermanentDelete = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Hapus PERMANEN ${ids.length} data input terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+      setEmployeeDailyRecords(prev => prev.filter(r => !selectedIds.has(r.id)));
+      resetSelection();
+      triggerAlert('Data terpilih dihapus permanen.');
+    });
+  };
 
   /* ══════════════════════════════════════════════════ */
   /*  RENDER                                           */
@@ -467,7 +495,7 @@ const InputDailyTab = () => {
             <History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Input'}
           </h3>
           <div className="flex gap-3">
-            <button onClick={() => setShowTrash(!showTrash)} className="text-xs font-bold text-slate-500">
+            <button onClick={() => { setShowTrash(!showTrash); resetSelection(); }} className="text-xs font-bold text-slate-500">
               {showTrash ? 'Kembali' : 'Recycle Bin'}
             </button>
             <button onClick={() => setIsDailySortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 border rounded-lg px-2 py-1.5">
@@ -477,6 +505,16 @@ const InputDailyTab = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          {allVisibleRecords.length > 0 && (
+            <BulkSelectBar
+              count={count}
+              total={allVisibleRecords.length}
+              allSelected={allSelected}
+              onToggleAll={toggleSelectAll}
+              onDeleteSelected={showTrash ? handleBulkPermanentDelete : handleBulkSoftDelete}
+            />
+          )}
+
           {groupedRecords.length === 0 && (
             <p className="text-xs text-slate-400 text-center py-10">Belum ada riwayat input.</p>
           )}
@@ -523,9 +561,16 @@ const InputDailyTab = () => {
                       const hasAdj = (rec.additions?.length || 0) + (rec.deductions?.length || 0) > 0;
 
                       return (
-                        <div key={rec.id} className="px-3 py-2.5 bg-white">
+                        <div key={rec.id} className={`px-3 py-2.5 bg-white ${selectedIds.has(rec.id) ? 'bg-orange-50/60' : ''}`}>
                           <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
+                            <div className="flex items-start gap-2 flex-1 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(rec.id)}
+                                onChange={() => toggleSelectOne(rec.id)}
+                                className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
                               {/* Baris 1: Tanggal + jam kerja */}
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md font-mono">{rec.dateStr}</span>
@@ -556,6 +601,7 @@ const InputDailyTab = () => {
                               ) : (
                                 <p className="text-[11px] text-slate-400 mt-1">Belum ada rincian tambahan/potongan.</p>
                               )}
+                              </div>
                             </div>
 
                             {/* Tombol aksi */}

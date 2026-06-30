@@ -77,7 +77,7 @@ const ReceiptModal = () => {
     };
 
     return (
-        <div className="fixed inset-0 z-[70] flex items-start md:items-center justify-center p-4 bg-black backdrop-blur-md overflow-y-auto py-10 transition-opacity duration-300 print:bg-white print:p-0">
+        <div className="fixed inset-0 z-[70] flex items-start md:items-center justify-center p-4 bg-black/40 backdrop-blur-md overflow-y-auto py-10 transition-opacity duration-300 print:bg-white print:p-0">
             <style dangerouslySetInnerHTML={{
                 __html: `
         @media print {

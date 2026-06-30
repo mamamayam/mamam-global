@@ -4,7 +4,8 @@ import { useAppContext } from '../../context/AppContext';
 import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2, Save, RotateCcw } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
-import { PageHeader, Card, Input, Select, Button, EmptyState } from '../../components/ui';
+import { PageHeader, Card, Input, Select, Button, EmptyState, BulkSelectBar } from '../../components/ui';
+import { useBulkSelect } from '../../hook/useBulkSelect';
 
 const CustomerView = () => {
   // Ambil triggerConfirm dari AppContext (pola yang sama seperti di EmployeesView)
@@ -168,6 +169,56 @@ const CustomerView = () => {
 
   const loyalCustomers = useMemo(() => [...activeOnly(customers)].sort((a, b) => b.points - a.points), [customers]);
 
+  // Daftar pelanggan & voucher yang sedang terlihat (sesuai mode Recycle Bin aktif)
+  const visibleCustomers = showTrashCustomers ? trashedOnly(customers) : activeOnly(customers);
+  const visibleVouchers = showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers);
+
+  // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih" — Pelanggan
+  const { selectedIds: selectedCustomerIds, allSelected: allCustomersSelected, toggleOne: toggleSelectCustomer, toggleAll: toggleSelectAllCustomers, reset: resetCustomerSelection, count: customerSelectedCount } = useBulkSelect(visibleCustomers);
+
+  const handleBulkSoftDeleteCustomers = () => {
+    const ids = [...selectedCustomerIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Pindahkan ${ids.length} pelanggan terpilih ke Recycle Bin?`, () => {
+      setCustomers(customers.map(c => selectedCustomerIds.has(c.id) ? markDeleted(c) : c));
+      resetCustomerSelection();
+      triggerAlert('Pelanggan terpilih dipindahkan ke Recycle Bin.');
+    });
+  };
+
+  const handleBulkPermanentDeleteCustomers = () => {
+    const ids = [...selectedCustomerIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Hapus PERMANEN ${ids.length} pelanggan terpilih? Data riwayat poin mungkin kehilangan referensi nama. Tindakan ini tidak bisa dibatalkan.`, () => {
+      setCustomers(customers.filter(c => !selectedCustomerIds.has(c.id)));
+      resetCustomerSelection();
+      triggerAlert('Pelanggan terpilih dihapus permanen.');
+    });
+  };
+
+  // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih" — Voucher
+  const { selectedIds: selectedVoucherIds, allSelected: allVouchersSelected, toggleOne: toggleSelectVoucher, toggleAll: toggleSelectAllVouchers, reset: resetVoucherSelection, count: voucherSelectedCount } = useBulkSelect(visibleVouchers);
+
+  const handleBulkSoftDeleteVouchers = () => {
+    const ids = [...selectedVoucherIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Pindahkan ${ids.length} voucher terpilih ke Recycle Bin?`, () => {
+      setVouchers(vouchers.map(v => selectedVoucherIds.has(v.id) ? markDeleted(v) : v));
+      resetVoucherSelection();
+      triggerAlert('Voucher terpilih dipindahkan ke Recycle Bin.');
+    });
+  };
+
+  const handleBulkPermanentDeleteVouchers = () => {
+    const ids = [...selectedVoucherIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Hapus PERMANEN ${ids.length} voucher terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+      setVouchers(vouchers.filter(v => !selectedVoucherIds.has(v.id)));
+      resetVoucherSelection();
+      triggerAlert('Voucher terpilih dihapus permanen.');
+    });
+  };
+
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col min-h-0 relative animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <div className="shrink-0">
@@ -216,7 +267,7 @@ const CustomerView = () => {
               <div className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0 flex justify-between items-center">
                 <span>{showTrashCustomers ? 'Recycle Bin' : (editingCustomerId ? 'Edit Data Pelanggan' : 'Data Pelanggan')}</span>
                 <button
-                  onClick={() => setShowTrashCustomers(v => !v)}
+                  onClick={() => { setShowTrashCustomers(v => !v); resetCustomerSelection(); }}
                   className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
                 >
                   {showTrashCustomers ? 'Kembali' : `Recycle Bin (${trashedOnly(customers).length})`}
@@ -254,11 +305,28 @@ const CustomerView = () => {
                 </div>
               )}
               <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-950/30 custom-scrollbar">
-                {(showTrashCustomers ? trashedOnly(customers) : activeOnly(customers)).map(c => (
-                  <div key={c.id} className="flex justify-between items-center p-3 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm hover:border-accent-200 dark:hover:border-accent-500/30 transition-all duration-300">
-                    <div>
-                      <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{c.name}</p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{c.phone || 'Tanpa No. HP'}</p>
+                {visibleCustomers.length > 0 && (
+                  <BulkSelectBar
+                    count={customerSelectedCount}
+                    total={visibleCustomers.length}
+                    allSelected={allCustomersSelected}
+                    onToggleAll={toggleSelectAllCustomers}
+                    onDeleteSelected={showTrashCustomers ? handleBulkPermanentDeleteCustomers : handleBulkSoftDeleteCustomers}
+                  />
+                )}
+                {visibleCustomers.map(c => (
+                  <div key={c.id} className={`flex justify-between items-center p-3 bg-white dark:bg-slate-900 border rounded-xl shadow-sm hover:border-accent-200 dark:hover:border-accent-500/30 transition-all duration-300 ${selectedCustomerIds.has(c.id) ? 'border-orange-500 ring-1 ring-orange-500' : 'border-slate-100 dark:border-slate-800'}`}>
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedCustomerIds.has(c.id)}
+                        onChange={() => toggleSelectCustomer(c.id)}
+                        className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                      />
+                      <div>
+                        <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{c.name}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{c.phone || 'Tanpa No. HP'}</p>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -305,7 +373,7 @@ const CustomerView = () => {
                     </div>
                   </div>
                 ))}
-                {(showTrashCustomers ? trashedOnly(customers) : activeOnly(customers)).length === 0 && (
+                {visibleCustomers.length === 0 && (
                   <EmptyState size="sm" title={showTrashCustomers ? 'Recycle bin kosong.' : 'Belum ada pelanggan'} />
                 )}
               </div>
@@ -372,7 +440,7 @@ const CustomerView = () => {
             <div
               className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0 flex justify-between items-center">
               <span>{showTrashVouchers ? 'Recycle Bin' : 'Voucher Diskon Aktif'}</span>
-              <button onClick={() => setShowTrashVouchers(v => !v)}
+              <button onClick={() => { setShowTrashVouchers(v => !v); resetVoucherSelection(); }}
                 className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400
       transition-colors"
               >
@@ -437,16 +505,33 @@ const CustomerView = () => {
             )}
 
             <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-950/30 custom-scrollbar">
-              {(showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers)).map(v => (
+              {visibleVouchers.length > 0 && (
+                <BulkSelectBar
+                  count={voucherSelectedCount}
+                  total={visibleVouchers.length}
+                  allSelected={allVouchersSelected}
+                  onToggleAll={toggleSelectAllVouchers}
+                  onDeleteSelected={showTrashVouchers ? handleBulkPermanentDeleteVouchers : handleBulkSoftDeleteVouchers}
+                />
+              )}
+              {visibleVouchers.map(v => (
                 <div key={v.id}
-                  className="flex justify-between items-center p-3 bg-white dark:bg-slate-900 border border-accent-100 dark:border-accent-500/20 rounded-xl shadow-sm relative overflow-hidden transition-shadow duration-300">
+                  className={`flex justify-between items-center p-3 bg-white dark:bg-slate-900 border rounded-xl shadow-sm relative overflow-hidden transition-shadow duration-300 ${selectedVoucherIds.has(v.id) ? 'border-orange-500 ring-1 ring-orange-500' : 'border-accent-100 dark:border-accent-500/20'}`}>
                   <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-accent-600 dark:bg-accent-500"></div>
-                  <div className="pl-3">
-                    <p className="font-black text-accent-600 dark:text-accent-400 tracking-wider text-sm">{v.code}</p>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                      Min. Order: {formatRupiah(v.minPurchase)} &bull; Sisa Kuota: <span
-                        className="font-bold text-accent-600 dark:text-accent-400">{v.quota || 0}x</span>
-                    </p>
+                  <div className="flex items-start gap-2 pl-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedVoucherIds.has(v.id)}
+                      onChange={() => toggleSelectVoucher(v.id)}
+                      className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                    />
+                    <div>
+                      <p className="font-black text-accent-600 dark:text-accent-400 tracking-wider text-sm">{v.code}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                        Min. Order: {formatRupiah(v.minPurchase)} &bull; Sisa Kuota: <span
+                          className="font-bold text-accent-600 dark:text-accent-400">{v.quota || 0}x</span>
+                      </p>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -494,7 +579,7 @@ const CustomerView = () => {
                   </div>
                 </div>
               ))}
-              {(showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers)).length === 0 && (
+              {visibleVouchers.length === 0 && (
                 <EmptyState size="sm" title={showTrashVouchers ? 'Recycle bin kosong.' : 'Belum ada voucher'} />
               )}
             </div>

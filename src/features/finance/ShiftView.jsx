@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown } from 'lucide-react';
+import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown, AlertTriangle } from 'lucide-react';
 import { isNativePlatform, printShiftNativeBluetooth } from '../../library/printer';
 import { toPng, toBlob } from 'html-to-image';
 import { generateUUID, toLocalMonthString } from '../../utils/formatters';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete, pushLiveState } from '../../storage/realtimeSync';
 import { applySort } from '../../utils/sortUtils';
+import { useBulkSelect } from '../../hook/useBulkSelect';
 
 // Import komponen UI Design System
 import { 
@@ -18,7 +19,8 @@ import {
   EmptyState, 
   Badge, 
   IconButton,
-  SortModal
+  SortModal,
+  BulkSelectBar
 } from '../../components/ui';
 
 const ShiftView = () => {
@@ -134,6 +136,16 @@ const ShiftView = () => {
       expectedCash
     };
   }, [currentShift, salesHistory, expenses, incomes]);
+
+  // Deteksi dompet yang kebawa nginap dari hari sebelumnya (kemungkinan kasir lupa nutup).
+  // Sengaja pakai perbandingan TANGGAL, bukan jumlah jam, karena shift resto
+  // bisa aja legit jalan lama dalam satu hari kalender yang sama.
+  const isShiftCarriedOver = useMemo(() => {
+    if (!currentShift) return false;
+    const start = new Date(currentShift.startTime);
+    const now = new Date();
+    return start.toDateString() !== now.toDateString();
+  }, [currentShift]);
 
   const handleOpenShift = () => {
     if (!initialCashInput || Number(initialCashInput) < 0) return triggerAlert('Masukkan nominal saldo awal yang valid.');
@@ -292,6 +304,34 @@ const ShiftView = () => {
     { key: 'difference-desc', label: 'Selisih Terbesar' },
   ];
 
+  // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih"
+  const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedShiftHistory);
+
+  // Hapus Banyak SEKALIGUS (Pindah ke Recycle Bin)
+  const handleBulkSoftDeleteShift = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Pindahkan ${ids.length} data dompet terpilih ke Recycle Bin?`, () => {
+      setShiftHistory(shiftHistory.map(shift => selectedIds.has(shift.id) ? markDeleted(shift) : shift));
+      resetSelection();
+      triggerAlert('Data terpilih dipindahkan ke Recycle Bin.');
+    });
+  };
+
+  // Hapus Banyak SEKALIGUS (Permanen di Recycle Bin)
+  const handleBulkPermanentDeleteShift = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    triggerConfirm(`Hapus PERMANEN ${ids.length} data dompet terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+      setShiftHistory(shiftHistory.filter(shift => !selectedIds.has(shift.id)));
+      ids.forEach(id => pushTransactionDelete('shiftHistory', id).catch(err =>
+        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+      ));
+      resetSelection();
+      triggerAlert('Data terpilih dihapus permanen.');
+    });
+  };
+
   const rekapShiftStats = useMemo(() => {
     let totalInitial = 0;
     let totalSales = 0;
@@ -408,6 +448,23 @@ const ShiftView = () => {
         title="Manajemen Dompet" 
         icon={<Clock className="w-6 h-6" />} 
       />
+
+      {/* =========================================================================
+          BANNER PERINGATAN — DOMPET KEBAWA NGINAP DARI HARI SEBELUMNYA
+          ========================================================================= */}
+      {currentShift && isShiftCarriedOver && (
+        <div className="max-w-4xl mb-6 shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="bg-accent-50 dark:bg-accent-500/10 border-2 border-red-100 dark:border-red-500/20 text-accent-700 dark:text-accent-400 p-4 rounded-2xl flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-bold text-sm text-accent-700 dark:text-accent-300">Dompet Belum Ditutup dari Hari Sebelumnya!</p>
+              <p className="text-xs text-accent-600/90 dark:text-accent-400/80 mt-0.5">
+                Dibuka sejak {new Date(currentShift.startTime).toLocaleString('id-ID')}. Transaksi hari ini bisa kecampur sama shift lama — segera hitung & tutup dompet sebelum lanjut jualan.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!currentShift ? (
         <Card variant="elevated" className="max-w-md mx-auto text-center mt-10 mb-8 shrink-0">
@@ -560,7 +617,7 @@ const ShiftView = () => {
             <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">{showTrash ? 'Recycle Bin' : 'Daftar Penutupan Dompet'}</h4>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setShowTrash(v => !v)}
+                onClick={() => { setShowTrash(v => !v); resetSelection(); }}
                 className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
               >
                 {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(shiftHistory).length})`}
@@ -576,6 +633,19 @@ const ShiftView = () => {
             </div>
           </div>
           
+          {isAdminMode && sortedShiftHistory.length > 0 && (
+            <div className="p-3 border-b border-slate-100 dark:border-slate-800">
+              <BulkSelectBar
+                count={count}
+                total={sortedShiftHistory.length}
+                allSelected={allSelected}
+                onToggleAll={toggleSelectAll}
+                onDeleteSelected={showTrash ? handleBulkPermanentDeleteShift : handleBulkSoftDeleteShift}
+                label="Pilih Semua"
+              />
+            </div>
+          )}
+
           <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[400px] overflow-y-auto custom-scrollbar">
             {sortedShiftHistory.length === 0 ? (
               <EmptyState 
@@ -589,18 +659,28 @@ const ShiftView = () => {
                 const statusLabel = shift.difference < 0 ? 'Minus' : shift.difference > 0 ? 'Lebih' : 'Pas (Balance)';
 
                 return (
-                  <div key={shift.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-950/50 transition-colors animate-in fade-in slide-in-from-left-2 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div className="space-y-1 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-black text-sm text-slate-800 dark:text-slate-100">{shift.id}</span>
-                        <Badge variant={badgeVariant}><span className="uppercase tracking-wider text-[10px]">{statusLabel}</span></Badge>
-                      </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                        Buka: {new Date(shift.startTime).toLocaleString('id-ID')} | Tutup: {new Date(shift.endTime).toLocaleString('id-ID')}
+                  <div key={shift.id} className={`p-4 hover:bg-slate-50 dark:hover:bg-slate-950/50 transition-colors animate-in fade-in slide-in-from-left-2 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${isAdminMode && selectedIds.has(shift.id) ? 'bg-orange-50/60 dark:bg-orange-500/5' : ''}`}>
+                    <div className="flex items-start gap-3 flex-1">
+                      {isAdminMode && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(shift.id)}
+                          onChange={() => toggleSelectOne(shift.id)}
+                          className="w-4 h-4 mt-1 rounded accent-orange-500 cursor-pointer shrink-0"
+                        />
+                      )}
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-black text-sm text-slate-800 dark:text-slate-100">{shift.id}</span>
+                          <Badge variant={badgeVariant}><span className="uppercase tracking-wider text-[10px]">{statusLabel}</span></Badge>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                          Buka: {new Date(shift.startTime).toLocaleString('id-ID')} | Tutup: {new Date(shift.endTime).toLocaleString('id-ID')}
+                        </p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                          Saldo Awal: {formatRupiah(shift.stats.initialCash)} | Penjualan Tunai: {formatRupiah(shift.stats.cashSales)} | Target Uang: {formatRupiah(shift.stats.expectedCash)}
                       </p>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                        Saldo Awal: {formatRupiah(shift.stats.initialCash)} | Penjualan Tunai: {formatRupiah(shift.stats.cashSales)} | Target Uang: {formatRupiah(shift.stats.expectedCash)}
-                      </p>
+                    </div>
                     </div>
 
                     <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-0 pt-2 md:pt-0">

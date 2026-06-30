@@ -1,19 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import {
   Settings, Store, Save, ReceiptText, MapPin, Phone, Calculator,
-  Bluetooth, BluetoothSearching, Unplug, CheckCircle, Sun, Moon, Palette
+  Bluetooth, BluetoothSearching, Unplug, CheckCircle, Sun, Moon, Palette,
+  ShieldAlert, ShieldCheck
 } from 'lucide-react';
 import { Alert, Button } from '../../components/ui';
+import { usePrinterStorage }     from '../../hook/usePrinterStorage';
+import { useBluetoothPermission } from '../../hook/useBluetoothPermission';
 
 // ====== Daftar pilihan tema warna ======
 const COLOR_THEMES = [
   { id: 'orange', label: 'Orange', hex: '#ea580c' },
-  { id: 'blue', label: 'Biru', hex: '#4f46e5' },
-  { id: 'green', label: 'Hijau', hex: '#059669' },
-  { id: 'violet', label: 'Ungu', hex: '#7c3aed' },
-  { id: 'rose', label: 'Merah', hex: '#e11d48' },
-  { id: 'teal', label: 'Teal', hex: '#0d9488' },
+  { id: 'blue',   label: 'Biru',   hex: '#4f46e5' },
+  { id: 'green',  label: 'Hijau',  hex: '#059669' },
+  { id: 'violet', label: 'Ungu',   hex: '#7c3aed' },
+  { id: 'rose',   label: 'Merah',  hex: '#e11d48' },
+  { id: 'teal',   label: 'Teal',   hex: '#0d9488' },
 ];
 
 // =========================================================================
@@ -50,34 +53,27 @@ const TextInput = ({ label, icon: Icon, placeholder, value, onChange, type = "te
 // KOMPONEN UTAMA SETTINGS VIEW
 // =========================================================================
 const SettingsView = () => {
-  // Tambah colorTheme & setColorTheme dari context
   const { storeSettings, setStoreSettings, theme, setTheme, colorTheme, setColorTheme } = useAppContext();
 
   const [localSettings, setLocalSettings] = useState({
-    storeName: '',
+    storeName:    '',
     storeAddress: '',
-    storePhone: '',
+    storePhone:   '',
     receiptFooter: '',
-    roundingMode: 'none',
-    // === BARU: nama & tagline sidebar ===
-    appName: 'MAMAM AYAM',
+    roundingMode:  'none',
+    appName:    'MAMAM AYAM',
     appTagline: 'Ecosystem',
     ...storeSettings
   });
-  const [isSaved, setIsSaved] = useState(false);
-
-  // =========================================================================
-  // STATE & LOGIKA BLUETOOTH PRINTER (tidak berubah)
-  // =========================================================================
-  const [savedPrinter, setSavedPrinter] = useState(null);
-  const [isScanning, setIsScanning] = useState(false);
+  const [isSaved,        setIsSaved]        = useState(false);
+  const [isScanning,     setIsScanning]     = useState(false);
   const [scannedDevices, setScannedDevices] = useState([]);
 
-  useEffect(() => {
-    const mac = localStorage.getItem('my_printer_mac');
-    const name = localStorage.getItem('my_printer_name');
-    if (mac && name) setSavedPrinter({ name, address: mac });
-  }, []);
+  // =========================================================================
+  // ✅ BLUETOOTH: pakai hooks baru (persistent + permission-aware)
+  // =========================================================================
+  const { savedPrinter, savePrinter, clearPrinter }   = usePrinterStorage();
+  const { btStatus, requestBtPermission, checkBtPermission } = useBluetoothPermission();
 
   const handleScanBluetooth = () => {
     if (!window.bluetoothSerial) {
@@ -87,7 +83,7 @@ const SettingsView = () => {
     setIsScanning(true);
     setScannedDevices([]);
 
-    const executeScan = () => {
+    const doScan = () => {
       window.bluetoothSerial.isEnabled(
         () => {
           window.bluetoothSerial.list(
@@ -100,8 +96,10 @@ const SettingsView = () => {
               setIsScanning(false);
             },
             (err) => {
+              // Kalau error BLUETOOTH_CONNECT muncul di sini, berarti izin kena revoke
+              // saat runtime (misal user cabut manual dari Settings)
               if (err && typeof err === 'string' && err.includes('BLUETOOTH_CONNECT')) {
-                alert("Izin 'Perangkat di Sekitar' ditolak oleh sistem. Mohon izinkan manual di Pengaturan Aplikasi HP.");
+                checkBtPermission(); // refresh status → banner permission akan muncul
               } else {
                 alert(`Gagal scan: ${err}`);
               }
@@ -116,44 +114,20 @@ const SettingsView = () => {
       );
     };
 
-    const uaMatch = navigator.userAgent.match(/Android\s([0-9.]+)/);
-    const androidVersion = uaMatch ? parseFloat(uaMatch[1]) : null;
-    const needsRuntimePermission = androidVersion !== null && androidVersion >= 12;
-
-    if (needsRuntimePermission && window.cordova?.plugins?.permissions) {
-      const permissions = window.cordova.plugins.permissions;
-      permissions.requestPermissions(
-        ['android.permission.BLUETOOTH_CONNECT', 'android.permission.BLUETOOTH_SCAN'],
-        (status) => {
-          if (status.hasPermission) {
-            executeScan();
-          } else {
-            alert("Izin 'Perangkat di Sekitar' ditolak. Aktifkan manual di Pengaturan Aplikasi > Permissions.");
-            setIsScanning(false);
-          }
-        },
-        () => {
-          alert("Gagal meminta izin dari sistem.");
-          setIsScanning(false);
-        }
-      );
-    } else {
-      executeScan();
-    }
+    // requestBtPermission sudah handle Android version check secara internal.
+    // Kalau 'granted'/'not_required'/'unknown' → langsung doScan tanpa dialog.
+    // Kalau 'denied' → minta izin dulu, baru doScan.
+    requestBtPermission(doScan, () => setIsScanning(false));
   };
 
-  const handleConnectPrinter = (device) => {
-    localStorage.setItem('my_printer_mac', device.address);
-    localStorage.setItem('my_printer_name', device.name);
-    setSavedPrinter(device);
+  const handleConnectPrinter = async (device) => {
+    await savePrinter(device);
     setScannedDevices([]);
     alert(`Printer "${device.name}" berhasil diatur sebagai printer utama!`);
   };
 
-  const handleDisconnectPrinter = () => {
-    localStorage.removeItem('my_printer_mac');
-    localStorage.removeItem('my_printer_name');
-    setSavedPrinter(null);
+  const handleDisconnectPrinter = async () => {
+    await clearPrinter();
   };
   // =========================================================================
 
@@ -174,12 +148,37 @@ const SettingsView = () => {
     e.preventDefault();
     const finalizedSettings = {
       ...localSettings,
-      taxRate: localSettings.taxRate === '' ? 0 : localSettings.taxRate,
+      taxRate:       localSettings.taxRate       === '' ? 0 : localSettings.taxRate,
       serviceCharge: localSettings.serviceCharge === '' ? 0 : localSettings.serviceCharge,
     };
     setStoreSettings(finalizedSettings);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
+  };
+
+  // =========================================================================
+  // UI HELPER: permission banner
+  // =========================================================================
+  const BtPermissionBanner = () => {
+    if (btStatus !== 'denied') return null;
+    return (
+      <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
+        <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-amber-700 dark:text-amber-400">Izin Bluetooth Diperlukan</p>
+          <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
+            Setelah update APK, izin Bluetooth perlu diberikan ulang.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => requestBtPermission(() => {}, () => {})}
+          className="text-xs font-bold text-amber-700 dark:text-amber-400 hover:underline shrink-0"
+        >
+          Izinkan
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -197,7 +196,7 @@ const SettingsView = () => {
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
 
-              {/* === BARU: Nama & tagline sidebar === */}
+              {/* Profil Aplikasi */}
               <div className="flex items-center gap-2 border-b pb-2">
                 <Store className="w-5 h-5 text-slate-700 dark:text-slate-200" />
                 <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Profil Aplikasi</h3>
@@ -217,18 +216,17 @@ const SettingsView = () => {
                 helperText='Teks kecil di bawah nama, contoh: "POS System", "Manajemen Kasir".'
               />
 
-              {/* Profil Usaha (Untuk Struk) */}
+              {/* Profil Struk */}
               <div className="flex items-center gap-2 border-b pb-2">
                 <ReceiptText className="w-5 h-5 text-slate-700 dark:text-slate-200" />
                 <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Profil Struk</h3>
               </div>
               <TextInput
-                label="Nama Toko "
+                label="Nama Toko"
                 placeholder="Misal: Kedai Kopi Senja"
                 value={localSettings.storeName}
                 onChange={(val) => handleTextChange('storeName', val)}
               />
-
               <TextInput
                 label="Nomor Telepon / WhatsApp"
                 icon={Phone}
@@ -292,12 +290,12 @@ const SettingsView = () => {
           {/* ============ KOLOM KANAN ============ */}
           <div className="space-y-6">
 
-            {/* TAMPILAN (DARK / LIGHT MODE) — accent-* menggantikan orange-* */}
+            {/* TAMPILAN (DARK / LIGHT MODE) */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
                 {theme === 'dark'
                   ? <Moon className="w-5 h-5 text-slate-700 dark:text-slate-200" />
-                  : <Sun className="w-5 h-5 text-slate-700 dark:text-slate-200" />
+                  : <Sun  className="w-5 h-5 text-slate-700 dark:text-slate-200" />
                 }
                 <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Tampilan</h3>
               </div>
@@ -330,7 +328,7 @@ const SettingsView = () => {
               <p className="text-xs text-slate-400 dark:text-slate-500">Pengaturan tampilan ini tersimpan di device ini.</p>
             </div>
 
-            {/* === BARU: TEMA WARNA === */}
+            {/* TEMA WARNA */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
                 <Palette className="w-5 h-5 text-slate-700 dark:text-slate-200" />
@@ -370,14 +368,28 @@ const SettingsView = () => {
               </p>
             </div>
 
-            {/* KONEKSI PRINTER BLUETOOTH (tidak berubah) */}
+            {/* ====================================================
+                KONEKSI PRINTER BLUETOOTH
+                - Pakai usePrinterStorage  → data survive APK update
+                - Pakai useBluetoothPermission → proactive permission check
+                ==================================================== */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 space-y-4 relative overflow-hidden">
               <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-500/20 pb-2">
                 <div className="flex items-center gap-2">
                   <Bluetooth className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Koneksi Printer Bluetooth</h3>
                 </div>
+                {/* Status badge permission */}
+                {btStatus === 'granted' && (
+                  <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span className="font-bold">Izin OK</span>
+                  </div>
+                )}
               </div>
+
+              {/* ⚠️ Banner permission — muncul otomatis setelah update APK */}
+              <BtPermissionBanner />
 
               {savedPrinter ? (
                 <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-500/30 p-4 rounded-xl flex items-center justify-between">
@@ -404,8 +416,8 @@ const SettingsView = () => {
                   <button
                     type="button"
                     onClick={handleScanBluetooth}
-                    disabled={isScanning}
-                    className="w-full py-3 rounded-xl bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-70"
+                    disabled={isScanning || btStatus === 'denied'}
+                    className="w-full py-3 rounded-xl bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isScanning ? (
                       <><BluetoothSearching className="w-4 h-4 animate-pulse" /> Mencari Perangkat...</>
@@ -435,7 +447,9 @@ const SettingsView = () => {
                   )}
                 </div>
               )}
-              <p className="text-xs text-slate-500 dark:text-slate-400">Pastikan printer sudah menyala dan di-pairing di pengaturan Android HP sebelum melakukan scan.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Pastikan printer sudah menyala dan di-pairing di pengaturan Android HP sebelum melakukan scan.
+              </p>
             </div>
 
           </div>

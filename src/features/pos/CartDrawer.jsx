@@ -1,4 +1,4 @@
-import React, { useState, useEffect} from "react";
+import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { usePosStore } from '../../store/usePosStore';
 import { activeOnly } from "../../utils/softDelete";
@@ -39,18 +39,29 @@ const CartDrawer = () => {
     getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill 
   } = useAppContext();
 
-  // Tambahan: Local state untuk input nomor HP pelanggan baru via Kasir
+  // Local state untuk input nomor HP pelanggan baru via Kasir
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
 
-  // Fix 2: Refs untuk menjaga customer tetap ada saat keranjang dikosongkan
-  const customerNameBackup = React.useRef('');
-  const isCustomerClearedIntentionally = React.useRef(false);
-  const prevCartLengthRef = React.useRef(cart.length);
+  // NOTE: mekanisme backup/restore customerName pakai ref (Fix 2 versi lama) udah dihapus.
+  // Itu penyebab nama pelanggan nyangkut lagi abis checkout & pas load saved bill kosong/guest,
+  // soalnya auto-restore-nya kepicu tiap kali cart.length transisi dari 0 ke >0.
 
-  // Fix 1: Handler untuk hapus customer secara sengaja (tombol X)
+  // Reset semua state transaksi sekaligus (dipanggil saat keranjang dikosongkan total)
+  const resetTransactionState = () => {
+    setCart([]);
+    setCustomerName('');
+    setOrderType('Takeaway'); // sesuaikan kalau default order type bukan ini
+    setDeliveryFee(0);
+    setCustomDeliveryFee('');
+    setVoucherInputCode('');
+    setAppliedVoucher(null);
+    setPointsToRedeem(0);
+    setManualDiscount({ type: 'fixed', value: 0 });
+    setNewCustomerPhone('');
+  };
+
+  // Handler untuk hapus customer secara sengaja (tombol X)
   const handleClearCustomer = () => {
-    isCustomerClearedIntentionally.current = true;
-    customerNameBackup.current = '';
     setCustomerName('');
   };
 
@@ -70,33 +81,11 @@ const CartDrawer = () => {
     }
   }, [isCartOpen, setCurrentView]);
 
-  // Fix 2a: Backup customerName setiap kali ada isinya
-  useEffect(() => {
-    if (customerName.trim() !== '') {
-      customerNameBackup.current = customerName;
-      isCustomerClearedIntentionally.current = false;
-    }
-  }, [customerName]);
-
-  // Fix 2b: Restore customerName saat item baru masuk setelah keranjang kosong
-  useEffect(() => {
-    if (
-      prevCartLengthRef.current === 0 &&
-      cart.length > 0 &&
-      !customerName.trim() &&
-      customerNameBackup.current.trim() &&
-      !isCustomerClearedIntentionally.current
-    ) {
-      setCustomerName(customerNameBackup.current);
-    }
-    prevCartLengthRef.current = cart.length;
-  }, [cart.length]);
-
   if (!isCartOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center">
-      <div className="absolute inset-0 bg-slate-500/30 dark:bg-slate-800/40 backdrop-blur-sm transition-opacity duration-300" onClick={() => setIsCartOpen(false)} />
+      <div className="absolute inset-0 bg-slate-500/40 dark:bg-slate-800/40 backdrop-blur-sm transition-opacity duration-300" onClick={() => setIsCartOpen(false)} />
       <div className="w-full md:w-[420px] bg-white dark:bg-slate-900 h-full flex flex-col shadow-2xl relative animate-in slide-in-from-right duration-300 ease-out">
 
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900">
@@ -105,7 +94,7 @@ const CartDrawer = () => {
           </h2>
           <div className="flex gap-2">
             {cart.length > 0 && (
-              <button onClick={() => triggerConfirm('Hapus semua isi keranjang?', () => setCart([]))} className="p-2 text-accent-500 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-full transition-colors" title="Kosongkan Keranjang">
+              <button onClick={() => triggerConfirm('Hapus semua isi keranjang? Data pelanggan & pesanan ikut direset.', resetTransactionState)} className="p-2 text-accent-500 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-full transition-colors" title="Kosongkan Keranjang">
                 <Trash2 className="w-5 h-5" />
               </button>
             )}
@@ -278,7 +267,7 @@ const CartDrawer = () => {
                       key={type}
                       onClick={() => {
                         setOrderType(type);
-                        if (type !== 'Delivery') setDeliveryFee(0);
+                        if (type !== 'Delivery') { setDeliveryFee(0); setCustomDeliveryFee(''); }
 
                         // RESET DISKON, POIN, DAN VOUCHER JIKA PILIH OJOL
                         if (type === 'Ojol') {

@@ -134,7 +134,7 @@ const PaymentModal = () => {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black backdrop-blur-md transition-opacity duration-300">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md transition-opacity duration-300">
       <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300 ease-out">
         <div className="p-5 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-950">
           <div>
