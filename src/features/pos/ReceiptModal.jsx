@@ -1,8 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 // Lo bisa panggil usePosStore di sini nanti kalau receiptModal ikut dipindah ke Zustand
 // import { usePosStore } from '../../store/usePosStore'; 
 import { useAppContext } from "../../context/AppContext";
-import { Printer, Share2 } from "lucide-react";
+import { Printer, Share2, Loader2 } from "lucide-react";
 import { isNativePlatform, printNativeBluetooth } from '../../library/printer.js';
 import { toPng, toBlob } from 'html-to-image';
 import { Capacitor } from '@capacitor/core';
@@ -12,6 +12,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 const ReceiptModal = () => {
     // ─── AMBIL DARI CONTEXT ───
     const { receiptModal, setReceiptModal, storeSettings, formatRupiah, printReceipt, customers } = useAppContext();
+    const [isPrinting, setIsPrinting] = useState(false);
 
     if (!receiptModal.isOpen || !receiptModal.data) return null;
     const { data, kembalian } = receiptModal;
@@ -21,6 +22,19 @@ const ReceiptModal = () => {
     const matchedCustomer = customers?.find(c => c.name === data.customerName);
     const sisaPoin = matchedCustomer ? matchedCustomer.points : (data.customerPoints || 0);
     const pointsUsed = (data.pointDiscount || 0) / 100;
+
+    const handlePrint = async () => {
+        if (isNativePlatform()) {
+            setIsPrinting(true);
+            try {
+                await printNativeBluetooth(data, storeSettings, kembalian, sisaPoin);
+            } finally {
+                setIsPrinting(false);
+            }
+        } else {
+            printReceipt();
+        }
+    };
 
     const handleShareImage = async () => {
         const receiptElement = document.getElementById('receipt-content');
@@ -233,10 +247,26 @@ const ReceiptModal = () => {
 
                 <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 rounded-b-xl flex flex-col gap-2 no-print relative z-20">
                     <div className="flex gap-2">
-                        <button onClick={async () => { if (isNativePlatform()) { await printNativeBluetooth(data, storeSettings, kembalian, sisaPoin); } else { printReceipt(); } }} className="flex-1 py-3 rounded-lg bg-slate-800 text-white font-bold shadow-sm hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors">
-                            <Printer className="w-4 h-4" /> Cetak
+                        <button
+                            onClick={handlePrint}
+                            disabled={isPrinting}
+                            className="flex-1 py-3 rounded-lg bg-slate-800 text-white font-bold shadow-sm hover:bg-slate-900 text-sm flex justify-center items-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            {isPrinting ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin" /> Menghubungkan...
+                                </>
+                            ) : (
+                                <>
+                                    <Printer className="w-4 h-4" /> Cetak
+                                </>
+                            )}
                         </button>
-                        <button onClick={handleShareImage} className="flex-1 py-3 rounded-lg bg-green-600 dark:bg-green-500 text-white font-bold shadow-sm hover:bg-green-700 dark:hover:bg-green-600 text-sm flex justify-center items-center gap-2 transition-colors">
+                        <button
+                            onClick={handleShareImage}
+                            disabled={isPrinting}
+                            className="flex-1 py-3 rounded-lg bg-green-600 dark:bg-green-500 text-white font-bold shadow-sm hover:bg-green-700 dark:hover:bg-green-600 text-sm flex justify-center items-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
                             <Share2 className="w-4 h-4" /> Bagikan
                         </button>
                     </div>
