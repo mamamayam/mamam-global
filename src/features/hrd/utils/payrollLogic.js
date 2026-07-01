@@ -66,6 +66,31 @@ export function getClockOutMinutesContinuous(clockInStr, clockOutStr) {
   return outTotal;
 }
 
+/**
+ * Hitung menit kerja NORMAL (yang dibayar pakai upah per jam) — TIDAK
+ * termasuk porsi waktu yang sudah dibayar sebagai uang lembur
+ * (earlyOvertimeMins / lateOvertimeMins).
+ *
+ * Sebelumnya hoursWorked dihitung dari SELURUH rentang clock-in–clock-out,
+ * jadi menit yang masuk kategori lembur ikut kehitung juga di jam kerja
+ * biasa → karyawan dibayar dua kali untuk menit yang sama (upah per jam +
+ * uang lembur). Fungsi ini motong porsi lembur itu dari jam kerja normal,
+ * biar cuma dibayar sekali lewat uang lembur.
+ */
+export function calculateRegularMinutes(clockInStr, clockOutStr, earlyOvertimeMins, lateOvertimeMins) {
+  const inMins = timeStrToMinutes(clockInStr);
+  const outMinsContinuous = getClockOutMinutesContinuous(clockInStr, clockOutStr);
+
+  // Kalau ada lembur pagi, jam kerja normal mulai dihitung dari jam masuk
+  // resmi (WORK_START_MINUTES), bukan dari jam masuk aktual yang lebih pagi.
+  const regularInMins = earlyOvertimeMins > 0 ? WORK_START_MINUTES : inMins;
+  // Kalau ada lembur sore, jam kerja normal berhenti dihitung di jam
+  // pulang resmi (WORK_END_MINUTES), bukan di jam pulang aktual yang lebih malam.
+  const regularOutMins = lateOvertimeMins > 0 ? WORK_END_MINUTES : outMinsContinuous;
+
+  return Math.max(0, regularOutMins - regularInMins);
+}
+
 export function calculateBolongMinutes(sortedLogs, fallbackEndDate = null) {
   let totalMinutes = 0;
   for (let i = 0; i < sortedLogs.length; i++) {

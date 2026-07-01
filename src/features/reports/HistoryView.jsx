@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { X, History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw, ArrowUpDown, Eye } from 'lucide-react';
+import { X, History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw, ArrowUpDown, Eye, CreditCard } from 'lucide-react';
 import { formatRupiah } from '../../utils/formatters';
 import { useBulkSelect } from '../../hook/useBulkSelect';
 import { BulkSelectBar, PageHeader, Card, Button, DetailModal, SortModal } from '../../components/ui';
@@ -15,6 +15,7 @@ const HistoryView = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFilter, setDateFilter] = useState('semua');
     const [orderTypeFilter, setOrderTypeFilter] = useState('semua');
+    const [paymentMethodFilter, setPaymentMethodFilter] = useState('semua');
     const [sortKey, setSortKey] = useState('date-desc');
     const [isSortOpen, setIsSortOpen] = useState(false);
 
@@ -48,6 +49,9 @@ const HistoryView = () => {
 
     // Mengambil daftar tipe order unik dari data riwayat untuk dropdown
     const uniqueOrderTypes = [...new Set(visibleSalesHistory.map(order => order.orderType).filter(Boolean))];
+
+    // Mengambil daftar metode pembayaran unik dari data riwayat untuk dropdown (Cash, QRIS, Ojol, dll)
+    const uniquePaymentMethods = [...new Set(visibleSalesHistory.map(order => order.paymentMethod).filter(Boolean))];
 
     // Fungsi mengecek apakah tanggal pesanan masuk dalam rentang filter
     const isWithinDateRange = (dateString, filterType) => {
@@ -97,8 +101,9 @@ const HistoryView = () => {
 
         const matchesDate = isWithinDateRange(order.date, dateFilter);
         const matchesOrderType = orderTypeFilter === 'semua' || order.orderType === orderTypeFilter;
+        const matchesPaymentMethod = paymentMethodFilter === 'semua' || order.paymentMethod === paymentMethodFilter;
 
-        return matchesSearch && matchesDate && matchesOrderType;
+        return matchesSearch && matchesDate && matchesOrderType && matchesPaymentMethod;
     });
 
     // Urutkan hasil filter
@@ -226,6 +231,20 @@ const HistoryView = () => {
                             ))}
                         </select>
                         <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
+                    </div>
+
+                    <div className="relative w-full sm:w-48">
+                        <select
+                            className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-500 transition-all text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+                            value={paymentMethodFilter}
+                            onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                        >
+                            <option value="semua">Semua Metode Bayar</option>
+                            {uniquePaymentMethods.map(method => (
+                                <option key={method} value={method}>{method}</option>
+                            ))}
+                        </select>
+                        <CreditCard className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
                     </div>
 
                     <button

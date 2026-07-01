@@ -11,6 +11,18 @@ import { useBulkSelect } from '../../hook/useBulkSelect';
 
 const KASBON_CATEGORY = 'Kasbon Karyawan';
 
+// Parse string "YYYY-MM-DD" dari <input type="date"> sebagai LOCAL midnight.
+// PENTING: jangan pakai `new Date("YYYY-MM-DD")` langsung — JS selalu
+// menganggap format date-only itu sebagai UTC midnight, bukan local midnight.
+// Di WIB (UTC+7) itu geser jadi jam 07:00 pagi local, sehingga transaksi yang
+// dicatat "hari ini" bisa keitung terjadi SEBELUM shift dibuka (kalau shift
+// baru buka setelah jam 07:00) dan otomatis ke-exclude dari filter dompet
+// di ShiftView (`new Date(item.date) >= currentShift.startTime`).
+function parseLocalDate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 /* ─────────────────────────────────────────────────────────────────
  * Kasbon Karyawan ↔ Potongan Gaji (employeeDailyRecords)
  *
@@ -106,7 +118,7 @@ const ExpenseView = () => {
     if (!dateInput) return triggerAlert('Pilih tanggal pengeluaran!');
     if (category === KASBON_CATEGORY && !selectedEmployeeId) return triggerAlert('Pilih karyawan yang melakukan kasbon!');
 
-    const expenseDate = new Date(dateInput);
+    const expenseDate = parseLocalDate(dateInput);
     const isKasbon = category === KASBON_CATEGORY;
 
     if (editingId) {
@@ -401,12 +413,14 @@ const ExpenseView = () => {
           <div className="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Pengeluaran'}</h3>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => { setShowTrash(v => !v); resetSelection(); }}
-                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
-              >
-                {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
-              </button>
+              {isAdminMode && (
+                <button
+                  onClick={() => { setShowTrash(v => !v); resetSelection(); }}
+                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
+                >
+                  {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
+                </button>
+              )}
               {!showTrash && (
                 <>
                   <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300" />
@@ -436,7 +450,7 @@ const ExpenseView = () => {
               {formatRupiah(activeTotal)}
             </span>
           </div>
-          {isAdminMode && sortedExpenses.length > 0 && (
+          {sortedExpenses.length > 0 && (
             <div className="px-4 pt-3">
               <BulkSelectBar
                 count={count}
@@ -460,16 +474,14 @@ const ExpenseView = () => {
                 const empName = isKasbon && exp.employeeId && employees ? employees.find(e => e.id === exp.employeeId)?.name : null;
 
                 return (
-                  <div key={exp.id} className={`flex justify-between items-center p-3.5 border rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700 transition-all duration-200 animate-in slide-in-from-left-2 duration-300 ${isAdminMode && selectedIds.has(exp.id) ? 'border-orange-500 ring-1 ring-orange-500' : 'border-slate-100 dark:border-slate-800'}`}>
+                  <div key={exp.id} className={`flex justify-between items-center p-3.5 border rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700 transition-all duration-200 animate-in slide-in-from-left-2 duration-300 ${selectedIds.has(exp.id) ? 'border-orange-500 ring-1 ring-orange-500' : 'border-slate-100 dark:border-slate-800'}`}>
                     <div className="flex items-start gap-2 flex-1 pr-4">
-                      {isAdminMode && (
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(exp.id)}
-                          onChange={() => toggleSelectOne(exp.id)}
-                          className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
-                        />
-                      )}
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(exp.id)}
+                        onChange={() => toggleSelectOne(exp.id)}
+                        className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                      />
                       <div className="flex-1">
                         <p className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
                           {exp.category}
@@ -483,9 +495,9 @@ const ExpenseView = () => {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <p className="font-bold text-accent-500 dark:text-accent-400 bg-accent-50 dark:bg-accent-500/10 px-3 py-1.5 rounded-lg text-sm border border-red-100 dark:border-red-500/20">-{formatRupiah(exp.amount)}</p>
-                      {isAdminMode && (
-                        <div className="flex gap-1">
-                          {showTrash ? (
+                      <div className="flex gap-1">
+                        {showTrash ? (
+                          isAdminMode && (
                             <>
                               <IconButton variant="edit" onClick={() => handleRestoreExpense(exp.id)} title="Kembalikan">
                                 <RotateCcw className="w-3.5 h-3.5" />
@@ -494,18 +506,20 @@ const ExpenseView = () => {
                                 <Trash2 className="w-3.5 h-3.5" />
                               </IconButton>
                             </>
-                          ) : (
-                            <>
+                          )
+                        ) : (
+                          <>
+                            {isAdminMode && (
                               <IconButton variant="edit" onClick={() => handleEditClick(exp)} title="Edit Catatan">
                                 <Pencil className="w-3.5 h-3.5" />
                               </IconButton>
-                              <IconButton variant="delete" onClick={() => handleDeleteExpense(exp.id)} title="Hapus Catatan">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </IconButton>
-                            </>
-                          )}
-                        </div>
-                      )}
+                            )}
+                            <IconButton variant="delete" onClick={() => handleDeleteExpense(exp.id)} title="Hapus Catatan">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </IconButton>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )

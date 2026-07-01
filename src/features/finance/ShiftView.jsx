@@ -110,6 +110,19 @@ const ShiftView = () => {
     if (!currentShift) return null;
     const start = currentShift.startTime;
 
+    // Batas HARI (local midnight) shift dibuka — khusus dipakai buat filter
+    // Pemasukan & Pengeluaran, BUKAN `start` yang presisi jam-menit-detik.
+    // Sebabnya: ExpenseView/IncomeView cuma punya input TANGGAL (gak ada
+    // jam), jadi field `date`-nya selalu tersimpan sebagai local midnight
+    // 00:00 lewat parseLocalDate(). Kalau dibandingkan langsung ke `start`
+    // (jam persis shift dibuka, mis. 08:00), maka 00:00 >= 08:00 SELALU
+    // false → transaksi yang dicatat "hari ini" gak akan pernah kehitung
+    // masuk shift yang lagi jalan (ini penyebab pengeluaran & pemasukan
+    // gak muncul di Dompet). Penjualan (shiftSales) TETAP pakai `start`
+    // presisi jam karena timestamp-nya emang jam asli waktu checkout.
+    const shiftStartDate = new Date(start);
+    const startOfShiftDay = new Date(shiftStartDate.getFullYear(), shiftStartDate.getMonth(), shiftStartDate.getDate());
+
     // Penjualan Tunai
     const shiftSales = activeOnly(salesHistory).filter(s => new Date(s.date) >= start);
     let cashSalesTotal = 0;
@@ -121,8 +134,8 @@ const ShiftView = () => {
     });
 
     // Pemasukan & Pengeluaran (hanya yang Tunai yang mempengaruhi saldo laci)
-    const shiftIncomes = incomes.filter(i => new Date(i.date) >= start);
-    const shiftExpenses = expenses.filter(e => new Date(e.date) >= start && (e.paymentMethod || 'Tunai') === 'Tunai');
+    const shiftIncomes = activeOnly(incomes).filter(i => new Date(i.date) >= startOfShiftDay);
+    const shiftExpenses = activeOnly(expenses).filter(e => new Date(e.date) >= startOfShiftDay && (e.paymentMethod || 'Tunai') === 'Tunai');
 
     const cashIncomeTotal = shiftIncomes.reduce((s, i) => s + i.amount, 0);
     const cashExpenseTotal = shiftExpenses.reduce((s, e) => s + e.amount, 0);
@@ -643,12 +656,14 @@ const ShiftView = () => {
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
             <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">{showTrash ? 'Recycle Bin' : 'Daftar Penutupan Dompet'}</h4>
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => { setShowTrash(v => !v); resetSelection(); }}
-                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
-              >
-                {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(shiftHistory).length})`}
-              </button>
+              {isAdminMode && (
+                <button
+                  onClick={() => { setShowTrash(v => !v); resetSelection(); }}
+                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
+                >
+                  {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(shiftHistory).length})`}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setIsSortOpen(true)}
@@ -660,7 +675,7 @@ const ShiftView = () => {
             </div>
           </div>
           
-          {isAdminMode && sortedShiftHistory.length > 0 && (
+          {sortedShiftHistory.length > 0 && (
             <div className="p-3 border-b border-slate-100 dark:border-slate-800">
               <BulkSelectBar
                 count={count}
@@ -686,16 +701,14 @@ const ShiftView = () => {
                 const statusLabel = shift.difference < 0 ? 'Minus' : shift.difference > 0 ? 'Lebih' : 'Pas (Balance)';
 
                 return (
-                  <div key={shift.id} className={`p-4 hover:bg-slate-50 dark:hover:bg-slate-950/50 transition-colors animate-in fade-in slide-in-from-left-2 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${isAdminMode && selectedIds.has(shift.id) ? 'bg-orange-50/60 dark:bg-orange-500/5' : ''}`}>
+                  <div key={shift.id} className={`p-4 hover:bg-slate-50 dark:hover:bg-slate-950/50 transition-colors animate-in fade-in slide-in-from-left-2 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${selectedIds.has(shift.id) ? 'bg-orange-50/60 dark:bg-orange-500/5' : ''}`}>
                     <div className="flex items-start gap-3 flex-1">
-                      {isAdminMode && (
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(shift.id)}
-                          onChange={() => toggleSelectOne(shift.id)}
-                          className="w-4 h-4 mt-1 rounded accent-orange-500 cursor-pointer shrink-0"
-                        />
-                      )}
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(shift.id)}
+                        onChange={() => toggleSelectOne(shift.id)}
+                        className="w-4 h-4 mt-1 rounded accent-orange-500 cursor-pointer shrink-0"
+                      />
                       <div className="space-y-1 flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-black text-sm text-slate-800 dark:text-slate-100">{shift.id}</span>
@@ -728,27 +741,27 @@ const ShiftView = () => {
                       </div>
 
                       <div className="flex gap-1 border-l border-slate-200 dark:border-slate-700 pl-4 ml-2">
-                        {isAdminMode && (
+                        {showTrash ? (
+                          isAdminMode && (
+                            <>
+                              <IconButton variant="edit" onClick={() => handleRestoreShift(shift.id)} title="Kembalikan">
+                                <RotateCcw className="w-4 h-4" />
+                              </IconButton>
+                              <IconButton variant="delete" onClick={() => handlePermanentDeleteShift(shift.id)} title="Hapus Permanen">
+                                <Trash2 className="w-4 h-4" />
+                              </IconButton>
+                            </>
+                          )
+                        ) : (
                           <>
-                            {showTrash ? (
-                              <>
-                                <IconButton variant="edit" onClick={() => handleRestoreShift(shift.id)} title="Kembalikan">
-                                  <RotateCcw className="w-4 h-4" />
-                                </IconButton>
-                                <IconButton variant="delete" onClick={() => handlePermanentDeleteShift(shift.id)} title="Hapus Permanen">
-                                  <Trash2 className="w-4 h-4" />
-                                </IconButton>
-                              </>
-                            ) : (
-                              <>
-                                <IconButton variant="edit" onClick={() => handleOpenEditModal(shift)}>
-                                  <Edit className="w-4 h-4" />
-                                </IconButton>
-                                <IconButton variant="delete" onClick={() => handleDeleteShift(shift.id)}>
-                                  <Trash2 className="w-4 h-4" />
-                                </IconButton>
-                              </>
+                            {isAdminMode && (
+                              <IconButton variant="edit" onClick={() => handleOpenEditModal(shift)}>
+                                <Edit className="w-4 h-4" />
+                              </IconButton>
                             )}
+                            <IconButton variant="delete" onClick={() => handleDeleteShift(shift.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </IconButton>
                           </>
                         )}
                         <IconButton 

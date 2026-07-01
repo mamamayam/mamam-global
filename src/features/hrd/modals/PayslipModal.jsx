@@ -114,13 +114,6 @@ const PayslipModal = () => {
             </div>
             <div className="text-right">
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Total Jam Kerja</span> <span className="font-bold">: {data.totalHours} Jam</span></div>
-              {/* TAMBAHAN BARIS LEMBUR */}
-              {overtimePay > 0 && (
-                <div className="flex justify-between text-sm mb-2 text-orange-600 font-semibold">
-                  <span>Uang Lembur ({((data.totalOvertimeMinutes || 0) / 60).toFixed(1).replace('.', ',')} jam)</span>
-                  <span>{formatRupiah(overtimePay)}</span>
-                </div>
-              )}
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Upah per Jam</span> <span className="font-bold">: {formatRupiah(data.employee.hourlyRate)}</span></div>
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Lembur per 30 Menit</span> <span className="font-bold">: {formatRupiah(data.overtimeRate || 0)}</span></div>
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Bonus Full Time</span> <span className="font-bold">: {formatRupiah(data.employee.fullTimeBonus || 0)}</span></div>

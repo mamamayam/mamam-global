@@ -182,6 +182,7 @@ const VariantManagement = () => {
     isRequired: false, maxSelection: 1, options: []
   });
   const [newOption, setNewOption] = useState({ name: '', extraPrice: '' });
+  const [editingOptionId, setEditingOptionId] = useState(null);
 
   useEffect(() => {
     if (!variantGroups || variantGroups.length === 0) return;
@@ -220,15 +221,36 @@ const VariantManagement = () => {
     });
   };
 
-  const handleAddOption = () => {
+  const handleSaveOption = () => {
     if (!newOption.name || newOption.extraPrice === '') return triggerAlert("Nama opsi dan harga tambahan harus diisi.");
-    const opt = { id: `opt${Date.now()}`, name: newOption.name, extraPrice: Number(newOption.extraPrice) };
-    setFormData(prev => ({ ...prev, options: [...(prev.options ?? []), opt] }));
+    if (editingOptionId) {
+      setFormData(prev => ({
+        ...prev,
+        options: (prev.options ?? []).map(o => o.id === editingOptionId
+          ? { ...o, name: newOption.name, extraPrice: Number(newOption.extraPrice) }
+          : o)
+      }));
+      setEditingOptionId(null);
+    } else {
+      const opt = { id: `opt${Date.now()}`, name: newOption.name, extraPrice: Number(newOption.extraPrice) };
+      setFormData(prev => ({ ...prev, options: [...(prev.options ?? []), opt] }));
+    }
+    setNewOption({ name: '', extraPrice: '' });
+  };
+
+  const handleEditOption = (opt) => {
+    setEditingOptionId(opt.id);
+    setNewOption({ name: opt.name, extraPrice: String(opt.extraPrice) });
+  };
+
+  const handleCancelEditOption = () => {
+    setEditingOptionId(null);
     setNewOption({ name: '', extraPrice: '' });
   };
 
   const handleRemoveOption = (optId) => {
     setFormData(prev => ({ ...prev, options: (prev.options ?? []).filter(o => o.id !== optId) }));
+    if (editingOptionId === optId) handleCancelEditOption();
   };
 
   // Drag Reorder Group (dalam kategori)
@@ -340,7 +362,7 @@ const VariantManagement = () => {
           </div>
           <div className="space-y-4">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Opsi Pilihan Varian</h3>
-            <div className="flex gap-2 items-end bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+            <div className={`flex gap-2 items-end p-3 rounded-xl border transition-colors ${editingOptionId ? 'bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/30' : 'bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800'}`}>
               <div className="flex-1 min-w-0">
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nama Opsi</label>
                 <input type="text" placeholder="Misal: Mozzarella" className="w-full p-2 text-xs border border-slate-200 rounded-lg" value={newOption.name} onChange={e => setNewOption({ ...newOption, name: e.target.value })} />
@@ -349,7 +371,12 @@ const VariantManagement = () => {
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Harga + (Rp)</label>
                 <input type="number" placeholder="0" className="w-full p-2 text-xs border border-slate-200 rounded-lg" value={newOption.extraPrice} onChange={e => setNewOption({ ...newOption, extraPrice: e.target.value })} />
               </div>
-              <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={handleAddOption} className="shrink-0 h-9">Tambah</Button>
+              {editingOptionId && (
+                <Button size="sm" variant="secondary" onClick={handleCancelEditOption} className="shrink-0 h-9">Batal</Button>
+              )}
+              <Button size="sm" icon={editingOptionId ? <Edit3 className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />} onClick={handleSaveOption} className="shrink-0 h-9">
+                {editingOptionId ? 'Simpan' : 'Tambah'}
+              </Button>
             </div>
             <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
               {(formData.options ?? []).length === 0 ? (
@@ -358,8 +385,9 @@ const VariantManagement = () => {
                 (formData.options ?? []).map((opt) => {
                   const isDragging = optionsDrag.dragId === opt.id;
                   const isDropTarget = optionsDrag.overId === opt.id && optionsDrag.dragId !== null && optionsDrag.dragId !== opt.id;
+                  const isBeingEdited = editingOptionId === opt.id;
                   return (
-                    <div key={opt.id} ref={optionsDrag.registerRef(opt.id)} className={getDragRowClass(isDragging, isDropTarget, "flex justify-between items-center p-2.5 bg-white border rounded-xl shadow-sm transition-all", "border-slate-100")}>
+                    <div key={opt.id} ref={optionsDrag.registerRef(opt.id)} className={getDragRowClass(isDragging, isDropTarget, `flex justify-between items-center p-2.5 bg-white border rounded-xl shadow-sm transition-all ${isBeingEdited ? 'border-orange-400 ring-1 ring-orange-300 bg-orange-50/60' : ''}`, "border-slate-100")}>
                       <div className="flex items-center gap-2 min-w-0">
                         <div onPointerDown={optionsDrag.startDrag(opt.id)} className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-400 shrink-0 p-1 touch-none">
                           <GripVertical className="w-4 h-4" />
@@ -369,7 +397,10 @@ const VariantManagement = () => {
                           <span className="text-[10px] text-slate-500">+{formatRupiah(opt.extraPrice)}</span>
                         </div>
                       </div>
-                      <IconButton variant="delete" size="sm" onClick={() => handleRemoveOption(opt.id)}><Trash className="w-4 h-4" /></IconButton>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <IconButton variant="edit" size="sm" onClick={() => handleEditOption(opt)}><Edit3 className="w-4 h-4" /></IconButton>
+                        <IconButton variant="delete" size="sm" onClick={() => handleRemoveOption(opt.id)}><Trash className="w-4 h-4" /></IconButton>
+                      </div>
                     </div>
                   );
                 })

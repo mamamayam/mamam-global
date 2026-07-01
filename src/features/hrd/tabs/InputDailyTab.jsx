@@ -12,7 +12,7 @@ import {
 import {
   WORK_START_MINUTES, WORK_END_MINUTES, EARLY_OVERTIME_THRESHOLD_MINUTES, OVERTIME_THRESHOLD_MINUTES,
   LEMBUR_CATEGORY_KEYWORD, KASBON_CATEGORY_KEYWORD,
-  getEmployeeStatus, calculateHoursFromTimes, formatTimeFromDate, timeStrToMinutes,
+  getEmployeeStatus, calculateRegularMinutes, formatTimeFromDate, timeStrToMinutes,
   calculateBolongMinutes, getOvertimeRate, calculateOvertimePay,
   AUTO_ADJUSTMENT_CATEGORIES, mergeAutoAdjustments,
 } from '../utils/payrollLogic';
@@ -45,14 +45,17 @@ const computeAttendanceFromLogs = (employeeId, dateStr, logs) => {
       cOut = formatTimeFromDate(keluarRec.date);
       const bolongFallbackEnd = new Date(`${dateStr}T${cOut}:00`);
       cBolong = calculateBolongMinutes(empLogs, bolongFallbackEnd);
-      const rawHours = calculateHoursFromTimes(cIn, cOut);
-      const netHours = Number((rawHours - (cBolong / 60)).toFixed(4));
-      cHours = netHours > 0 ? Math.ceil(netHours * 10) / 10 : 0;
       const inMins = timeStrToMinutes(cIn);
       const outMins = timeStrToMinutes(cOut);
       const earlyOvertimeMins = inMins <= EARLY_OVERTIME_THRESHOLD_MINUTES ? WORK_START_MINUTES - inMins : 0;
       const lateOvertimeMins = outMins >= OVERTIME_THRESHOLD_MINUTES ? outMins - WORK_END_MINUTES : 0;
       cOvertime = earlyOvertimeMins + lateOvertimeMins;
+      // Jam kerja normal TIDAK termasuk menit yang udah dibayar sebagai
+      // lembur (earlyOvertimeMins/lateOvertimeMins), supaya gak dobel bayar.
+      const regularMinutes = calculateRegularMinutes(cIn, cOut, earlyOvertimeMins, lateOvertimeMins);
+      const rawHours = Number((regularMinutes / 60).toFixed(2));
+      const netHours = Number((rawHours - (cBolong / 60)).toFixed(4));
+      cHours = netHours > 0 ? Math.ceil(netHours * 10) / 10 : 0;
     } else {
       cBolong = calculateBolongMinutes(empLogs, new Date());
       cOut = '';
