@@ -14,9 +14,13 @@ import {
 } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
+import { OVERTIME_THRESHOLD_MINUTES, WORK_END_MINUTES } from './utils/payrollLogic';
 
 const AUTO_CLOSE_HOUR = 21; // Sistem mendeteksi kelalaian jika sudah lewat jam 21:00
-const OUTLET_CLOSE_HOUR = 19; // Jam pulang otomatis yang akan dicatat (Jam 19:00)
+// Jam pulang otomatis yang akan dicatat — diturunkan dari WORK_END_MINUTES
+// (payrollLogic.js) supaya selalu sama dengan jam tutup kerja yang dipakai
+// untuk hitung Bonus Full Time & lembur, bukan angka 19 yang berdiri sendiri.
+const OUTLET_CLOSE_HOUR = WORK_END_MINUTES / 60;
 
 const LOG_FILTER_TABS = [
   { id: 'hari-ini', label: 'Hari Ini' },
@@ -49,9 +53,38 @@ const SORT_OPTIONS = [
 export default function Attendance() {
   const { employees, attendanceLog, setAttendanceLog, isAdminMode, triggerConfirm, currentShift } = useAppContext();
 
-  const [now, setNow] = useState(() => Date.now());
   const [autoClosedEmployees, setAutoClosedEmployees] = useState([]);
   const autoCloseRef = useRef('');
+
+  // Refs supaya watchdog auto-close (lihat useEffect di bawah) selalu baca
+  // data TERBARU tanpa perlu nge-recreate interval-nya tiap kali
+  // attendanceLog/employees berubah (yang notabene sering berubah sepanjang
+  // hari kerja di kasir).
+  const attendanceLogRef = useRef(attendanceLog);
+  const employeesRef = useRef(employees);
+  const currentShiftRef = useRef(currentShift);
+  useEffect(() => { attendanceLogRef.current = attendanceLog; }, [attendanceLog]);
+  useEffect(() => { employeesRef.current = employees; }, [employees]);
+  useEffect(() => { currentShiftRef.current = currentShift; }, [currentShift]);
+
+  // Status "Dompet (shift kasir) masih kebuka dari hari sebelumnya" — kemungkinan
+  // lupa ditutup. Versi sebelumnya numpang di state `now` yang tick tiap detik
+  // biar "tetep update live" — tapi tick itu sendiri yang jadi sumber re-render
+  // berat (lihat catatan watchdog di bawah), jadi sekarang dipecah jadi dua:
+  //  1) instan tiap kali currentShift berubah (effect ini), dan
+  //  2) dicek ulang tiap 1 menit lewat watchdog auto-close di bawah, supaya
+  //     tetap akurat kalau tanggal berganti hari sementara shift-nya sendiri
+  //     tidak berubah (mis. dompet dibuka jam 23:50, halaman ini masih
+  //     kebuka pas lewat tengah malam).
+  // Presisi 1 menit lebih dari cukup untuk peringatan dompet belum ditutup —
+  // tidak perlu balik ke tick tiap detik.
+  const [isShiftCarriedOver, setIsShiftCarriedOver] = useState(false);
+
+  useEffect(() => {
+    setIsShiftCarriedOver(
+      currentShift ? new Date(currentShift.startTime).toDateString() !== new Date().toDateString() : false
+    );
+  }, [currentShift]);
 
   // Koreksi manual (Status Hari Ini)
   const [editEmployeeId, setEditEmployeeId] = useState(null);
@@ -69,83 +102,92 @@ export default function Attendance() {
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Tick tiap detik untuk countdown auto-close
+  // Watchdog gabungan: (1) auto-close jam 21:00 — otomatis insert record
+  // keluar pukul 19:00 bagi karyawan yang lupa absen pulang, dan (2) recheck
+  // berkala status dompet-kebawa-dari-kemarin (lihat catatan di atas).
+  //
+  // Dulu auto-close di-drive oleh state `now` yang di-tick tiap 1 detik, yang
+  // artinya SELURUH halaman (termasuk sampai 300 baris riwayat absen) ikut
+  // re-render 60x/menit walau gak ada apa pun yang berubah secara visual.
+  // Sekarang dicek lewat setInterval biasa yang gak nyentuh state React sama
+  // sekali kecuali memang ada perubahan nyata yang perlu ditampilkan — jauh
+  // lebih ringan dipakai seharian nyala di kasir.
   useEffect(() => {
-    const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(tick);
-  }, []);
+    const checkAutoClose = () => {
+      const nowDate = new Date();
+      if (nowDate.getHours() < AUTO_CLOSE_HOUR) return;
 
-  // Auto-close jam 21:00 — otomatis insert record keluar pukul 19:00 bagi karyawan yang lupa absen pulang
-  useEffect(() => {
-    const nowDate = new Date(now);
-    if (nowDate.getHours() < AUTO_CLOSE_HOUR) return;
+      const todayStr = toLocalDateString();
+      if (autoCloseRef.current === todayStr) return;
+      autoCloseRef.current = todayStr;
 
-    const todayStr = toLocalDateString();
-    if (autoCloseRef.current === todayStr) return;
-    autoCloseRef.current = todayStr;
+      const todayActiveAll = activeOnly(attendanceLogRef.current).filter(r => r.dateStr === todayStr);
 
-    const todayActiveAll = activeOnly(attendanceLog).filter(r => r.dateStr === todayStr);
+      const getLastRecord = (empId) => {
+        const recs = todayActiveAll
+          .filter(r => r.employeeId === empId)
+          .sort((a, b) => new Date(a.date) - new Date(b.date));
+        return recs[recs.length - 1];
+      };
 
-    const getLastRecord = (empId) => {
-      const recs = todayActiveAll
-        .filter(r => r.employeeId === empId)
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
-      return recs[recs.length - 1];
-    };
+      const toAutoCloseMasuk = employeesRef.current.filter(emp => {
+        const lastType = getLastRecord(emp.id)?.type;
+        return lastType === 'masuk' || lastType === 'masuk_lagi';
+      });
+      const toAutoCloseBolong = employeesRef.current.filter(emp => getLastRecord(emp.id)?.type === 'bolong');
 
-    const toAutoCloseMasuk = employees.filter(emp => {
-      const lastType = getLastRecord(emp.id)?.type;
-      return lastType === 'masuk' || lastType === 'masuk_lagi';
-    });
-    const toAutoCloseBolong = employees.filter(emp => getLastRecord(emp.id)?.type === 'bolong');
+      if (toAutoCloseMasuk.length === 0 && toAutoCloseBolong.length === 0) return;
 
-    if (toAutoCloseMasuk.length === 0 && toAutoCloseBolong.length === 0) return;
+      const outletCloseDate = new Date(nowDate);
+      outletCloseDate.setHours(OUTLET_CLOSE_HOUR, 0, 0, 0);
 
-    const outletCloseDate = new Date(nowDate);
-    outletCloseDate.setHours(OUTLET_CLOSE_HOUR, 0, 0, 0);
-
-    const newRecords = [
-      ...toAutoCloseMasuk.map(emp => ({
-        id: `AUTO-KELUAR-${emp.id}-${todayStr}`,
-        employeeId: emp.id,
-        employeeName: emp.name,
-        type: 'keluar',
-        date: outletCloseDate.toISOString(),
-        dateStr: todayStr,
-        isAutoClose: true,
-        deletedAt: null,
-      })),
-      ...toAutoCloseBolong.map(emp => {
-        const bolongRec = getLastRecord(emp.id);
-        return {
-          id: `AUTO-KELUAR-BOLONG-${emp.id}-${todayStr}`,
+      const newRecords = [
+        ...toAutoCloseMasuk.map(emp => ({
+          id: `AUTO-KELUAR-${emp.id}-${todayStr}`,
           employeeId: emp.id,
           employeeName: emp.name,
           type: 'keluar',
-          date: bolongRec.date,
+          date: outletCloseDate.toISOString(),
           dateStr: todayStr,
           isAutoClose: true,
-          isFromBolong: true,
           deletedAt: null,
-        };
-      }),
-    ];
+        })),
+        ...toAutoCloseBolong.map(emp => {
+          const bolongRec = getLastRecord(emp.id);
+          return {
+            id: `AUTO-KELUAR-BOLONG-${emp.id}-${todayStr}`,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            type: 'keluar',
+            date: bolongRec.date,
+            dateStr: todayStr,
+            isAutoClose: true,
+            isFromBolong: true,
+            deletedAt: null,
+          };
+        }),
+      ];
 
-    setAttendanceLog(prev => [...prev, ...newRecords]);
-    setAutoClosedEmployees([
-      ...toAutoCloseMasuk.map(e => ({ name: e.name, fromBolong: false })),
-      ...toAutoCloseBolong.map(e => ({ name: e.name, fromBolong: true })),
-    ]);
-  }, [now, attendanceLog, employees, setAttendanceLog]);
+      setAttendanceLog(prev => [...prev, ...newRecords]);
+      setAutoClosedEmployees([
+        ...toAutoCloseMasuk.map(e => ({ name: e.name, fromBolong: false })),
+        ...toAutoCloseBolong.map(e => ({ name: e.name, fromBolong: true })),
+      ]);
+    };
 
-  // Dompet (shift kasir) yang masih kebuka dari hari sebelumnya — kemungkinan lupa ditutup.
-  // Numpang di "now" yang udah tick tiap detik di atas, biar tetep update live
-  // tanpa perlu bikin interval baru.
-  const isShiftCarriedOver = useMemo(() => {
-    if (!currentShift) return false;
-    const start = new Date(currentShift.startTime);
-    return start.toDateString() !== new Date(now).toDateString();
-  }, [currentShift, now]);
+    const checkShiftCarriedOver = () => {
+      const shift = currentShiftRef.current;
+      setIsShiftCarriedOver(shift ? new Date(shift.startTime).toDateString() !== new Date().toDateString() : false);
+    };
+
+    checkAutoClose(); // langsung cek sekali saat mount (siapa tau dibuka udah lewat jam 21:00)
+    checkShiftCarriedOver();
+    const watchdog = setInterval(() => {
+      checkAutoClose();
+      checkShiftCarriedOver();
+    }, 60000); // cek tiap 1 menit, bukan tiap detik
+    return () => clearInterval(watchdog);
+  }, [setAttendanceLog]);
 
   const todayStr = toLocalDateString();
 
@@ -179,7 +221,7 @@ export default function Attendance() {
     if (keluarRecord) {
       const outDate = new Date(keluarRecord.date);
       const outMins = outDate.getHours() * 60 + outDate.getMinutes();
-      if (outMins >= 1170) isLembur = true; // 1170 = 19:30
+      if (outMins >= OVERTIME_THRESHOLD_MINUTES) isLembur = true;
     }
 
     return {
@@ -207,11 +249,9 @@ export default function Attendance() {
       .sort((a, b) => a.name.localeCompare(b.name, 'id'));
   }, [attendanceLog]);
 
-  const baseLogSource = showHistoryTrash
-    ? trashedOnly(attendanceLog)
-    : activeOnly(attendanceLog);
-
   const filteredLogs = useMemo(() => {
+    const baseLogSource = showHistoryTrash ? trashedOnly(attendanceLog) : activeOnly(attendanceLog);
+
     const now = new Date();
     const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -255,7 +295,7 @@ export default function Attendance() {
         type: r => r.type || '',
       }
     );
-  }, [baseLogSource, dateFilter, customStartDate, customEndDate, typeFilter, empFilter, sortKey, searchTerm]);
+  }, [attendanceLog, showHistoryTrash, dateFilter, customStartDate, customEndDate, typeFilter, empFilter, sortKey, searchTerm]);
 
   const handleDeleteRecord = (id) =>
     setAttendanceLog(prev => prev.map(r => r.id === id ? markDeleted(r) : r));
@@ -322,7 +362,7 @@ export default function Attendance() {
   const fmtTime = (d) => new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 
-  const trashedCount = trashedOnly(attendanceLog).length;
+  const trashedCount = useMemo(() => trashedOnly(attendanceLog).length, [attendanceLog]);
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6">

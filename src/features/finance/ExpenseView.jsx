@@ -9,11 +9,73 @@ import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/s
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 import { useBulkSelect } from '../../hook/useBulkSelect';
 
+const KASBON_CATEGORY = 'Kasbon Karyawan';
+
+/* ─────────────────────────────────────────────────────────────────
+ * Kasbon Karyawan ↔ Potongan Gaji (employeeDailyRecords)
+ *
+ * Kasbon karyawan dicatat sebagai pengeluaran kas DI SINI, tapi juga harus
+ * otomatis muncul sebagai potongan gaji harian karyawan terkait di modul HRD.
+ * Dua helper di bawah ini menjaga link itu tetap konsisten lewat update
+ * IMUTABEL (gak pernah .push() langsung ke array/objek lama) supaya:
+ *   - edit nominal/karyawan/tanggal/kategori kasbon ikut mengoreksi potongan
+ *     gaji yang sudah tercipta, bukan numpuk/nyangkut data lama, dan
+ *   - hapus permanen kasbon ikut menghapus potongan gaji terkait, supaya
+ *     karyawan gak terus-terusan "dipotong" gaji buat kasbon yang sudah
+ *     dihapus dari pembukuan.
+ * ───────────────────────────────────────────────────────────────── */
+
+// Cari & hapus SATU potongan Kasbon dari employeeDailyRecords manapun ia berada.
+// Diutamakan cocok lewat linkedDeductionId (akurat, dipakai kasbon yang dibuat
+// lewat versi kode ini). Fallback ke (karyawan + tanggal + kategori 'Kasbon')
+// khusus buat data kasbon LAMA yang belum punya linkedDeductionId, supaya tetap
+// nyambung ke catatan lama alih-alih bikin dobel.
+function removeKasbonDeduction(records, { deductionId, employeeId, dateStr }) {
+  let removed = false;
+  const next = records.map(r => {
+    if (removed || !r.deductions?.length) return r;
+    if (deductionId) {
+      if (!r.deductions.some(d => d.id === deductionId)) return r;
+      removed = true;
+      return { ...r, deductions: r.deductions.filter(d => d.id !== deductionId) };
+    }
+    if (r.employeeId !== employeeId || r.dateStr !== dateStr) return r;
+    const idx = r.deductions.findIndex(d => d.category === 'Kasbon');
+    if (idx === -1) return r;
+    removed = true;
+    return { ...r, deductions: r.deductions.filter((_, i) => i !== idx) };
+  });
+  return removed ? next : records;
+}
+
+// Tambahkan SATU potongan Kasbon baru ke record (employeeId, dateStr) terkait,
+// bikin record baru kalau belum ada. Selalu immutable — gak pernah .push() ke
+// array deductions yang sudah ada, karena itu memutasi object yang masih
+// dipakai/dirujuk di tempat lain (lihat catatan audit).
+function addKasbonDeduction(records, employeeId, dateStr, dateObj, amount) {
+  const deductionId = `KASBON-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const newDeduction = { id: deductionId, category: 'Kasbon', amount, expenseRecorded: true };
+  const idx = records.findIndex(r => r.employeeId === employeeId && r.dateStr === dateStr);
+
+  if (idx >= 0) {
+    const next = records.map((r, i) => i === idx ? { ...r, deductions: [...(r.deductions || []), newDeduction] } : r);
+    return { records: next, deductionId };
+  }
+
+  const newRecord = {
+    id: `REC-${Date.now()}`,
+    employeeId, date: dateObj, dateStr,
+    isDayOff: false, clockIn: '', clockOut: '', hoursWorked: 0, bolongMinutes: 0, overtimeMinutes: 0,
+    additions: [], deductions: [newDeduction],
+  };
+  return { records: [...records, newRecord], deductionId };
+}
+
 const ExpenseView = () => {
   const {
     expenseCategories, setExpenseCategories,
     expenses, setExpenses,
-    triggerAlert, triggerConfirm, formatRupiah, currentShift,
+    triggerAlert, triggerConfirm, formatRupiah,
     employees, employeeDailyRecords, setEmployeeDailyRecords,
     isAdminMode
   } = useAppContext();
@@ -42,33 +104,62 @@ const ExpenseView = () => {
   const handleAddExpense = () => {
     if (!amount || amount <= 0) return triggerAlert('Masukkan nominal pengeluaran yang valid!');
     if (!dateInput) return triggerAlert('Pilih tanggal pengeluaran!');
-    if (category === 'Kasbon Karyawan' && !selectedEmployeeId) return triggerAlert('Pilih karyawan yang melakukan kasbon!');
+    if (category === KASBON_CATEGORY && !selectedEmployeeId) return triggerAlert('Pilih karyawan yang melakukan kasbon!');
 
     const expenseDate = new Date(dateInput);
+    const isKasbon = category === KASBON_CATEGORY;
 
     if (editingId) {
       // === MODE EDIT (ADMIN) ===
-      const updatedExpenses = expenses.map(exp => {
-        if (exp.id === editingId) {
-          return {
-            ...exp,
-            amount: Number(amount),
-            category,
-            note,
-            date: expenseDate,
-            paymentMethod,
-            employeeId: category === 'Kasbon Karyawan' ? selectedEmployeeId : null
-          };
-        }
-        return exp;
-      });
+      const oldExpense = expenses.find(exp => exp.id === editingId);
+      let nextDailyRecords = employeeDailyRecords;
 
-      setExpenses(updatedExpenses);
+      // Lepas dulu potongan kasbon LAMA (kalau expense ini sebelumnya kasbon),
+      // baru pasang ulang kalau hasil edit masih kasbon. Pola "lepas lalu
+      // pasang ulang" ini bikin proses edit selalu konsisten apa pun yang
+      // berubah — nominal, karyawan, tanggal, atau kategori (termasuk saat
+      // dipindah keluar dari Kasbon Karyawan ke kategori lain).
+      if (oldExpense?.employeeId) {
+        nextDailyRecords = removeKasbonDeduction(nextDailyRecords, {
+          deductionId: oldExpense.linkedDeductionId,
+          employeeId: oldExpense.employeeId,
+          dateStr: toLocalDateString(oldExpense.date),
+        });
+      }
+
+      let linkedDeductionId = null;
+      if (isKasbon) {
+        const result = addKasbonDeduction(nextDailyRecords, selectedEmployeeId, dateInput, expenseDate, Number(amount));
+        nextDailyRecords = result.records;
+        linkedDeductionId = result.deductionId;
+      }
+
+      if (nextDailyRecords !== employeeDailyRecords) setEmployeeDailyRecords(nextDailyRecords);
+
+      setExpenses(expenses.map(exp => exp.id === editingId ? {
+        ...exp,
+        amount: Number(amount),
+        category,
+        note,
+        date: expenseDate,
+        paymentMethod,
+        employeeId: isKasbon ? selectedEmployeeId : null,
+        linkedDeductionId,
+      } : exp));
+
       setEditingId(null);
       setAmount(''); setNote(''); setSelectedEmployeeId('');
       triggerAlert('Pengeluaran berhasil diperbarui!');
     } else {
       // === MODE BUAT BARU ===
+      let linkedDeductionId = null;
+
+      if (isKasbon) {
+        const result = addKasbonDeduction(employeeDailyRecords, selectedEmployeeId, dateInput, expenseDate, Number(amount));
+        setEmployeeDailyRecords(result.records);
+        linkedDeductionId = result.deductionId;
+      }
+
       const newExp = {
         id: `EXP-${Date.now()}`,
         amount: Number(amount),
@@ -76,31 +167,9 @@ const ExpenseView = () => {
         note,
         date: expenseDate,
         paymentMethod,
-        employeeId: category === 'Kasbon Karyawan' ? selectedEmployeeId : null
+        employeeId: isKasbon ? selectedEmployeeId : null,
+        linkedDeductionId,
       };
-
-      if (category === 'Kasbon Karyawan' && selectedEmployeeId) {
-        const dateStr = dateInput;
-        const existingRecordIndex = employeeDailyRecords.findIndex(r => r.employeeId === selectedEmployeeId && r.dateStr === dateStr);
-        const newDeduction = { id: Date.now().toString(), category: 'Kasbon', amount: Number(amount) };
-
-        if (existingRecordIndex >= 0) {
-          const updatedRecords = [...employeeDailyRecords];
-          updatedRecords[existingRecordIndex].deductions.push(newDeduction);
-          setEmployeeDailyRecords(updatedRecords);
-        } else {
-          const newRecord = {
-            id: `REC-${Date.now()}`,
-            employeeId: selectedEmployeeId,
-            date: expenseDate,
-            dateStr: dateStr,
-            hoursWorked: 0,
-            additions: [],
-            deductions: [newDeduction]
-          };
-          setEmployeeDailyRecords([...employeeDailyRecords, newRecord]);
-        }
-      }
 
       setExpenses([newExp, ...expenses]);
       setAmount(''); setNote(''); setSelectedEmployeeId('');
@@ -132,7 +201,15 @@ const ExpenseView = () => {
 
   const handlePermanentDeleteExpense = (id) => {
     triggerConfirm('Hapus PERMANEN catatan ini? Tindakan ini tidak bisa dibatalkan.', () => {
+      const exp = expenses.find(e => e.id === id);
       setExpenses(expenses.filter(e => e.id !== id));
+      if (exp?.employeeId) {
+        setEmployeeDailyRecords(removeKasbonDeduction(employeeDailyRecords, {
+          deductionId: exp.linkedDeductionId,
+          employeeId: exp.employeeId,
+          dateStr: toLocalDateString(exp.date),
+        }));
+      }
       // Langsung kirim delete ke Supabase saat ini juga, gak nunggu siklus
       // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
       pushTransactionDelete('expenses', id).catch(err =>
@@ -150,14 +227,19 @@ const ExpenseView = () => {
     setDateInput(toLocalDateString());
   };
 
-  const filteredExpenses = (showTrash ? trashedOnly(expenses) : activeOnly(expenses)).filter(e => filterMonth === '' || toLocalMonthString(e.date) === filterMonth);
+  const filteredExpenses = useMemo(() => {
+    return (showTrash ? trashedOnly(expenses) : activeOnly(expenses))
+      .filter(e => filterMonth === '' || toLocalMonthString(e.date) === filterMonth);
+  }, [expenses, showTrash, filterMonth]);
 
   // Urutkan hasil filter pakai sortKey terpilih
-  const sortedExpenses = applySort(filteredExpenses, sortKey, {
+  const sortedExpenses = useMemo(() => applySort(filteredExpenses, sortKey, {
     date: e => new Date(e.date),
     category: e => e.category || '',
     amount: e => e.amount || 0,
-  });
+  }), [filteredExpenses, sortKey]);
+
+  const trashedCount = useMemo(() => trashedOnly(expenses).length, [expenses]);
 
   const sortOptions = [
     { key: 'date-desc', label: 'Terbaru Dulu' },
@@ -186,6 +268,18 @@ const ExpenseView = () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
     triggerConfirm(`Hapus PERMANEN ${ids.length} catatan pengeluaran terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+      const kasbonToUnlink = expenses.filter(e => selectedIds.has(e.id) && e.employeeId);
+      if (kasbonToUnlink.length > 0) {
+        let nextDailyRecords = employeeDailyRecords;
+        kasbonToUnlink.forEach(exp => {
+          nextDailyRecords = removeKasbonDeduction(nextDailyRecords, {
+            deductionId: exp.linkedDeductionId,
+            employeeId: exp.employeeId,
+            dateStr: toLocalDateString(exp.date),
+          });
+        });
+        setEmployeeDailyRecords(nextDailyRecords);
+      }
       setExpenses(expenses.filter(e => !selectedIds.has(e.id)));
       ids.forEach(id => pushTransactionDelete('expenses', id).catch(err =>
         console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
@@ -248,7 +342,7 @@ const ExpenseView = () => {
             </Select>
           </div>
 
-          {category === 'Kasbon Karyawan' && (
+          {category === KASBON_CATEGORY && (
             <div className="animate-in slide-in-from-top-2 duration-300">
               <Select
                 label="Pilih Karyawan (Kasbon)"
@@ -311,7 +405,7 @@ const ExpenseView = () => {
                 onClick={() => { setShowTrash(v => !v); resetSelection(); }}
                 className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
               >
-                {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(expenses).length})`}
+                {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
               </button>
               {!showTrash && (
                 <>
@@ -362,7 +456,7 @@ const ExpenseView = () => {
               />
             ) : (
               sortedExpenses.map(exp => {
-                const isKasbon = exp.category === 'Kasbon Karyawan';
+                const isKasbon = exp.category === KASBON_CATEGORY;
                 const empName = isKasbon && exp.employeeId && employees ? employees.find(e => e.id === exp.employeeId)?.name : null;
 
                 return (

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
+import { buildPayslipRows, countWorkDays } from '../utils/payrollLogic';
 
 const S = StyleSheet.create({
   page: {
@@ -166,48 +167,21 @@ const S = StyleSheet.create({
 });
 
 const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
-  const basicPay = data.totalHours * data.employee.hourlyRate;
+  const basicPay = data.basicPay;
   const overtimePay = data.overtimePay || 0;
-  const sortedRecords = [...data.records].sort((a, b) => new Date(a.date) - new Date(b.date));
-  const totalHariKerja = sortedRecords.filter(r => r.hoursWorked > 0).length;
+  const totalHariKerja = countWorkDays(data.records);
 
-  // Flatten semua baris tabel
-  const tableRows = sortedRecords.flatMap((rec, i) => {
-    const items = [];
-    if (rec.hoursWorked > 0) {
-      items.push({
-        desc: `Upah Jam Kerja (${rec.hoursWorked} Jam)`,
-        in: rec.hoursWorked * data.employee.hourlyRate,
-        out: 0,
-      });
-    }
-    if (rec.overtimeMinutes > 0 && data.overtimeRate) {
-      const dailyOvertimePay = Math.floor(rec.overtimeMinutes / 30) * data.overtimeRate;
-      if (dailyOvertimePay > 0) {
-        items.push({
-          desc: `Uang Lembur (${(rec.overtimeMinutes / 60).toFixed(1).replace('.', ',')} jam)`,
-          in: dailyOvertimePay,
-          out: 0,
-        });
-      }
-    }
-    rec.additions
-      ?.filter(a => !(a.category || '').toLowerCase().includes('lembur'))
-      .forEach(a =>
-        items.push({ desc: a.category + (a.note ? ` (${a.note})` : ''), in: a.amount, out: 0 })
-      );
-    rec.deductions?.forEach(d =>
-      items.push({ desc: d.category + (d.note ? ` (${d.note})` : ''), in: 0, out: d.amount })
-    );
-
-    return items.map((item, j) => ({
+  // Sama persis dengan yang dipakai PayslipModal (tampilan layar) — satu
+  // sumber kebenaran, jadi versi PDF & versi layar selalu identik angkanya.
+  const tableRows = buildPayslipRows(data).flatMap(({ rec, items }) =>
+    items.map((item, j) => ({
       rec,
       item,
       isFirst: j === 0,
       isLastOfRec: j === items.length - 1,
-      key: `${i}-${j}`,
-    }));
-  });
+      key: `${rec.id}-${j}`,
+    }))
+  );
 
   return (
     <Document>

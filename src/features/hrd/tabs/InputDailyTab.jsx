@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../../context/AppContext';
 import { toLocalDateString } from '../../../utils/formatters';
 import { Card, Button, Input, Select, IconButton, Badge, SegmentedControl, Alert, SortModal, BulkSelectBar } from '../../../components/ui';
@@ -103,7 +103,6 @@ const InputDailyTab = () => {
   /* ── State Form Utama ── */
   const [dailyDate, setDailyDate]   = useState(toLocalDateString());
   const [dailyEmpId, setDailyEmpId] = useState('');
-  const formRef = useRef(null);
   const [additions, setAdditions]   = useState([]);
   const [deductions, setDeductions] = useState([]);
   const [catModalType, setCatModalType]       = useState(null);
@@ -405,7 +404,7 @@ const InputDailyTab = () => {
 
       {/* ─── KOLOM KIRI: Form Tambahan & Potongan ─── */}
       <div className="lg:col-span-1 flex flex-col gap-6">
-        <div ref={formRef}>
+        <div>
           <Card padding="lg" className="flex flex-col h-fit relative">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">

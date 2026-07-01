@@ -6,13 +6,14 @@ import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { pdf } from '@react-pdf/renderer';
 import PayslipPDFDocument from './PayslipPDFDocument';
+import { buildPayslipRows, countWorkDays } from '../utils/payrollLogic';
 
 const PayslipModal = () => {
   const { payslipModal, setPayslipModal, formatRupiah } = useAppContext();
   if (!payslipModal.isOpen || !payslipModal.data) return null;
   const { data, month } = payslipModal;
 
-  const basicPay = data.totalHours * data.employee.hourlyRate;
+  const basicPay = data.basicPay;
   const overtimePay = data.overtimePay || 0;
 
   const monthLabel = new Date(`${month}-01`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
@@ -68,11 +69,11 @@ const PayslipModal = () => {
     }
   };
 
-  // Urutkan records berdasarkan tanggal
-  const sortedRecords = [...data.records].sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  // HITUNG HARI KERJA MASUK
-  const totalHariKerja = sortedRecords.filter(rec => rec.hoursWorked > 0).length;
+  // Baris "Rincian Pemasukan & Pengeluaran Harian" — SATU sumber kebenaran
+  // yang sama dipakai dokumen PDF (PayslipPDFDocument), supaya yang dilihat
+  // di layar & yang didownload selalu identik.
+  const payslipRows = buildPayslipRows(data);
+  const totalHariKerja = countWorkDays(data.records);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity duration-300 print:bg-white print:p-0 overflow-y-auto">
@@ -140,49 +141,26 @@ const PayslipModal = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedRecords.map((rec, i) => {
-                    const items = [];
-                    // Tambahkan Upah Jam Kerja ke list item
-                    if (rec.hoursWorked > 0) {
-                      items.push({ desc: `Upah Jam Kerja (${rec.hoursWorked} Jam)`, in: rec.hoursWorked * data.employee.hourlyRate, out: 0 });
-                    }
-                    // Uang Lembur per hari ini — dihitung dari overtimeMinutes + tarif lembur karyawan
-                    if (rec.overtimeMinutes > 0 && data.overtimeRate) {
-                      const dailyOvertimePay = Math.floor(rec.overtimeMinutes / 30) * data.overtimeRate;
-                      if (dailyOvertimePay > 0) {
-                        items.push({ desc: `Uang Lembur (${(rec.overtimeMinutes / 60).toFixed(1).replace('.', ',')} jam)`, in: dailyOvertimePay, out: 0 });
-                      }
-                    }
-                    // Tambahkan Pemasukan Tambahan (kecuali Bonus Lembur, sudah dihitung di atas)
-                    rec.additions
-                      .filter(a => !(a.category || '').toLowerCase().includes('lembur'))
-                      .forEach(a => items.push({ desc: a.category + (a.note ? ` (${a.note})` : ''), in: a.amount, out: 0 }));
-                    // Tambahkan Pengeluaran / Potongan
-                    rec.deductions.forEach(d => items.push({ desc: d.category + (d.note ? ` (${d.note})` : ''), in: 0, out: d.amount }));
-
-                    if (items.length === 0) return null;
-
-                    return items.map((item, j) => (
-                      <tr key={`${i}-${j}`} className="border-b border-slate-200 dark:border-slate-700 print:border-gray-300">
-                        {j === 0 ? (
-                          <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top whitespace-nowrap" rowSpan={items.length}>
-                            <div className="font-semibold">{rec.dateStr}</div>
-                            <div className="text-xs text-slate-500 print:text-gray-600 mt-1">
-                              {rec.clockIn || '--:--'} s/d {rec.clockOut || '--:--'}
-                            </div>
-                          </td>
-                        ) : null}
-                        <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top">{item.desc}</td>
-                        <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top text-right text-green-600 dark:text-green-400 print:text-black">
-                          {item.in > 0 ? formatRupiah(item.in) : '-'}
+                  {payslipRows.map(({ rec, items }, i) => items.map((item, j) => (
+                    <tr key={`${rec.id}-${j}`} className="border-b border-slate-200 dark:border-slate-700 print:border-gray-300">
+                      {j === 0 ? (
+                        <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top whitespace-nowrap" rowSpan={items.length}>
+                          <div className="font-semibold">{rec.dateStr}</div>
+                          <div className="text-xs text-slate-500 print:text-gray-600 mt-1">
+                            {rec.clockIn || '--:--'} s/d {rec.clockOut || '--:--'}
+                          </div>
                         </td>
-                        <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top text-right text-accent-600 dark:text-accent-400 print:text-black">
-                          {item.out > 0 ? formatRupiah(item.out) : '-'}
-                        </td>
-                      </tr>
-                    ));
-                  })}
-                  {sortedRecords.length === 0 && (
+                      ) : null}
+                      <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top">{item.desc}</td>
+                      <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top text-right text-green-600 dark:text-green-400 print:text-black">
+                        {item.in > 0 ? formatRupiah(item.in) : '-'}
+                      </td>
+                      <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top text-right text-accent-600 dark:text-accent-400 print:text-black">
+                        {item.out > 0 ? formatRupiah(item.out) : '-'}
+                      </td>
+                    </tr>
+                  )))}
+                  {payslipRows.length === 0 && (
                     <tr>
                       <td colSpan="4" className="py-4 text-center text-slate-500 border border-slate-200 print:border-gray-300">Tidak ada data harian.</td>
                     </tr>

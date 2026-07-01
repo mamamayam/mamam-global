@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown, AlertTriangle } from 'lucide-react';
+import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown, AlertTriangle, Users } from 'lucide-react';
 import { isNativePlatform, printShiftNativeBluetooth } from '../../library/printer';
 import { toPng, toBlob } from 'html-to-image';
 import { generateUUID, toLocalMonthString } from '../../utils/formatters';
@@ -27,10 +27,11 @@ const ShiftView = () => {
   const { 
     currentShift, setCurrentShift, shiftHistory, setShiftHistory,
     salesHistory, expenses, incomes, formatRupiah, triggerAlert, triggerConfirm,
-    storeSettings, isAdminMode
+    storeSettings, isAdminMode, employees
   } = useAppContext();
 
   const [initialCashInput, setInitialCashInput] = useState('');
+  const [openedByEmployeeId, setOpenedByEmployeeId] = useState('');
   const [actualCashInput, setActualCashInput] = useState('');
   const [showXReading, setShowXReading] = useState(false);
   const [closedShiftData, setClosedShiftData] = useState(null);
@@ -149,16 +150,20 @@ const ShiftView = () => {
 
   const handleOpenShift = () => {
     if (!initialCashInput || Number(initialCashInput) < 0) return triggerAlert('Masukkan nominal saldo awal yang valid.');
+    const selectedEmployee = employees?.find(e => e.id === openedByEmployeeId);
     const newShift = {
       id: `DOMPET-${generateUUID().split('-')[0].toUpperCase()}`,
       startTime: new Date(),
-      initialCash: Number(initialCashInput)
+      initialCash: Number(initialCashInput),
+      openedByEmployeeId: selectedEmployee?.id || null,
+      openedByEmployeeName: selectedEmployee?.name || null,
     };
     setCurrentShift(newShift);    
     pushLiveState('currentShift', newShift).catch(err => 
       console.warn('Gagal push manual :', err)
     );
     setInitialCashInput('');
+    setOpenedByEmployeeId('');
     triggerAlert('Dompet berhasil dibuka!');
   };
 
@@ -379,6 +384,9 @@ const ShiftView = () => {
           <div className="space-y-1 text-xs mb-4 print:mb-2 print:text-black">
             <div className="flex justify-between"><span>Buka:</span> <span>{closedShiftData.startTime.toLocaleString('id-ID')}</span></div>
             <div className="flex justify-between"><span>Tutup:</span> <span>{closedShiftData.endTime.toLocaleString('id-ID')}</span></div>
+            {closedShiftData.openedByEmployeeName && (
+              <div className="flex justify-between"><span>Kasir:</span> <span className="font-bold">{closedShiftData.openedByEmployeeName}</span></div>
+            )}
           </div>
 
           <div className="border-b-2 border-dashed border-slate-300 dark:border-slate-600 pb-4 mb-4 print:pb-2 print:mb-2 text-xs space-y-1.5 print:text-black">
@@ -486,6 +494,20 @@ const ShiftView = () => {
             />
           </div>
 
+          <div className="text-left mb-6">
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">Dibuka Oleh (Opsional)</label>
+            <select
+              value={openedByEmployeeId}
+              onChange={e => setOpenedByEmployeeId(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm font-medium px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
+            >
+              <option value="">-- Pilih Karyawan --</option>
+              {(employees || []).filter(e => e.status !== 'resign').map(e => (
+                <option key={e.id} value={e.id}>{e.name}</option>
+              ))}
+            </select>
+          </div>
+
           <Button size="full" onClick={handleOpenShift}>
             Buka Dompet
           </Button>
@@ -502,6 +524,11 @@ const ShiftView = () => {
               <Badge variant="info" className="uppercase tracking-wider">Dompet Terbuka</Badge>
               <h3 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100 mt-4 mb-1">{currentShift.id}</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">Waktu Buka: {currentShift.startTime.toLocaleString('id-ID')}</p>
+              {currentShift.openedByEmployeeName && (
+                <p className="text-sm font-semibold text-orange-600 dark:text-orange-400 mt-1 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" /> {currentShift.openedByEmployeeName}
+                </p>
+              )}
             </div>
 
             <div className="mt-8 space-y-4 relative z-10">
@@ -677,6 +704,11 @@ const ShiftView = () => {
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                           Buka: {new Date(shift.startTime).toLocaleString('id-ID')} | Tutup: {new Date(shift.endTime).toLocaleString('id-ID')}
                         </p>
+                        {shift.openedByEmployeeName && (
+                          <p className="text-[11px] text-orange-600 dark:text-orange-400 font-semibold">
+                            Kasir: {shift.openedByEmployeeName}
+                          </p>
+                        )}
                         <p className="text-[10px] text-slate-400 dark:text-slate-500">
                           Saldo Awal: {formatRupiah(shift.stats.initialCash)} | Penjualan Tunai: {formatRupiah(shift.stats.cashSales)} | Target Uang: {formatRupiah(shift.stats.expectedCash)}
                       </p>

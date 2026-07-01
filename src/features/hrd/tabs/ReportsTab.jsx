@@ -4,11 +4,11 @@ import { toLocalMonthString } from '../../../utils/formatters';
 import { Card, Button, Input, EmptyState, SortModal } from '../../../components/ui';
 import { applySort } from '../../../utils/sortUtils';
 import { activeOnly } from '../../../utils/softDelete';
-import { PieChart, Printer, Calendar, ChevronRight, ChevronDown, ArrowUpDown } from 'lucide-react';
-import { KASBON_CATEGORY_KEYWORD, LEMBUR_CATEGORY_KEYWORD, getOvertimeRate, calculateOvertimePay } from '../utils/payrollLogic';
+import { PieChart, Printer, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { AUTO_ADJUSTMENT_CATEGORIES, summarizeAutoBonuses } from '../utils/payrollLogic';
 
 const ReportsTab = () => {
-  const { employees, employeeDailyRecords, expenses, setPayslipModal, formatRupiah } = useAppContext();
+  const { employees, employeeDailyRecords, setPayslipModal, formatRupiah } = useAppContext();
 
   const [reportMonth, setReportMonth] = useState(toLocalMonthString());
   const [perfSortKey, setPerfSortKey] = useState('name-asc');
@@ -24,59 +24,48 @@ const ReportsTab = () => {
     filteredRecordsForReport.forEach(rec => {
       if (!perf[rec.employeeId]) {
         const emp = employees.find(e => e.id === rec.employeeId);
-        perf[rec.employeeId] = { 
-          employee: emp || { name: 'Karyawan Dihapus', hourlyRate: 0 }, 
-          totalHours: 0, 
-          totalOvertimeMinutes: 0, 
-          totalAdditions: 0, 
-          totalDeductions: 0, 
-          totalKasbon: 0, 
-          netPay: 0, 
+        perf[rec.employeeId] = {
+          employee: emp || { name: 'Karyawan Dihapus', hourlyRate: 0 },
+          totalHours: 0,
+          totalOvertimeMinutes: 0,
+          totalAdditions: 0,
+          totalDeductions: 0,
+          netPay: 0,
           records: [],
-          overtimeByDay: [],
         };
       }
       const data = perf[rec.employeeId];
       data.records.push(rec);
 
-      // Bulatkan ke atas per hari dulu (1 desimal), baru diakumulasi ke total bulanan
-      // — sama persis seperti perhitungan lembur (akumulasi per hari, bukan per bulan).
-      const hoursForDay = Math.ceil((rec.hoursWorked || 0) * 10 - 1e-9) / 10;
-      data.totalHours += hoursForDay;
-      data.totalOvertimeMinutes += (rec.overtimeMinutes || 0);
+      // hoursWorked sudah dibulatkan ke atas (per 0,1 jam) sekali saat
+      // disimpan — jadi tinggal diakumulasi langsung, tanpa perlu dibulatkan
+      // ulang lagi di sini.
+      data.totalHours += rec.hoursWorked || 0;
+      data.totalOvertimeMinutes += rec.overtimeMinutes || 0;
 
-      if (rec.overtimeMinutes > 0) {
-        data.overtimeByDay.push({ dateStr: rec.dateStr, overtimeMinutes: rec.overtimeMinutes });
-      }
-
-      // Mengambil tambahan & potongan manual dari record harian
-      // "Bonus Lembur" dikecualikan di sini — nominalnya dihitung ulang di bawah pakai tarif
-      // lembur personal karyawan (Manajemen Karyawan), supaya tidak dobel hitung dengan overtimePay.
+      // Hanya tambahan/potongan MANUAL yang diakumulasi di sini. Bonus Full
+      // Time & Bonus Lembur (auto) sengaja dikecualikan & dihitung terpisah
+      // di bawah lewat summarizeAutoBonuses — supaya keduanya selalu pakai
+      // tarif/konfigurasi TERKINI milik karyawan, bukan nilai cache yang
+      // mungkin sudah basi kalau Bonus Full Time / tarif lembur baru diubah.
       data.totalAdditions += (rec.additions || [])
-        .filter(a => !(a.category || '').toLowerCase().includes(LEMBUR_CATEGORY_KEYWORD))
+        .filter(a => !AUTO_ADJUSTMENT_CATEGORIES.includes(a.category))
         .reduce((sum, a) => sum + a.amount, 0);
       data.totalDeductions += (rec.deductions || []).reduce((sum, d) => sum + d.amount, 0);
     });
 
-    // Hitung nominal lembur per hari dulu (floor per hari, bukan floor total bulanan),
-    // baru ditotal — supaya rincian per hari SELALU sama dengan total bulanan (tidak ada selisih).
     Object.values(perf).forEach(data => {
-      const overtimeRate = getOvertimeRate(data.employee);
+      const { fullTimeBonusTotal, overtimePayTotal, overtimeRate, overtimeByDay } =
+        summarizeAutoBonuses(data.records, data.employee);
 
-      data.overtimeByDay = data.overtimeByDay
-        .sort((a, b) => new Date(a.dateStr) - new Date(b.dateStr))
-        .map(d => ({ ...d, pay: calculateOvertimePay(d.overtimeMinutes, overtimeRate) }));
-
-      const nominalLembur = data.overtimeByDay.reduce((sum, d) => sum + d.pay, 0);
       data.overtimeRate = overtimeRate; // Tarif/30 menit, dipakai juga di Payslip
-      data.overtimePay = nominalLembur; // Simpan variabel ini untuk dipakai di Payslip
-
-      // Otomatis tambahkan nominal lembur ke dalam Total Tambahan karyawan
-      data.totalAdditions += nominalLembur;
+      data.overtimePay = overtimePayTotal; // Simpan variabel ini untuk dipakai di Payslip
+      data.overtimeByDay = overtimeByDay;
+      data.totalAdditions += fullTimeBonusTotal + overtimePayTotal;
 
       // Hitung total akhir gaji bersih
-      const basicPay = data.totalHours * data.employee.hourlyRate;
-      data.netPay = basicPay + data.totalAdditions - data.totalDeductions;
+      data.basicPay = data.totalHours * data.employee.hourlyRate;
+      data.netPay = data.basicPay + data.totalAdditions - data.totalDeductions;
     });
 
     return Object.values(perf);

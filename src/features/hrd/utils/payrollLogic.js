@@ -129,15 +129,18 @@ export function computeAutoAdjustments(record, emp) {
     });
   }
 
-  // Bonus Lembur: dihitung per blok 30 menit dari overtimeMinutes.
-  const totalBlocks = Math.floor((record.overtimeMinutes || 0) / 30);
-  if (totalBlocks > 0) {
-    const overtimeRate = getOvertimeRate(emp);
+  // Bonus Lembur: dihitung per blok 30 menit dari overtimeMinutes, lewat
+  // calculateOvertimePay() yang sama dipakai di Reports & Payslip — supaya
+  // formulanya cuma ada SATU implementasi di seluruh aplikasi.
+  const overtimeRate = getOvertimeRate(emp);
+  const lemburPay = calculateOvertimePay(record.overtimeMinutes, overtimeRate);
+  if (lemburPay > 0) {
+    const paidMinutes = Math.floor((record.overtimeMinutes || 0) / 30) * 30;
     items.push({
       id: `auto-lembur-${record.employeeId || 'x'}-${record.dateStr || 'x'}`,
       category: 'Bonus Lembur',
-      amount: totalBlocks * overtimeRate,
-      note: `(${totalBlocks * 30} menit · Rp${overtimeRate.toLocaleString('id-ID')}/30m)`,
+      amount: lemburPay,
+      note: `(${paidMinutes} menit · Rp${overtimeRate.toLocaleString('id-ID')}/30m)`,
       expenseRecorded: false,
     });
   }
@@ -162,4 +165,99 @@ export function mergeAutoAdjustments(existingAdditions, record, emp) {
   );
   const freshAutoItems = computeAutoAdjustments(record, emp);
   return [...manualOnly, ...freshAutoItems];
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/*  REKAP & SLIP GAJI — helper bareng buat ReportsTab & Payslip      */
+/*                                                                   */
+/*  Dulu Bonus Lembur SELALU dihitung ulang pakai tarif terkini di   */
+/*  ReportsTab, tapi Bonus Full Time malah dipercaya dari cache lama */
+/*  di rec.additions — jadi kalau fullTimeBonus diubah belakangan,   */
+/*  cuma Lembur yang ikut update, Full Time bisa nyangkut basi.      */
+/*  Kedua bonus auto sekarang lewat computeAutoAdjustments() yang    */
+/*  sama, jadi keduanya selalu fresh & konsisten satu sama lain.     */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Hitung total Bonus Full Time & Bonus Lembur (data + tarif TERKINI milik
+ * emp) dari sekumpulan record harian dalam 1 periode laporan.
+ *
+ * @param {Array} records - employeeDailyRecords milik 1 karyawan dalam periode
+ * @param {object} emp - data karyawan TERKINI (bukan snapshot lama)
+ * @returns {{fullTimeBonusTotal:number, overtimePayTotal:number, overtimeRate:number, overtimeByDay:Array}}
+ */
+export function summarizeAutoBonuses(records, emp) {
+  const overtimeRate = getOvertimeRate(emp);
+  let fullTimeBonusTotal = 0;
+  let overtimePayTotal = 0;
+  const overtimeByDay = [];
+
+  (records || []).forEach(rec => {
+    computeAutoAdjustments(rec, emp).forEach(item => {
+      if (item.category === 'Bonus Full Time') {
+        fullTimeBonusTotal += item.amount;
+      } else if (item.category === 'Bonus Lembur') {
+        overtimePayTotal += item.amount;
+        overtimeByDay.push({ dateStr: rec.dateStr, overtimeMinutes: rec.overtimeMinutes || 0, pay: item.amount });
+      }
+    });
+  });
+
+  overtimeByDay.sort((a, b) => new Date(a.dateStr) - new Date(b.dateStr));
+  return { fullTimeBonusTotal, overtimePayTotal, overtimeRate, overtimeByDay };
+}
+
+/**
+ * Hitung jumlah hari masuk kerja (hoursWorked > 0) dalam sekumpulan record.
+ * Dipakai di Payslip untuk baris "Hari Kerja Masuk".
+ */
+export function countWorkDays(records) {
+  return (records || []).filter(r => r.hoursWorked > 0).length;
+}
+
+/**
+ * Bangun baris "Rincian Pemasukan & Pengeluaran Harian" buat slip gaji.
+ * SATU sumber kebenaran yang dipakai bareng oleh tampilan layar
+ * (PayslipModal) & dokumen PDF (PayslipPDFDocument) supaya angka yang
+ * dilihat admin di layar dan yang didownload/dibagikan selalu identik.
+ *
+ * @param {object} data - 1 item employeePerformance hasil ReportsTab
+ *   (punya: employee, records, overtimeRate)
+ * @returns {Array<{rec:object, items:Array<{desc:string,in:number,out:number}>}>}
+ */
+export function buildPayslipRows(data) {
+  const sortedRecords = [...(data.records || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  return sortedRecords
+    .map(rec => {
+      const items = [];
+
+      if (rec.hoursWorked > 0) {
+        items.push({
+          desc: `Upah Jam Kerja (${rec.hoursWorked} Jam)`,
+          in: rec.hoursWorked * data.employee.hourlyRate,
+          out: 0,
+        });
+      }
+
+      // Bonus Full Time & Bonus Lembur dihitung ulang dari data + tarif
+      // TERKINI (computeAutoAdjustments), bukan dari cache rec.additions —
+      // jadi slip gaji gak pernah nampilin angka basi.
+      computeAutoAdjustments(rec, data.employee).forEach(auto => {
+        const desc = auto.category === 'Bonus Lembur'
+          ? `Uang Lembur (${((rec.overtimeMinutes || 0) / 60).toFixed(1).replace('.', ',')} jam)`
+          : auto.category + (auto.note ? ` ${auto.note}` : '');
+        items.push({ desc, in: auto.amount, out: 0 });
+      });
+
+      (rec.additions || [])
+        .filter(a => !AUTO_ADJUSTMENT_CATEGORIES.includes(a.category))
+        .forEach(a => items.push({ desc: a.category + (a.note ? ` (${a.note})` : ''), in: a.amount, out: 0 }));
+
+      (rec.deductions || [])
+        .forEach(d => items.push({ desc: d.category + (d.note ? ` (${d.note})` : ''), in: 0, out: d.amount }));
+
+      return { rec, items };
+    })
+    .filter(row => row.items.length > 0);
 }

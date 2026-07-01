@@ -1,16 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../../context/AppContext';
 import { toLocalDateString } from '../../../utils/formatters';
-import { Card, Button, Input, Select, IconButton, Badge, EmptyState, SortModal } from '../../../components/ui';
+import { Card, Button, Input, Select, IconButton, Badge, SortModal } from '../../../components/ui';
 import { applySort } from '../../../utils/sortUtils';
-import { Plus, Edit3, Trash2, Briefcase, Users, ArrowUpDown, ChevronLeft } from 'lucide-react';
+import { Plus, Edit3, Trash2, Briefcase, ArrowUpDown, ChevronLeft } from 'lucide-react';
 import { EMPLOYEE_STATUS_OPTIONS, getEmployeeStatus, getEmployeeStatusInfo, OVERTIME_RATE_PER_30MIN } from '../utils/payrollLogic';
 
+// Form kosong dipakai di 3 tempat (state awal, reset setelah simpan, tombol
+// "Tambah Karyawan") — disatukan di sini biar gak ada 3 salinan object literal
+// yang sama persis & gampang ketinggalan kalau suatu saat ada field baru.
+const createEmptyEmployeeForm = () => ({
+  id: '', name: '', phone: '', address: '',
+  hourlyRate: 0, fullTimeBonus: 0, overtimeRate30: OVERTIME_RATE_PER_30MIN,
+  startDate: toLocalDateString(), status: 'aktif', resignDate: '',
+});
+
 const ManageEmployeesTab = () => {
-  const { employees, setEmployees, formatRupiah, triggerAlert, triggerConfirm } = useAppContext();
+  const { employees, setEmployees, formatRupiah, triggerAlert, triggerConfirm, currentShift } = useAppContext();
 
   const [isEditingEmp, setIsEditingEmp] = useState(false);
-  const [empFormData, setEmpFormData] = useState({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, overtimeRate30: OVERTIME_RATE_PER_30MIN, startDate: toLocalDateString(), status: 'aktif', resignDate: '' });
+  const [empFormData, setEmpFormData] = useState(createEmptyEmployeeForm);
   const [empSortKey, setEmpSortKey] = useState('name-asc');
   const [isEmpSortOpen, setIsEmpSortOpen] = useState(false);
   const [empStatusFilter, setEmpStatusFilter] = useState('semua');
@@ -31,7 +40,7 @@ const ManageEmployeesTab = () => {
       triggerAlert('Karyawan baru berhasil ditambahkan.');
     }
     setIsEditingEmp(false);
-    setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, overtimeRate30: OVERTIME_RATE_PER_30MIN, startDate: toLocalDateString(), status: 'aktif', resignDate: '' });
+    setEmpFormData(createEmptyEmployeeForm());
   };
 
   const handleDeleteEmployee = (id) => {
@@ -41,15 +50,16 @@ const ManageEmployeesTab = () => {
     });
   };
 
-  const filteredEmployeesByStatus = empStatusFilter === 'semua'
-    ? employees
-    : employees.filter(e => getEmployeeStatus(e) === empStatusFilter);
-
-  const sortedEmployees = applySort(filteredEmployeesByStatus, empSortKey, {
-    name: e => e.name || '',
-    rate: e => e.hourlyRate || 0,
-    date: e => new Date(e.startDate),
-  });
+  const sortedEmployees = useMemo(() => {
+    const filtered = empStatusFilter === 'semua'
+      ? employees
+      : employees.filter(e => getEmployeeStatus(e) === empStatusFilter);
+    return applySort(filtered, empSortKey, {
+      name: e => e.name || '',
+      rate: e => e.hourlyRate || 0,
+      date: e => new Date(e.startDate),
+    });
+  }, [employees, empStatusFilter, empSortKey]);
 
   const empListSortOptions = [
     { key: 'name-asc', label: 'Nama (A-Z)' },
@@ -100,7 +110,7 @@ const ManageEmployeesTab = () => {
               <button type="button" onClick={() => setIsEmpSortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5">
                 <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>
-              <Button variant="dark" icon={<Plus className="w-4 h-4" />} onClick={() => { setEmpFormData({ id: '', name: '', phone: '', address: '', hourlyRate: 0, fullTimeBonus: 0, overtimeRate30: OVERTIME_RATE_PER_30MIN, startDate: toLocalDateString(), status: 'aktif', resignDate: '' }); setIsEditingEmp(true); }}>
+              <Button variant="dark" icon={<Plus className="w-4 h-4" />} onClick={() => { setEmpFormData(createEmptyEmployeeForm()); setIsEditingEmp(true); }}>
                 Tambah Karyawan
               </Button>
             </div>
@@ -119,6 +129,9 @@ const ManageEmployeesTab = () => {
                     <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base leading-tight pr-10">{emp.name}</h4>
                     <div className="flex items-center gap-1.5 mt-1">
                       <Badge size="sm" variant={getEmployeeStatusInfo(getEmployeeStatus(emp)).badgeVariant}>{getEmployeeStatusInfo(getEmployeeStatus(emp)).label}</Badge>
+                      {currentShift?.openedByEmployeeId === emp.id && (
+                        <Badge size="sm" variant="success">🟢 Sedang Jaga</Badge>
+                      )}
                     </div>
                   </div>
                 </div>

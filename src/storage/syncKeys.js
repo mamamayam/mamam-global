@@ -22,7 +22,7 @@ export const ALL_KEYS = [
 export const TRANSACTION_KEYS = [
   'salesHistory', 'expenses', 'incomes', 'shiftHistory',
   'employeeDailyRecords', 'claimsHistory', 'savedBills',
-  'attendanceLog',
+  'attendanceLog', 'customers',
 ];
 
 // Key konfigurasi: disimpan sebagai satu blob JSON per key di tabel `app_config`.
@@ -31,7 +31,7 @@ export const TRANSACTION_KEYS = [
 // Tabel Supabase: kolom (key text PK, value jsonb, updated_at timestamptz, updated_by text)
 export const CONFIG_KEYS = [
   'menus', 'variantGroups', 'variantCategories', 'categories', 'hppLibrary',
-  'customers', 'vouchers', 'employees',
+  'vouchers', 'employees',
   'expenseCategories', 'incomeCategories', 'additionCategories', 'deductionCategories',
   'rawMaterials', 'semiFinished', 'storeSettings',
 ];

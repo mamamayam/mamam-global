@@ -193,7 +193,7 @@ export default function App() {
   const [shiftHistory, setShiftHistory, l14, setShiftHistoryRemote] = usePersistState('shiftHistory', [], { syncMode: 'transaction', syncReadyPromise });
 
   // --- PELANGGAN ----
-  const [customers, setCustomers, l15, setCustomersRemote] = usePersistState('customers', [], { syncMode: 'config', syncReadyPromise });
+  const [customers, setCustomers, l15, setCustomersRemote] = usePersistState('customers', [], { syncMode: 'transaction', syncReadyPromise });
   const [vouchers, setVouchers, l16, setVouchersRemote] = usePersistState('vouchers', [], { syncMode: 'config', syncReadyPromise });
   const [claimsHistory, setClaimsHistory, l17, setClaimsHistoryRemote] = usePersistState('claimsHistory', [], { syncMode: 'transaction', syncReadyPromise });
 

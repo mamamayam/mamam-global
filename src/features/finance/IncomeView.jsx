@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { TrendingUp, History, Save, Trash2, Pencil, X, Settings2, ChevronDown, RotateCcw, ArrowUpDown } from 'lucide-react';
+import { TrendingUp, History, Save, Trash2, Pencil, X, Settings2, RotateCcw, ArrowUpDown } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import CategoryModal from '../../components/CategoryModal';
@@ -12,7 +12,7 @@ import { useBulkSelect } from '../../hook/useBulkSelect';
 const IncomeView = () => {
   const { incomes, setIncomes, incomeCategories, setIncomeCategories, triggerAlert, triggerConfirm, formatRupiah, currentShift, isAdminMode } = useAppContext();
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState(incomeCategories[0]);
+  const [category, setCategory] = useState(incomeCategories[0] || 'Lainnya');
   const [note, setNote] = useState('');
   const [dateInput, setDateInput] = useState(toLocalDateString());
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
@@ -20,7 +20,6 @@ const IncomeView = () => {
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
-
 
   const activeTotal = useMemo(() => {
     return activeOnly(incomes)
@@ -105,15 +104,19 @@ const IncomeView = () => {
     setDateInput(toLocalDateString());
   };
 
-  // Konversi ink.date ke bentuk Date Object untuk menghindari crash string saat pembacaan localStorage
-  const filteredIncomes = (showTrash ? trashedOnly(incomes) : activeOnly(incomes)).filter(inc => filterMonth === '' || toLocalMonthString(inc.date) === filterMonth);
+  const filteredIncomes = useMemo(() => {
+    return (showTrash ? trashedOnly(incomes) : activeOnly(incomes))
+      .filter(inc => filterMonth === '' || toLocalMonthString(inc.date) === filterMonth);
+  }, [incomes, showTrash, filterMonth]);
 
   // Urutkan hasil filter pakai sortKey terpilih
-  const sortedIncomes = applySort(filteredIncomes, sortKey, {
+  const sortedIncomes = useMemo(() => applySort(filteredIncomes, sortKey, {
     date: inc => new Date(inc.date),
     category: inc => inc.category || '',
     amount: inc => inc.amount || 0,
-  });
+  }), [filteredIncomes, sortKey]);
+
+  const trashedCount = useMemo(() => trashedOnly(incomes).length, [incomes]);
 
   const sortOptions = [
     { key: 'date-desc', label: 'Terbaru Dulu' },
@@ -227,7 +230,7 @@ const IncomeView = () => {
                 onClick={() => { setShowTrash(v => !v); resetSelection(); }}
                 className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
               >
-                {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(incomes).length})`}
+                {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
               </button>
               {!showTrash && (
                 <>
