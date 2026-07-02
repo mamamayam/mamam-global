@@ -362,7 +362,6 @@ export default function App() {
   // --- STATES APLIKASI ---
   const [appliedVoucher, setAppliedVoucher] = useState(null);
   const [voucherInputCode, setVoucherInputCode] = useState('');
-  const [isCustomerDropdownMode, setIsCustomerDropdownMode] = useState(false);
 
   const getBulanIniStart = () => {
     const d = new Date();
@@ -389,6 +388,8 @@ export default function App() {
   const setIsCategoryModalOpen = usePosStore((state) => state.setIsCategoryModalOpen);
   const customerName = usePosStore((state) => state.customerName);
   const setCustomerName = usePosStore((state) => state.setCustomerName);
+  const selectedCustomerId = usePosStore((state) => state.selectedCustomerId);
+  const setSelectedCustomerId = usePosStore((state) => state.setSelectedCustomerId);
   const orderType = usePosStore((state) => state.orderType);
   const setOrderType = usePosStore((state) => state.setOrderType);
   const deliveryFee = usePosStore((state) => state.deliveryFee);
@@ -411,10 +412,14 @@ export default function App() {
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
 
+  // Fix: activeCustomer sekarang ID-based, BUKAN name-matching lagi.
+  // Alasan: cocokin nama pakai string (walau udah .toLowerCase()) tetap rapuh
+  // terhadap spasi nyempil di data lama & gak bisa nentuin customer yang mana
+  // kalau ada 2 nama persis sama. ID gak pernah ambigu.
   const activeCustomer = useMemo(() => {
-    if (!customerName) return null;
-    return customers.find(c => c.name.toLowerCase() === customerName.trim().toLowerCase());
-  }, [customerName, customers]);
+    if (!selectedCustomerId) return null;
+    return customers.find(c => c.id === selectedCustomerId) || null;
+  }, [selectedCustomerId, customers]);
 
   useEffect(() => {
     if (!activeCustomer || cart.length === 0) setPointsToRedeem(0);
@@ -531,6 +536,7 @@ export default function App() {
     const bill = {
       id: idTransaksi,
       customerName: customerName || 'Tanpa Nama',
+      customerId: activeCustomer?.id || null,
       cart,
       orderType,
       date: new Date()
@@ -543,6 +549,7 @@ export default function App() {
       date: new Date().toISOString(),
       orderType,
       customerName: customerName || 'Tanpa Nama',
+      customerId: activeCustomer?.id || null,
       items: cart,
       subtotal: getSubtotal(),
       discount: getDiscount(),
@@ -568,6 +575,7 @@ export default function App() {
     // 4. Reset Cart dan tutup sidebar/modal keranjang
     setCart([]);
     setCustomerName('');
+    setSelectedCustomerId(null);
     setAppliedVoucher(null);
     setPointsToRedeem(0);
     setManualDiscount({ type: 'fixed', value: 0 });
@@ -575,7 +583,24 @@ export default function App() {
   };
 
   const loadSavedBill = (bill) => {
-    setCart(bill.cart); setCustomerName(bill.customerName); setOrderType(bill.orderType);
+    setCart(bill.cart);
+    setCustomerName(bill.customerName);
+    // Bill lama cuma nyimpen customerName (string), belum ada selectedCustomerId.
+    // Coba cocokkan ulang sekali ke customer terdaftar biar poin tetap ke-attach;
+    // kalau gak ketemu (nama diketik ulang/beda), biarin null — kasir cukup
+    // buka CustomerPickerModal lagi buat resolve manual, gak ada poin yang
+    // "ke-klaim diam-diam" ke customer yang salah.
+    // Bill baru udah nyimpen customerId langsung (reliable). Bill lama
+    // (sebelum fitur ini) cuma punya customerName string — buat itu, coba
+    // cocokkan ulang sekali; kalau gak ketemu, biarin null (Guest), gak ada
+    // poin yang "ke-klaim diam-diam" ke customer yang salah.
+    const matched = bill.customerId
+      ? customers.find(c => c.id === bill.customerId)
+      : bill.customerName
+        ? customers.find(c => c.name.trim().toLowerCase() === bill.customerName.trim().toLowerCase())
+        : null;
+    setSelectedCustomerId(matched ? matched.id : null);
+    setOrderType(bill.orderType);
     setSavedBills(savedBills.filter(b => b.id !== bill.id));
     triggerAlert('Bill berhasil dimuat!');
   };
@@ -650,6 +675,7 @@ export default function App() {
 
     // Order / Checkout
     customerName, setCustomerName,
+    selectedCustomerId, setSelectedCustomerId,
     orderType, setOrderType,
     deliveryFee, setDeliveryFee,
     customDeliveryFee, setCustomDeliveryFee,
@@ -657,7 +683,6 @@ export default function App() {
     // Customer
     activeCustomer,
     customers, setCustomers,
-    isCustomerDropdownMode, setIsCustomerDropdownMode,
     pointsToRedeem, setPointsToRedeem,
 
     // Employee / Payroll

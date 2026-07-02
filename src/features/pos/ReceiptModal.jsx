@@ -19,7 +19,13 @@ const ReceiptModal = () => {
 
     const isOpenBill = data.status === 'OPEN' || data.status === 'UNPAID';
 
-    const matchedCustomer = customers?.find(c => c.name === data.customerName);
+    // Fix: prioritaskan customerId (reliable, ID-based). Fallback nama cuma
+    // buat struk/order lama yang dibuat sebelum field customerId ada —
+    // dibikin case-insensitive + trim biar minimal gak separah exact-match
+    // sebelumnya, tapi ini murni buat display, gak ngubah poin di database.
+    const matchedCustomer = data.customerId
+        ? customers?.find(c => c.id === data.customerId)
+        : customers?.find(c => c.name.trim().toLowerCase() === (data.customerName || '').trim().toLowerCase());
     const sisaPoin = matchedCustomer ? matchedCustomer.points : (data.customerPoints || 0);
     const pointsUsed = (data.pointDiscount || 0) / 100;
 

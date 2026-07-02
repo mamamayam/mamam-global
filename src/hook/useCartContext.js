@@ -21,6 +21,8 @@ export const useCartContext = () => {
     activeCustomer: context.activeCustomer,
     customerName: context.customerName,
     setCustomerName: context.setCustomerName,
+    selectedCustomerId: context.selectedCustomerId,
+    setSelectedCustomerId: context.setSelectedCustomerId,
     customers: context.customers,
     setCustomers: context.setCustomers,
     

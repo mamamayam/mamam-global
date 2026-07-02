@@ -40,6 +40,10 @@ export const usePosStore = create(
 
       cart: [],
       customerName: '',
+      // Sumber kebenaran tunggal untuk atribusi poin — HANYA diisi lewat
+      // CustomerPickerModal (pilih existing / tambah baru), gak pernah dari
+      // ketikan bebas. null = guest/tanpa pelanggan terdaftar.
+      selectedCustomerId: null,
       orderType: 'Takeaway',
       deliveryFee: 0,
       customDeliveryFee: '',
@@ -116,6 +120,7 @@ export const usePosStore = create(
       // ─── DRAFT CHECKOUT ACTIONS ────────────────────────────────────────────
 
       setCustomerName: (name) => set({ customerName: name }),
+      setSelectedCustomerId: (id) => set({ selectedCustomerId: id }),
       setOrderType: (type) => set({ orderType: type }),
       setDeliveryFee: (fee) => set({ deliveryFee: fee }),
       setCustomDeliveryFee: (fee) => set({ customDeliveryFee: fee }),
@@ -129,6 +134,7 @@ export const usePosStore = create(
       resetDraft: () => set({
         cart: [],
         customerName: '',
+        selectedCustomerId: null,
         orderType: 'Takeaway',
         deliveryFee: 0,
         customDeliveryFee: '',
@@ -145,6 +151,7 @@ export const usePosStore = create(
       partialize: (state) => ({
         cart: state.cart,
         customerName: state.customerName,
+        selectedCustomerId: state.selectedCustomerId,
         orderType: state.orderType,
         deliveryFee: state.deliveryFee,
         customDeliveryFee: state.customDeliveryFee,

@@ -2,19 +2,21 @@ import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { usePosStore } from '../../store/usePosStore';
 import { activeOnly } from "../../utils/softDelete";
+import CustomerPickerModal from './CustomerPicker';
 import {
   ShoppingCart,
   Trash2,
   X,
   Save,
   Award,
-  Info,
   Truck,
   Edit3,
   Minus,
   Plus,
   Ticket,
-  ChevronRight
+  ChevronRight,
+  Users,
+  Pencil
 } from 'lucide-react';
 
 const CartDrawer = () => {
@@ -30,7 +32,7 @@ const CartDrawer = () => {
   // Tambahan: Destructure 'setCustomers' dari appContext
   const { 
     menus, setCurrentView, savedBills, triggerConfirm, formatRupiah, activeCustomer, 
-    customerName, setCustomerName, isCustomerDropdownMode, setIsCustomerDropdownMode, 
+    customerName, setCustomerName, setSelectedCustomerId,
     customers, setCustomers, orderType, setOrderType, deliveryFee, setDeliveryFee, 
     customDeliveryFee, setCustomDeliveryFee, updateCartQty, updateCartItemNote, 
     voucherInputCode, setVoucherInputCode, vouchers, appliedVoucher, setAppliedVoucher, 
@@ -39,8 +41,8 @@ const CartDrawer = () => {
     getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill 
   } = useAppContext();
 
-  // Local state untuk input nomor HP pelanggan baru via Kasir
-  const [newCustomerPhone, setNewCustomerPhone] = useState('');
+  // Modal pilih/tambah pelanggan — satu-satunya jalur buat set customerName/selectedCustomerId
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
 
   // NOTE: mekanisme backup/restore customerName pakai ref (Fix 2 versi lama) udah dihapus.
   // Itu penyebab nama pelanggan nyangkut lagi abis checkout & pas load saved bill kosong/guest,
@@ -50,6 +52,7 @@ const CartDrawer = () => {
   const resetTransactionState = () => {
     setCart([]);
     setCustomerName('');
+    setSelectedCustomerId(null);
     setOrderType('Takeaway'); // sesuaikan kalau default order type bukan ini
     setDeliveryFee(0);
     setCustomDeliveryFee('');
@@ -57,12 +60,12 @@ const CartDrawer = () => {
     setAppliedVoucher(null);
     setPointsToRedeem(0);
     setManualDiscount({ type: 'fixed', value: 0 });
-    setNewCustomerPhone('');
   };
 
-  // Handler untuk hapus customer secara sengaja (tombol X)
+  // Handler untuk hapus customer secara sengaja (tombol X di badge)
   const handleClearCustomer = () => {
     setCustomerName('');
+    setSelectedCustomerId(null);
   };
 
   const handleEditVariant = (cartItem) => {
@@ -132,131 +135,51 @@ const CartDrawer = () => {
             </div>
           ) : (
             <div className="p-4 space-y-5">
-              {/* --- CUSTOMER INPUT --- */}
+              {/* --- CUSTOMER PICKER --- */}
+              {/* Fix: udah gak ada input teks bebas di sini. Satu-satunya cara set
+                  customerName/selectedCustomerId adalah lewat CustomerPickerModal,
+                  yang selalu commit via aksi eksplisit (pilih/tambah/guest) —
+                  gak ada lagi state "ngetik tapi belum resolved" yang bisa
+                  lolos ke checkout dan bikin poin ilang diam-diam. */}
               <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Nama Pelanggan</label>
-                  <div className="flex items-center gap-2">
-                    {activeCustomer ? (
-                      <span className="text-[10px] font-bold bg-green-50 dark:bg-green-500/10 text-green-500 dark:text-green-400 px-2 py-0.5 rounded-md border border-green-200 dark:border-green-500/30 flex items-center gap-1 animate-in fade-in duration-300">
-                        <Award className="w-3 h-3" /> <span className="hidden md:inline">Terdaftar</span> ({activeCustomer.points} Pts)
-                      </span>
-                    ) : customerName.trim() !== '' && !isCustomerDropdownMode ? (
-                      <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 italic hidden md:block">Guest</span>
-                    ) : null}
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Pelanggan</label>
 
-                    <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950 px-2 py-1 rounded-md border border-slate-100 dark:border-slate-800">
-                      <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase">Daftar</span>
-                      <button
-                        onClick={() => {
-                          setIsCustomerDropdownMode(!isCustomerDropdownMode);
-                          if (!activeCustomer) setCustomerName('');
-                        }}
-                        className={`w-7 h-4 rounded-full relative transition-colors duration-300 ${isCustomerDropdownMode ? 'bg-accent-600 dark:bg-accent-500' : 'bg-slate-300 dark:bg-slate-600'}`}
-                      >
-                        <div className={`w-3 h-3 bg-white dark:bg-slate-900 rounded-full absolute top-0.5 transition-transform duration-300 ${isCustomerDropdownMode ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {isCustomerDropdownMode ? (
-                  // Fix 1 (dropdown mode): tambah tombol X untuk hapus pilihan pelanggan
-                  <div className="flex items-center gap-1">
-                    <select
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className="flex-1 border-b-2 border-slate-100 dark:border-slate-800 focus:border-accent-600 dark:focus:border-accent-500 pb-2 focus:outline-none bg-transparent transition-colors font-semibold text-slate-800 dark:text-slate-100 text-sm cursor-pointer"
+                {activeCustomer ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => setIsCustomerModalOpen(true)}
+                      className="flex-1 flex items-center gap-2 min-w-0 text-left"
                     >
-                      <option value="">-- Pilih Pelanggan (Guest) --</option>
-                      {activeOnly(customers).map(c => (
-                        <option key={c.id} value={c.name}>{c.name} - {c.phone || 'Tanpa HP'} ({c.points} Pts)</option>
-                      ))}
-                    </select>
-                    {customerName && (
-                      <button
-                        onClick={handleClearCustomer}
-                        title="Hapus pilihan pelanggan"
-                        className="pb-2 text-slate-300 hover:text-accent-500 dark:text-slate-600 dark:hover:text-accent-400 transition-colors shrink-0"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                      <span className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{activeCustomer.name}</span>
+                      <span className="text-[10px] font-bold bg-green-50 dark:bg-green-500/10 text-green-500 dark:text-green-400 px-2 py-0.5 rounded-md border border-green-200 dark:border-green-500/30 flex items-center gap-1 shrink-0">
+                        <Award className="w-3 h-3" /> {activeCustomer.points} Pts
+                      </span>
+                    </button>
+                    <button onClick={() => setIsCustomerModalOpen(true)} title="Ganti pelanggan" className="p-1.5 text-slate-400 hover:text-accent-500 dark:hover:text-accent-400 transition-colors shrink-0">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={handleClearCustomer} title="Hapus pilihan pelanggan" className="p-1.5 text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors shrink-0">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 ) : (
-                  // Fix 1 (text mode): tambah tombol X di dalam input
-                  <div className="relative flex items-end">
-                    <input
-                      type="text"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Ketik nama / no. HP pelanggan..."
-                      className="w-full border-b-2 border-slate-100 dark:border-slate-800 focus:border-accent-600 dark:focus:border-accent-500 pb-2 focus:outline-none bg-transparent transition-colors font-semibold text-slate-800 dark:text-slate-100 text-sm pr-5"
-                    />
-                    {customerName && (
-                      <button
-                        onClick={handleClearCustomer}
-                        title="Hapus nama pelanggan"
-                        className="absolute right-0 bottom-2 text-slate-300 hover:text-accent-500 dark:text-slate-600 dark:hover:text-accent-400 transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    onClick={() => setIsCustomerModalOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-accent-400 dark:hover:border-accent-500 text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 text-xs font-bold transition-colors"
+                  >
+                    <Users className="w-3.5 h-3.5" /> Pilih / Tambah Pelanggan
+                  </button>
                 )}
 
-                {/* Fix Suggestion logic: Includes Phone numbers as well */}
-                {!isCustomerDropdownMode && customerName.trim() !== '' && !activeCustomer && activeOnly(customers).filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).length > 0 && (
-                  <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-300 bg-accent-50 dark:bg-accent-500/50 border border-accent-100 dark:border-accent-500/20 p-2 rounded-xl">
-                    <p className="text-[10px] font-bold text-accent-600 dark:text-accent-400 mb-1.5 flex items-center gap-1"><Info className="w-3 h-3" /> Maksud Anda pelanggan ini?</p>
-                    <div className="space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar pr-1 relative z-10">
-                      {activeOnly(customers).filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).map(sc => (
-                        <div key={sc.id} onClick={() => setCustomerName(sc.name)} className="flex justify-between items-center bg-white dark:bg-slate-900 border border-accent-100 dark:border-accent-500/20 p-2 rounded-lg cursor-pointer hover:border-accent-300 dark:hover:border-accent-500/40 hover:shadow-sm transition-all">
-                          <div className="flex flex-col">
-                            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">{sc.name}</span>
-                            <span className="text-[9px] font-medium text-slate-500 dark:text-slate-400">{sc.phone || 'Tidak ada No. HP'}</span>
-                          </div>
-                          <span className="text-[10px] text-accent-600 dark:text-accent-400 font-bold bg-accent-50 dark:bg-accent-500/10 px-2 py-1 rounded-md border border-accent-200 dark:border-accent-500/30">Pilih</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* --- TAMBAH PELANGGAN BARU JIKA TIDAK DITEMUKAN --- */}
-                {!isCustomerDropdownMode && customerName.trim() !== '' && !activeCustomer && activeOnly(customers).filter(c => c.name.toLowerCase().includes(customerName.toLowerCase()) || (c.phone && c.phone.includes(customerName))).length === 0 && (
-                  <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-300 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 p-3 rounded-xl">
-                    <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1">
-                      <Info className="w-3.5 h-3.5" /> Pelanggan belum terdaftar
-                    </p>
-                    <div className="space-y-2">
-                      <input
-                        type="text"
-                        placeholder="No. Whatsapp (Opsional)"
-                        value={newCustomerPhone}
-                        onChange={(e) => setNewCustomerPhone(e.target.value)}
-                        className="w-full text-xs p-2 rounded-lg border border-blue-200 dark:border-blue-500/30 bg-white dark:bg-slate-900 outline-none focus:border-blue-500 transition-colors"
-                      />
-                      <button
-                        onClick={() => {
-                          const newCustomer = {
-                            id: `CUST-${Date.now()}`,
-                            name: customerName,
-                            phone: newCustomerPhone,
-                            points: 0
-                          };
-                          setCustomers([...customers, newCustomer]);
-                          setNewCustomerPhone('');
-                          triggerAlert('Pelanggan berhasil ditambahkan & langsung aktif!');
-                        }}
-                        className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg transition-colors flex justify-center items-center gap-1 shadow-sm"
-                      >
-                        <Plus className="w-3 h-3" /> Tambahkan ke Database
-                      </button>
-                    </div>
-                  </div>
+                {customerName.trim() !== '' && !activeCustomer && (
+                  <p className="mt-2 text-[10px] font-semibold text-slate-400 dark:text-slate-500 italic">Guest — bayar sebagai "{customerName}", gak dapet poin.</p>
                 )}
               </div>
+
+              <CustomerPickerModal
+                isOpen={isCustomerModalOpen}
+                onClose={() => setIsCustomerModalOpen(false)}
+              />
 
               {/* --- ORDER TYPE --- */}
               <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">

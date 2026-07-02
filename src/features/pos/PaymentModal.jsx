@@ -68,7 +68,7 @@ const PaymentModal = () => {
     }
 
     const newOrder = {
-      id: `ORD-${generateUUID().split('-')[0].toUpperCase()}`, date: new Date(), customerName: customerName || 'Tanpa Nama', orderType, items: [...cart],
+      id: `ORD-${generateUUID().split('-')[0].toUpperCase()}`, date: new Date(), customerName: customerName || 'Tanpa Nama', customerId: activeCustomer?.id || null, orderType, items: [...cart],
       subtotal: getSubtotal(), discount: getDiscount(), pointDiscount: getPointDiscount(),
       manualDiscountAmount: getManualDiscountAmount(),
       taxAmount: getTaxAmount(), serviceAmount: getServiceChargeAmount(),
@@ -83,15 +83,16 @@ const PaymentModal = () => {
     };
 
     // 2. PROSES PENAMBAHAN POIN BARU (BERLAKU UNTUK SINGLE & SPLIT)
+    // Fix: poin CUMA nempel kalau activeCustomer resolved by ID (dari
+    // CustomerPickerModal). Fallback cocokin-nama-string udah dihapus total —
+    // itu sumber bug "poin ilang diam-diam" kalau nama diketik gak persis
+    // sama kayak di database (typo, spasi, beda kapital, atau nama duplikat).
+    // Kalau activeCustomer null di titik ini, artinya transaksi emang sengaja
+    // jalan sebagai Guest (atau bill lama yang belum di-resolve ulang) —
+    // gak ada poin yang boleh ditebak-tebak nempel ke customer manapun.
     const pointsEarned = Math.floor(total / 10000);
-    if (pointsEarned > 0) {
-      const registeredCustomer = activeCustomer
-        ? updatedCustomers.find(c => c.id === activeCustomer.id)
-        : updatedCustomers.find(c => c.name.toLowerCase() === newOrder.customerName.toLowerCase());
-
-      if (registeredCustomer) {
-        updatedCustomers = updatedCustomers.map(c => c.id === registeredCustomer.id ? { ...c, points: c.points + pointsEarned } : c);
-      }
+    if (pointsEarned > 0 && activeCustomer) {
+      updatedCustomers = updatedCustomers.map(c => c.id === activeCustomer.id ? { ...c, points: c.points + pointsEarned } : c);
     }
 
     // 3. COMMIT PERUBAHAN STATE CUSTOMERS HANYA SATU KALI DI SINI

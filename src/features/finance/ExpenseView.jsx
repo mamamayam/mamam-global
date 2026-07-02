@@ -98,17 +98,36 @@ const ExpenseView = () => {
   const [dateInput, setDateInput] = useState(toLocalDateString());
   const [paymentMethod, setPaymentMethod] = useState('Tunai');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [filterMode, setFilterMode] = useState('month'); // 'month' | 'range' | 'all'
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
 
+  // Cek apakah sebuah tanggal transaksi lolos filter aktif (mode bulan / rentang tanggal / semua).
+  // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
+  // aman dibandingkan leksikografis tanpa perlu konversi ke Date/timestamp.
+  const matchesDateFilter = (date) => {
+    if (filterMode === 'all') return true;
+    if (filterMode === 'range') {
+      if (!filterStartDate && !filterEndDate) return true;
+      const d = toLocalDateString(date);
+      if (filterStartDate && d < filterStartDate) return false;
+      if (filterEndDate && d > filterEndDate) return false;
+      return true;
+    }
+    // default: mode bulan
+    return filterMonth === '' || toLocalMonthString(date) === filterMonth;
+  };
+
   const activeTotal = useMemo(() => {
     return activeOnly(expenses)
-      .filter(inc => filterMonth === '' || toLocalMonthString(inc.date) === filterMonth)
+      .filter(inc => matchesDateFilter(inc.date))
       .reduce((s, e) => s + e.amount, 0);
-  }, [expenses, filterMonth]);
+  }, [expenses, filterMode, filterMonth, filterStartDate, filterEndDate]);
 
   // State untuk melacak data yang sedang diedit
   const [editingId, setEditingId] = useState(null);
@@ -241,8 +260,8 @@ const ExpenseView = () => {
 
   const filteredExpenses = useMemo(() => {
     return (showTrash ? trashedOnly(expenses) : activeOnly(expenses))
-      .filter(e => filterMonth === '' || toLocalMonthString(e.date) === filterMonth);
-  }, [expenses, showTrash, filterMonth]);
+      .filter(e => matchesDateFilter(e.date));
+  }, [expenses, showTrash, filterMode, filterMonth, filterStartDate, filterEndDate]);
 
   // Urutkan hasil filter pakai sortKey terpilih
   const sortedExpenses = useMemo(() => applySort(filteredExpenses, sortKey, {
@@ -423,16 +442,44 @@ const ExpenseView = () => {
               )}
               {!showTrash && (
                 <>
-                  <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300" />
-                  {filterMonth &&
-                    <Button
-                      size="xs"
-                      variant="secondary"
-                      onClick={() => setFilterMonth('')}
-                    >
-                      Semua
-                    </Button>
-                  }
+                  <select
+                    value={filterMode}
+                    onChange={e => setFilterMode(e.target.value)}
+                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900"
+                  >
+                    <option value="month">Per Bulan</option>
+                    <option value="range">Rentang Tanggal</option>
+                    <option value="all">Semua</option>
+                  </select>
+
+                  {filterMode === 'month' && (
+                    <input
+                      type="month"
+                      value={filterMonth}
+                      onChange={e => setFilterMonth(e.target.value)}
+                      className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
+                    />
+                  )}
+
+                  {filterMode === 'range' && (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="date"
+                        value={filterStartDate}
+                        onChange={e => setFilterStartDate(e.target.value)}
+                        max={filterEndDate || undefined}
+                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
+                      />
+                      <span className="text-xs text-slate-400">-</span>
+                      <input
+                        type="date"
+                        value={filterEndDate}
+                        onChange={e => setFilterEndDate(e.target.value)}
+                        min={filterStartDate || undefined}
+                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
+                      />
+                    </div>
+                  )}
                 </>
               )}
               <button
