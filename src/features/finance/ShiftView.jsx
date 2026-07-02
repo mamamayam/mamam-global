@@ -50,6 +50,7 @@ const ShiftView = () => {
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
+  const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
 
   const handleShareImage = async () => {
     const reportElement = document.getElementById('xreading-content');
@@ -658,12 +659,18 @@ const ShiftView = () => {
             <div className="flex items-center gap-3">
               {isAdminMode && (
                 <button
-                  onClick={() => { setShowTrash(v => !v); resetSelection(); }}
+                  onClick={() => { setShowTrash(v => !v); resetSelection(); setIsSelecting(false); }}
                   className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
                 >
                   {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(shiftHistory).length})`}
                 </button>
               )}
+              <button
+                onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
+                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isSelecting ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
+              >
+                {isSelecting ? 'Batal' : 'Pilih'}
+              </button>
               <button
                 type="button"
                 onClick={() => setIsSortOpen(true)}
@@ -675,7 +682,7 @@ const ShiftView = () => {
             </div>
           </div>
           
-          {sortedShiftHistory.length > 0 && (
+          {isSelecting && sortedShiftHistory.length > 0 && (
             <div className="p-3 border-b border-slate-100 dark:border-slate-800">
               <BulkSelectBar
                 count={count}
@@ -703,12 +710,14 @@ const ShiftView = () => {
                 return (
                   <div key={shift.id} className={`p-4 hover:bg-slate-50 dark:hover:bg-slate-950/50 transition-colors animate-in fade-in slide-in-from-left-2 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${selectedIds.has(shift.id) ? 'bg-orange-50/60 dark:bg-orange-500/5' : ''}`}>
                     <div className="flex items-start gap-3 flex-1">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(shift.id)}
-                        onChange={() => toggleSelectOne(shift.id)}
-                        className="w-4 h-4 mt-1 rounded accent-orange-500 cursor-pointer shrink-0"
-                      />
+                      {isSelecting && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(shift.id)}
+                          onChange={() => toggleSelectOne(shift.id)}
+                          className="w-4 h-4 mt-1 rounded accent-orange-500 cursor-pointer shrink-0"
+                        />
+                      )}
                       <div className="space-y-1 flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-black text-sm text-slate-800 dark:text-slate-100">{shift.id}</span>

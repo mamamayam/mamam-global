@@ -24,6 +24,7 @@ const HistoryView = () => {
     const [customEndDate, setCustomEndDate] = useState('');
     const [showTrash, setShowTrash] = useState(false);
     const [detailOrder, setDetailOrder] = useState(null);
+    const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
 
     // Daftar opsi tab periode tanggal
     const filterTabs = [
@@ -167,13 +168,22 @@ const HistoryView = () => {
                     icon={<History className="w-6 h-6 text-green-500 dark:text-green-400" />}
                 />
                 {isAdminMode && (
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => { setShowTrash(v => !v); resetSelection(); }}
-                    >
-                        {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(salesHistory).length})`}
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => { setShowTrash(v => !v); resetSelection(); setIsSelecting(false); }}
+                        >
+                            {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(salesHistory).length})`}
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant={isSelecting ? 'primary' : 'secondary'}
+                            onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
+                        >
+                            {isSelecting ? 'Batal' : 'Pilih'}
+                        </Button>
+                    </div>
                 )}
             </div>
 
@@ -276,8 +286,8 @@ const HistoryView = () => {
                 </Card>
             </div>
 
-            {/* BULK SELECT BAR - SEKARANG SELALU MUNCUL KALAU ADA DATA */}
-            {sortedHistory.length > 0 && (
+            {/* BULK SELECT BAR - MUNCUL SAAT MODE PILIH AKTIF */}
+            {isSelecting && sortedHistory.length > 0 && (
                 <div className="mb-4">
                     <BulkSelectBar
                         count={count}
@@ -297,13 +307,14 @@ const HistoryView = () => {
                         <div key={order.id} className={`bg-white dark:bg-slate-900 rounded-2xl shadow-sm border p-4 relative flex flex-col hover:shadow-md transition-shadow ${selectedIds.has(order.id) ? 'border-orange-500 ring-1 ring-orange-500' : 'border-slate-100 dark:border-slate-800'}`}>
                             <div className="flex justify-between items-start mb-3 border-b border-dashed border-slate-200 dark:border-slate-700 pb-3">
                                 <div className="flex items-start gap-2">
-                                    {/* CHECKBOX SEKARANG SELALU MUNCUL */}
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedIds.has(order.id)}
-                                        onChange={() => toggleSelectOne(order.id)}
-                                        className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
-                                    />
+                                    {isSelecting && (
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.has(order.id)}
+                                            onChange={() => toggleSelectOne(order.id)}
+                                            className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                                        />
+                                    )}
                                     <div>
                                         <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">#{order.id}</h3>
                                         <p className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(order.date).toLocaleString('id-ID')}</p>

@@ -35,6 +35,7 @@ const IncomeView = () => {
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
+  const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
 
   // Cek apakah sebuah tanggal transaksi lolos filter aktif (mode bulan / rentang tanggal / semua).
   // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
@@ -259,12 +260,18 @@ const IncomeView = () => {
             <div className="flex items-center gap-2">
               {isAdminMode && (
                 <button
-                  onClick={() => { setShowTrash(v => !v); resetSelection(); }}
+                  onClick={() => { setShowTrash(v => !v); resetSelection(); setIsSelecting(false); }}
                   className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
                 >
                   {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
                 </button>
               )}
+              <button
+                onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
+                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isSelecting ? 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
+              >
+                {isSelecting ? 'Batal' : 'Pilih'}
+              </button>
               {!showTrash && (
                 <>
                   <select
@@ -322,7 +329,7 @@ const IncomeView = () => {
               {formatRupiah(activeTotal)}
             </span>
           </div>
-          {sortedIncomes.length > 0 && (
+          {isSelecting && sortedIncomes.length > 0 && (
             <div className="px-4 pt-3">
               <BulkSelectBar
                 count={count}
@@ -344,12 +351,14 @@ const IncomeView = () => {
               sortedIncomes.map(inc => (
                 <div key={inc.id} className={`flex justify-between items-center p-3.5 border rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700 transition-all duration-200 animate-in slide-in-from-left-2 duration-300 ${selectedIds.has(inc.id) ? 'border-orange-500 ring-1 ring-orange-500' : 'border-slate-100 dark:border-slate-800'}`}>
                   <div className="flex items-start gap-2 flex-1 pr-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(inc.id)}
-                      onChange={() => toggleSelectOne(inc.id)}
-                      className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
-                    />
+                    {isSelecting && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(inc.id)}
+                        onChange={() => toggleSelectOne(inc.id)}
+                        className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                      />
+                    )}
                     <div className="flex-1">
                       <p className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">{inc.category} <Badge variant="neutral">{new Date(inc.date).toLocaleDateString('id-ID')}</Badge></p>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{inc.note || 'Tanpa catatan'}</p>

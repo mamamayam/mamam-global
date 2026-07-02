@@ -114,6 +114,7 @@ const InputDailyTab = () => {
   const [isDailySortOpen, setIsDailySortOpen] = useState(false);
   const [expandedRecordId, setExpandedRecordId]     = useState(null);
   const [collapsedEmployees, setCollapsedEmployees] = useState(new Set());
+  const [isSelecting, setIsSelecting]               = useState(false); // toggle mode "Pilih" utk bulk delete
 
   const [adjType, setAdjType]                   = useState('addition');
   const [adjCategory, setAdjCategory]           = useState('');
@@ -497,8 +498,14 @@ const InputDailyTab = () => {
             <History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Input'}
           </h3>
           <div className="flex gap-3">
-            <button onClick={() => { setShowTrash(!showTrash); resetSelection(); }} className="text-xs font-bold text-slate-500">
+            <button onClick={() => { setShowTrash(!showTrash); resetSelection(); setIsSelecting(false); }} className="text-xs font-bold text-slate-500">
               {showTrash ? 'Kembali' : 'Recycle Bin'}
+            </button>
+            <button
+              onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
+              className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isSelecting ? 'bg-green-50 text-green-600' : 'text-slate-500'}`}
+            >
+              {isSelecting ? 'Batal' : 'Pilih'}
             </button>
             <button onClick={() => setIsDailySortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 border rounded-lg px-2 py-1.5">
               <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
@@ -507,7 +514,7 @@ const InputDailyTab = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {allVisibleRecords.length > 0 && (
+          {isSelecting && allVisibleRecords.length > 0 && (
             <BulkSelectBar
               count={count}
               total={allVisibleRecords.length}
@@ -566,12 +573,14 @@ const InputDailyTab = () => {
                         <div key={rec.id} className={`px-3 py-2.5 bg-white ${selectedIds.has(rec.id) ? 'bg-orange-50/60' : ''}`}>
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-start gap-2 flex-1 min-w-0">
-                              <input
-                                type="checkbox"
-                                checked={selectedIds.has(rec.id)}
-                                onChange={() => toggleSelectOne(rec.id)}
-                                className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
-                              />
+                              {isSelecting && (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedIds.has(rec.id)}
+                                  onChange={() => toggleSelectOne(rec.id)}
+                                  className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                                />
+                              )}
                               <div className="flex-1 min-w-0">
                               {/* Baris 1: Tanggal + jam kerja */}
                               <div className="flex items-center gap-2 flex-wrap">
