@@ -3,7 +3,7 @@ import { useAppContext } from '../../context/AppContext';
 import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown, AlertTriangle, Users } from 'lucide-react';
 import { isNativePlatform, printShiftNativeBluetooth } from '../../library/printer';
 import { toPng, toBlob } from 'html-to-image';
-import { generateUUID, toLocalMonthString } from '../../utils/formatters';
+import { generateUUID, toLocalMonthString, toLocalDateString } from '../../utils/formatters';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete, pushLiveState } from '../../storage/realtimeSync';
 import { applySort } from '../../utils/sortUtils';
@@ -14,6 +14,7 @@ import {
   Button, 
   Card, 
   Input, 
+  Select,
   Modal, 
   PageHeader, 
   EmptyState, 
@@ -45,8 +46,11 @@ const ShiftView = () => {
   const [isEditingActiveInitial, setIsEditingActiveInitial] = useState(false);
   const [editActiveInitialInput, setEditActiveInitialInput] = useState('');
 
-  // Filter Bulan untuk Rekapitulasi Riwayat Shift di Bagian Bawah
+  // Filter Bulan/Rentang Tanggal untuk Rekapitulasi Riwayat Shift di Bagian Bawah
+  const [filterMode, setFilterMode] = useState('month'); // 'month' | 'range' | 'all'
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString()); // Default YYYY-MM
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
@@ -299,14 +303,26 @@ const ShiftView = () => {
     });
   };
 
+  // Cek apakah tanggal shift (startTime) lolos filter aktif (mode bulan / rentang tanggal / semua).
+  // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
+  // aman dibandingkan leksikografis tanpa perlu konversi ke Date/timestamp.
+  const matchesDateFilter = (date) => {
+    if (filterMode === 'all') return true;
+    if (filterMode === 'range') {
+      if (!filterStartDate && !filterEndDate) return true;
+      const d = toLocalDateString(date);
+      if (filterStartDate && d < filterStartDate) return false;
+      if (filterEndDate && d > filterEndDate) return false;
+      return true;
+    }
+    // default: mode bulan
+    return filterMonth === '' || toLocalMonthString(date) === filterMonth;
+  };
+
   const filteredShiftHistory = useMemo(() => {
     const source = showTrash ? trashedOnly(shiftHistory) : activeOnly(shiftHistory);
-    return source.filter(shift => {
-      if (!filterMonth) return true;
-      const shiftDateStr = toLocalMonthString(shift.startTime);
-      return shiftDateStr === filterMonth;
-    });
-  }, [shiftHistory, filterMonth, showTrash]);
+    return source.filter(shift => matchesDateFilter(shift.startTime));
+  }, [shiftHistory, filterMode, filterMonth, filterStartDate, filterEndDate, showTrash]);
 
   // Urutkan hasil filter pakai sortKey terpilih (gak ngubah rekapShiftStats, cuma urutan tampil)
   const sortedShiftHistory = useMemo(() => applySort(filteredShiftHistory, sortKey, {
@@ -620,14 +636,43 @@ const ShiftView = () => {
             <p className="text-xs text-slate-500 dark:text-slate-400">Laporan performa dan akurasi kas di dompet.</p>
           </div>
           <div className="flex items-center gap-2">
-            <Input
-              type="month"
-              value={filterMonth}
-              onChange={e => setFilterMonth(e.target.value)}
+            <Select
+              value={filterMode}
+              onChange={e => setFilterMode(e.target.value)}
               className="py-1.5 px-3 text-xs font-bold"
-            />
-            {filterMonth && (
-              <button onClick={() => setFilterMonth('')} className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 underline">Semua</button>
+            >
+              <option value="month">Per Bulan</option>
+              <option value="range">Rentang Tanggal</option>
+              <option value="all">Semua</option>
+            </Select>
+
+            {filterMode === 'month' && (
+              <Input
+                type="month"
+                value={filterMonth}
+                onChange={e => setFilterMonth(e.target.value)}
+                className="py-1.5 px-3 text-xs font-bold"
+              />
+            )}
+
+            {filterMode === 'range' && (
+              <div className="flex items-center gap-1">
+                <Input
+                  type="date"
+                  value={filterStartDate}
+                  onChange={e => setFilterStartDate(e.target.value)}
+                  max={filterEndDate || undefined}
+                  className="py-1.5 px-2 text-xs font-bold"
+                />
+                <span className="text-xs text-slate-400">-</span>
+                <Input
+                  type="date"
+                  value={filterEndDate}
+                  onChange={e => setFilterEndDate(e.target.value)}
+                  min={filterStartDate || undefined}
+                  className="py-1.5 px-2 text-xs font-bold"
+                />
+              </div>
             )}
           </div>
         </div>
