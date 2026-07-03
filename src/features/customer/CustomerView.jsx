@@ -4,6 +4,7 @@ import { useAppContext } from '../../context/AppContext';
 import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2, Save, RotateCcw, X, Search } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import { PageHeader, Card, Input, Select, Button, EmptyState, BulkSelectBar } from '../../components/ui';
 import { useBulkSelect } from '../../hook/useBulkSelect';
 
@@ -14,6 +15,12 @@ const CustomerView = () => {
   const [customerSubTab, setCustomerSubTab] = useState('manage');
   const [showTrashCustomers, setShowTrashCustomers] = useState(false);
   const [showTrashVouchers, setShowTrashVouchers] = useState(false);
+
+  /* ── Filter Bulan/Rentang Tanggal untuk Riwayat Klaim Reward (tab Loyalitas) ── */
+  const [filterMode, setFilterMode] = useState('month'); // 'month' | 'range' | 'all'
+  const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
 
   // State Search & Filter — Pelanggan
   const [customerSearch, setCustomerSearch] = useState('');
@@ -187,6 +194,26 @@ const CustomerView = () => {
   };
 
   const loyalCustomers = useMemo(() => [...activeOnly(customers)].sort((a, b) => b.points - a.points), [customers]);
+
+  // Cek apakah tanggal klaim lolos filter aktif (mode bulan / rentang tanggal / semua).
+  // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
+  // aman dibandingkan leksikografis tanpa perlu konversi ke Date/timestamp.
+  const matchesDateFilter = (date) => {
+    if (filterMode === 'all') return true;
+    if (filterMode === 'range') {
+      if (!filterStartDate && !filterEndDate) return true;
+      const d = toLocalDateString(date);
+      if (filterStartDate && d < filterStartDate) return false;
+      if (filterEndDate && d > filterEndDate) return false;
+      return true;
+    }
+    // default: mode bulan
+    return filterMonth === '' || toLocalMonthString(date) === filterMonth;
+  };
+
+  const filteredClaimsHistory = useMemo(() => {
+    return claimsHistory.filter(claim => matchesDateFilter(claim.date));
+  }, [claimsHistory, filterMode, filterMonth, filterStartDate, filterEndDate]);
 
   // Daftar pelanggan & voucher yang sedang terlihat (sesuai mode Recycle Bin aktif)
   const visibleCustomers = showTrashCustomers ? trashedOnly(customers) : activeOnly(customers);
@@ -476,9 +503,51 @@ const CustomerView = () => {
             </Card>
 
             <Card padding="lg" className="animate-in fade-in slide-in-from-right-4 duration-300 max-w-3xl ease-out">
-              <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base mb-4 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-green-500 dark:text-green-400" /> Riwayat Klaim Reward & Tukar Poin</h3>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-green-500 dark:text-green-400" /> Riwayat Klaim Reward & Tukar Poin</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    value={filterMode}
+                    onChange={e => setFilterMode(e.target.value)}
+                    className="py-1.5 px-2 text-xs font-bold"
+                  >
+                    <option value="month">Per Bulan</option>
+                    <option value="range">Rentang Tanggal</option>
+                    <option value="all">Semua</option>
+                  </Select>
+
+                  {filterMode === 'month' && (
+                    <Input
+                      type="month"
+                      value={filterMonth}
+                      onChange={e => setFilterMonth(e.target.value)}
+                      className="py-1.5 px-2 text-xs font-bold"
+                    />
+                  )}
+
+                  {filterMode === 'range' && (
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="date"
+                        value={filterStartDate}
+                        onChange={e => setFilterStartDate(e.target.value)}
+                        max={filterEndDate || undefined}
+                        className="py-1.5 px-2 text-xs font-bold"
+                      />
+                      <span className="text-xs text-slate-400">-</span>
+                      <Input
+                        type="date"
+                        value={filterEndDate}
+                        onChange={e => setFilterEndDate(e.target.value)}
+                        min={filterStartDate || undefined}
+                        className="py-1.5 px-2 text-xs font-bold"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="space-y-3">
-                {claimsHistory.map(claim => (
+                {filteredClaimsHistory.map(claim => (
                   <div key={claim.id} className="flex justify-between items-center p-3.5 border border-green-100 dark:border-green-500/20 bg-green-50 dark:bg-green-500/20 rounded-2xl hover:bg-green-50 dark:hover:bg-green-500/40 transition-colors duration-300">
                     <div>
                       <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{claim.customerName}</p>
@@ -488,7 +557,7 @@ const CustomerView = () => {
                     <span className="bg-green-100 dark:bg-green-500/15 text-green-800 dark:text-green-300 text-xs font-bold px-3 py-1.5 rounded-lg border border-green-200 dark:border-green-500/30 shadow-sm">Selesai Klaim (-{claim.pointsUsed} Pts)</span>
                   </div>
                 ))}
-                {claimsHistory.length === 0 && <EmptyState size="sm" title="Belum ada riwayat klaim reward." />}
+                {filteredClaimsHistory.length === 0 && <EmptyState size="sm" title="Belum ada riwayat klaim reward pada periode ini." />}
               </div>
             </Card>
 

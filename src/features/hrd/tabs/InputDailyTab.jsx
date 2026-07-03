@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../../context/AppContext';
-import { toLocalDateString } from '../../../utils/formatters';
+import { toLocalDateString, toLocalMonthString } from '../../../utils/formatters';
 import { Card, Button, Input, Select, IconButton, Badge, SegmentedControl, Alert, SortModal, BulkSelectBar } from '../../../components/ui';
 import CategoryModal from '../../../components/CategoryModal';
 import { activeOnly, trashedOnly, markDeleted } from '../../../utils/softDelete';
@@ -115,6 +115,28 @@ const InputDailyTab = () => {
   const [expandedRecordId, setExpandedRecordId]     = useState(null);
   const [collapsedEmployees, setCollapsedEmployees] = useState(new Set());
   const [isSelecting, setIsSelecting]               = useState(false); // toggle mode "Pilih" utk bulk delete
+
+  /* ── Filter Bulan/Rentang Tanggal untuk Riwayat Input (kolom kanan) ── */
+  const [filterMode, setFilterMode] = useState('month'); // 'month' | 'range' | 'all'
+  const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+
+  // rec.dateStr sudah dalam format "YYYY-MM-DD" (lihat computeAttendanceFromLogs
+  // & baseFields di atas), jadi bisa langsung dibandingkan sebagai string tanpa
+  // konversi Date sama sekali.
+  const matchesDateFilter = (dateStr) => {
+    if (!dateStr) return true;
+    if (filterMode === 'all') return true;
+    if (filterMode === 'range') {
+      if (!filterStartDate && !filterEndDate) return true;
+      if (filterStartDate && dateStr < filterStartDate) return false;
+      if (filterEndDate && dateStr > filterEndDate) return false;
+      return true;
+    }
+    // default: mode bulan
+    return filterMonth === '' || dateStr.slice(0, 7) === filterMonth;
+  };
 
   const [adjType, setAdjType]                   = useState('addition');
   const [adjCategory, setAdjCategory]           = useState('');
@@ -349,9 +371,10 @@ const InputDailyTab = () => {
   const editNetAdjustment = editTotalAdditions - editTotalDeductions;
   const editingEmpName = editingRecord ? employees.find(e => e.id === editingRecord.employeeId)?.name : '';
 
-  /* ── Riwayat dikelompokkan per karyawan ── */
+  /* ── Riwayat dikelompokkan per karyawan (sudah kena filter tanggal) ── */
   const groupedRecords = useMemo(() => {
-    const rawList = showTrash ? trashedOnly(employeeDailyRecords) : activeOnly(employeeDailyRecords);
+    const rawList = (showTrash ? trashedOnly(employeeDailyRecords) : activeOnly(employeeDailyRecords))
+      .filter(rec => matchesDateFilter(rec.dateStr));
     const groups = new Map();
     rawList.forEach(rec => {
       if (!groups.has(rec.employeeId)) groups.set(rec.employeeId, []);
@@ -372,7 +395,7 @@ const InputDailyTab = () => {
     }
 
     return grouped;
-  }, [employeeDailyRecords, showTrash, dailySortKey, employees]);
+  }, [employeeDailyRecords, showTrash, dailySortKey, employees, filterMode, filterMonth, filterStartDate, filterEndDate]);
 
   // Daftar flat semua record yang sedang tampil (lintas semua grup karyawan, termasuk yang collapsed)
   const allVisibleRecords = useMemo(() => groupedRecords.flatMap(g => g.records), [groupedRecords]);
@@ -493,24 +516,69 @@ const InputDailyTab = () => {
 
       {/* ─── KOLOM KANAN: Riwayat Dikelompokkan per Karyawan ─── */}
       <Card padding="none" className="lg:col-span-2 flex flex-col h-[700px]">
-        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center rounded-t-2xl">
-          <h3 className="font-heading font-bold flex items-center gap-2">
-            <History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Input'}
-          </h3>
-          <div className="flex gap-3">
-            <button onClick={() => { setShowTrash(!showTrash); resetSelection(); setIsSelecting(false); }} className="text-xs font-bold text-slate-500">
-              {showTrash ? 'Kembali' : 'Recycle Bin'}
-            </button>
-            <button
-              onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
-              className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isSelecting ? 'bg-green-50 text-green-600' : 'text-slate-500'}`}
-            >
-              {isSelecting ? 'Batal' : 'Pilih'}
-            </button>
-            <button onClick={() => setIsDailySortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 border rounded-lg px-2 py-1.5">
-              <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
-            </button>
+        <div className="p-4 border-b border-slate-100 bg-slate-50 rounded-t-2xl space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="font-heading font-bold flex items-center gap-2">
+              <History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Input'}
+            </h3>
+            <div className="flex gap-3">
+              <button onClick={() => { setShowTrash(!showTrash); resetSelection(); setIsSelecting(false); }} className="text-xs font-bold text-slate-500">
+                {showTrash ? 'Kembali' : 'Recycle Bin'}
+              </button>
+              <button
+                onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
+                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isSelecting ? 'bg-green-50 text-green-600' : 'text-slate-500'}`}
+              >
+                {isSelecting ? 'Batal' : 'Pilih'}
+              </button>
+              <button onClick={() => setIsDailySortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 border rounded-lg px-2 py-1.5">
+                <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
+              </button>
+            </div>
           </div>
+
+          {!showTrash && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={filterMode}
+                onChange={e => setFilterMode(e.target.value)}
+                className="py-1.5 px-2 text-xs font-bold"
+              >
+                <option value="month">Per Bulan</option>
+                <option value="range">Rentang Tanggal</option>
+                <option value="all">Semua</option>
+              </Select>
+
+              {filterMode === 'month' && (
+                <Input
+                  type="month"
+                  value={filterMonth}
+                  onChange={e => setFilterMonth(e.target.value)}
+                  className="py-1.5 px-2 text-xs font-bold"
+                />
+              )}
+
+              {filterMode === 'range' && (
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="date"
+                    value={filterStartDate}
+                    onChange={e => setFilterStartDate(e.target.value)}
+                    max={filterEndDate || undefined}
+                    className="py-1.5 px-2 text-xs font-bold"
+                  />
+                  <span className="text-xs text-slate-400">-</span>
+                  <Input
+                    type="date"
+                    value={filterEndDate}
+                    onChange={e => setFilterEndDate(e.target.value)}
+                    min={filterStartDate || undefined}
+                    className="py-1.5 px-2 text-xs font-bold"
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
@@ -525,7 +593,9 @@ const InputDailyTab = () => {
           )}
 
           {groupedRecords.length === 0 && (
-            <p className="text-xs text-slate-400 text-center py-10">Belum ada riwayat input.</p>
+            <p className="text-xs text-slate-400 text-center py-10">
+              {showTrash ? 'Recycle bin kosong.' : 'Belum ada riwayat input pada periode ini.'}
+            </p>
           )}
 
           {groupedRecords.map(({ employee, records }) => {
