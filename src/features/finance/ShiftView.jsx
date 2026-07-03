@@ -618,7 +618,7 @@ const ShiftView = () => {
               iconRight={<Printer className="w-5 h-5" />} 
               onClick={handleCloseShift}
             >
-              Tutup Dompet & Cetak Laporan
+              Tutup Dompet & Cetak Laporan Hari Ini
             </Button>
           </Card>
         </div>
