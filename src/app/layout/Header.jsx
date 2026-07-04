@@ -15,7 +15,7 @@ export default function Header({
             </div>
             <div className="flex items-center gap-3">
                 {currentShift && <span className="hidden md:inline-block bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 px-3 py-1 rounded-full text-xs font-bold border border-blue-100 dark:border-blue-500/20"><Clock className="w-3 h-3 inline-block mr-1 mb-0.5" /> Dompet Aktif</span>}
-                <div className="flex items-center bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-full text-[10px] md:text-xs font-bold border border-slate-200 dark:border-slate-700 whitespace-nowrap">{today}</div>
+                <div className="hidden lg:flex items-center bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-full text-[10px] md:text-xs font-bold border border-slate-200 dark:border-slate-700 whitespace-nowrap">{today}</div>
             </div>
         </header>
     );
