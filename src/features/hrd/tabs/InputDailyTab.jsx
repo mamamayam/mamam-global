@@ -50,8 +50,6 @@ const computeAttendanceFromLogs = (employeeId, dateStr, logs) => {
       const earlyOvertimeMins = inMins <= EARLY_OVERTIME_THRESHOLD_MINUTES ? WORK_START_MINUTES - inMins : 0;
       const lateOvertimeMins = outMins >= OVERTIME_THRESHOLD_MINUTES ? outMins - WORK_END_MINUTES : 0;
       cOvertime = earlyOvertimeMins + lateOvertimeMins;
-      // Jam kerja normal TIDAK termasuk menit yang udah dibayar sebagai
-      // lembur (earlyOvertimeMins/lateOvertimeMins), supaya gak dobel bayar.
       const regularMinutes = calculateRegularMinutes(cIn, cOut, earlyOvertimeMins, lateOvertimeMins);
       const rawHours = Number((regularMinutes / 60).toFixed(2));
       const netHours = Number((rawHours - (cBolong / 60)).toFixed(4));
@@ -70,11 +68,9 @@ const computeAttendanceFromLogs = (employeeId, dateStr, logs) => {
 };
 
 /* ─────────────────────────────────────────────────────── */
-/* Komponen kecil untuk form item di dalam modal edit       */
-/* ─────────────────────────────────────────────────────── */
 const AdjRow = ({ item, onRemove, formatRupiah }) => {
   const isAddition = item._type === 'addition';
-  const isAuto = AUTO_ADJUSTMENT_CATEGORIES.includes(item.category);
+  const isAuto = item.isAuto || AUTO_ADJUSTMENT_CATEGORIES.includes(item.category);
   return (
     <div className={`flex items-center justify-between gap-2 p-2.5 rounded-lg border ${isAddition ? 'bg-green-50/60 border-green-100' : 'bg-red-50/60 border-red-100'}`}>
       <div className="flex-1 min-w-0">
@@ -91,7 +87,6 @@ const AdjRow = ({ item, onRemove, formatRupiah }) => {
     </div>
   );
 };
-
 /* ─────────────────────────────────────────────────────── */
 
 const InputDailyTab = () => {
@@ -100,31 +95,26 @@ const InputDailyTab = () => {
     employeeDailyRecords, setEmployeeDailyRecords,
     additionCategories, setAdditionCategories,
     deductionCategories, setDeductionCategories,
-    expenses, setExpenses, attendanceLog,
+    expenses, attendanceLog,
   } = useAppContext();
 
-  /* ── State Form Utama ── */
-  const [dailyDate, setDailyDate]   = useState(toLocalDateString());
+  const [dailyDate, setDailyDate] = useState(toLocalDateString());
   const [dailyEmpId, setDailyEmpId] = useState('');
-  const [additions, setAdditions]   = useState([]);
+  const [additions, setAdditions] = useState([]);
   const [deductions, setDeductions] = useState([]);
-  const [catModalType, setCatModalType]       = useState(null);
-  const [showTrash, setShowTrash]             = useState(false);
-  const [dailySortKey, setDailySortKey]       = useState('date-desc');
+  const [catModalType, setCatModalType] = useState(null);
+  const [showTrash, setShowTrash] = useState(false);
+  const [dailySortKey, setDailySortKey] = useState('date-desc');
   const [isDailySortOpen, setIsDailySortOpen] = useState(false);
-  const [expandedRecordId, setExpandedRecordId]     = useState(null);
+  const [expandedRecordId, setExpandedRecordId] = useState(null);
   const [collapsedEmployees, setCollapsedEmployees] = useState(new Set());
-  const [isSelecting, setIsSelecting]               = useState(false); // toggle mode "Pilih" utk bulk delete
+  const [isSelecting, setIsSelecting] = useState(false);
 
-  /* ── Filter Bulan/Rentang Tanggal untuk Riwayat Input (kolom kanan) ── */
-  const [filterMode, setFilterMode] = useState('month'); // 'month' | 'range' | 'all'
+  const [filterMode, setFilterMode] = useState('month');
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
 
-  // rec.dateStr sudah dalam format "YYYY-MM-DD" (lihat computeAttendanceFromLogs
-  // & baseFields di atas), jadi bisa langsung dibandingkan sebagai string tanpa
-  // konversi Date sama sekali.
   const matchesDateFilter = (dateStr) => {
     if (!dateStr) return true;
     if (filterMode === 'all') return true;
@@ -134,27 +124,26 @@ const InputDailyTab = () => {
       if (filterEndDate && dateStr > filterEndDate) return false;
       return true;
     }
-    // default: mode bulan
     return filterMonth === '' || dateStr.slice(0, 7) === filterMonth;
   };
 
-  const [adjType, setAdjType]                   = useState('addition');
-  const [adjCategory, setAdjCategory]           = useState('');
-  const [adjAmount, setAdjAmount]               = useState('');
-  const [adjNote, setAdjNote]                   = useState('');
+  const [adjType, setAdjType] = useState('addition');
+  const [adjCategory, setAdjCategory] = useState('');
+  const [adjAmount, setAdjAmount] = useState('');
+  const [adjNote, setAdjNote] = useState('');
   const [adjPaymentMethod, setAdjPaymentMethod] = useState('Tunai');
 
-  /* ── State Modal Edit ── */
-  const [editingRecord, setEditingRecord]               = useState(null);
-  const [editAdditions, setEditAdditions]               = useState([]);
-  const [editDeductions, setEditDeductions]             = useState([]);
-  const [editAdjType, setEditAdjType]                   = useState('addition');
-  const [editAdjCategory, setEditAdjCategory]           = useState('');
-  const [editAdjAmount, setEditAdjAmount]               = useState('');
-  const [editAdjNote, setEditAdjNote]                   = useState('');
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [editAdditions, setEditAdditions] = useState([]);
+  const [editDeductions, setEditDeductions] = useState([]);
+  const [editAdjType, setEditAdjType] = useState('addition');
+  const [editAdjCategory, setEditAdjCategory] = useState('');
+  const [editAdjAmount, setEditAdjAmount] = useState('');
+  const [editAdjNote, setEditAdjNote] = useState('');
   const [editAdjPaymentMethod, setEditAdjPaymentMethod] = useState('Tunai');
+  const [editClockIn, setEditClockIn] = useState('');
+  const [editClockOut, setEditClockOut] = useState('');
 
-  /* ── Helpers ── */
   const formatRupiah = (amount) => `Rp${Number(amount || 0).toLocaleString('id-ID')}`;
   const formatJam = (hours) => {
     const h = Number(hours) || 0;
@@ -169,22 +158,26 @@ const InputDailyTab = () => {
     });
   };
 
-  /* ── hasAdjustments ── */
+  /* ── Helper SSoT: Ambil Kasbon dinamis dari Expenses ── */
+  const getDerivedKasbon = (empId, dateStr) => {
+    if (!expenses || expenses.length === 0) return [];
+    return expenses
+      .filter(e => !e.deletedAt && e.employeeId === empId && toLocalDateString(e.date) === dateStr && (e.category === 'Kasbon Karyawan' || e.category.toLowerCase().includes('kasbon')))
+      .map(e => ({
+        id: e.id,
+        category: 'Kasbon (Dompet)',
+        amount: e.amount,
+        note: e.note,
+        _type: 'deduction',
+        isAuto: true
+      }));
+  };
+
   const hasAdjustments = useMemo(() => {
     const r = employeeDailyRecords.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
     return r && (r.additions?.length > 0 || r.deductions?.length > 0);
   }, [dailyEmpId, dailyDate, employeeDailyRecords]);
 
-  /* ── Effect 1: Auto-sync absensi → employeeDailyRecords ──
-     Nyimak SEMUA tanggal yang ada di attendanceLog (bukan cuma dailyDate
-     yang sedang dibuka di form), dan langsung ngitung + nempelin Bonus
-     Full Time / Bonus Lembur via mergeAutoAdjustments. Ini satu-satunya
-     sumber kebenaran sync data, jadi gak peduli datanya masuk dari absensi
-     auto, web app karyawan, atau record dibuat manual — begitu masuk ke
-     attendanceLog, record + bonusnya langsung kebentuk/keupdate sendiri,
-     tanpa nunggu admin buka tanggal itu di form atau pencet Simpan.
-     Juga ikut nyimak `employees` supaya kalau fullTimeBonus/overtimeRate30
-     diubah di Kelola Karyawan, bonus yang udah tersimpan ikut ke-update. */
   useEffect(() => {
     if (!attendanceLog) return;
     const activeLogs = activeOnly(attendanceLog);
@@ -204,7 +197,25 @@ const InputDailyTab = () => {
         const prevIndex = next.findIndex(r => !r.deletedAt && r.employeeId === empId && r.dateStr === dateStr);
         const prevExisting = prevIndex >= 0 ? next[prevIndex] : null;
 
-        const baseFields = { isDayOff: result.isDayOff, clockIn: result.clockIn, clockOut: result.clockOut, hoursWorked: result.hoursWorked, bolongMinutes: result.bolongMinutes, overtimeMinutes: result.overtimeMinutes };
+        const baseFields = prevExisting?.isManualOverride ? 
+          { 
+            isDayOff: prevExisting.isDayOff, 
+            clockIn: prevExisting.clockIn, 
+            clockOut: prevExisting.clockOut, 
+            hoursWorked: prevExisting.hoursWorked, 
+            bolongMinutes: prevExisting.bolongMinutes, 
+            overtimeMinutes: prevExisting.overtimeMinutes,
+            isManualOverride: true 
+          } : 
+          { 
+            isDayOff: result.isDayOff, 
+            clockIn: result.clockIn, 
+            clockOut: result.clockOut, 
+            hoursWorked: result.hoursWorked, 
+            bolongMinutes: result.bolongMinutes, 
+            overtimeMinutes: result.overtimeMinutes 
+          };
+
         const recordSnapshot = { ...prevExisting, ...baseFields, employeeId: empId, dateStr };
         const recalculatedAdditions = mergeAutoAdjustments(prevExisting?.additions, recordSnapshot, emp);
 
@@ -229,10 +240,6 @@ const InputDailyTab = () => {
     });
   }, [attendanceLog, employees, setEmployeeDailyRecords]);
 
-  /* ── Effect 2: Load adj dari record yang sudah ada ──
-     Record yang dimuat ke sini udah pasti termasuk Bonus Full Time/Lembur
-     yang fresh (dari Effect 1 di atas) — form ini sekarang cuma dipakai
-     buat nambah/edit item MANUAL (kasbon, bonus custom, dll). */
   useEffect(() => {
     if (dailyEmpId && dailyDate) {
       const r = employeeDailyRecords.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
@@ -243,11 +250,10 @@ const InputDailyTab = () => {
     }
   }, [dailyEmpId, dailyDate, employeeDailyRecords]);
 
-  /* ── Handler Form Utama ── */
   const handleAddAdjustment = () => {
     if (!adjCategory) return triggerAlert('Pilih kategori terlebih dahulu!');
     if (!adjAmount || Number(adjAmount) <= 0) return triggerAlert('Masukkan nominal yang valid!');
-    const newItem = { id: Date.now() + Math.random(), category: adjCategory, amount: Number(adjAmount), note: adjNote, paymentMethod: adjType === 'deduction' ? adjPaymentMethod : null, expenseRecorded: false };
+    const newItem = { id: Date.now() + Math.random(), category: adjCategory, amount: Number(adjAmount), note: adjNote, paymentMethod: adjType === 'deduction' ? adjPaymentMethod : null };
     if (adjType === 'addition') setAdditions(prev => [...prev, newItem]);
     else setDeductions(prev => [...prev, newItem]);
     setAdjAmount(''); setAdjNote('');
@@ -262,56 +268,42 @@ const InputDailyTab = () => {
     if (!dailyEmpId || !dailyDate) return triggerAlert('Pilih karyawan & tanggal terlebih dahulu!');
     const validDeductions = deductions.filter(d => d.category && d.amount > 0);
     const emp = employees.find(e => e.id === dailyEmpId);
-    const empName = emp?.name || 'Karyawan';
-    const generatedExpenses = [];
-    const updatedDeductions = validDeductions.map(d => {
-      if (d.paymentMethod === 'Tunai' && !d.expenseRecorded) {
-        generatedExpenses.push({ id: `EXP-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, amount: d.amount, category: 'Lain-lain', note: `Potongan ${empName} (${d.category})${d.note ? ' - ' + d.note : ''}`, date: new Date(dailyDate), paymentMethod: 'Tunai', employeeId: dailyEmpId });
-        return { ...d, expenseRecorded: true };
-      }
-      return d;
-    });
-    if (generatedExpenses.length > 0) setExpenses([...generatedExpenses, ...expenses]);
     const validAdditions = additions.filter(a => a.category && a.amount > 0);
+
     setEmployeeDailyRecords(prev => {
       const existing = prev.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
-      // Hitung ulang auto-adjustment (Bonus Full Time/Lembur) dari data absensi
-      // terkini—jaga-jaga kalau Effect 1 belum sempat jalan duluan. Item manual
-      // (additions dari state form) digabung, item auto lama otomatis diganti baru.
       if (existing) {
         const finalAdditions = mergeAutoAdjustments(validAdditions, existing, emp);
-        return prev.map(r => r.id === existing.id ? { ...r, additions: finalAdditions, deductions: updatedDeductions } : r);
+        return prev.map(r => r.id === existing.id ? { ...r, additions: finalAdditions, deductions: validDeductions } : r);
       }
       const computed = computeAttendanceFromLogs(dailyEmpId, dailyDate, attendanceLog);
       const newRecordBase = { employeeId: dailyEmpId, dateStr: dailyDate, isDayOff: computed.isDayOff, clockIn: computed.clockIn, clockOut: computed.clockOut, hoursWorked: computed.hoursWorked, bolongMinutes: computed.bolongMinutes, overtimeMinutes: computed.overtimeMinutes };
       const finalAdditions = mergeAutoAdjustments(validAdditions, newRecordBase, emp);
-      return [{ id: `REC-${Date.now()}`, date: new Date(dailyDate), ...newRecordBase, additions: finalAdditions, deductions: updatedDeductions }, ...prev];
+      return [{ id: `REC-${Date.now()}`, date: new Date(dailyDate), ...newRecordBase, additions: finalAdditions, deductions: validDeductions }, ...prev];
     });
     triggerAlert(hasAdjustments ? 'Perubahan berhasil diupdate!' : 'Data berhasil disimpan!');
   };
 
-  /* ── Handler Delete / Move to Trash ── */
   const handleDeleteRecord = (rec) => {
     if (showTrash) {
-      // Jika berada di Recycle Bin, konfirmasi sebelum hapus permanen
       triggerConfirm('Apakah Anda yakin ingin menghapus permanen data ini? Tindakan ini tidak dapat dibatalkan.', () => {
         setEmployeeDailyRecords(prev => prev.filter(r => r.id !== rec.id));
         triggerAlert('Data berhasil dihapus secara permanen!');
       });
     } else {
-      // Jika di riwayat biasa, lakukan soft delete (pindah ke trash)
       setEmployeeDailyRecords(prev => prev.map(r => r.id === rec.id ? markDeleted(r) : r));
       triggerAlert('Data berhasil dipindahkan ke Recycle Bin!');
     }
   };
 
-  /* ── Handler Modal Edit ── */
   const handleOpenEdit = (rec) => {
     setEditingRecord(rec);
     setEditAdditions(rec.additions || []);
     setEditDeductions(rec.deductions || []);
     setEditAdjType('addition');
     setEditAdjCategory(''); setEditAdjAmount(''); setEditAdjNote(''); setEditAdjPaymentMethod('Tunai');
+    setEditClockIn(rec.clockIn || '');
+    setEditClockOut(rec.clockOut || '');
   };
 
   const handleCloseEdit = () => setEditingRecord(null);
@@ -319,7 +311,7 @@ const InputDailyTab = () => {
   const handleEditAddAdjustment = () => {
     if (!editAdjCategory) return triggerAlert('Pilih kategori terlebih dahulu!');
     if (!editAdjAmount || Number(editAdjAmount) <= 0) return triggerAlert('Masukkan nominal yang valid!');
-    const newItem = { id: Date.now() + Math.random(), category: editAdjCategory, amount: Number(editAdjAmount), note: editAdjNote, paymentMethod: editAdjType === 'deduction' ? editAdjPaymentMethod : null, expenseRecorded: false };
+    const newItem = { id: Date.now() + Math.random(), category: editAdjCategory, amount: Number(editAdjAmount), note: editAdjNote, paymentMethod: editAdjType === 'deduction' ? editAdjPaymentMethod : null };
     if (editAdjType === 'addition') setEditAdditions(prev => [...prev, newItem]);
     else setEditDeductions(prev => [...prev, newItem]);
     setEditAdjAmount(''); setEditAdjNote('');
@@ -333,45 +325,89 @@ const InputDailyTab = () => {
   const handleSaveEdit = () => {
     if (!editingRecord) return;
     const emp = employees.find(e => e.id === editingRecord.employeeId);
-    const empName = emp?.name || 'Karyawan';
     const validAdditions = editAdditions.filter(a => a.category && a.amount > 0);
     const validDeductions = editDeductions.filter(d => d.category && d.amount > 0);
-    const generatedExpenses = [];
-    const updatedDeductions = validDeductions.map(d => {
-      if (d.paymentMethod === 'Tunai' && !d.expenseRecorded) {
-        generatedExpenses.push({ id: `EXP-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, amount: d.amount, category: 'Lain-lain', note: `Potongan ${empName} (${d.category})${d.note ? ' - ' + d.note : ''}`, date: new Date(editingRecord.dateStr), paymentMethod: 'Tunai', employeeId: editingRecord.employeeId });
-        return { ...d, expenseRecorded: true };
+    
+    let updatedFields = {};
+    let isManualOverride = editingRecord.isManualOverride || false;
+
+    if (editClockIn !== editingRecord.clockIn || editClockOut !== editingRecord.clockOut) {
+      isManualOverride = true;
+      const cIn = editClockIn;
+      const cOut = editClockOut;
+      let cHours = 0, cOvertime = 0;
+      const cBolong = editingRecord.bolongMinutes || 0; 
+
+      if (cIn && cOut) {
+        const inMins = timeStrToMinutes(cIn);
+        const outMins = timeStrToMinutes(cOut);
+        const earlyOvertimeMins = inMins <= EARLY_OVERTIME_THRESHOLD_MINUTES ? WORK_START_MINUTES - inMins : 0;
+        const lateOvertimeMins = outMins >= OVERTIME_THRESHOLD_MINUTES ? outMins - WORK_END_MINUTES : 0;
+        cOvertime = earlyOvertimeMins + lateOvertimeMins;
+        
+        const regularMinutes = calculateRegularMinutes(cIn, cOut, earlyOvertimeMins, lateOvertimeMins);
+        const rawHours = Number((regularMinutes / 60).toFixed(2));
+        const netHours = Number((rawHours - (cBolong / 60)).toFixed(4));
+        cHours = netHours > 0 ? Math.ceil(netHours * 10) / 10 : 0;
       }
-      return d;
-    });
-    if (generatedExpenses.length > 0) setExpenses([...generatedExpenses, ...expenses]);
-    // Sama seperti handleSaveDailyRecord: hitung ulang Bonus Full Time/Lembur dari
-    // data absensi yang tersimpan di record ini, jangan cuma percaya additions lama.
-    const finalAdditions = mergeAutoAdjustments(validAdditions, editingRecord, emp);
-    setEmployeeDailyRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, additions: finalAdditions, deductions: updatedDeductions } : r));
+
+      updatedFields = {
+        clockIn: cIn,
+        clockOut: cOut,
+        hoursWorked: cHours,
+        overtimeMinutes: cOvertime,
+        isManualOverride
+      };
+    }
+
+    const recordSnapshot = { ...editingRecord, ...updatedFields };
+    const finalAdditions = mergeAutoAdjustments(validAdditions, recordSnapshot, emp);
+    
+    setEmployeeDailyRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...updatedFields, additions: finalAdditions, deductions: validDeductions } : r));
     triggerAlert('Perubahan berhasil disimpan!');
     handleCloseEdit();
   };
 
-  /* ── Computed values form utama ── */
   const hasUnsavedAdjustments = useMemo(() => {
     const existing = employeeDailyRecords.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
     return JSON.stringify(additions) !== JSON.stringify(existing?.additions || []) || JSON.stringify(deductions) !== JSON.stringify(existing?.deductions || []);
   }, [additions, deductions, dailyEmpId, dailyDate, employeeDailyRecords]);
 
-  const adjustmentRows = useMemo(() => ([...additions.map(a => ({ ...a, _type: 'addition' })), ...deductions.map(d => ({ ...d, _type: 'deduction' }))]), [additions, deductions]);
+  // Derived Kasbon Logic for Main Form
+  const derivedKasbon = useMemo(() => getDerivedKasbon(dailyEmpId, dailyDate), [expenses, dailyEmpId, dailyDate]);
+  
+  const adjustmentRows = useMemo(() => ([
+    ...additions.map(a => ({ ...a, _type: 'addition' })), 
+    ...deductions.map(d => ({ ...d, _type: 'deduction' })),
+    ...derivedKasbon
+  ]), [additions, deductions, derivedKasbon]);
+  
   const totalAdditions = useMemo(() => additions.reduce((s, a) => s + (Number(a.amount) || 0), 0), [additions]);
-  const totalDeductions = useMemo(() => deductions.reduce((s, d) => s + (Number(d.amount) || 0), 0), [deductions]);
+  const totalDeductions = useMemo(() => 
+    deductions.reduce((s, d) => s + (Number(d.amount) || 0), 0) + 
+    derivedKasbon.reduce((s, d) => s + (Number(d.amount) || 0), 0), 
+  [deductions, derivedKasbon]);
+  
   const netAdjustment = totalAdditions - totalDeductions;
 
-  /* ── Computed values modal edit ── */
-  const editAdjRows = useMemo(() => ([...editAdditions.map(a => ({ ...a, _type: 'addition' })), ...editDeductions.map(d => ({ ...d, _type: 'deduction' }))]), [editAdditions, editDeductions]);
+  // Derived Kasbon Logic for Edit Modal
+  const editDerivedKasbon = useMemo(() => editingRecord ? getDerivedKasbon(editingRecord.employeeId, editingRecord.dateStr) : [], [expenses, editingRecord]);
+  
+  const editAdjRows = useMemo(() => ([
+    ...editAdditions.map(a => ({ ...a, _type: 'addition' })), 
+    ...editDeductions.map(d => ({ ...d, _type: 'deduction' })),
+    ...editDerivedKasbon
+  ]), [editAdditions, editDeductions, editDerivedKasbon]);
+  
   const editTotalAdditions = useMemo(() => editAdditions.reduce((s, a) => s + (Number(a.amount) || 0), 0), [editAdditions]);
-  const editTotalDeductions = useMemo(() => editDeductions.reduce((s, d) => s + (Number(d.amount) || 0), 0), [editDeductions]);
+  const editTotalDeductions = useMemo(() => 
+    editDeductions.reduce((s, d) => s + (Number(d.amount) || 0), 0) + 
+    editDerivedKasbon.reduce((s, d) => s + (Number(d.amount) || 0), 0), 
+  [editDeductions, editDerivedKasbon]);
+  
   const editNetAdjustment = editTotalAdditions - editTotalDeductions;
   const editingEmpName = editingRecord ? employees.find(e => e.id === editingRecord.employeeId)?.name : '';
 
-  /* ── Riwayat dikelompokkan per karyawan (sudah kena filter tanggal) ── */
   const groupedRecords = useMemo(() => {
     const rawList = (showTrash ? trashedOnly(employeeDailyRecords) : activeOnly(employeeDailyRecords))
       .filter(rec => matchesDateFilter(rec.dateStr));
@@ -386,21 +422,16 @@ const InputDailyTab = () => {
       records: recs.sort((a, b) => new Date(b.date) - new Date(a.date)),
     }));
 
-    // Sort antar kelompok karyawan
     if (dailySortKey === 'name-asc') {
       grouped.sort((a, b) => (a.employee?.name || '').localeCompare(b.employee?.name || ''));
     } else {
-      // date-desc: urut berdasar record terbaru tiap karyawan
       grouped.sort((a, b) => new Date(b.records[0]?.date) - new Date(a.records[0]?.date));
     }
 
     return grouped;
   }, [employeeDailyRecords, showTrash, dailySortKey, employees, filterMode, filterMonth, filterStartDate, filterEndDate]);
 
-  // Daftar flat semua record yang sedang tampil (lintas semua grup karyawan, termasuk yang collapsed)
   const allVisibleRecords = useMemo(() => groupedRecords.flatMap(g => g.records), [groupedRecords]);
-
-  // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih"
   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(allVisibleRecords);
 
   const handleBulkSoftDelete = () => {
@@ -423,13 +454,9 @@ const InputDailyTab = () => {
     });
   };
 
-  /* ══════════════════════════════════════════════════ */
-  /*  RENDER                                           */
-  /* ══════════════════════════════════════════════════ */
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full animate-in fade-in slide-in-from-right-4 duration-300">
-
-      {/* ─── KOLOM KIRI: Form Tambahan & Potongan ─── */}
+      {/* ─── KOLOM KIRI ─── */}
       <div className="lg:col-span-1 flex flex-col gap-6">
         <div>
           <Card padding="lg" className="flex flex-col h-fit relative">
@@ -480,14 +507,12 @@ const InputDailyTab = () => {
                 <div>
                   <label className="text-xs font-bold text-slate-500 mb-1.5 block">Metode Pembayaran</label>
                   <SegmentedControl options={[{ value: 'Tunai', label: 'Tunai' }, { value: 'Non-Tunai', label: 'Non-Tunai' }]} value={adjPaymentMethod} onChange={setAdjPaymentMethod} />
-                  <p className="text-[10px] text-slate-400 mt-1">Tunai = otomatis tercatat sebagai pengeluaran kas.</p>
                 </div>
               )}
               <Button variant={adjType === 'addition' ? 'success' : 'danger'} size="full" icon={<Plus className="w-4 h-4" />} onClick={handleAddAdjustment}>
                 {adjType === 'addition' ? 'Tambah Penghasilan' : 'Tambah Potongan'}
               </Button>
 
-              {/* Rincian transaksi yang sedang di-compose */}
               <div className="pt-3 border-t border-slate-100">
                 <p className="text-xs font-bold text-slate-500 mb-2">Rincian Transaksi</p>
                 {adjustmentRows.length === 0
@@ -514,7 +539,7 @@ const InputDailyTab = () => {
         </div>
       </div>
 
-      {/* ─── KOLOM KANAN: Riwayat Dikelompokkan per Karyawan ─── */}
+      {/* ─── KOLOM KANAN ─── */}
       <Card padding="none" className="lg:col-span-2 flex flex-col h-[700px]">
         <div className="p-4 border-b border-slate-100 bg-slate-50 rounded-t-2xl space-y-3">
           <div className="flex justify-between items-center">
@@ -539,42 +564,19 @@ const InputDailyTab = () => {
 
           {!showTrash && (
             <div className="flex flex-wrap items-center gap-2">
-              <Select
-                value={filterMode}
-                onChange={e => setFilterMode(e.target.value)}
-                className="py-1.5 px-2 text-xs font-bold"
-              >
+              <Select value={filterMode} onChange={e => setFilterMode(e.target.value)} className="py-1.5 px-2 text-xs font-bold">
                 <option value="month">Per Bulan</option>
                 <option value="range">Rentang Tanggal</option>
                 <option value="all">Semua</option>
               </Select>
-
               {filterMode === 'month' && (
-                <Input
-                  type="month"
-                  value={filterMonth}
-                  onChange={e => setFilterMonth(e.target.value)}
-                  className="py-1.5 px-2 text-xs font-bold"
-                />
+                <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="py-1.5 px-2 text-xs font-bold" />
               )}
-
               {filterMode === 'range' && (
                 <div className="flex items-center gap-1">
-                  <Input
-                    type="date"
-                    value={filterStartDate}
-                    onChange={e => setFilterStartDate(e.target.value)}
-                    max={filterEndDate || undefined}
-                    className="py-1.5 px-2 text-xs font-bold"
-                  />
+                  <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} max={filterEndDate || undefined} className="py-1.5 px-2 text-xs font-bold" />
                   <span className="text-xs text-slate-400">-</span>
-                  <Input
-                    type="date"
-                    value={filterEndDate}
-                    onChange={e => setFilterEndDate(e.target.value)}
-                    min={filterStartDate || undefined}
-                    className="py-1.5 px-2 text-xs font-bold"
-                  />
+                  <Input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} min={filterStartDate || undefined} className="py-1.5 px-2 text-xs font-bold" />
                 </div>
               )}
             </div>
@@ -583,13 +585,7 @@ const InputDailyTab = () => {
 
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
           {isSelecting && allVisibleRecords.length > 0 && (
-            <BulkSelectBar
-              count={count}
-              total={allVisibleRecords.length}
-              allSelected={allSelected}
-              onToggleAll={toggleSelectAll}
-              onDeleteSelected={showTrash ? handleBulkPermanentDelete : handleBulkSoftDelete}
-            />
+            <BulkSelectBar count={count} total={allVisibleRecords.length} allSelected={allSelected} onToggleAll={toggleSelectAll} onDeleteSelected={showTrash ? handleBulkPermanentDelete : handleBulkSoftDelete} />
           )}
 
           {groupedRecords.length === 0 && (
@@ -602,18 +598,16 @@ const InputDailyTab = () => {
             const empId = employee?.id || records[0]?.employeeId;
             const isCollapsed = collapsedEmployees.has(empId);
 
-            // Total akumulasi per karyawan (semua record)
             const empTotalAdd = records.reduce((s, r) => s + (r.additions || []).reduce((ss, a) => ss + (a.amount || 0), 0), 0);
-            const empTotalDed = records.reduce((s, r) => s + (r.deductions || []).reduce((ss, d) => ss + (d.amount || 0), 0), 0);
+            const empTotalDed = records.reduce((s, r) => {
+              const manualDed = (r.deductions || []).reduce((ss, d) => ss + (d.amount || 0), 0);
+              const autoKasbon = getDerivedKasbon(r.employeeId, r.dateStr).reduce((ss, d) => ss + (d.amount || 0), 0);
+              return s + manualDed + autoKasbon;
+            }, 0);
 
             return (
               <div key={empId} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-
-                {/* ── Header Karyawan (klik untuk collapse) ── */}
-                <button
-                  onClick={() => toggleEmployeeCollapse(empId)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 transition-colors"
-                >
+                <button onClick={() => toggleEmployeeCollapse(empId)} className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 transition-colors">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
                       <User className="w-4 h-4 text-slate-500" />
@@ -630,91 +624,56 @@ const InputDailyTab = () => {
                   </div>
                 </button>
 
-                {/* ── List Record Karyawan ── */}
                 {!isCollapsed && (
                   <div className="divide-y divide-slate-100">
                     {records.map(rec => {
                       const isExpanded = expandedRecordId === rec.id;
+                      const recDerivedKasbon = getDerivedKasbon(rec.employeeId, rec.dateStr);
                       const recTotalAdd = (rec.additions || []).reduce((s, a) => s + (a.amount || 0), 0);
-                      const recTotalDed = (rec.deductions || []).reduce((s, d) => s + (d.amount || 0), 0);
-                      const hasAdj = (rec.additions?.length || 0) + (rec.deductions?.length || 0) > 0;
+                      const recTotalDed = (rec.deductions || []).reduce((s, d) => s + (d.amount || 0), 0) + recDerivedKasbon.reduce((s, d) => s + (d.amount || 0), 0);
+                      const hasAdj = (rec.additions?.length || 0) + (rec.deductions?.length || 0) + recDerivedKasbon.length > 0;
 
                       return (
                         <div key={rec.id} className={`px-3 py-2.5 bg-white ${selectedIds.has(rec.id) ? 'bg-orange-50/60' : ''}`}>
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-start gap-2 flex-1 min-w-0">
                               {isSelecting && (
-                                <input
-                                  type="checkbox"
-                                  checked={selectedIds.has(rec.id)}
-                                  onChange={() => toggleSelectOne(rec.id)}
-                                  className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
-                                />
+                                <input type="checkbox" checked={selectedIds.has(rec.id)} onChange={() => toggleSelectOne(rec.id)} className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0" />
                               )}
                               <div className="flex-1 min-w-0">
-                              {/* Baris 1: Tanggal + jam kerja */}
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md font-mono">{rec.dateStr}</span>
-                                {rec.isDayOff ? (
-                                  <Badge variant="neutral">Libur</Badge>
-                                ) : (
+                                {rec.isDayOff ? <Badge variant="neutral">Libur</Badge> : (
                                   <span className="text-[11px] text-slate-500 flex items-center gap-1">
                                     <Clock className="w-3 h-3" />
                                     {formatJam(rec.hoursWorked) ? `${formatJam(rec.hoursWorked)} jam` : 'Belum clock-out'}
                                   </span>
                                 )}
                               </div>
-
-                              {/* Baris 2: Ringkasan tambahan/potongan */}
                               {hasAdj ? (
                                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                                  {recTotalAdd > 0 && (
-                                    <span className="text-[11px] font-semibold text-green-700 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded-md">
-                                      +{formatRupiah(recTotalAdd)} ({rec.additions.length})
-                                    </span>
-                                  )}
-                                  {recTotalDed > 0 && (
-                                    <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-md">
-                                      -{formatRupiah(recTotalDed)} ({rec.deductions.length})
-                                    </span>
-                                  )}
+                                  {recTotalAdd > 0 && <span className="text-[11px] font-semibold text-green-700 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded-md">+{formatRupiah(recTotalAdd)}</span>}
+                                  {recTotalDed > 0 && <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-md">-{formatRupiah(recTotalDed)}</span>}
                                 </div>
-                              ) : (
-                                <p className="text-[11px] text-slate-400 mt-1">Belum ada rincian tambahan/potongan.</p>
-                              )}
+                              ) : <p className="text-[11px] text-slate-400 mt-1">Belum ada rincian tambahan/potongan.</p>}
                               </div>
                             </div>
-
-                            {/* Tombol aksi */}
                             <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                onClick={() => setExpandedRecordId(isExpanded ? null : rec.id)}
-                                className="p-1.5 rounded-md text-blue-400 hover:text-blue-700 hover:bg-blue-50 transition-colors"
-                                title="Detail Jam Kerja"
-                              >
+                              <button onClick={() => setExpandedRecordId(isExpanded ? null : rec.id)} className="p-1.5 rounded-md text-blue-400 hover:text-blue-700 hover:bg-blue-50 transition-colors">
                                 {isExpanded ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                               </button>
                               {!showTrash && (
-                                <IconButton variant="edit" onClick={() => handleOpenEdit(rec)} title="Edit Tambahan/Potongan">
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </IconButton>
+                                <IconButton variant="edit" onClick={() => handleOpenEdit(rec)} title="Edit Tambahan/Potongan"><Edit3 className="w-3.5 h-3.5" /></IconButton>
                               )}
-                              <IconButton 
-                                variant="delete" 
-                                onClick={() => handleDeleteRecord(rec)}
-                                title={showTrash ? "Hapus Permanen" : "Hapus ke Recycle Bin"}
-                              >
+                              <IconButton variant="delete" onClick={() => handleDeleteRecord(rec)} title={showTrash ? "Hapus Permanen" : "Hapus ke Recycle Bin"}>
                                 <Trash2 className="w-3.5 h-3.5" />
                               </IconButton>
                             </div>
                           </div>
 
-                          {/* Expanded: detail jam absensi + rincian adj */}
                           {isExpanded && (
                             <div className="mt-2.5 pt-2.5 border-t border-slate-100 animate-in fade-in duration-200">
-                              {rec.isDayOff ? (
-                                <p className="text-xs text-slate-400 text-center py-2">Tidak ada data absensi (Libur).</p>
-                              ) : (
+                              {rec.isDayOff ? <p className="text-xs text-slate-400 text-center py-2">Tidak ada data absensi (Libur).</p> : (
                                 <>
                                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
                                     <StatField label="Jam Masuk" value={rec.clockIn} />
@@ -725,14 +684,13 @@ const InputDailyTab = () => {
                                     <StatField label="Total Jam" value={formatJam(rec.hoursWorked) || '0,0'} highlight />
                                   </div>
 
-                                  {/* Rincian adj inline */}
                                   {hasAdj && (
                                     <div className="bg-slate-50 rounded-lg p-2.5">
                                       <p className="text-[11px] font-bold text-slate-500 mb-2">Rincian Tambahan / Potongan</p>
                                       <div className="space-y-1">
-                                        {[...(rec.additions || []).map(a => ({ ...a, _type: 'addition' })), ...(rec.deductions || []).map(d => ({ ...d, _type: 'deduction' }))].map(item => (
+                                        {[...(rec.additions || []).map(a => ({ ...a, _type: 'addition' })), ...(rec.deductions || []).map(d => ({ ...d, _type: 'deduction' })), ...recDerivedKasbon].map(item => (
                                           <div key={item.id} className={`flex justify-between items-center text-[11px] px-2 py-1.5 rounded-md ${item._type === 'addition' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
-                                            <span className="font-semibold truncate pr-2">{item.category}{item.note ? ` · ${item.note}` : ''}</span>
+                                            <span className="font-semibold truncate pr-2">{item.category}{item.isAuto ? ' (Otomatis)' : ''}{item.note ? ` · ${item.note}` : ''}</span>
                                             <span className="font-bold shrink-0">{item._type === 'addition' ? '+' : '-'}{formatRupiah(item.amount)}</span>
                                           </div>
                                         ))}
@@ -760,25 +718,33 @@ const InputDailyTab = () => {
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col animate-in zoom-in-95 fade-in duration-200">
-
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-slate-100">
               <div>
                 <h3 className="font-heading font-bold text-slate-800">{editingEmpName}</h3>
-                <p className="text-xs text-slate-400 mt-0.5">{editingRecord.dateStr} · Edit Tambahan & Potongan</p>
+                <p className="text-xs text-slate-400 mt-0.5">{editingRecord.dateStr} · Edit Rincian Harian</p>
               </div>
-              <button onClick={handleCloseEdit} className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={handleCloseEdit} className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
             </div>
-
-            {/* Modal Body */}
+            
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <SegmentedControl
-                options={[{ value: 'addition', label: 'Penghasilan (+)', tone: 'green' }, { value: 'deduction', label: 'Potongan (-)', tone: 'red' }]}
-                value={editAdjType}
-                onChange={(val) => { setEditAdjType(val); setEditAdjCategory(''); }}
-              />
+              <div className="grid grid-cols-2 gap-3 pb-4 border-b border-slate-100">
+                <Input 
+                  type="time" 
+                  label="Jam Masuk" 
+                  variant="muted" 
+                  value={editClockIn} 
+                  onChange={e => setEditClockIn(e.target.value)} 
+                />
+                <Input 
+                  type="time" 
+                  label="Jam Keluar" 
+                  variant="muted" 
+                  value={editClockOut} 
+                  onChange={e => setEditClockOut(e.target.value)} 
+                />
+              </div>
+
+              <SegmentedControl options={[{ value: 'addition', label: 'Penghasilan (+)', tone: 'green' }, { value: 'deduction', label: 'Potongan (-)', tone: 'red' }]} value={editAdjType} onChange={(val) => { setEditAdjType(val); setEditAdjCategory(''); }} />
               <div>
                 <label className="text-xs font-bold text-slate-500 mb-1.5 block">Kategori</label>
                 <Select variant="muted" value={editAdjCategory} onChange={e => setEditAdjCategory(e.target.value)}>
@@ -795,27 +761,15 @@ const InputDailyTab = () => {
                 <div>
                   <label className="text-xs font-bold text-slate-500 mb-1.5 block">Metode Pembayaran</label>
                   <SegmentedControl options={[{ value: 'Tunai', label: 'Tunai' }, { value: 'Non-Tunai', label: 'Non-Tunai' }]} value={editAdjPaymentMethod} onChange={setEditAdjPaymentMethod} />
-                  <p className="text-[10px] text-slate-400 mt-1">Tunai = otomatis tercatat sebagai pengeluaran kas.</p>
                 </div>
               )}
-              <Button
-                variant={editAdjType === 'addition' ? 'success' : 'danger'}
-                size="full"
-                icon={<Plus className="w-4 h-4" />}
-                onClick={handleEditAddAdjustment}
-              >
+              <Button variant={editAdjType === 'addition' ? 'success' : 'danger'} size="full" icon={<Plus className="w-4 h-4" />} onClick={handleEditAddAdjustment}>
                 {editAdjType === 'addition' ? 'Tambah Penghasilan' : 'Tambah Potongan'}
               </Button>
-
-              {/* Daftar adj yang sedang diedit */}
               <div className="pt-3 border-t border-slate-100">
                 <p className="text-xs font-bold text-slate-500 mb-2">Rincian Saat Ini</p>
-                {editAdjRows.length === 0
-                  ? <p className="text-xs text-slate-400 text-center py-3">Belum ada tambahan/potongan.</p>
-                  : <div className="space-y-2">{editAdjRows.map(item => <AdjRow key={item.id} item={item} onRemove={handleEditRemoveAdjustment} formatRupiah={formatRupiah} />)}</div>
-                }
+                {editAdjRows.length === 0 ? <p className="text-xs text-slate-400 text-center py-3">Belum ada tambahan/potongan.</p> : <div className="space-y-2">{editAdjRows.map(item => <AdjRow key={item.id} item={item} onRemove={handleEditRemoveAdjustment} formatRupiah={formatRupiah} />)}</div>}
               </div>
-
               {editAdjRows.length > 0 && (
                 <div className="space-y-1 pt-3 border-t border-slate-100 text-xs">
                   <div className="flex justify-between text-slate-500"><span>Total Tambahan</span><span className="font-bold text-green-700">+{formatRupiah(editTotalAdditions)}</span></div>
@@ -824,13 +778,10 @@ const InputDailyTab = () => {
                 </div>
               )}
             </div>
-
-            {/* Modal Footer */}
+            
             <div className="p-4 border-t border-slate-100 flex gap-2">
               <Button variant="secondary" size="full" onClick={handleCloseEdit}>Batal</Button>
-              <Button variant="primary" size="full" icon={<Save className="w-4 h-4" />} onClick={handleSaveEdit}>
-                Simpan Perubahan
-              </Button>
+              <Button variant="primary" size="full" icon={<Save className="w-4 h-4" />} onClick={handleSaveEdit}>Simpan Perubahan</Button>
             </div>
           </div>
         </div>

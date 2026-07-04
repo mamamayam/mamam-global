@@ -11,76 +11,9 @@ import { useBulkSelect } from '../../hook/useBulkSelect';
 
 const KASBON_CATEGORY = 'Kasbon Karyawan';
 
-// Parse string "YYYY-MM-DD" dari <input type="date"> sebagai LOCAL midnight.
-// PENTING: jangan pakai `new Date("YYYY-MM-DD")` langsung — JS selalu
-// menganggap format date-only itu sebagai UTC midnight, bukan local midnight.
-// Di WIB (UTC+7) itu geser jadi jam 07:00 pagi local, sehingga transaksi yang
-// dicatat "hari ini" bisa keitung terjadi SEBELUM shift dibuka (kalau shift
-// baru buka setelah jam 07:00) dan otomatis ke-exclude dari filter dompet
-// di ShiftView (`new Date(item.date) >= currentShift.startTime`).
 function parseLocalDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d);
-}
-
-/* ─────────────────────────────────────────────────────────────────
- * Kasbon Karyawan ↔ Potongan Gaji (employeeDailyRecords)
- *
- * Kasbon karyawan dicatat sebagai pengeluaran kas DI SINI, tapi juga harus
- * otomatis muncul sebagai potongan gaji harian karyawan terkait di modul HRD.
- * Dua helper di bawah ini menjaga link itu tetap konsisten lewat update
- * IMUTABEL (gak pernah .push() langsung ke array/objek lama) supaya:
- *   - edit nominal/karyawan/tanggal/kategori kasbon ikut mengoreksi potongan
- *     gaji yang sudah tercipta, bukan numpuk/nyangkut data lama, dan
- *   - hapus permanen kasbon ikut menghapus potongan gaji terkait, supaya
- *     karyawan gak terus-terusan "dipotong" gaji buat kasbon yang sudah
- *     dihapus dari pembukuan.
- * ───────────────────────────────────────────────────────────────── */
-
-// Cari & hapus SATU potongan Kasbon dari employeeDailyRecords manapun ia berada.
-// Diutamakan cocok lewat linkedDeductionId (akurat, dipakai kasbon yang dibuat
-// lewat versi kode ini). Fallback ke (karyawan + tanggal + kategori 'Kasbon')
-// khusus buat data kasbon LAMA yang belum punya linkedDeductionId, supaya tetap
-// nyambung ke catatan lama alih-alih bikin dobel.
-function removeKasbonDeduction(records, { deductionId, employeeId, dateStr }) {
-  let removed = false;
-  const next = records.map(r => {
-    if (removed || !r.deductions?.length) return r;
-    if (deductionId) {
-      if (!r.deductions.some(d => d.id === deductionId)) return r;
-      removed = true;
-      return { ...r, deductions: r.deductions.filter(d => d.id !== deductionId) };
-    }
-    if (r.employeeId !== employeeId || r.dateStr !== dateStr) return r;
-    const idx = r.deductions.findIndex(d => d.category === 'Kasbon');
-    if (idx === -1) return r;
-    removed = true;
-    return { ...r, deductions: r.deductions.filter((_, i) => i !== idx) };
-  });
-  return removed ? next : records;
-}
-
-// Tambahkan SATU potongan Kasbon baru ke record (employeeId, dateStr) terkait,
-// bikin record baru kalau belum ada. Selalu immutable — gak pernah .push() ke
-// array deductions yang sudah ada, karena itu memutasi object yang masih
-// dipakai/dirujuk di tempat lain (lihat catatan audit).
-function addKasbonDeduction(records, employeeId, dateStr, dateObj, amount) {
-  const deductionId = `KASBON-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const newDeduction = { id: deductionId, category: 'Kasbon', amount, expenseRecorded: true };
-  const idx = records.findIndex(r => r.employeeId === employeeId && r.dateStr === dateStr);
-
-  if (idx >= 0) {
-    const next = records.map((r, i) => i === idx ? { ...r, deductions: [...(r.deductions || []), newDeduction] } : r);
-    return { records: next, deductionId };
-  }
-
-  const newRecord = {
-    id: `REC-${Date.now()}`,
-    employeeId, date: dateObj, dateStr,
-    isDayOff: false, clockIn: '', clockOut: '', hoursWorked: 0, bolongMinutes: 0, overtimeMinutes: 0,
-    additions: [], deductions: [newDeduction],
-  };
-  return { records: [...records, newRecord], deductionId };
 }
 
 const ExpenseView = () => {
@@ -88,8 +21,7 @@ const ExpenseView = () => {
     expenseCategories, setExpenseCategories,
     expenses, setExpenses,
     triggerAlert, triggerConfirm, formatRupiah,
-    employees, employeeDailyRecords, setEmployeeDailyRecords,
-    isAdminMode
+    employees, isAdminMode
   } = useAppContext();
 
   const [amount, setAmount] = useState('');
@@ -98,19 +30,16 @@ const ExpenseView = () => {
   const [dateInput, setDateInput] = useState(toLocalDateString());
   const [paymentMethod, setPaymentMethod] = useState('Tunai');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
-  const [filterMode, setFilterMode] = useState('month'); // 'month' | 'range' | 'all'
+  const [filterMode, setFilterMode] = useState('month');
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
-  const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
-  const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
-  const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
+  const [showTrash, setShowTrash] = useState(false);
+  const [sortKey, setSortKey] = useState('date-desc');
+  const [isSortOpen, setIsSortOpen] = useState(false);
+  const [isSelecting, setIsSelecting] = useState(false);
 
-  // Cek apakah sebuah tanggal transaksi lolos filter aktif (mode bulan / rentang tanggal / semua).
-  // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
-  // aman dibandingkan leksikografis tanpa perlu konversi ke Date/timestamp.
   const matchesDateFilter = (date) => {
     if (filterMode === 'all') return true;
     if (filterMode === 'range') {
@@ -120,7 +49,6 @@ const ExpenseView = () => {
       if (filterEndDate && d > filterEndDate) return false;
       return true;
     }
-    // default: mode bulan
     return filterMonth === '' || toLocalMonthString(date) === filterMonth;
   };
 
@@ -130,7 +58,6 @@ const ExpenseView = () => {
       .reduce((s, e) => s + e.amount, 0);
   }, [expenses, filterMode, filterMonth, filterStartDate, filterEndDate]);
 
-  // State untuk melacak data yang sedang diedit
   const [editingId, setEditingId] = useState(null);
 
   const handleAddExpense = () => {
@@ -142,32 +69,6 @@ const ExpenseView = () => {
     const isKasbon = category === KASBON_CATEGORY;
 
     if (editingId) {
-      // === MODE EDIT (ADMIN) ===
-      const oldExpense = expenses.find(exp => exp.id === editingId);
-      let nextDailyRecords = employeeDailyRecords;
-
-      // Lepas dulu potongan kasbon LAMA (kalau expense ini sebelumnya kasbon),
-      // baru pasang ulang kalau hasil edit masih kasbon. Pola "lepas lalu
-      // pasang ulang" ini bikin proses edit selalu konsisten apa pun yang
-      // berubah — nominal, karyawan, tanggal, atau kategori (termasuk saat
-      // dipindah keluar dari Kasbon Karyawan ke kategori lain).
-      if (oldExpense?.employeeId) {
-        nextDailyRecords = removeKasbonDeduction(nextDailyRecords, {
-          deductionId: oldExpense.linkedDeductionId,
-          employeeId: oldExpense.employeeId,
-          dateStr: toLocalDateString(oldExpense.date),
-        });
-      }
-
-      let linkedDeductionId = null;
-      if (isKasbon) {
-        const result = addKasbonDeduction(nextDailyRecords, selectedEmployeeId, dateInput, expenseDate, Number(amount));
-        nextDailyRecords = result.records;
-        linkedDeductionId = result.deductionId;
-      }
-
-      if (nextDailyRecords !== employeeDailyRecords) setEmployeeDailyRecords(nextDailyRecords);
-
       setExpenses(expenses.map(exp => exp.id === editingId ? {
         ...exp,
         amount: Number(amount),
@@ -175,23 +76,13 @@ const ExpenseView = () => {
         note,
         date: expenseDate,
         paymentMethod,
-        employeeId: isKasbon ? selectedEmployeeId : null,
-        linkedDeductionId,
+        employeeId: isKasbon ? selectedEmployeeId : null
       } : exp));
 
       setEditingId(null);
       setAmount(''); setNote(''); setSelectedEmployeeId('');
       triggerAlert('Pengeluaran berhasil diperbarui!');
     } else {
-      // === MODE BUAT BARU ===
-      let linkedDeductionId = null;
-
-      if (isKasbon) {
-        const result = addKasbonDeduction(employeeDailyRecords, selectedEmployeeId, dateInput, expenseDate, Number(amount));
-        setEmployeeDailyRecords(result.records);
-        linkedDeductionId = result.deductionId;
-      }
-
       const newExp = {
         id: `EXP-${Date.now()}`,
         amount: Number(amount),
@@ -199,8 +90,7 @@ const ExpenseView = () => {
         note,
         date: expenseDate,
         paymentMethod,
-        employeeId: isKasbon ? selectedEmployeeId : null,
-        linkedDeductionId,
+        employeeId: isKasbon ? selectedEmployeeId : null
       };
 
       setExpenses([newExp, ...expenses]);
@@ -233,17 +123,7 @@ const ExpenseView = () => {
 
   const handlePermanentDeleteExpense = (id) => {
     triggerConfirm('Hapus PERMANEN catatan ini? Tindakan ini tidak bisa dibatalkan.', () => {
-      const exp = expenses.find(e => e.id === id);
       setExpenses(expenses.filter(e => e.id !== id));
-      if (exp?.employeeId) {
-        setEmployeeDailyRecords(removeKasbonDeduction(employeeDailyRecords, {
-          deductionId: exp.linkedDeductionId,
-          employeeId: exp.employeeId,
-          dateStr: toLocalDateString(exp.date),
-        }));
-      }
-      // Langsung kirim delete ke Supabase saat ini juga, gak nunggu siklus
-      // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
       pushTransactionDelete('expenses', id).catch(err =>
         console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
       );
@@ -264,7 +144,6 @@ const ExpenseView = () => {
       .filter(e => matchesDateFilter(e.date));
   }, [expenses, showTrash, filterMode, filterMonth, filterStartDate, filterEndDate]);
 
-  // Urutkan hasil filter pakai sortKey terpilih
   const sortedExpenses = useMemo(() => applySort(filteredExpenses, sortKey, {
     date: e => new Date(e.date),
     category: e => e.category || '',
@@ -281,10 +160,8 @@ const ExpenseView = () => {
     { key: 'amount-desc', label: 'Nominal Terbesar' },
   ];
 
-  // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih"
   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedExpenses);
 
-  // Hapus Banyak SEKALIGUS (Pindah ke Recycle Bin)
   const handleBulkSoftDelete = () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
@@ -295,23 +172,10 @@ const ExpenseView = () => {
     });
   };
 
-  // Hapus Banyak SEKALIGUS (Permanen di Recycle Bin)
   const handleBulkPermanentDelete = () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
     triggerConfirm(`Hapus PERMANEN ${ids.length} catatan pengeluaran terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
-      const kasbonToUnlink = expenses.filter(e => selectedIds.has(e.id) && e.employeeId);
-      if (kasbonToUnlink.length > 0) {
-        let nextDailyRecords = employeeDailyRecords;
-        kasbonToUnlink.forEach(exp => {
-          nextDailyRecords = removeKasbonDeduction(nextDailyRecords, {
-            deductionId: exp.linkedDeductionId,
-            employeeId: exp.employeeId,
-            dateStr: toLocalDateString(exp.date),
-          });
-        });
-        setEmployeeDailyRecords(nextDailyRecords);
-      }
       setExpenses(expenses.filter(e => !selectedIds.has(e.id)));
       ids.forEach(id => pushTransactionDelete('expenses', id).catch(err =>
         console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
@@ -416,7 +280,6 @@ const ExpenseView = () => {
               </Button>
             </div>
           </div>
-
 
           <Button
             onClick={handleAddExpense}
@@ -583,7 +446,7 @@ const ExpenseView = () => {
             )}
           </div>
         </Card>
-      </div >
+      </div>
 
       <SortModal
         isOpen={isSortOpen}
@@ -606,7 +469,7 @@ const ExpenseView = () => {
           if (category === deletedCat) setCategory(expenseCategories.find(c => c !== deletedCat) || '');
         }}
       />
-    </div >
+    </div>
   );
 };
 export default ExpenseView;
