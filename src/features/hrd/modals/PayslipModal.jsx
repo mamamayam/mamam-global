@@ -107,13 +107,19 @@ const PayslipModal = () => {
           </div>
 
           <div className="flex justify-between mb-8 text-sm text-slate-700 dark:text-slate-200 print:text-black">
+            {/* KOLOM KIRI */}
             <div>
               <div className="mb-2"><span className="inline-block w-32 text-slate-500 print:text-gray-600">Nama</span> <span className="font-bold">: {data.employee.name}</span></div>
               <div className="mb-2"><span className="inline-block w-32 text-slate-500 print:text-gray-600">Posisi</span> <span className="font-bold">: Karyawan</span></div>
               <div className="mb-2"><span className="inline-block w-32 text-slate-500 print:text-gray-600">Hari Kerja Masuk</span> <span className="font-bold">: {totalHariKerja} Hari</span></div>
+
+              {/* --- TOTAL JAM KERJA DIPINDAH KESINI --- */}
+              <div className="mb-2"><span className="inline-block w-32 text-slate-500 print:text-gray-600">Total Jam Kerja</span> <span className="font-bold">: {Number(data.totalHours).toFixed(1).replace('.', ',')} Jam</span></div>
             </div>
+
+            {/* KOLOM KANAN */}
             <div className="text-right">
-              <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Total Jam Kerja</span> <span className="font-bold">: {data.totalHours} Jam</span></div>
+              {/* Total Jam Kerja sebelumnya ada di sini, sekarang dihapus */}
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Upah per Jam</span> <span className="font-bold">: {formatRupiah(data.employee.hourlyRate)}</span></div>
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Lembur per 30 Menit</span> <span className="font-bold">: {formatRupiah(data.overtimeRate || 0)}</span></div>
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Bonus Full Time</span> <span className="font-bold">: {formatRupiah(data.employee.fullTimeBonus || 0)}</span></div>

@@ -196,11 +196,14 @@ const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
 
         {/* INFO KARYAWAN */}
         <View style={S.infoSection}>
+          {/* KOLOM KIRI */}
           <View>
             {[
               ['Nama', data.employee.name],
               ['Posisi', 'Karyawan'],
               ['Hari Kerja Masuk', `${totalHariKerja} Hari`],
+              /* --- TOTAL JAM KERJA DIPINDAH KESINI --- */
+              ['Total Jam Kerja', `${Number(data.totalHours).toFixed(1).replace('.', ',')} Jam`],
             ].map(([label, value]) => (
               <View key={label} style={S.infoRow}>
                 <Text style={S.infoLabel}>{label}</Text>
@@ -209,9 +212,11 @@ const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
               </View>
             ))}
           </View>
+
+          {/* KOLOM KANAN */}
           <View>
             {[
-              ['Total Jam Kerja', `${data.totalHours} Jam`],
+              /* Total Jam Kerja sebelumnya ada di sini, sekarang dihapus */
               ['Upah per Jam', formatRupiah(data.employee.hourlyRate)],
               ['Lembur per 30 Menit', formatRupiah(data.overtimeRate || 0)],
               ['Bonus Full Time', formatRupiah(data.employee.fullTimeBonus || 0)],
