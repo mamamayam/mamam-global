@@ -8,7 +8,7 @@ import { PieChart, Printer, ChevronDown, ArrowUpDown } from 'lucide-react';
 import { AUTO_ADJUSTMENT_CATEGORIES, summarizeAutoBonuses } from '../utils/payrollLogic';
 
 const ReportsTab = () => {
-  const { employees, employeeDailyRecords, setPayslipModal, formatRupiah } = useAppContext();
+  const { employees, employeeDailyRecords, expenses, setPayslipModal, formatRupiah } = useAppContext();
 
   const [reportMonth, setReportMonth] = useState(toLocalMonthString());
   const [perfSortKey, setPerfSortKey] = useState('name-asc');
@@ -54,6 +54,38 @@ const ReportsTab = () => {
       data.totalDeductions += (rec.deductions || []).reduce((sum, d) => sum + d.amount, 0);
     });
 
+    const activeExpenses = activeOnly(expenses || []);
+    activeExpenses.forEach(exp => {
+      // Pengecekan apakah pengeluaran adalah Kasbon pada bulan pelaporan terkait
+      if (
+        exp.employeeId && 
+        toLocalMonthString(exp.date) === reportMonth && 
+        (exp.category === 'Kasbon Karyawan' || (exp.category || '').toLowerCase().includes('kasbon'))
+      ) {
+        if (!perf[exp.employeeId]) {
+          const emp = employees.find(e => e.id === exp.employeeId);
+          perf[exp.employeeId] = {
+            employee: emp || { name: 'Karyawan Dihapus', hourlyRate: 0 },
+            totalHours: 0,
+            totalOvertimeMinutes: 0,
+            totalAdditions: 0,
+            totalDeductions: 0,
+            netPay: 0,
+            records: [],
+          };
+        }
+        // Menambahkan nominal pengeluaran kasbon ini langsung ke total potongan karyawan
+        perf[exp.employeeId].totalDeductions += exp.amount; 
+
+        if (!perf[exp.employeeId].kasbonRecords) {
+          perf[exp.employeeId].kasbonRecords = [];
+        }
+        perf[exp.employeeId].kasbonRecords.push(exp);
+        // =======================================================
+      }
+    });
+    // ------------------------------------------------
+
     Object.values(perf).forEach(data => {
       const { fullTimeBonusTotal, overtimePayTotal, overtimeRate, overtimeByDay } =
         summarizeAutoBonuses(data.records, data.employee);
@@ -69,7 +101,7 @@ const ReportsTab = () => {
     });
 
     return Object.values(perf);
-  }, [filteredRecordsForReport, employees]);
+  }, [filteredRecordsForReport, employees, expenses, reportMonth]);
 
   const totalPayrollExpense = employeePerformance.reduce((sum, p) => sum + p.netPay, 0);
 

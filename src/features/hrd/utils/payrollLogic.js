@@ -253,36 +253,77 @@ export function countWorkDays(records) {
 export function buildPayslipRows(data) {
   const sortedRecords = [...(data.records || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  return sortedRecords
-    .map(rec => {
-      const items = [];
+  const rows = sortedRecords.map(rec => {
+    const items = [];
 
-      if (rec.hoursWorked > 0) {
-        items.push({
-          desc: `Upah Jam Kerja (${rec.hoursWorked} Jam)`,
-          in: rec.hoursWorked * data.employee.hourlyRate,
-          out: 0,
-        });
-      }
+    if (rec.hoursWorked > 0) {
+      items.push({
+        desc: `Upah Jam Kerja (${rec.hoursWorked} Jam)`,
+        in: rec.hoursWorked * data.employee.hourlyRate,
+        out: 0,
+      });
+    }
 
-      // Bonus Full Time & Bonus Lembur dihitung ulang dari data + tarif
-      // TERKINI (computeAutoAdjustments), bukan dari cache rec.additions —
-      // jadi slip gaji gak pernah nampilin angka basi.
-      computeAutoAdjustments(rec, data.employee).forEach(auto => {
-        const desc = auto.category === 'Bonus Lembur'
-          ? `Uang Lembur (${((rec.overtimeMinutes || 0) / 60).toFixed(1).replace('.', ',')} jam)`
-          : auto.category + (auto.note ? ` ${auto.note}` : '');
-        items.push({ desc, in: auto.amount, out: 0 });
+    computeAutoAdjustments(rec, data.employee).forEach(auto => {
+      const desc = auto.category === 'Bonus Lembur'
+        ? `Uang Lembur (${((rec.overtimeMinutes || 0) / 60).toFixed(1).replace('.', ',')} jam)`
+        : auto.category + (auto.note ? ` ${auto.note}` : '');
+      items.push({ desc, in: auto.amount, out: 0 });
+    });
+
+    (rec.additions || [])
+      .filter(a => !AUTO_ADJUSTMENT_CATEGORIES.includes(a.category))
+      .forEach(a => {
+        items.push({ desc: a.category + (a.note ? ` (${a.note})` : ''), in: a.amount, out: 0 });
       });
 
-      (rec.additions || [])
-        .filter(a => !AUTO_ADJUSTMENT_CATEGORIES.includes(a.category))
-        .forEach(a => items.push({ desc: a.category + (a.note ? ` (${a.note})` : ''), in: a.amount, out: 0 }));
+    (rec.deductions || []).forEach(d => {
+      items.push({ desc: d.category + (d.note ? ` (${d.note})` : ''), in: 0, out: d.amount });
+    });
 
-      (rec.deductions || [])
-        .forEach(d => items.push({ desc: d.category + (d.note ? ` (${d.note})` : ''), in: 0, out: d.amount }));
+    // [+] PERBAIKAN: Mengembalikan format ke bentuk { rec, items }
+    return { rec, items }; 
+  });
 
-      return { rec, items };
-    })
-    .filter(row => row.items.length > 0);
+  if (data.kasbonRecords && data.kasbonRecords.length > 0) {
+    data.kasbonRecords.forEach(kasbon => {
+      // Ambil format YYYY-MM-DD dari tanggal kasbon untuk pencocokan record
+      const kDate = new Date(kasbon.date);
+      const y = kDate.getFullYear();
+      const m = String(kDate.getMonth() + 1).padStart(2, '0');
+      const d = String(kDate.getDate()).padStart(2, '0');
+      const dateString = `${y}-${m}-${d}`;
+
+      // Cari record hari terkait lewat rec.dateStr
+      const existingRow = rows.find(r => r.rec.dateStr === dateString || r.rec.date.startsWith(dateString));
+      
+      const kasbonItem = {
+        desc: `${kasbon.category}${kasbon.note ? ` (${kasbon.note})` : ''}`,
+        in: 0,
+        out: kasbon.amount
+      };
+
+      if (existingRow) {
+        existingRow.items.push(kasbonItem);
+      } else {
+        // [+] PERBAIKAN: Jika transaksi kasbon terjadi di hari libur, buat record buatan 
+        // agar layar slip gaji tidak crash saat mencari jam masuk/keluar
+        rows.push({
+          rec: {
+            id: `kasbon-${kasbon.id}`,
+            date: kasbon.date,
+            dateStr: dateString,
+            clockIn: null, // UI akan otomatis menampilkan '--:--'
+            clockOut: null
+          },
+          items: [kasbonItem]
+        });
+      }
+    });
+
+    // Urutkan ulang secara kronologis
+    rows.sort((a, b) => new Date(a.rec.date) - new Date(b.rec.date));
+  }
+
+  return rows;
 }

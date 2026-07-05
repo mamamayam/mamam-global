@@ -33,10 +33,13 @@ const computeAttendanceFromLogs = (employeeId, dateStr, logs) => {
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
   const hasMasuk = empLogs.some(r => r.type === 'masuk');
+  const hasLibur = empLogs.some(r => r.type === 'libur'); // [+] Cek apakah ada record libur
 
   let status = '', cIn = '', cOut = '', cBolong = 0, cHours = 0, cDayOff = false, cOvertime = 0;
 
-  if (hasMasuk) {
+  if (hasLibur) { // [+] Jika ada libur, langsung prioritaskan hari ini menjadi day off
+    status = 'Libur'; cDayOff = true;
+  } else if (hasMasuk) {
     status = 'Hadir';
     const masukRec = empLogs.find(r => r.type === 'masuk');
     const keluarRec = [...empLogs].reverse().find(r => r.type === 'keluar');

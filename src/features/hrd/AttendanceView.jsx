@@ -37,10 +37,11 @@ const TYPE_OPTIONS = [
   { value: 'bolong', label: 'Jam Bolong' },
   { value: 'masuk_lagi', label: 'Masuk Lagi' },
   { value: 'keluar', label: 'Pulang' },
+  { value: 'libur', label: 'Libur' },
 ];
 
-const TYPE_LABEL = { masuk: 'Masuk', keluar: 'Pulang', bolong: 'Mulai Bolong', masuk_lagi: 'Masuk Lagi' };
-const TYPE_VARIANT = { masuk: 'success', keluar: 'neutral', bolong: 'warning', masuk_lagi: 'success' };
+const TYPE_LABEL = { masuk: 'Masuk', keluar: 'Pulang', bolong: 'Mulai Bolong', masuk_lagi: 'Masuk Lagi', libur: 'Libur' }; // [+] Tambah Libur
+const TYPE_VARIANT = { masuk: 'success', keluar: 'neutral', bolong: 'warning', masuk_lagi: 'success', libur: 'neutral' }; // [+] Tambah Libur
 
 const SORT_OPTIONS = [
   { key: 'date-desc', label: 'Terbaru Dulu' },
@@ -136,9 +137,16 @@ export default function Attendance() {
       });
       const toAutoCloseBolong = employeesRef.current.filter(emp => getLastRecord(emp.id)?.type === 'bolong');
 
-      if (toAutoCloseMasuk.length === 0 && toAutoCloseBolong.length === 0) return;
+      // [+] 1. Tambahkan kode ini untuk mencari karyawan yang tidak ada rekam absensi sama sekali hari ini
+      const toAutoLibur = employeesRef.current.filter(emp => {
+        const recs = todayActiveAll.filter(r => r.employeeId === emp.id);
+        return recs.length === 0;
+      });
 
-      const outletCloseDate = new Date(nowDate);
+      // [+] 2. Update baris kondisi IF ini agar juga mengecek toAutoLibur
+      if (toAutoCloseMasuk.length === 0 && toAutoCloseBolong.length === 0 && toAutoLibur.length === 0) return;
+
+      const outletCloseDate = new Date(); 
       outletCloseDate.setHours(OUTLET_CLOSE_HOUR, 0, 0, 0);
 
       const newRecords = [
@@ -166,12 +174,26 @@ export default function Attendance() {
             deletedAt: null,
           };
         }),
+        // [+] 3. Sisipkan generator pembuat record Libur otomatis
+        ...toAutoLibur.map(emp => ({
+          id: `AUTO-LIBUR-${emp.id}-${todayStr}`,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          type: 'libur', // Tipe log otomatis diisi libur
+          date: outletCloseDate.toISOString(),
+          dateStr: todayStr,
+          isAutoClose: true,
+          deletedAt: null,
+        })),
       ];
 
       setAttendanceLog(prev => [...prev, ...newRecords]);
+      
+      // [+] 4. Update data notifikasi UI dengan tambahan `isLibur`
       setAutoClosedEmployees([
-        ...toAutoCloseMasuk.map(e => ({ name: e.name, fromBolong: false })),
-        ...toAutoCloseBolong.map(e => ({ name: e.name, fromBolong: true })),
+        ...toAutoCloseMasuk.map(e => ({ name: e.name, fromBolong: false, isLibur: false })),
+        ...toAutoCloseBolong.map(e => ({ name: e.name, fromBolong: true, isLibur: false })),
+        ...toAutoLibur.map(e => ({ name: e.name, fromBolong: false, isLibur: true })),
       ]);
     };
 
@@ -208,6 +230,7 @@ export default function Attendance() {
     const bolong = bolongRecords[bolongRecords.length - 1];
     const masukLagi = masukLagiRecords[masukLagiRecords.length - 1];
     const keluarRecord = records.find(r => r.type === 'keluar');
+    const liburRecord = records.find(r => r.type === 'libur');
 
     let durasiBolongText = '';
     if (bolong && masukLagi && new Date(masukLagi.date) > new Date(bolong.date)) {
@@ -231,6 +254,7 @@ export default function Attendance() {
       masukLagi,
       durasiBolongText,
       keluar: records.find(r => r.type === 'keluar'),
+      libur: liburRecord,
       lastRecord,
       isLembur,
     };
@@ -404,15 +428,20 @@ export default function Attendance() {
                 Karyawan berikut tidak absen pulang sampai jam {AUTO_CLOSE_HOUR}:00, sehingga jam pulang dicatat otomatis
                 pukul <span className="font-semibold">{OUTLET_CLOSE_HOUR}:00</span> (jam tutup outlet). Admin bisa melakukan pengeditan secara manual jika diperlukan.
                 Yang bertanda <span className="font-semibold italic">(jam bolong)</span> — pulang dicatat saat mereka keluar bolong karena tidak absen balik.
+                {/* [+] Keterangan Teks Tambahan */}
+                <br />Yang bertanda <span className="font-semibold italic">(libur)</span> — otomatis diliburkan karena tidak memiliki catatan absensi sama sekali hari ini.
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {autoClosedEmployees.map(({ name, fromBolong }) => (
+                {/* [+] Update parameter map dari `isLibur` di sini */}
+                {autoClosedEmployees.map(({ name, fromBolong, isLibur }) => (
                   <span
                     key={name}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent-100 dark:bg-accent-900/60 text-accent-800 dark:text-accent-300 text-xs font-bold"
                   >
                     {name}
                     {fromBolong && <span className="font-normal opacity-70">(jam bolong)</span>}
+                    {/* [+] Tampilkan tag "(libur)" */}
+                    {isLibur && <span className="font-normal opacity-70">(libur)</span>}
                   </span>
                 ))}
               </div>
@@ -451,7 +480,7 @@ export default function Attendance() {
           />
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {employeeStatuses.map(({ isLembur, employee, masuk, bolong, masukLagi, durasiBolongText, keluar, lastRecord }) => (
+            {employeeStatuses.map(({ employee, masuk, bolong, masukLagi, durasiBolongText, keluar, lastRecord, isLembur, libur }) => (
               <div key={employee.id} className="flex flex-col">
                 <div className="p-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -459,17 +488,21 @@ export default function Attendance() {
                       {employee.name}
                     </p>
                     <p className="text-xs text-slate-400 dark:text-slate-500">
-                      {masuk ? `Masuk ${fmtTime(masuk.date)}` : 'Belum absen masuk'}
-                      {bolong && ` · Bolong ${fmtTime(bolong.date)}`}
-                      {masukLagi && ` - ${fmtTime(masukLagi.date)} `}
-                      {durasiBolongText && <span className="text-amber-500 font-medium">{durasiBolongText}</span>}
-                      {keluar && ` · Pulang ${fmtTime(keluar.date)}`}
-                      {keluar?.isAutoClose && (
-                        <span className={`ml-1 font-medium ${keluar.isFromBolong ? 'text-accent-400' : 'text-amber-500'}`}>
-                          {keluar.isFromBolong ? '(dari bolong)' : '(auto)'}
-                        </span>
+                      {libur ? `Tercatat Libur pada ${fmtTime(libur.date)}` : (
+                        <>
+                          {masuk ? `Masuk ${fmtTime(masuk.date)}` : 'Belum absen masuk'}
+                          {bolong && ` · Bolong ${fmtTime(bolong.date)}`}
+                          {masukLagi && ` - ${fmtTime(masukLagi.date)} `}
+                          {durasiBolongText && <span className="text-amber-500 font-medium">{durasiBolongText}</span>}
+                          {keluar && ` · Pulang ${fmtTime(keluar.date)}`}
+                          {keluar?.isAutoClose && (
+                            <span className={`ml-1 font-medium ${keluar.isFromBolong ? 'text-accent-400' : 'text-amber-500'}`}>
+                              {keluar.isFromBolong ? '(dari bolong)' : '(auto)'}
+                            </span>
+                          )}
+                          {lastRecord?.isManual && <span className="ml-1 text-blue-400 font-medium">(manual)</span>}
+                        </>
                       )}
-                      {lastRecord?.isManual && <span className="ml-1 text-blue-400 font-medium">(manual)</span>}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -491,6 +524,8 @@ export default function Attendance() {
                     )}
                     {lastRecord?.type === 'keluar' ? (
                       <Badge variant="neutral" dot>Pulang</Badge>
+                    ) : lastRecord?.type === 'libur' ? ( // [+] Tambahan baru
+                      <Badge variant="neutral" dot>Libur</Badge>
                     ) : lastRecord?.type === 'bolong' ? (
                       <Badge variant="warning" dot>Jam Bolong</Badge>
                     ) : lastRecord?.type === 'masuk' ? (
@@ -540,6 +575,7 @@ export default function Attendance() {
                         <option value="bolong">Jam Bolong</option>
                         <option value="masuk_lagi">Masuk Lagi</option>
                         <option value="keluar">Keluar</option>
+                        <option value="libur">Libur</option>
                       </select>
                       <input
                         type="time" value={editTime}
