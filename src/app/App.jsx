@@ -579,6 +579,9 @@ export default function App() {
     setAppliedVoucher(null);
     setPointsToRedeem(0);
     setManualDiscount({ type: 'fixed', value: 0 });
+    setOrderType('Takeaway');
+    setDeliveryFee(0);
+    setCustomDeliveryFee('');
     setIsCartOpen(false);
   };
 
