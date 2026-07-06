@@ -1000,7 +1000,10 @@ export default function App() {
 
             {/* Toast koneksi online/offline */}
             {connectionToast && (
-              <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[200] pointer-events-none animate-in fade-in slide-in-from-bottom-4 duration-300">
+              <div
+                className="fixed left-1/2 -translate-x-1/2 z-[200] pointer-events-none animate-in fade-in slide-in-from-top-4 duration-300"
+                style={{ top: 'calc(env(safe-area-inset-top, 0px) + 1rem)' }}
+              >
                 <div className={`flex items-center gap-2 text-white text-sm font-semibold px-5 py-3 rounded-full shadow-2xl backdrop-blur-sm border whitespace-nowrap
                   ${connectionToast.type === 'offline'
                     ? 'bg-slate-700/95 dark:bg-slate-800/95 border-white/20'
