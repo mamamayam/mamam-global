@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, createContext, useContext, useRef, useCallback } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { usePersistState } from '../hook/usePersistState';
+import { useOnlineStatus } from '../hook/useOnlineStatus';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
 import { AppContext, useAppContext } from '../context/AppContext';
 import { usePosStore } from '../store/usePosStore';
@@ -63,6 +64,8 @@ import {
   X,
   Warehouse,
   BarChart3,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 
 
@@ -82,6 +85,11 @@ export default function App() {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const [variantCategories, setVariantCategories] = useState(['Lainnya']);
+
+  // --- TOAST KONEKSI ONLINE/OFFLINE ---
+  const { isOnline, justWentOnline, justWentOffline, clearTransition } = useOnlineStatus();
+  const [connectionToast, setConnectionToast] = useState(null); // { msg, type: 'offline'|'syncing'|'online' }
+  const connectionToastTimerRef = useRef(null);
 
 
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -358,6 +366,48 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDataLoaded]);
+
+  // ── Toast koneksi: reaksi ke transisi online/offline ────────────────────
+  // - Baru mati → toast "Mode Offline", nempel sampai online lagi (gak auto-hide).
+  // - Baru nyala → toast "Menyinkronkan ulang..." lalu trigger runAutoSync
+  //   force, baru toast "Tersinkronisasi" dan auto-hide.
+  useEffect(() => {
+    if (justWentOffline) {
+      clearTimeout(connectionToastTimerRef.current);
+      setConnectionToast({ msg: 'Mode Offline — perubahan disimpan lokal', type: 'offline' });
+      clearTransition();
+      return;
+    }
+
+    if (justWentOnline) {
+      clearTimeout(connectionToastTimerRef.current);
+      setConnectionToast({ msg: 'Online — menyinkronkan ulang...', type: 'syncing' });
+      clearTransition();
+
+      (async () => {
+        try {
+          const { isSupabaseConfigured } = await import('../storage/syncClient');
+          if (!isSupabaseConfigured()) {
+            setConnectionToast(null);
+            return;
+          }
+          const { runAutoSync } = await import('../storage/realtimeSync');
+          const count = await runAutoSync({ force: true });
+          setConnectionToast({
+            msg: count > 0 ? `Tersinkronisasi — ${count} perubahan terkirim` : 'Tersinkronisasi ✓',
+            type: 'online',
+          });
+        } catch (e) {
+          setConnectionToast({ msg: 'Online, tapi sync gagal — coba manual sync', type: 'online' });
+        } finally {
+          connectionToastTimerRef.current = setTimeout(() => setConnectionToast(null), 3500);
+        }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justWentOffline, justWentOnline]);
+
+  useEffect(() => () => clearTimeout(connectionToastTimerRef.current), []);
 
   // --- STATES APLIKASI ---
   const [appliedVoucher, setAppliedVoucher] = useState(null);
@@ -944,6 +994,27 @@ export default function App() {
               <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[200] pointer-events-none exit-toast animate-in fade-in slide-in-from-bottom-4 duration-300">
                 <div className="flex items-center gap-2 bg-accent-600/95 dark:bg-accent-500/95 text-white text-sm font-semibold px-5 py-3 rounded-full shadow-2xl backdrop-blur-sm border border-white/20 dark:border-orange-400/30 whitespace-nowrap">
                   <span>Ketuk sekali lagi untuk keluar</span>
+                </div>
+              </div>
+            )}
+
+            {/* Toast koneksi online/offline */}
+            {connectionToast && (
+              <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[200] pointer-events-none animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className={`flex items-center gap-2 text-white text-sm font-semibold px-5 py-3 rounded-full shadow-2xl backdrop-blur-sm border whitespace-nowrap
+                  ${connectionToast.type === 'offline'
+                    ? 'bg-slate-700/95 dark:bg-slate-800/95 border-white/20'
+                    : connectionToast.type === 'syncing'
+                      ? 'bg-indigo-600/95 border-white/20'
+                      : 'bg-emerald-600/95 border-white/20'}`}>
+                  {connectionToast.type === 'offline' ? (
+                    <WifiOff className="w-4 h-4 shrink-0" />
+                  ) : connectionToast.type === 'syncing' ? (
+                    <RefreshCw className="w-4 h-4 shrink-0 animate-spin" />
+                  ) : (
+                    <Wifi className="w-4 h-4 shrink-0" />
+                  )}
+                  <span>{connectionToast.msg}</span>
                 </div>
               </div>
             )}
