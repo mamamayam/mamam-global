@@ -95,6 +95,12 @@ function calcRecordCount(allData) {
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+const PHASE_LABEL = {
+  transaction: 'Transaksi',
+  config: 'Konfigurasi',
+  live: 'Status Live',
+};
+
 // syncAllToSupabase dihapus — digantikan runAutoSync({ force: true })
 // yang hanya mengirim data yang benar-benar berubah sejak sync terakhir.
 
@@ -373,6 +379,58 @@ function ActionItem({ icon: Icon, label, sublabel, onClick, loading, done, iconB
   );
 }
 
+// ── SyncProgressBar ────────────────────────────────────────────────────────
+// Nampilin progress backup manual secara real-time: key/tabel ke berapa dari
+// berapa total, plus detail record di dalam tabel yang lagi diproses
+// (mis. "salesHistory: 45/120"). Kalau totalInKey = 0 (belum ada info detail
+// item, atau key-nya config/live-state yang cuma 1 unit), progress bar tetap
+// nunjukin posisi key secara keseluruhan.
+function SyncProgressBar({ progress }) {
+  if (!progress) return null;
+
+  const { keyIndex, totalKeys, key, phase, doneInKey, totalInKey, sentCount, failedCount } = progress;
+
+  const keyPct = totalKeys > 0 ? Math.min(100, Math.round(((keyIndex - 1) / totalKeys) * 100)) : 0;
+  const itemPct = totalInKey > 0 ? Math.round((doneInKey / totalInKey) * 100) : (doneInKey > 0 ? 100 : 0);
+  // Progress keseluruhan: posisi key + kontribusi progress di dalam key itu.
+  const overallPct = totalKeys > 0
+    ? Math.min(100, Math.round((((keyIndex - 1) + (totalInKey > 0 ? doneInKey / totalInKey : 0)) / totalKeys) * 100))
+    : 0;
+
+  return (
+    <div className="bg-indigo-50 dark:bg-indigo-500/10 border-2 border-indigo-200 dark:border-indigo-500/30 rounded-xl p-4 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">
+          {key ? `${PHASE_LABEL[phase] || ''} — ${key}` : 'Menyiapkan sync...'}
+        </span>
+        <span className="text-xs font-bold text-indigo-500 dark:text-indigo-400">{overallPct}%</span>
+      </div>
+
+      {/* Progress keseluruhan (semua tabel/key) */}
+      <div className="h-2 bg-indigo-100 dark:bg-indigo-500/20 rounded-full overflow-hidden">
+        <div className="h-full bg-indigo-500 rounded-full transition-all duration-200" style={{ width: `${overallPct}%` }} />
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-indigo-400 dark:text-indigo-400/70">
+        <span>Tabel {Math.min(keyIndex, totalKeys)} / {totalKeys}</span>
+        {totalInKey > 0 && <span>{doneInKey} / {totalInKey} record</span>}
+      </div>
+
+      {/* Progress detail dalam key yang sedang jalan (relevan untuk tabel besar) */}
+      {totalInKey > 0 && (
+        <div className="h-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-full overflow-hidden">
+          <div className="h-full bg-indigo-400 rounded-full transition-all duration-200" style={{ width: `${itemPct}%` }} />
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 text-[11px] text-indigo-500 dark:text-indigo-400 pt-0.5">
+        <span>✓ {sentCount} terkirim</span>
+        {failedCount > 0 && <span className="text-amber-600 dark:text-amber-400">⚠ {failedCount} gagal</span>}
+      </div>
+    </div>
+  );
+}
+
 // ── BackupView ─────────────────────────────────────────────────────────────
 
 const BackupView = ({ onBack }) => {
@@ -383,6 +441,7 @@ const BackupView = ({ onBack }) => {
   const [dateRangeModal, setDateRangeModal] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(null); // { keyIndex, totalKeys, key, phase, doneInKey, totalInKey, sentCount, failedCount }
   const [storageSize, setStorageSize] = useState('Menghitung...');
   const [recordCount, setRecordCount] = useState('...');
 
@@ -532,12 +591,13 @@ const BackupView = ({ onBack }) => {
     if (!supabaseReady) { showToast('Supabase belum dikonfigurasi di .env', 'error'); return; }
     if (isSyncInFlight()) { showToast('Sync sedang berjalan, tunggu sebentar...', 'error'); return; }
     setIsSyncing(true);
+    setSyncProgress({ keyIndex: 0, totalKeys: 1, key: '', phase: '', doneInKey: 0, totalInKey: 0, sentCount: 0, failedCount: 0 });
     try {
       // Tiap item sekarang punya timeout 15 detik (lihat PUSH_TIMEOUT_MS di
-      // realtimeSync.js), jadi proses ini gak akan pernah "muter" tanpa
-      // batas kayak sebelumnya — worst case tetep kelar, cuma butuh waktu
-      // sebanding jumlah item yang gagal/timeout.
-      const { sent, failed } = await runAutoSync({ force: true });
+      // realtimeSync.js), dan dikirim per-batch paralel (lihat AUTO_SYNC_BATCH_SIZE),
+      // jadi proses ini jauh lebih cepat dan gak akan pernah "muter" tanpa
+      // batas kayak sebelumnya.
+      const { sent, failed } = await runAutoSync({ force: true, onProgress: setSyncProgress });
       refreshSyncTime.current();
       if (failed > 0) {
         showToast(`${sent} terkirim, ${failed} gagal (timeout/koneksi) — otomatis dicoba lagi nanti`, 'error');
@@ -548,6 +608,7 @@ const BackupView = ({ onBack }) => {
       showToast('Gagal: ' + err.message, 'error');
     } finally {
       setIsSyncing(false);
+      setSyncProgress(null);
     }
   }
 
@@ -674,8 +735,11 @@ const BackupView = ({ onBack }) => {
               </div>
             )}
 
-            {/* Info Waktu Sync Terakhir */}
-            {supabaseReady && (
+            {/* Progress Bar Sync Manual — muncul cuma selagi isSyncing */}
+            {supabaseReady && isSyncing && <SyncProgressBar progress={syncProgress} />}
+
+            {/* Info Waktu Sync Terakhir — disembunyikan sementara selagi progress bar tampil */}
+            {supabaseReady && !isSyncing && (
               <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                   <RefreshCw className="w-3 h-3" />

@@ -264,12 +264,33 @@ export function diffArrays(prevArr, nextArr) {
 //             (2) instant per-transaksi (di luar fungsi ini, lewat usePersistState),
 //             (3) instant live-state (di luar fungsi ini).
 // =============================================================================
-const AUTO_SYNC_ITEM_GAP_MS = 250;
+// Dulu: kirim 1-per-1 dengan jeda 250ms SETELAH tiap item (serial murni).
+// Untuk 1000+ item beda snapshot, ini gampang jadi berjam-jam (250ms x N,
+// belum termasuk waktu network call itu sendiri). Sekarang: kirim per BATCH
+// beberapa item sekaligus secara paralel (Promise.all), baru lanjut batch
+// berikutnya. Ini motong waktu total kira-kira sebanding BATCH_SIZE kali
+// lebih cepat, tanpa mem-bombardir Supabase dengan ratusan request bersamaan.
+const AUTO_SYNC_BATCH_SIZE = 8;
 const AUTO_SYNC_SNAPSHOT_KEY = 'mamam_auto_sync_snapshot';
 const AUTO_SYNC_ENABLED_KEY = 'mamam_auto_sync_enabled';
 const RECYCLE_BIN_RETENTION_DAYS = 30;
 
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+// Jalankan `items` lewat `worker(item)` per batch paralel, panggil
+// `onItemDone(item, ok)` tiap satu item kelar (dipakai buat update progress
+// bar per-record real-time, bukan cuma per-batch).
+async function runInBatches(items, worker, onItemDone) {
+  const results = [];
+  for (let i = 0; i < items.length; i += AUTO_SYNC_BATCH_SIZE) {
+    const chunk = items.slice(i, i + AUTO_SYNC_BATCH_SIZE);
+    const chunkResults = await Promise.all(chunk.map(async (item) => {
+      const ok = await worker(item);
+      onItemDone?.(item, ok);
+      return { item, ok };
+    }));
+    results.push(...chunkResults);
+  }
+  return results;
+}
 
 export function isAutoSyncEnabled() {
   const raw = localStorage.getItem(AUTO_SYNC_ENABLED_KEY);
@@ -339,10 +360,14 @@ export function isSyncInFlight() {
  *   true  → bypass toggle, dan key tanpa snapshot langsung di-push penuh
  *           sebagai initial upload (dipakai sync manual, catch-up startup,
  *           reconnect, dan flush background/foreground — lihat App.jsx).
+ * @param {(info: object) => void} [options.onProgress]
+ *   Dipanggil berkali-kali selama proses jalan, buat progress bar di UI.
+ *   Shape: { keyIndex, totalKeys, key, phase: 'transaction'|'config'|'live',
+ *            doneInKey, totalInKey, sentCount, failedCount }
  *
  * @returns {Promise<{sent: number, failed: number}>}
  */
-export async function runAutoSync({ force = false } = {}) {
+export async function runAutoSync({ force = false, onProgress } = {}) {
   if ((!isAutoSyncEnabled() && !force) || !isSupabaseConfigured() || autoSyncInFlight) {
     return { sent: 0, failed: 0 };
   }
@@ -351,22 +376,38 @@ export async function runAutoSync({ force = false } = {}) {
   let sentCount = 0;
   let failedCount = 0;
 
+  // Total semua key (transaksi + config + live-state) — dipakai buat hitung
+  // keyIndex/totalKeys yang konsisten di seluruh progress report.
+  const totalKeys = TRANSACTION_KEYS.length + CONFIG_KEYS.length + LIVE_STATE_KEYS.length;
+  let keyIndex = 0;
+
+  function report(key, phase, doneInKey, totalInKey) {
+    onProgress?.({
+      keyIndex, totalKeys, key, phase,
+      doneInKey, totalInKey,
+      sentCount, failedCount,
+    });
+  }
+
   try {
     const snapshot = loadAutoSyncSnapshot();
 
     // ── TRANSACTION KEYS — push per-record, hapus permanen HANYA dari purge ─
     for (const tableKey of TRANSACTION_KEYS) {
+      keyIndex++;
       try {
         let current = await purgeExpired(tableKey, await loadData(tableKey, []));
 
         if (!(tableKey in snapshot)) {
           if (force && current.length > 0) {
             const pushedMap = new Map();
-            for (const item of current) {
+            let doneInKey = 0;
+            report(tableKey, 'transaction', 0, current.length);
+            await runInBatches(current, async (item) => {
               const ok = await pushTransactionUpsert(tableKey, item);
               if (ok) { sentCount++; pushedMap.set(String(item.id), item); } else { failedCount++; }
-              await sleep(AUTO_SYNC_ITEM_GAP_MS);
-            }
+              return ok;
+            }, () => { doneInKey++; report(tableKey, 'transaction', doneInKey, current.length); });
             // Cuma yang beneran kekirim yang jadi baseline — sisanya bakal
             // ketauan lagi sebagai upsert baru di run berikutnya, gak
             // ke-skip diam-diam.
@@ -380,19 +421,31 @@ export async function runAutoSync({ force = false } = {}) {
 
         const { upserts, deletes } = diffArrays(snapshot[tableKey], current);
         const workingMap = new Map((snapshot[tableKey] || []).map(it => [String(it.id), it]));
+        const totalInKey = upserts.length + deletes.length;
+        let doneInKey = 0;
+        report(tableKey, 'transaction', 0, totalInKey);
 
-        for (const item of upserts) {
-          const ok = await pushTransactionUpsert(tableKey, item);
-          if (ok) { sentCount++; workingMap.set(String(item.id), item); } else { failedCount++; }
-          await sleep(AUTO_SYNC_ITEM_GAP_MS);
+        if (upserts.length > 0) {
+          await runInBatches(upserts, async (item) => {
+            const ok = await pushTransactionUpsert(tableKey, item);
+            if (ok) { sentCount++; workingMap.set(String(item.id), item); } else { failedCount++; }
+            return ok;
+          }, () => { doneInKey++; report(tableKey, 'transaction', doneInKey, totalInKey); });
+          // Simpan snapshot begitu upserts kelar (bukan nunggu deletes juga)
+          // biar progress yang udah kekirim gak ilang kalau macet di deletes.
+          snapshot[tableKey] = Array.from(workingMap.values());
+          saveAutoSyncSnapshot(snapshot);
         }
+
         // `deletes` di sini cuma muncul dari item yang barusan kena purge di
         // atas (UI gak pernah filter langsung dari array) — jadi delete di
         // Supabase juga otomatis ngikut aturan "hapus cuma dari recycle bin".
-        for (const id of deletes) {
-          const ok = await pushTransactionDelete(tableKey, id);
-          if (ok) { sentCount++; workingMap.delete(String(id)); } else { failedCount++; }
-          await sleep(AUTO_SYNC_ITEM_GAP_MS);
+        if (deletes.length > 0) {
+          await runInBatches(deletes, async (id) => {
+            const ok = await pushTransactionDelete(tableKey, id);
+            if (ok) { sentCount++; workingMap.delete(String(id)); } else { failedCount++; }
+            return ok;
+          }, () => { doneInKey++; report(tableKey, 'transaction', doneInKey, totalInKey); });
         }
 
         snapshot[tableKey] = Array.from(workingMap.values());
@@ -404,7 +457,11 @@ export async function runAutoSync({ force = false } = {}) {
     }
 
     // ── CONFIG KEYS — push manual-only, per-key, cuma yang berubah ─────────
+    // Config itu 1 blob per key (bukan array of record), jadi gak ada
+    // "batch dalam key" — progress cukup done=0/1 lalu done=1/1.
     for (const key of CONFIG_KEYS) {
+      keyIndex++;
+      report(key, 'config', 0, 1);
       try {
         let current = await purgeExpired(key, await loadData(key, undefined));
 
@@ -412,21 +469,21 @@ export async function runAutoSync({ force = false } = {}) {
           if (force && current !== undefined) {
             const ok = await pushConfig(key, current);
             if (ok) { sentCount++; snapshot[key] = current; } else { failedCount++; }
-            await sleep(AUTO_SYNC_ITEM_GAP_MS);
           } else {
             snapshot[key] = current;
           }
           saveAutoSyncSnapshot(snapshot);
+          report(key, 'config', 1, 1);
           continue;
         }
 
         if (JSON.stringify(current) !== JSON.stringify(snapshot[key])) {
           const ok = await pushConfig(key, current);
           if (ok) { sentCount++; snapshot[key] = current; } else { failedCount++; }
-          await sleep(AUTO_SYNC_ITEM_GAP_MS);
         }
 
         saveAutoSyncSnapshot(snapshot);
+        report(key, 'config', 1, 1);
       } catch (err) {
         failedCount++;
         console.warn(`[sync] error proses config "${key}", lanjut ke key berikutnya:`, err.message);
@@ -437,6 +494,8 @@ export async function runAutoSync({ force = false } = {}) {
     // Push instan (di luar fungsi ini) sudah cover real-time-nya; loop ini
     // cuma jaring pengaman kalau push instan gagal terkirim (device offline dll).
     for (const key of LIVE_STATE_KEYS) {
+      keyIndex++;
+      report(key, 'live', 0, 1);
       try {
         const current = await loadData(key, null);
 
@@ -444,21 +503,21 @@ export async function runAutoSync({ force = false } = {}) {
           if (force) {
             const ok = await pushLiveState(key, current);
             if (ok) { sentCount++; snapshot[key] = current; } else { failedCount++; }
-            await sleep(AUTO_SYNC_ITEM_GAP_MS);
           } else {
             snapshot[key] = current;
           }
           saveAutoSyncSnapshot(snapshot);
+          report(key, 'live', 1, 1);
           continue;
         }
 
         if (JSON.stringify(current) !== JSON.stringify(snapshot[key])) {
           const ok = await pushLiveState(key, current);
           if (ok) { sentCount++; snapshot[key] = current; } else { failedCount++; }
-          await sleep(AUTO_SYNC_ITEM_GAP_MS);
         }
 
         saveAutoSyncSnapshot(snapshot);
+        report(key, 'live', 1, 1);
       } catch (err) {
         failedCount++;
         console.warn(`[sync] error proses live-state "${key}", lanjut ke key berikutnya:`, err.message);
