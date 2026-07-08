@@ -68,8 +68,11 @@ import {
   WifiOff,
 } from 'lucide-react';
 
-
-
+// Interval auto-sync berkala (lihat useEffect di bawah). 10 menit — cukup
+// sering buat nangkep perubahan config selama jam kerja, tapi murah karena
+// runAutoSync cuma push kalau BENERAN ada yang beda (gak ada network call
+// kalau nggak ada perubahan).
+const AUTO_SYNC_INTERVAL_MS = 10 * 60 * 1000;
 
 
 
@@ -347,6 +350,21 @@ export default function App() {
         setSyncStatus('ready');
         setSyncStep('');
         console.log('[App] Sinkronisasi awal selesai ✅ — push diizinkan');
+
+        // Catch-up otomatis begitu app kebuka: kalo sesi sebelumnya ketutup
+        // sebelum sempat sync (config/transaksi numpuk), langsung coba kirim
+        // SEKARANG — gak nunggu user pencet manual atau nunggu jam tertentu.
+        (async () => {
+          try {
+            const { runAutoSync } = await import('../storage/realtimeSync');
+            const { sent, failed } = await runAutoSync({ force: true });
+            if (sent > 0 || failed > 0) {
+              console.log(`[App] Catch-up sync startup: ${sent} terkirim, ${failed} gagal`);
+            }
+          } catch (e) {
+            console.warn('[App] Catch-up sync startup error:', e?.message);
+          }
+        })();
       }).catch((err) => {
         if (cancelled) return;
         clearTimeout(timeoutId);
@@ -392,9 +410,11 @@ export default function App() {
             return;
           }
           const { runAutoSync } = await import('../storage/realtimeSync');
-          const count = await runAutoSync({ force: true });
+          const { sent, failed } = await runAutoSync({ force: true });
           setConnectionToast({
-            msg: count > 0 ? `Tersinkronisasi — ${count} perubahan terkirim` : 'Tersinkronisasi ✓',
+            msg: failed > 0
+              ? `Tersinkronisasi sebagian — ${sent} terkirim, ${failed} gagal`
+              : sent > 0 ? `Tersinkronisasi — ${sent} perubahan terkirim` : 'Tersinkronisasi ✓',
             type: 'online',
           });
         } catch (e) {
@@ -408,6 +428,78 @@ export default function App() {
   }, [justWentOffline, justWentOnline]);
 
   useEffect(() => () => clearTimeout(connectionToastTimerRef.current), []);
+
+  // ── Auto-sync berkala — GANTI cara lama (cek jam 21:00 yang cuma jalan
+  // kalau layar BackupView lagi kebuka). Ini jalan di level App.jsx, tiap
+  // AUTO_SYNC_INTERVAL_MS, SELAMA app kebuka — gak peduli user lagi di layar
+  // mana. force:false aman dipanggil berkali-kali (lihat komen runAutoSync
+  // di storage/realtimeSync.js soal kenapa itu gak akan bulk-upload key yang
+  // belum pernah ke-baseline).
+  const syncStatusRef = useRef(syncStatus);
+  useEffect(() => { syncStatusRef.current = syncStatus; }, [syncStatus]);
+
+  useEffect(() => {
+    if (syncStatus !== 'ready' && syncStatus !== 'error') return;
+
+    const id = setInterval(async () => {
+      try {
+        const { isAutoSyncEnabled, runAutoSync } = await import('../storage/realtimeSync');
+        if (!isAutoSyncEnabled()) return;
+        const { sent, failed } = await runAutoSync({ force: false });
+        if (sent > 0) console.log(`[App] Auto-sync berkala: ${sent} terkirim`);
+        if (failed > 0) console.warn(`[App] Auto-sync berkala: ${failed} gagal, dicoba lagi nanti`);
+      } catch (e) {
+        console.warn('[App] Auto-sync berkala error:', e?.message);
+      }
+    }, AUTO_SYNC_INTERVAL_MS);
+
+    return () => clearInterval(id);
+  }, [syncStatus]);
+
+  // ── Flush pas app di-background / dibuka lagi ───────────────────────────
+  // Best-effort: begitu app diminimize/dikunci (karyawan pulang & HP
+  // ditinggal, dll), coba kirim sisa perubahan SEBELUM device idle. Juga
+  // coba lagi pas app dibuka balik, sebagai jaring pengaman ekstra selain
+  // auto-sync berkala di atas.
+  // CATATAN JUJUR: OS/browser bisa langsung suspend eksekusi JS begitu app
+  // di-background — ini best-effort, BUKAN jaminan 100%. Auto-sync berkala
+  // di atas tetap jalur paling reliable karena jalan selama app aktif.
+  useEffect(() => {
+    let lastFlush = 0;
+    const FLUSH_COOLDOWN_MS = 5000; // cegah dobel-trigger kalo pause & visibilitychange nembak bareng
+
+    const flush = async (label) => {
+      if (syncStatusRef.current !== 'ready' && syncStatusRef.current !== 'error') return;
+      const now = Date.now();
+      if (now - lastFlush < FLUSH_COOLDOWN_MS) return;
+      lastFlush = now;
+      try {
+        const { runAutoSync } = await import('../storage/realtimeSync');
+        const { sent, failed } = await runAutoSync({ force: true });
+        console.log(`[App] Flush (${label}): ${sent} terkirim, ${failed} gagal`);
+      } catch (e) {
+        console.warn(`[App] Flush (${label}) error:`, e?.message);
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') flush('visibility-hidden');
+      else if (document.visibilityState === 'visible') flush('visibility-visible');
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    let pauseHandle, resumeHandle;
+    (async () => {
+      pauseHandle = await CapacitorApp.addListener('pause', () => flush('capacitor-pause'));
+      resumeHandle = await CapacitorApp.addListener('resume', () => flush('capacitor-resume'));
+    })();
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      pauseHandle?.remove?.();
+      resumeHandle?.remove?.();
+    };
+  }, []);
 
   // --- STATES APLIKASI ---
   const [appliedVoucher, setAppliedVoucher] = useState(null);

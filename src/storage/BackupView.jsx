@@ -11,7 +11,8 @@ import { Share } from '@capacitor/share';
 import { exportAllData, loadData, saveData } from '../storage/db';
 import { ALL_KEYS, TRANSACTION_KEYS, APP_CONFIG_KEYS, DATE_FILTERABLE_KEYS } from '../storage/syncKeys';
 import { getSupabaseClient, isSupabaseConfigured } from '../storage/syncClient';
-import { runAutoSync, isSyncInFlight } from '../storage/realtimeSync';
+import { runAutoSync, isSyncInFlight, isAutoSyncEnabled, setAutoSyncEnabled } from '../storage/realtimeSync';
+import appVersion from '../version.json';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -392,14 +393,18 @@ const BackupView = ({ onBack }) => {
     return raw ? new Date(raw).toLocaleString('id-ID') : null;
   });
 
-  const [dailySyncOn, setDailySyncOn] = useState(() => {
-    const saved = localStorage.getItem('mamam_daily_sync');
-    return saved !== 'false'; // Default bernilai true sebagai safety net
-  });
+  // Toggle auto-sync berkala. Jalannya sekarang di App.jsx level (global,
+  // gak peduli lagi buka layar apa, plus flush pas app di-background/dibuka
+  // lagi) — bukan lagi cek jam 21:00 di dalam layar ini doang. Flag-nya
+  // disatuin sama yang dicek langsung sama runAutoSync() sendiri
+  // (isAutoSyncEnabled/setAutoSyncEnabled di realtimeSync.js), biar cuma
+  // ada SATU sumber kebenaran — gak ada 2 toggle beda localStorage key yang
+  // gampang ketuker/gak sinkron satu sama lain.
+  const [dailySyncOn, setDailySyncOn] = useState(() => isAutoSyncEnabled());
 
   function handleToggleDailySync() {
     const next = !dailySyncOn;
-    localStorage.setItem('mamam_daily_sync', String(next));
+    setAutoSyncEnabled(next);
     setDailySyncOn(next);
   }
 
@@ -416,7 +421,8 @@ const BackupView = ({ onBack }) => {
     });
   }, []);
 
-  // Listener: update lastSyncTime kapanpun ada sync dari manapun
+  // Listener: update lastSyncTime kapanpun ada sync dari manapun — termasuk
+  // dari auto-sync berkala & flush background/foreground yang jalan di App.jsx.
   useEffect(() => {
     const handler = () => refreshSyncTime.current();
 
@@ -433,24 +439,6 @@ const BackupView = ({ onBack }) => {
       window.removeEventListener('mamam_sync_updated', handler);
     };
   }, []);
-
-  // Interval: hanya untuk cek daily sync jam 21:00, bukan polling timestamp
-  useEffect(() => {
-    const id = setInterval(() => {
-      const currentTime = new Date();
-      if (dailySyncOn && currentTime.getHours() === 21) {
-        const raw = localStorage.getItem('mamam_last_supabase_sync');
-        const lastD = raw ? new Date(raw) : null;
-        if (!lastD || lastD.toDateString() !== currentTime.toDateString() || lastD.getHours() < 21) {
-          runAutoSync({ force: true }).then(count => {
-            refreshSyncTime.current();
-            showToast(`Auto-Sync 21:00 — ${count > 0 ? count + ' perubahan dikirim' : 'sudah tersinkron'}`);
-          }).catch(e => console.error("Daily sync fail:", e));
-        }
-      }
-    }, 60_000);
-    return () => clearInterval(id);
-  }, [dailySyncOn]);
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
@@ -545,9 +533,17 @@ const BackupView = ({ onBack }) => {
     if (isSyncInFlight()) { showToast('Sync sedang berjalan, tunggu sebentar...', 'error'); return; }
     setIsSyncing(true);
     try {
-      const count = await runAutoSync({ force: true });
+      // Tiap item sekarang punya timeout 15 detik (lihat PUSH_TIMEOUT_MS di
+      // realtimeSync.js), jadi proses ini gak akan pernah "muter" tanpa
+      // batas kayak sebelumnya — worst case tetep kelar, cuma butuh waktu
+      // sebanding jumlah item yang gagal/timeout.
+      const { sent, failed } = await runAutoSync({ force: true });
       refreshSyncTime.current();
-      showToast(count > 0 ? `Sync selesai — ${count} perubahan dikirim` : 'Semua data sudah tersinkron ✓');
+      if (failed > 0) {
+        showToast(`${sent} terkirim, ${failed} gagal (timeout/koneksi) — otomatis dicoba lagi nanti`, 'error');
+      } else {
+        showToast(sent > 0 ? `Sync selesai — ${sent} perubahan dikirim` : 'Semua data sudah tersinkron ✓');
+      }
     } catch (err) {
       showToast('Gagal: ' + err.message, 'error');
     } finally {
@@ -571,6 +567,7 @@ const BackupView = ({ onBack }) => {
   }
 
   const STATUS_ROWS = [
+    { label: 'Versi aplikasi', value: `v${appVersion.version} (${appVersion.updatedAt})` },
     { label: 'Backup local terakhir', value: lastBackup },
     { label: 'Sync cloud terakhir', value: lastSyncTime || 'Belum pernah' },
     { label: 'Total record', value: `±${recordCount} data` },
@@ -659,10 +656,12 @@ const BackupView = ({ onBack }) => {
             {/* Layout 2 Tombol Berdampingan */}
             {supabaseReady && (
               <div className="grid grid-cols-2 gap-2">
-                {/* 1. Sync Jam 21:00 (Safety Net) */}
+                {/* 1. Auto-Sync Berkala — jalan global di App.jsx tiap ~10 menit
+                    + pas app di-background/dibuka lagi, gak peduli lagi di
+                    layar mana (lihat App.jsx, bukan di sini lagi) */}
                 <button onClick={handleToggleDailySync} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${dailySyncOn ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
                   <Clock className="w-5 h-5" />
-                  <p className="text-[10px] font-bold leading-tight">Otomatis<br />21:00</p>
+                  <p className="text-[10px] font-bold leading-tight">Auto-Sync<br />Berkala</p>
                   <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${dailySyncOn ? 'bg-blue-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>{dailySyncOn ? 'ON' : 'OFF'}</div>
                 </button>
 

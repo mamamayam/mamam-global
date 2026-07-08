@@ -2,6 +2,7 @@ import React from "react";
 import { X } from "lucide-react";
 import Button from '../../components/ui/Button';
 import { useAppContext } from '../../context/AppContext';
+import appVersion from '../../version.json';
 
 export default function Sidebar({
     currentView,
@@ -83,6 +84,9 @@ export default function Sidebar({
                         </Button>
                     )}
                 </div>
+                <p className="text-center text-[10px] text-slate-300 dark:text-slate-600 font-semibold pb-2">
+                    v{appVersion.version} · {appVersion.updatedAt}
+                </p>
             </nav>
         </aside>
     );

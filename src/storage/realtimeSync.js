@@ -1,9 +1,26 @@
-import { getSupabaseClient, getDeviceId, isSupabaseConfigured } from './syncClient';
+import { getSupabaseClient, getDeviceId, isSupabaseConfigured, withTimeout } from './syncClient';
 import { saveData, loadData } from './db';
 import { TRANSACTION_KEYS, CONFIG_KEYS, LIVE_STATE_KEYS, APP_CONFIG_KEYS } from './syncKeys';
 import { splitExpired } from '../utils/softDelete';
 
 const deviceId = getDeviceId();
+
+// Timeout per network call ke Supabase (upsert/delete/select). 15 detik —
+// cukup toleran buat koneksi lambat, tapi gak bikin satu request macet
+// nge-block seluruh antrian sync selama-lamanya.
+const PUSH_TIMEOUT_MS = 15000;
+
+// Nunggu syncReadyPromise TAPI dengan batas waktu. Kalau initial pull di
+// App.jsx entah kenapa gak pernah resolve/reject, mendingan lanjut push
+// agak telat drpd stuck permanen nunggu promise yang gak bakal pernah selesai.
+async function waitReadyOrTimeout(readyPromise, ms = 20000) {
+  if (!readyPromise) return;
+  try {
+    await withTimeout(readyPromise, ms, 'syncReadyPromise');
+  } catch (_) {
+    // Lanjut aja — mendingan sync agak telat drpd nge-hang selamanya.
+  }
+}
 
 // =============================================================================
 // MERGE — satu fungsi dipakai di SEMUA tempat yang nerima data dari luar
@@ -80,30 +97,38 @@ export function mergeValue(local, remote) {
 }
 
 // ── PUSH: kirim 1 record transaksi (insert/update) — INSTAN ────────────────
+// Return value: true = beneran kekirim & kesimpen di Supabase, false = gagal
+// (error ATAU timeout). Dipakai runAutoSync buat mutusin key ini boleh
+// dianggap "sudah sinkron" (snapshot maju) atau harus di-retry run berikutnya.
 export async function pushTransactionUpsert(tableKey, item, readyPromise) {
-  if (!isSupabaseConfigured() || !item?.id) return;
+  if (!isSupabaseConfigured() || !item?.id) return false;
 
-  if (readyPromise) await readyPromise;
+  await waitReadyOrTimeout(readyPromise);
 
   const itemUpdatedAt = item.updated_at || new Date().toISOString();
 
   try {
     const supabase = await getSupabaseClient();
-    if (!supabase) return;
-    const { error } = await supabase.from(tableKey).upsert({
-      id: String(item.id),
-      payload: item,
-      updated_at: itemUpdatedAt,
-      updated_by: deviceId,
-    }, { onConflict: 'id' });
+    if (!supabase) return false;
+    const { error } = await withTimeout(
+      supabase.from(tableKey).upsert({
+        id: String(item.id),
+        payload: item,
+        updated_at: itemUpdatedAt,
+        updated_by: deviceId,
+      }, { onConflict: 'id' }),
+      PUSH_TIMEOUT_MS, `upsert ${tableKey}/${item.id}`
+    );
     if (error) {
       console.warn(`[sync] gagal push ${tableKey}/${item.id}:`, error.message);
-    } else {
-      localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
-      window.dispatchEvent(new CustomEvent('mamam_sync_updated'));
+      return false;
     }
+    localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
+    window.dispatchEvent(new CustomEvent('mamam_sync_updated'));
+    return true;
   } catch (err) {
-    console.warn(`[sync] error push ${tableKey}:`, err.message);
+    console.warn(`[sync] error/timeout push ${tableKey}/${item.id}:`, err.message);
+    return false;
   }
 }
 
@@ -114,16 +139,24 @@ export async function pushTransactionUpsert(tableKey, item, readyPromise) {
 // Tombol "Hapus" di UI TIDAK PERNAH manggil ini secara langsung — dia harus
 // pakai markDeleted() (set `deletedAt`), bukan filter dari array.
 export async function pushTransactionDelete(tableKey, id, readyPromise) {
-  if (!isSupabaseConfigured() || !id) return;
-  if (readyPromise) await readyPromise;
+  if (!isSupabaseConfigured() || !id) return false;
+  await waitReadyOrTimeout(readyPromise);
 
   try {
     const supabase = await getSupabaseClient();
-    if (!supabase) return;
-    const { error } = await supabase.from(tableKey).delete().eq('id', String(id));
-    if (error) console.warn(`[sync] gagal hapus ${tableKey}/${id}:`, error.message);
+    if (!supabase) return false;
+    const { error } = await withTimeout(
+      supabase.from(tableKey).delete().eq('id', String(id)),
+      PUSH_TIMEOUT_MS, `delete ${tableKey}/${id}`
+    );
+    if (error) {
+      console.warn(`[sync] gagal hapus ${tableKey}/${id}:`, error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.warn(`[sync] error delete ${tableKey}:`, err.message);
+    console.warn(`[sync] error/timeout delete ${tableKey}:`, err.message);
+    return false;
   }
 }
 
@@ -138,21 +171,29 @@ export async function pushTransactionDelete(tableKey, id, readyPromise) {
 // transaksi/currentShift. Ini sesuai yang lo mau: config gak butuh instan,
 // dan ngirit kuota + ngilangin kompleksitas timer/debounce.
 export async function pushConfig(key, value, readyPromise) {
-  if (!isSupabaseConfigured()) return;
-  if (readyPromise) await readyPromise;
+  if (!isSupabaseConfigured()) return false;
+  await waitReadyOrTimeout(readyPromise);
 
   try {
     const supabase = await getSupabaseClient();
-    if (!supabase) return;
-    const { error } = await supabase.from('app_config').upsert({
-      key,
-      value,
-      updated_at: new Date().toISOString(),
-      updated_by: deviceId,
-    }, { onConflict: 'key' });
-    if (error) console.warn(`[sync] gagal push config ${key}:`, error.message);
+    if (!supabase) return false;
+    const { error } = await withTimeout(
+      supabase.from('app_config').upsert({
+        key,
+        value,
+        updated_at: new Date().toISOString(),
+        updated_by: deviceId,
+      }, { onConflict: 'key' }),
+      PUSH_TIMEOUT_MS, `config ${key}`
+    );
+    if (error) {
+      console.warn(`[sync] gagal push config ${key}:`, error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.warn(`[sync] error push config ${key}:`, err.message);
+    console.warn(`[sync] error/timeout push config ${key}:`, err.message);
+    return false;
   }
 }
 
@@ -163,21 +204,29 @@ export async function pushConfig(key, value, readyPromise) {
 // karena transaksi di bawahnya butuh status ini selalu up-to-date di semua
 // device begitu berubah.
 export async function pushLiveState(key, value, readyPromise) {
-  if (!isSupabaseConfigured()) return;
-  if (readyPromise) await readyPromise;
+  if (!isSupabaseConfigured()) return false;
+  await waitReadyOrTimeout(readyPromise);
 
   try {
     const supabase = await getSupabaseClient();
-    if (!supabase) return;
-    const { error } = await supabase.from('app_config').upsert({
-      key,
-      value,
-      updated_at: new Date().toISOString(),
-      updated_by: deviceId,
-    }, { onConflict: 'key' });
-    if (error) console.warn(`[sync] gagal push live-state ${key}:`, error.message);
+    if (!supabase) return false;
+    const { error } = await withTimeout(
+      supabase.from('app_config').upsert({
+        key,
+        value,
+        updated_at: new Date().toISOString(),
+        updated_by: deviceId,
+      }, { onConflict: 'key' }),
+      PUSH_TIMEOUT_MS, `live-state ${key}`
+    );
+    if (error) {
+      console.warn(`[sync] gagal push live-state ${key}:`, error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.warn(`[sync] error push live-state ${key}:`, err.message);
+    console.warn(`[sync] error/timeout push live-state ${key}:`, err.message);
+    return false;
   }
 }
 
@@ -208,8 +257,10 @@ export function diffArrays(prevArr, nextArr) {
 }
 
 // =============================================================================
-// AUTO SYNC (manual & safety-net 21:00)
-// Skema push: (1) manual / 21:00 → transaksi (jaring pengaman) + SEMUA config,
+// AUTO SYNC (manual, catch-up startup, reconnect, berkala, & flush bg/fg)
+// Semua trigger-nya hidup di App.jsx sekarang — lihat catatan di sana.
+// Skema push: (1) runAutoSync() [dipanggil manual/startup/reconnect/berkala/
+//                 flush] → transaksi (jaring pengaman) + SEMUA config,
 //             (2) instant per-transaksi (di luar fungsi ini, lewat usePersistState),
 //             (3) instant live-state (di luar fungsi ini).
 // =============================================================================
@@ -271,120 +322,162 @@ export function isSyncInFlight() {
  * Transaksi: per-record upsert/delete. Config: per-key (push manual only).
  * Live state: safety net (push instan utamanya terjadi di luar fungsi ini).
  *
+ * BULLETPROOFING (lihat juga withTimeout di syncClient.js):
+ *  - Tiap key diproses dalam try/catch sendiri — satu key yang error/timeout
+ *    gak bikin key-key sesudahnya ikut gagal diproses.
+ *  - Snapshot disimpan SETELAH TIAP KEY selesai (bukan cuma sekali di akhir),
+ *    jadi kalau internet mati di tengah jalan, progress yang udah kekirim
+ *    gak ilang/keulang pas run berikutnya.
+ *  - Snapshot HANYA maju kalau push-nya beneran sukses. Kalau gagal, key itu
+ *    dibiarin di state lama → run berikutnya bakal ketauan lagi bedanya &
+ *    di-retry otomatis, gak diem-diem "dianggap kekirim" padahal enggak.
+ *
  * @param {Object} [options]
  * @param {boolean} [options.force=false]
  *   false → skip kalau isAutoSyncEnabled() = false, dan skip key tanpa
  *           snapshot (cuma bikin baseline, gak push, biar gak dobel sama push instan).
  *   true  → bypass toggle, dan key tanpa snapshot langsung di-push penuh
- *           sebagai initial upload (dipakai sync manual & safety-net 21:00).
+ *           sebagai initial upload (dipakai sync manual, catch-up startup,
+ *           reconnect, dan flush background/foreground — lihat App.jsx).
  *
- * @returns {Promise<number>} Jumlah record/config yang berhasil dikirim.
+ * @returns {Promise<{sent: number, failed: number}>}
  */
 export async function runAutoSync({ force = false } = {}) {
-  if ((!isAutoSyncEnabled() && !force) || !isSupabaseConfigured() || autoSyncInFlight) return 0;
+  if ((!isAutoSyncEnabled() && !force) || !isSupabaseConfigured() || autoSyncInFlight) {
+    return { sent: 0, failed: 0 };
+  }
   autoSyncInFlight = true;
+
+  let sentCount = 0;
+  let failedCount = 0;
 
   try {
     const snapshot = loadAutoSyncSnapshot();
-    let sentCount = 0;
 
     // ── TRANSACTION KEYS — push per-record, hapus permanen HANYA dari purge ─
     for (const tableKey of TRANSACTION_KEYS) {
-      let current = await purgeExpired(tableKey, await loadData(tableKey, []));
+      try {
+        let current = await purgeExpired(tableKey, await loadData(tableKey, []));
 
-      if (!(tableKey in snapshot)) {
-        if (force && current.length > 0) {
-          for (const item of current) {
-            await pushTransactionUpsert(tableKey, item);
-            sentCount++;
-            await sleep(AUTO_SYNC_ITEM_GAP_MS);
+        if (!(tableKey in snapshot)) {
+          if (force && current.length > 0) {
+            const pushedMap = new Map();
+            for (const item of current) {
+              const ok = await pushTransactionUpsert(tableKey, item);
+              if (ok) { sentCount++; pushedMap.set(String(item.id), item); } else { failedCount++; }
+              await sleep(AUTO_SYNC_ITEM_GAP_MS);
+            }
+            // Cuma yang beneran kekirim yang jadi baseline — sisanya bakal
+            // ketauan lagi sebagai upsert baru di run berikutnya, gak
+            // ke-skip diam-diam.
+            snapshot[tableKey] = Array.from(pushedMap.values());
+          } else {
+            snapshot[tableKey] = current;
           }
+          saveAutoSyncSnapshot(snapshot);
+          continue;
         }
-        snapshot[tableKey] = current;
-        continue;
-      }
 
-      const { upserts, deletes } = diffArrays(snapshot[tableKey], current);
+        const { upserts, deletes } = diffArrays(snapshot[tableKey], current);
+        const workingMap = new Map((snapshot[tableKey] || []).map(it => [String(it.id), it]));
 
-      for (const item of upserts) {
-        await pushTransactionUpsert(tableKey, item);
-        sentCount++;
-        await sleep(AUTO_SYNC_ITEM_GAP_MS);
-      }
-      // `deletes` di sini cuma muncul dari item yang barusan kena purge di
-      // atas (UI gak pernah filter langsung dari array) — jadi delete di
-      // Supabase juga otomatis ngikut aturan "hapus cuma dari recycle bin".
-      for (const id of deletes) {
-        await pushTransactionDelete(tableKey, id);
-        sentCount++;
-        await sleep(AUTO_SYNC_ITEM_GAP_MS);
-      }
+        for (const item of upserts) {
+          const ok = await pushTransactionUpsert(tableKey, item);
+          if (ok) { sentCount++; workingMap.set(String(item.id), item); } else { failedCount++; }
+          await sleep(AUTO_SYNC_ITEM_GAP_MS);
+        }
+        // `deletes` di sini cuma muncul dari item yang barusan kena purge di
+        // atas (UI gak pernah filter langsung dari array) — jadi delete di
+        // Supabase juga otomatis ngikut aturan "hapus cuma dari recycle bin".
+        for (const id of deletes) {
+          const ok = await pushTransactionDelete(tableKey, id);
+          if (ok) { sentCount++; workingMap.delete(String(id)); } else { failedCount++; }
+          await sleep(AUTO_SYNC_ITEM_GAP_MS);
+        }
 
-      snapshot[tableKey] = current;
+        snapshot[tableKey] = Array.from(workingMap.values());
+        saveAutoSyncSnapshot(snapshot);
+      } catch (err) {
+        failedCount++;
+        console.warn(`[sync] error proses transaksi "${tableKey}", lanjut ke key berikutnya:`, err.message);
+      }
     }
 
     // ── CONFIG KEYS — push manual-only, per-key, cuma yang berubah ─────────
     for (const key of CONFIG_KEYS) {
-      let current = await purgeExpired(key, await loadData(key, undefined));
+      try {
+        let current = await purgeExpired(key, await loadData(key, undefined));
 
-      if (!(key in snapshot)) {
-        if (force && current !== undefined) {
-          await pushConfig(key, current);
-          sentCount++;
+        if (!(key in snapshot)) {
+          if (force && current !== undefined) {
+            const ok = await pushConfig(key, current);
+            if (ok) { sentCount++; snapshot[key] = current; } else { failedCount++; }
+            await sleep(AUTO_SYNC_ITEM_GAP_MS);
+          } else {
+            snapshot[key] = current;
+          }
+          saveAutoSyncSnapshot(snapshot);
+          continue;
+        }
+
+        if (JSON.stringify(current) !== JSON.stringify(snapshot[key])) {
+          const ok = await pushConfig(key, current);
+          if (ok) { sentCount++; snapshot[key] = current; } else { failedCount++; }
           await sleep(AUTO_SYNC_ITEM_GAP_MS);
         }
-        snapshot[key] = current;
-        continue;
-      }
 
-      if (JSON.stringify(current) !== JSON.stringify(snapshot[key])) {
-        await pushConfig(key, current);
-        sentCount++;
-        await sleep(AUTO_SYNC_ITEM_GAP_MS);
+        saveAutoSyncSnapshot(snapshot);
+      } catch (err) {
+        failedCount++;
+        console.warn(`[sync] error proses config "${key}", lanjut ke key berikutnya:`, err.message);
       }
-
-      snapshot[key] = current;
     }
 
-    // ── LIVE STATE KEYS (currentShift, dkk) — safety net manual & 21:00 ────
+    // ── LIVE STATE KEYS (currentShift, dkk) — safety net manual & berkala ──
     // Push instan (di luar fungsi ini) sudah cover real-time-nya; loop ini
     // cuma jaring pengaman kalau push instan gagal terkirim (device offline dll).
     for (const key of LIVE_STATE_KEYS) {
-      const current = await loadData(key, null);
+      try {
+        const current = await loadData(key, null);
 
-      if (!(key in snapshot)) {
-        if (force) {
-          await pushLiveState(key, current);
-          sentCount++;
+        if (!(key in snapshot)) {
+          if (force) {
+            const ok = await pushLiveState(key, current);
+            if (ok) { sentCount++; snapshot[key] = current; } else { failedCount++; }
+            await sleep(AUTO_SYNC_ITEM_GAP_MS);
+          } else {
+            snapshot[key] = current;
+          }
+          saveAutoSyncSnapshot(snapshot);
+          continue;
+        }
+
+        if (JSON.stringify(current) !== JSON.stringify(snapshot[key])) {
+          const ok = await pushLiveState(key, current);
+          if (ok) { sentCount++; snapshot[key] = current; } else { failedCount++; }
           await sleep(AUTO_SYNC_ITEM_GAP_MS);
         }
-        snapshot[key] = current;
-        continue;
-      }
 
-      if (JSON.stringify(current) !== JSON.stringify(snapshot[key])) {
-        await pushLiveState(key, current);
-        sentCount++;
-        await sleep(AUTO_SYNC_ITEM_GAP_MS);
+        saveAutoSyncSnapshot(snapshot);
+      } catch (err) {
+        failedCount++;
+        console.warn(`[sync] error proses live-state "${key}", lanjut ke key berikutnya:`, err.message);
       }
-
-      snapshot[key] = current;
     }
 
-    saveAutoSyncSnapshot(snapshot);
     localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
     window.dispatchEvent(new CustomEvent('mamam_sync_updated'));
 
-    if (sentCount > 0) {
-      console.log(`[sync] ${force ? 'manual' : 'auto'}-sync: ${sentCount} perubahan terkirim ✅`);
+    if (sentCount > 0 || failedCount > 0) {
+      console.log(`[sync] ${force ? 'manual' : 'auto'}-sync: ${sentCount} terkirim, ${failedCount} gagal`);
     } else {
       console.log(`[sync] ${force ? 'manual' : 'auto'}-sync: tidak ada perubahan`);
     }
 
-    return sentCount;
+    return { sent: sentCount, failed: failedCount };
   } catch (err) {
-    console.warn(`[sync] ${force ? 'manual' : 'auto'}-sync gagal:`, err.message);
-    return 0;
+    console.warn(`[sync] ${force ? 'manual' : 'auto'}-sync gagal total:`, err.message);
+    return { sent: sentCount, failed: failedCount };
   } finally {
     autoSyncInFlight = false;
   }
@@ -425,9 +518,10 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
     for (const tableKey of TRANSACTION_KEYS) {
       if (cancelled) break;
       try {
-        const { data: rows, error } = await supabase
-          .from(tableKey)
-          .select('id, payload, updated_at, updated_by');
+        const { data: rows, error } = await withTimeout(
+          supabase.from(tableKey).select('id, payload, updated_at, updated_by'),
+          PUSH_TIMEOUT_MS, `initial pull ${tableKey}`
+        );
         if (error) { console.warn(`[sync] initial pull ${tableKey} gagal:`, error.message); continue; }
 
         const local = await loadData(tableKey, []);
@@ -446,10 +540,10 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
     // 2. Initial pull — config & live-state (merge, bukan overwrite)
     if (!cancelled) {
       try {
-        const { data: rows, error } = await supabase
-          .from('app_config')
-          .select('key, value, updated_at, updated_by')
-          .in('key', APP_CONFIG_KEYS);
+        const { data: rows, error } = await withTimeout(
+          supabase.from('app_config').select('key, value, updated_at, updated_by').in('key', APP_CONFIG_KEYS),
+          PUSH_TIMEOUT_MS, 'initial pull config'
+        );
         if (error) {
           console.warn('[sync] initial pull config gagal:', error.message);
         } else {

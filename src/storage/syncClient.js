@@ -17,6 +17,23 @@
 let _client = null;
 let _authReadyPromise = null;
 
+// ── TIMEOUT HELPER — dipakai di file ini & realtimeSync.js ─────────────────
+// Supabase-js gak punya timeout bawaan. Kalau koneksi macet/setengah putus
+// (bukan bener-bener offline, jadi listener 'online'/'offline' browser gak
+// kedeteksi), promise-nya bisa nge-hang SELAMANYA tanpa pernah resolve/reject.
+// Ini yang bikin manual sync bisa "muter" puluhan menit gak kelar — satu
+// request macet, semua proses di belakangnya (yang jalan serial) ikut
+// nunggu selama-lamanya. withTimeout() maksa promise itu "nyerah" setelah
+// N ms — request aslinya mungkin masih jalan diam-diam di background (gak
+// di-abort, cuma hasilnya diabaikan), tapi kode kita gak pernah stuck lagi.
+export function withTimeout(promise, ms, label = 'operasi') {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timeout ${ms}ms: ${label}`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /**
  * Pastikan client punya sesi Supabase Auth (anonymous, silent).
  * - Cek sesi tersimpan dulu (getSession) — kalau device ini sudah pernah
@@ -32,18 +49,20 @@ let _authReadyPromise = null;
  * minta client — push per-record, initial pull, maupun runAutoSync — tanpa
  * perlu nambahin await di file lain sama sekali.
  */
+const AUTH_TIMEOUT_MS = 8000;
+
 function ensureAuthSession(client) {
   if (!_authReadyPromise) {
     _authReadyPromise = (async () => {
       try {
-        const { data: { session } } = await client.auth.getSession();
+        const { data: { session } } = await withTimeout(client.auth.getSession(), AUTH_TIMEOUT_MS, 'auth.getSession');
         if (session) return session;
 
-        const { data, error } = await client.auth.signInAnonymously();
+        const { data, error } = await withTimeout(client.auth.signInAnonymously(), AUTH_TIMEOUT_MS, 'auth.signInAnonymously');
         if (error) throw error;
         return data.session;
       } catch (err) {
-        console.warn('[auth] silent sign-in gagal (device offline?), akan dicoba lagi nanti:', err.message);
+        console.warn('[auth] silent sign-in gagal/timeout (device offline?), akan dicoba lagi nanti:', err.message);
         _authReadyPromise = null;
         return null;
       }
