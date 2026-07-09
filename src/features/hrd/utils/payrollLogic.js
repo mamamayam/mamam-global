@@ -1,3 +1,5 @@
+import { createSnapshot, resolveSnapshot } from '../../../utils/snapshot';
+
 export const WORK_START_MINUTES = 9 * 60;
 export const WORK_END_MINUTES = 19 * 60;
 export const EARLY_OVERTIME_THRESHOLD_MINUTES = WORK_START_MINUTES - 30;
@@ -9,6 +11,45 @@ export const OVERTIME_RATE_PER_30MIN = 5000;
 export function getOvertimeRate(emp) {
   const rate = Number(emp?.overtimeRate30);
   return rate > 0 ? rate : OVERTIME_RATE_PER_30MIN;
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/*  SNAPSHOT TARIF KARYAWAN — bikin histori payroll immutable        */
+/*                                                                   */
+/*  Data karyawan (hourlyRate, overtimeRate30, fullTimeBonus) BOLEH  */
+/*  berubah kapan aja (kenaikan gaji, dst). Tapi begitu sebuah       */
+/*  employeeDailyRecord dibuat, tarif yang dipakai buat hari itu     */
+/*  harus DIBEKUKAN di record itu sendiri — supaya laporan/slip gaji */
+/*  bulan lalu gak ikut berubah kalau tarif karyawan diubah hari ini.*/
+/*  ID (employeeId) tetap disimpan seperti biasa, snapshot ini cuma  */
+/*  nambahin data buat display & kalkulasi, bukan gantiin relasinya. */
+/* ═══════════════════════════════════════════════════════════════ */
+
+// Field karyawan yang relevan buat kalkulasi payroll & perlu dibekukan.
+// Nambah field baru yang perlu di-snapshot? Cukup tambahin di sini —
+// semua tempat yang pakai snapshotEmployeeForPayroll()/resolveEmployeeForRecord()
+// otomatis ikut kebawa, gak perlu diubah satu-satu.
+export const EMPLOYEE_PAYROLL_SNAPSHOT_FIELDS = ['name', 'hourlyRate', 'overtimeRate30', 'fullTimeBonus'];
+
+/** Bekukan data karyawan TERKINI jadi snapshot buat ditempel ke 1 record histori. */
+export function snapshotEmployeeForPayroll(emp) {
+  return createSnapshot(emp, EMPLOYEE_PAYROLL_SNAPSHOT_FIELDS);
+}
+
+/**
+ * Resolve "data karyawan efektif" buat 1 record (employeeDailyRecord, dkk):
+ * prioritaskan snapshot yang sudah dibekukan di record itu sendiri, baru
+ * fallback ke data karyawan LIVE (by employeeId) kalau record-nya belum
+ * punya snapshot — supaya record lama (dibuat sebelum fitur ini ada) tetap
+ * kebaca normal sampai tersentuh lagi (disimpan/diedit) dan otomatis
+ * kebekukan jadi snapshot permanen saat itu.
+ *
+ * @param {object} record - record yang punya employeeId (& mungkin employeeSnapshot)
+ * @param {Array} employees - array data karyawan TERKINI (dari AppContext)
+ * @returns {object|null}
+ */
+export function resolveEmployeeForRecord(record, employees) {
+  return resolveSnapshot(record, 'employeeSnapshot', employees, 'employeeId');
 }
 
 // Nominal uang lembur = jumlah blok 30 menit (dibulatkan ke bawah) x tarif per 30 menit.
@@ -195,29 +236,40 @@ export function mergeAutoAdjustments(existingAdditions, record, emp) {
 /* ═══════════════════════════════════════════════════════════════ */
 /*  REKAP & SLIP GAJI — helper bareng buat ReportsTab & Payslip      */
 /*                                                                   */
-/*  Dulu Bonus Lembur SELALU dihitung ulang pakai tarif terkini di   */
-/*  ReportsTab, tapi Bonus Full Time malah dipercaya dari cache lama */
-/*  di rec.additions — jadi kalau fullTimeBonus diubah belakangan,   */
-/*  cuma Lembur yang ikut update, Full Time bisa nyangkut basi.      */
-/*  Kedua bonus auto sekarang lewat computeAutoAdjustments() yang    */
-/*  sama, jadi keduanya selalu fresh & konsisten satu sama lain.     */
+/*  [UPDATE] Sebelumnya Bonus Full Time & Bonus Lembur SELALU        */
+/*  dihitung ulang pakai tarif karyawan TERKINI (satu `emp` yang     */
+/*  sama buat semua record) — konsisten satu sama lain, tapi jadi    */
+/*  "mutable history": kalau tarif/fullTimeBonus karyawan diubah,    */
+/*  SEMUA laporan bulan-bulan sebelumnya ikut berubah juga.          */
+/*                                                                   */
+/*  Sekarang tarif di-resolve PER RECORD lewat                       */
+/*  resolveEmployeeForRecord() — prioritas ke rec.employeeSnapshot   */
+/*  (tarif yang dibekukan saat record itu dibuat), fallback ke data  */
+/*  karyawan live cuma buat record lama yang belum punya snapshot.   */
+/*  Konsistensi Full Time & Lembur tetap terjaga (sama-sama lewat    */
+/*  computeAutoAdjustments di setiap record), tapi sekarang juga     */
+/*  immutable terhadap perubahan tarif di kemudian hari.             */
 /* ═══════════════════════════════════════════════════════════════ */
 
 /**
- * Hitung total Bonus Full Time & Bonus Lembur (data + tarif TERKINI milik
- * emp) dari sekumpulan record harian dalam 1 periode laporan.
+ * Hitung total Bonus Full Time & Bonus Lembur dari sekumpulan record harian
+ * dalam 1 periode laporan. Tarif dipakai PER RECORD (snapshot-nya masing-
+ * masing kalau ada), bukan satu tarif tunggal buat semua record — supaya
+ * tetap akurat walau tarif karyawan berubah di tengah periode laporan.
  *
  * @param {Array} records - employeeDailyRecords milik 1 karyawan dalam periode
- * @param {object} emp - data karyawan TERKINI (bukan snapshot lama)
+ * @param {Array} employees - array data karyawan TERKINI (buat fallback record lama)
  * @returns {{fullTimeBonusTotal:number, overtimePayTotal:number, overtimeRate:number, overtimeByDay:Array}}
  */
-export function summarizeAutoBonuses(records, emp) {
-  const overtimeRate = getOvertimeRate(emp);
+export function summarizeAutoBonuses(records, employees) {
   let fullTimeBonusTotal = 0;
   let overtimePayTotal = 0;
   const overtimeByDay = [];
+  let representativeRate = OVERTIME_RATE_PER_30MIN; // buat label header slip gaji
 
   (records || []).forEach(rec => {
+    const emp = resolveEmployeeForRecord(rec, employees);
+    representativeRate = getOvertimeRate(emp);
     computeAutoAdjustments(rec, emp).forEach(item => {
       if (item.category === 'Bonus Full Time') {
         fullTimeBonusTotal += item.amount;
@@ -229,7 +281,7 @@ export function summarizeAutoBonuses(records, emp) {
   });
 
   overtimeByDay.sort((a, b) => new Date(a.dateStr) - new Date(b.dateStr));
-  return { fullTimeBonusTotal, overtimePayTotal, overtimeRate, overtimeByDay };
+  return { fullTimeBonusTotal, overtimePayTotal, overtimeRate: representativeRate, overtimeByDay };
 }
 
 /**
@@ -247,7 +299,7 @@ export function countWorkDays(records) {
  * dilihat admin di layar dan yang didownload/dibagikan selalu identik.
  *
  * @param {object} data - 1 item employeePerformance hasil ReportsTab
- *   (punya: employee, records, overtimeRate)
+ *   (punya: employee, employees, records, overtimeRate)
  * @returns {Array<{rec:object, items:Array<{desc:string,in:number,out:number}>}>}
  */
 export function buildPayslipRows(data) {
@@ -255,16 +307,21 @@ export function buildPayslipRows(data) {
 
   const rows = sortedRecords.map(rec => {
     const items = [];
+    // Tarif dipakai PER RECORD (prioritas ke snapshot yang dibekukan di
+    // record itu sendiri) — bukan data.employee tunggal — supaya baris
+    // "Upah Jam Kerja" tiap hari tetap akurat walau tarif berubah di
+    // tengah periode, dan gak ikut berubah kalau tarif diedit belakangan.
+    const emp = resolveEmployeeForRecord(rec, data.employees) || data.employee;
 
     if (rec.hoursWorked > 0) {
       items.push({
         desc: `Upah Jam Kerja (${rec.hoursWorked} Jam)`,
-        in: rec.hoursWorked * data.employee.hourlyRate,
+        in: rec.hoursWorked * (emp?.hourlyRate || 0),
         out: 0,
       });
     }
 
-    computeAutoAdjustments(rec, data.employee).forEach(auto => {
+    computeAutoAdjustments(rec, emp).forEach(auto => {
       const desc = auto.category === 'Bonus Lembur'
         ? `Uang Lembur (${((rec.overtimeMinutes || 0) / 60).toFixed(1).replace('.', ',')} jam)`
         : auto.category + (auto.note ? ` ${auto.note}` : '');

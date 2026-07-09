@@ -15,6 +15,7 @@ import {
   getEmployeeStatus, calculateRegularMinutes, formatTimeFromDate, timeStrToMinutes,
   calculateBolongMinutes, getOvertimeRate, calculateOvertimePay,
   AUTO_ADJUSTMENT_CATEGORIES, mergeAutoAdjustments,
+  snapshotEmployeeForPayroll, resolveEmployeeForRecord,
 } from '../utils/payrollLogic';
 
 const StatField = ({ label, value, highlight }) => (
@@ -200,6 +201,13 @@ const InputDailyTab = () => {
         const prevIndex = next.findIndex(r => !r.deletedAt && r.employeeId === empId && r.dateStr === dateStr);
         const prevExisting = prevIndex >= 0 ? next[prevIndex] : null;
 
+        // Tarif karyawan buat record ini: PRIORITASKAN snapshot yang sudah
+        // dibekukan sebelumnya (biar tarif lama gak ikut berubah kalau
+        // tarif karyawan diedit belakangan). Record yang belum pernah punya
+        // snapshot (baru dibuat, atau record lama dari sebelum fitur ini
+        // ada) dibekukan dari data karyawan TERKINI sekarang juga.
+        const employeeSnapshot = prevExisting?.employeeSnapshot || snapshotEmployeeForPayroll(emp);
+
         const baseFields = prevExisting?.isManualOverride ? 
           { 
             isDayOff: prevExisting.isDayOff, 
@@ -220,9 +228,14 @@ const InputDailyTab = () => {
           };
 
         const recordSnapshot = { ...prevExisting, ...baseFields, employeeId: empId, dateStr };
-        const recalculatedAdditions = mergeAutoAdjustments(prevExisting?.additions, recordSnapshot, emp);
+        const recalculatedAdditions = mergeAutoAdjustments(prevExisting?.additions, recordSnapshot, employeeSnapshot);
 
-        const isSame = prevExisting &&
+        // Record lama yang belum punya employeeSnapshot dianggap "berubah"
+        // walau field absensi/additions-nya kebetulan identik — supaya
+        // tarifnya ke-bekukan permanen begitu record ini kesentuh effect ini.
+        const needsSnapshotBackfill = !!prevExisting && !prevExisting.employeeSnapshot;
+
+        const isSame = prevExisting && !needsSnapshotBackfill &&
           prevExisting.isDayOff === baseFields.isDayOff &&
           prevExisting.clockIn === baseFields.clockIn &&
           prevExisting.clockOut === baseFields.clockOut &&
@@ -234,9 +247,9 @@ const InputDailyTab = () => {
 
         changed = true;
         if (prevExisting) {
-          next[prevIndex] = { ...prevExisting, ...baseFields, additions: recalculatedAdditions };
+          next[prevIndex] = { ...prevExisting, ...baseFields, additions: recalculatedAdditions, employeeSnapshot };
         } else {
-          next.unshift({ id: `REC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, employeeId: empId, date: new Date(dateStr), dateStr, ...baseFields, additions: recalculatedAdditions, deductions: [] });
+          next.unshift({ id: `REC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, employeeId: empId, date: new Date(dateStr), dateStr, ...baseFields, additions: recalculatedAdditions, deductions: [], employeeSnapshot });
         }
       });
       return changed ? next : prev;
@@ -276,13 +289,19 @@ const InputDailyTab = () => {
     setEmployeeDailyRecords(prev => {
       const existing = prev.find(r => !r.deletedAt && r.employeeId === dailyEmpId && r.dateStr === dailyDate);
       if (existing) {
-        const finalAdditions = mergeAutoAdjustments(validAdditions, existing, emp);
-        return prev.map(r => r.id === existing.id ? { ...r, additions: finalAdditions, deductions: validDeductions } : r);
+        // Prioritaskan tarif yang sudah dibekukan di record ini sebelumnya;
+        // record lama yang belum punya snapshot dibekukan sekarang.
+        const employeeSnapshot = existing.employeeSnapshot || snapshotEmployeeForPayroll(emp);
+        const finalAdditions = mergeAutoAdjustments(validAdditions, existing, employeeSnapshot);
+        return prev.map(r => r.id === existing.id ? { ...r, additions: finalAdditions, deductions: validDeductions, employeeSnapshot } : r);
       }
       const computed = computeAttendanceFromLogs(dailyEmpId, dailyDate, attendanceLog);
       const newRecordBase = { employeeId: dailyEmpId, dateStr: dailyDate, isDayOff: computed.isDayOff, clockIn: computed.clockIn, clockOut: computed.clockOut, hoursWorked: computed.hoursWorked, bolongMinutes: computed.bolongMinutes, overtimeMinutes: computed.overtimeMinutes };
-      const finalAdditions = mergeAutoAdjustments(validAdditions, newRecordBase, emp);
-      return [{ id: `REC-${Date.now()}`, date: new Date(dailyDate), ...newRecordBase, additions: finalAdditions, deductions: validDeductions }, ...prev];
+      // Record baru: bekukan tarif karyawan TERKINI sekarang juga, supaya
+      // gak berubah lagi walau tarif karyawan diedit di kemudian hari.
+      const employeeSnapshot = snapshotEmployeeForPayroll(emp);
+      const finalAdditions = mergeAutoAdjustments(validAdditions, newRecordBase, employeeSnapshot);
+      return [{ id: `REC-${Date.now()}`, date: new Date(dailyDate), ...newRecordBase, additions: finalAdditions, deductions: validDeductions, employeeSnapshot }, ...prev];
     });
     triggerAlert(hasAdjustments ? 'Perubahan berhasil diupdate!' : 'Data berhasil disimpan!');
   };
@@ -364,9 +383,14 @@ const InputDailyTab = () => {
     }
 
     const recordSnapshot = { ...editingRecord, ...updatedFields };
-    const finalAdditions = mergeAutoAdjustments(validAdditions, recordSnapshot, emp);
+    // Prioritaskan tarif yang sudah dibekukan waktu record ini pertama kali
+    // dibuat — supaya koreksi jam masuk/pulang gak diam-diam ikut menghitung
+    // ulang pakai tarif karyawan yang mungkin sudah berubah sejak saat itu.
+    // Record lama yang belum punya snapshot dibekukan sekarang.
+    const employeeSnapshot = editingRecord.employeeSnapshot || snapshotEmployeeForPayroll(emp);
+    const finalAdditions = mergeAutoAdjustments(validAdditions, recordSnapshot, employeeSnapshot);
     
-    setEmployeeDailyRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...updatedFields, additions: finalAdditions, deductions: validDeductions } : r));
+    setEmployeeDailyRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...updatedFields, additions: finalAdditions, deductions: validDeductions, employeeSnapshot } : r));
     triggerAlert('Perubahan berhasil disimpan!');
     handleCloseEdit();
   };
@@ -409,7 +433,7 @@ const InputDailyTab = () => {
   [editDeductions, editDerivedKasbon]);
   
   const editNetAdjustment = editTotalAdditions - editTotalDeductions;
-  const editingEmpName = editingRecord ? employees.find(e => e.id === editingRecord.employeeId)?.name : '';
+  const editingEmpName = editingRecord ? resolveEmployeeForRecord(editingRecord, employees)?.name : '';
 
   const groupedRecords = useMemo(() => {
     const rawList = (showTrash ? trashedOnly(employeeDailyRecords) : activeOnly(employeeDailyRecords))
@@ -420,8 +444,11 @@ const InputDailyTab = () => {
       groups.get(rec.employeeId).push(rec);
     });
 
-    const grouped = Array.from(groups.entries()).map(([empId, recs]) => ({
-      employee: employees.find(e => e.id === empId),
+    const grouped = Array.from(groups.entries()).map(([, recs]) => ({
+      // Snapshot record pertama di grup ini dipakai buat label nama —
+      // konsisten sama prinsip immutable history, dan tetap kebaca walau
+      // karyawannya sudah dihapus dari data master (lihat handleDeleteEmployee).
+      employee: resolveEmployeeForRecord(recs[0], employees),
       records: recs.sort((a, b) => new Date(b.date) - new Date(a.date)),
     }));
 
@@ -683,7 +710,7 @@ const InputDailyTab = () => {
                                     <StatField label="Jam Keluar" value={rec.clockOut} />
                                     <StatField label="Bolong (Jam)" value={!rec.bolongMinutes ? '0,0' : (rec.bolongMinutes / 60).toFixed(1).replace('.', ',')} />
                                     <StatField label="Lembur (Jam)" value={!rec.overtimeMinutes ? '0,0' : (rec.overtimeMinutes / 60).toFixed(1).replace('.', ',')} highlight={rec.overtimeMinutes > 0} />
-                                    <StatField label="Uang Lembur" value={rec.overtimeMinutes > 0 ? formatRupiah(calculateOvertimePay(rec.overtimeMinutes, getOvertimeRate(employees.find(e => e.id === rec.employeeId)))) : '-'} highlight={rec.overtimeMinutes > 0} />
+                                    <StatField label="Uang Lembur" value={rec.overtimeMinutes > 0 ? formatRupiah(calculateOvertimePay(rec.overtimeMinutes, getOvertimeRate(resolveEmployeeForRecord(rec, employees)))) : '-'} highlight={rec.overtimeMinutes > 0} />
                                     <StatField label="Total Jam" value={formatJam(rec.hoursWorked) || '0,0'} highlight />
                                   </div>
 

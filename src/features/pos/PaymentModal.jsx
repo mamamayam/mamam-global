@@ -64,7 +64,12 @@ const PaymentModal = () => {
     // Proses Pengurangan Poin (Jika ada klaim reward)
     if (activeCustomer && pointsToRedeem > 0) {
       updatedCustomers = updatedCustomers.map(c => c.id === activeCustomer.id ? { ...c, points: c.points - pointsToRedeem } : c);
-      setClaimsHistory([{ id: `cl-${generateUUID()}`, customerName: activeCustomer.name, rewardName: `Potongan Belanja ${formatRupiah(getPointDiscount())}`, pointsUsed: pointsToRedeem, date: new Date() }, ...claimsHistory]);
+      // customerId ditambahkan sebagai referensi (konsisten dengan pola di
+      // salesHistory/shiftHistory/attendanceLog: ID + snapshot nama).
+      // customerName tetap yang dipakai buat display, jadi gak ada
+      // perubahan tampilan — ini murni nambahin relasi yang sebelumnya
+      // belum ada.
+      setClaimsHistory([{ id: `cl-${generateUUID()}`, customerId: activeCustomer.id, customerName: activeCustomer.name, rewardName: `Potongan Belanja ${formatRupiah(getPointDiscount())}`, pointsUsed: pointsToRedeem, date: new Date() }, ...claimsHistory]);
     }
 
     const newOrder = {

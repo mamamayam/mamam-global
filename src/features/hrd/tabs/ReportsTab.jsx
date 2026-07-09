@@ -5,7 +5,7 @@ import { Card, Button, Input, EmptyState, SortModal } from '../../../components/
 import { applySort } from '../../../utils/sortUtils';
 import { activeOnly } from '../../../utils/softDelete';
 import { PieChart, Printer, ChevronDown, ArrowUpDown } from 'lucide-react';
-import { AUTO_ADJUSTMENT_CATEGORIES, summarizeAutoBonuses } from '../utils/payrollLogic';
+import { AUTO_ADJUSTMENT_CATEGORIES, summarizeAutoBonuses, resolveEmployeeForRecord } from '../utils/payrollLogic';
 
 const ReportsTab = () => {
   const { employees, employeeDailyRecords, expenses, setPayslipModal, formatRupiah } = useAppContext();
@@ -23,14 +23,20 @@ const ReportsTab = () => {
     const perf = {};
     filteredRecordsForReport.forEach(rec => {
       if (!perf[rec.employeeId]) {
-        const emp = employees.find(e => e.id === rec.employeeId);
+        const emp = resolveEmployeeForRecord(rec, employees);
         perf[rec.employeeId] = {
+          // employeeId disimpan terpisah dari `employee` (dipakai buat key React
+          // & toggle expand) — supaya tetap stabil walau `employee` di bawah ini
+          // adalah objek snapshot polos (gak punya `.id`) atau placeholder
+          // "Karyawan Dihapus".
+          employeeId: rec.employeeId,
           employee: emp || { name: 'Karyawan Dihapus', hourlyRate: 0 },
           totalHours: 0,
           totalOvertimeMinutes: 0,
           totalAdditions: 0,
           totalDeductions: 0,
           netPay: 0,
+          basicPay: 0,
           records: [],
         };
       }
@@ -43,11 +49,20 @@ const ReportsTab = () => {
       data.totalHours += rec.hoursWorked || 0;
       data.totalOvertimeMinutes += rec.overtimeMinutes || 0;
 
+      // Upah dasar dihitung PER RECORD (jam hari itu × tarif yang dibekukan
+      // di record itu sendiri) lalu diakumulasi — BUKAN totalHours × 1 tarif
+      // tunggal di akhir. Ini yang bikin hasilnya tetap akurat walau tarif
+      // karyawan berubah di TENGAH periode laporan (misal naik gaji tgl 15),
+      // dan gak ikut berubah kalau tarif diedit belakangan dari laporan bulan
+      // lalu — masing-masing hari tetap pakai tarif yang berlaku saat itu.
+      const recEmp = resolveEmployeeForRecord(rec, employees);
+      data.basicPay += (rec.hoursWorked || 0) * (recEmp?.hourlyRate || 0);
+
       // Hanya tambahan/potongan MANUAL yang diakumulasi di sini. Bonus Full
       // Time & Bonus Lembur (auto) sengaja dikecualikan & dihitung terpisah
-      // di bawah lewat summarizeAutoBonuses — supaya keduanya selalu pakai
-      // tarif/konfigurasi TERKINI milik karyawan, bukan nilai cache yang
-      // mungkin sudah basi kalau Bonus Full Time / tarif lembur baru diubah.
+      // di bawah lewat summarizeAutoBonuses — masing-masing record tetap
+      // pakai tarif/konfigurasi yang dibekukan waktu record itu dibuat
+      // (lihat resolveEmployeeForRecord), bukan data karyawan TERKINI.
       data.totalAdditions += (rec.additions || [])
         .filter(a => !AUTO_ADJUSTMENT_CATEGORIES.includes(a.category))
         .reduce((sum, a) => sum + a.amount, 0);
@@ -65,12 +80,14 @@ const ReportsTab = () => {
         if (!perf[exp.employeeId]) {
           const emp = employees.find(e => e.id === exp.employeeId);
           perf[exp.employeeId] = {
+            employeeId: exp.employeeId,
             employee: emp || { name: 'Karyawan Dihapus', hourlyRate: 0 },
             totalHours: 0,
             totalOvertimeMinutes: 0,
             totalAdditions: 0,
             totalDeductions: 0,
             netPay: 0,
+            basicPay: 0,
             records: [],
           };
         }
@@ -88,16 +105,21 @@ const ReportsTab = () => {
 
     Object.values(perf).forEach(data => {
       const { fullTimeBonusTotal, overtimePayTotal, overtimeRate, overtimeByDay } =
-        summarizeAutoBonuses(data.records, data.employee);
+        summarizeAutoBonuses(data.records, employees);
 
       data.overtimeRate = overtimeRate; // Tarif/30 menit, dipakai juga di Payslip
       data.overtimePay = overtimePayTotal; // Simpan variabel ini untuk dipakai di Payslip
       data.overtimeByDay = overtimeByDay;
       data.totalAdditions += fullTimeBonusTotal + overtimePayTotal;
 
-      // Hitung total akhir gaji bersih
-      data.basicPay = data.totalHours * data.employee.hourlyRate;
+      // data.basicPay sudah diakumulasi per-record di loop atas (lihat
+      // komentar di sana) — TIDAK dihitung ulang di sini pakai tarif tunggal.
       data.netPay = data.basicPay + data.totalAdditions - data.totalDeductions;
+
+      // Dibawa serta buat buildPayslipRows() di Payslip — supaya baris
+      // "Upah Jam Kerja" per hari di slip gaji juga resolve tarif per
+      // record (bukan cuma total di tabel rekap ini).
+      data.employees = employees;
     });
 
     return Object.values(perf);
@@ -162,7 +184,7 @@ const ReportsTab = () => {
                 <tr><td colSpan="6"><EmptyState size="sm" icon={<PieChart className="w-8 h-8" />} title="Tidak ada data penggajian pada bulan ini." /></td></tr>
               ) : (
                 sortedEmployeePerformance.map(p => (
-                  <React.Fragment key={p.employee.id}>
+                  <React.Fragment key={p.employeeId}>
                     <tr className="hover:bg-slate-50 transition-colors">
                       <td className="p-4"><p className="font-bold text-sm text-slate-800">{p.employee.name}</p></td>
                       <td className="p-4 text-center font-semibold text-slate-700 text-sm">{p.totalHours.toFixed(1).replace('.', ',')}</td>
@@ -170,12 +192,12 @@ const ReportsTab = () => {
                         {p.totalOvertimeMinutes > 0 ? (
                           <button
                             type="button"
-                            onClick={() => setExpandedEmpId(expandedEmpId === p.employee.id ? null : p.employee.id)}
+                            onClick={() => setExpandedEmpId(expandedEmpId === p.employeeId ? null : p.employeeId)}
                             className="inline-flex items-center gap-1 hover:underline"
                             title="Lihat rincian lembur per hari"
                           >
                             {(p.totalOvertimeMinutes / 60).toFixed(1).replace('.', ',')} Jam
-                            <ChevronDown className={`w-3 h-3 transition-transform ${expandedEmpId === p.employee.id ? 'rotate-180' : ''}`} />
+                            <ChevronDown className={`w-3 h-3 transition-transform ${expandedEmpId === p.employeeId ? 'rotate-180' : ''}`} />
                           </button>
                         ) : '-'}
                       </td>
@@ -186,7 +208,7 @@ const ReportsTab = () => {
                         <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>Cetak Slip</Button>
                       </td>
                     </tr>
-                    {expandedEmpId === p.employee.id && (
+                    {expandedEmpId === p.employeeId && (
                       <tr className="bg-orange-50/40">
                         <td colSpan="7" className="p-4">
                           <p className="text-xs font-bold text-slate-500 mb-2">Rincian Lembur Harian — {p.employee.name} (Rp{p.overtimeRate.toLocaleString('id-ID')}/30 menit)</p>

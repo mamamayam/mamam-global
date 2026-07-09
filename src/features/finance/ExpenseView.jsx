@@ -67,6 +67,13 @@ const ExpenseView = () => {
 
     const expenseDate = parseLocalDate(dateInput);
     const isKasbon = category === KASBON_CATEGORY;
+    // Snapshot nama karyawan SAAT kasbon dicatat — supaya kalau nama
+    // karyawan diedit atau datanya dihapus belakangan, catatan kasbon lama
+    // tetap nunjukkin nama yang benar (gak jadi kosong/berubah).
+    // employeeId tetap disimpan seperti biasa buat relasi/filter.
+    const employeeName = isKasbon
+      ? (employees.find(e => e.id === selectedEmployeeId)?.name || null)
+      : null;
 
     if (editingId) {
       setExpenses(expenses.map(exp => exp.id === editingId ? {
@@ -76,7 +83,8 @@ const ExpenseView = () => {
         note,
         date: expenseDate,
         paymentMethod,
-        employeeId: isKasbon ? selectedEmployeeId : null
+        employeeId: isKasbon ? selectedEmployeeId : null,
+        employeeName
       } : exp));
 
       setEditingId(null);
@@ -90,7 +98,8 @@ const ExpenseView = () => {
         note,
         date: expenseDate,
         paymentMethod,
-        employeeId: isKasbon ? selectedEmployeeId : null
+        employeeId: isKasbon ? selectedEmployeeId : null,
+        employeeName
       };
 
       setExpenses([newExp, ...expenses]);
@@ -388,7 +397,12 @@ const ExpenseView = () => {
             ) : (
               sortedExpenses.map(exp => {
                 const isKasbon = exp.category === KASBON_CATEGORY;
-                const empName = isKasbon && exp.employeeId && employees ? employees.find(e => e.id === exp.employeeId)?.name : null;
+                // Prioritaskan snapshot exp.employeeName (dibekukan saat kasbon
+                // dicatat). Fallback ke live lookup by employeeId cuma buat
+                // catatan kasbon LAMA yang dibuat sebelum field ini ada.
+                const empName = isKasbon
+                  ? (exp.employeeName || (exp.employeeId && employees ? employees.find(e => e.id === exp.employeeId)?.name : null))
+                  : null;
 
                 return (
                   <div key={exp.id} className={`flex justify-between items-center p-3.5 border rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700 transition-all duration-200 animate-in slide-in-from-left-2 duration-300 ${selectedIds.has(exp.id) ? 'border-orange-500 ring-1 ring-orange-500' : 'border-slate-100 dark:border-slate-800'}`}>
