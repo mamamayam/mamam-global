@@ -166,10 +166,14 @@ const S = StyleSheet.create({
   },
 });
 
-const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
+const PayslipPDFDocument = ({ data, liveEmployee, monthLabel, formatRupiah }) => {
   const basicPay = data.basicPay;
   const overtimePay = data.overtimePay || 0;
   const totalHariKerja = countWorkDays(data.records);
+
+  // Fallback kalau suatu saat dipanggil tanpa prop liveEmployee — tetap
+  // coba resolve data karyawan live, baru fallback terakhir ke snapshot.
+  const emp = liveEmployee || (data.employees || []).find(e => e.id === data.employeeId) || data.employee;
 
   // Sama persis dengan yang dipakai PayslipModal (tampilan layar) — satu
   // sumber kebenaran, jadi versi PDF & versi layar selalu identik angkanya.
@@ -217,9 +221,9 @@ const PayslipPDFDocument = ({ data, monthLabel, formatRupiah }) => {
           <View>
             {[
               /* Total Jam Kerja sebelumnya ada di sini, sekarang dihapus */
-              ['Upah per Jam', formatRupiah(data.employee.hourlyRate)],
+              ['Upah per Jam', formatRupiah(emp.hourlyRate)],
               ['Lembur per 30 Menit', formatRupiah(data.overtimeRate || 0)],
-              ['Bonus Full Time', formatRupiah(data.employee.fullTimeBonus || 0)],
+              ['Bonus Full Time', formatRupiah(emp.fullTimeBonus || 0)],
             ].map(([label, value]) => (
               <View key={label} style={S.infoRow}>
                 <Text style={S.infoLabelWide}>{label}</Text>

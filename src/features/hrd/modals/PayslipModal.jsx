@@ -16,6 +16,12 @@ const PayslipModal = () => {
   const basicPay = data.basicPay;
   const overtimePay = data.overtimePay || 0;
 
+  // Header slip gaji (Upah per Jam & Bonus Full Time) HARUS pakai data
+  // karyawan LIVE terkini — bukan data.employee (snapshot beku dari record
+  // pertama periode ini). Beda dengan rincian tabel harian yang memang
+  // sengaja pakai snapshot per-record biar histori bulan lalu gak berubah.
+  const liveEmployee = (data.employees || []).find(e => e.id === data.employeeId) || data.employee;
+
   const monthLabel = new Date(`${month}-01`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
 
   const handleSharePDF = async () => {
@@ -24,6 +30,7 @@ const PayslipModal = () => {
       const blob = await pdf(
         <PayslipPDFDocument
           data={data}
+          liveEmployee={liveEmployee}
           monthLabel={monthLabel}
           formatRupiah={formatRupiah}
         />
@@ -120,9 +127,9 @@ const PayslipModal = () => {
             {/* KOLOM KANAN */}
             <div className="text-right">
               {/* Total Jam Kerja sebelumnya ada di sini, sekarang dihapus */}
-              <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Upah per Jam</span> <span className="font-bold">: {formatRupiah(data.employee.hourlyRate)}</span></div>
+              <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Upah per Jam</span> <span className="font-bold">: {formatRupiah(liveEmployee.hourlyRate)}</span></div>
               <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Lembur per 30 Menit</span> <span className="font-bold">: {formatRupiah(data.overtimeRate || 0)}</span></div>
-              <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Bonus Full Time</span> <span className="font-bold">: {formatRupiah(data.employee.fullTimeBonus || 0)}</span></div>
+              <div className="mb-2"><span className="inline-block w-36 text-slate-500 print:text-gray-600">Bonus Full Time</span> <span className="font-bold">: {formatRupiah(liveEmployee.fullTimeBonus || 0)}</span></div>
             </div>
           </div>
 
