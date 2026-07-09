@@ -351,8 +351,16 @@ export function buildPayslipRows(data) {
       const d = String(kDate.getDate()).padStart(2, '0');
       const dateString = `${y}-${m}-${d}`;
 
-      // Cari record hari terkait lewat rec.dateStr
-      const existingRow = rows.find(r => r.rec.dateStr === dateString || r.rec.date.startsWith(dateString));
+      // Cari record hari terkait lewat rec.dateStr — ini satu-satunya field
+      // yang reliable dipakai buat matching tanggal di seluruh app (semua
+      // row, baik dari data.records maupun phantom row kasbon di bawah,
+      // selalu punya dateStr yang valid). Sebelumnya ada fallback
+      // `r.rec.date.startsWith(dateString)`, tapi itu nganggep rec.date
+      // selalu berupa string — padahal begitu direvive dari Dexie, rec.date
+      // itu objek Date, dan Date gak punya method .startsWith(), jadi malah
+      // crash ("...date.startsWith is not a function") tiap kali kasbon-nya
+      // bukan di record paling awal periode laporan.
+      const existingRow = rows.find(r => r.rec.dateStr === dateString);
       
       const kasbonItem = {
         desc: `${kasbon.category}${kasbon.note ? ` (${kasbon.note})` : ''}`,
