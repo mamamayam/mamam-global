@@ -1,6 +1,7 @@
-import { lazy, Suspense, Component } from 'react';
+import { lazy, Suspense, Component, useEffect } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui';
+import { isChunkLoadError, reloadOnceForFreshChunk, clearChunkReloadGuard } from '../utils/chunkReload';
 
 const HomeView          = lazy(() => import('../features/home/HomeView'));
 const ShiftView         = lazy(() => import('../features/finance/ShiftView'));
@@ -44,25 +45,38 @@ const VIEWS = {
 class ViewErrorBoundary extends Component {
     constructor(props) {
         super(props);
-        this.state = { hasError: false, error: null };
+        this.state = { hasError: false, error: null, isChunkError: false };
     }
 
     static getDerivedStateFromError(error) {
-        return { hasError: true, error };
+        return { hasError: true, error, isChunkError: isChunkLoadError(error) };
     }
 
     componentDidCatch(error, info) {
         console.error('[ErrorBoundary] Fitur crash:', error, info);
+        // Chunk load error (deploy baru, tab masih pegang bundle lama) gak
+        // bisa dibenerin cuma dengan render ulang React — "Coba Lagi" bakal
+        // gagal lagi persis sama. Reload penuh (sekali, guarded) biar
+        // otomatis kebenerin sendiri tanpa user harus ngerti apa-apa.
+        if (isChunkLoadError(error)) {
+            reloadOnceForFreshChunk();
+        }
     }
 
     // Reset error saat berpindah halaman
     componentDidUpdate(prevProps) {
         if (prevProps.viewKey !== this.props.viewKey && this.state.hasError) {
-            this.setState({ hasError: false, error: null });
+            this.setState({ hasError: false, error: null, isChunkError: false });
         }
     }
 
     handleRetry = () => {
+        if (this.state.isChunkError) {
+            // Auto-reload di componentDidCatch mungkin udah kepake/gagal
+            // (guard sessionStorage) — tombol ini selalu reload manual.
+            window.location.reload();
+            return;
+        }
         this.setState({ hasError: false, error: null });
     };
 
@@ -74,16 +88,22 @@ class ViewErrorBoundary extends Component {
                         <AlertCircle className="w-8 h-8 text-accent-500 dark:text-accent-400" />
                     </div>
                     <div>
-                        <h2 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">Halaman ini mengalami error</h2>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">Data kamu aman, hanya tampilan ini yang bermasalah.</p>
-                        {this.state.error && (
+                        <h2 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">
+                            {this.state.isChunkError ? 'Ada pembaruan aplikasi' : 'Halaman ini mengalami error'}
+                        </h2>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">
+                            {this.state.isChunkError
+                                ? 'Muat ulang buat pakai versi terbaru.'
+                                : 'Data kamu aman, hanya tampilan ini yang bermasalah.'}
+                        </p>
+                        {!this.state.isChunkError && this.state.error && (
                             <p className="text-xs text-accent-400 dark:text-accent-400 font-mono bg-accent-50 dark:bg-accent-500/10 rounded px-3 py-1 mt-2 max-w-xs mx-auto break-all">
                                 {this.state.error.message}
                             </p>
                         )}
                     </div>
                     <Button onClick={this.handleRetry} icon={<RefreshCw className="w-4 h-4" />}>
-                        Coba Lagi
+                        {this.state.isChunkError ? 'Muat Ulang' : 'Coba Lagi'}
                     </Button>
                 </div>
             );
@@ -111,6 +131,13 @@ function ViewSkeleton() {
 // --- Main AppRoutes ---
 export default function AppRoutes({ currentView }) {
     const ActiveView = VIEWS[currentView];
+
+    // App berhasil render normal -> reset guard reload, biar kalau ada
+    // deploy baru LAGI nanti (di sesi tab yang sama), auto-reload di
+    // ViewErrorBoundary/main.jsx tetap bisa jalan sekali lagi.
+    useEffect(() => {
+        clearChunkReloadGuard();
+    }, []);
 
     if (!ActiveView) {
         return (
