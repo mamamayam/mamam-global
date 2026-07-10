@@ -971,61 +971,74 @@ export default function App() {
   // ── Tampilan saat Supabase belum siap (blocking overlay) ────────────────
   if (!allDataLoaded || syncStatus === 'syncing') {
     const isSyncing = syncStatus === 'syncing';
+    const appNameLoading = storeSettings?.appName || 'Mamam Kasir';
+    const initialLoading = appNameLoading.trim().charAt(0).toUpperCase() || 'M';
+
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center bg-white z-[9999] gap-4 p-8">
+      <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-100/40 dark:bg-slate-950/60 backdrop-blur-xl transition-all p-4 overflow-hidden">
+
         <style dangerouslySetInnerHTML={{
           __html: `
           @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500&display=swap');
           .font-heading { font-family: 'Plus Jakarta Sans', sans-serif; }
           .font-body    { font-family: 'Inter', sans-serif; }
-          @keyframes spin-slow { to { transform: rotate(360deg); } }
-          .spin-slow { animation: spin-slow 1.4s linear infinite; }
-          @keyframes pulse-dot { 0%,100% { opacity:.3 } 50% { opacity:1 } }
-          .dot1 { animation: pulse-dot 1.2s ease-in-out infinite; }
-          .dot2 { animation: pulse-dot 1.2s ease-in-out .2s infinite; }
-          .dot3 { animation: pulse-dot 1.2s ease-in-out .4s infinite; }
+          @keyframes loadbar {
+            0%   { transform: translateX(-100%); }
+            50%  { transform: translateX(20%); }
+            100% { transform: translateX(120%); }
+          }
+          @keyframes floatGlow {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50%      { transform: translate(10px, -14px) scale(1.06); }
+          }
+          .loadbar-fill { animation: loadbar 1.8s cubic-bezier(0.4,0,0.2,1) infinite; }
+          .glow-orb { animation: floatGlow 6s ease-in-out infinite; }
         `
         }} />
 
-        {/* Logo / ikon app */}
-        <div className="w-16 h-16 rounded-3xl bg-accent-500 flex items-center justify-center shadow-lg shadow-orange-200">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 11l19-9-9 19-2-8-8-2z" />
-          </svg>
+        {/* Ambient glow orbs di background */}
+        <div className="absolute -top-24 -left-16 w-72 h-72 bg-accent-300/20 dark:bg-accent-600/10 rounded-full blur-3xl glow-orb pointer-events-none" />
+        <div className="absolute -bottom-24 -right-16 w-72 h-72 bg-accent-400/20 dark:bg-accent-500/10 rounded-full blur-3xl glow-orb pointer-events-none" style={{ animationDelay: '2s' }} />
+
+        <div className="relative bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl p-9 rounded-[2.5rem] shadow-[0_8px_40px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_40px_rgb(0,0,0,0.4)] border border-white/60 dark:border-slate-800/60 flex flex-col items-center max-w-sm w-full mx-4 animate-in fade-in zoom-in-95 duration-700 ease-out">
+
+          {/* Logo mark + Loader cincin */}
+          <div className="relative flex items-center justify-center w-24 h-24 mb-7">
+            {/* Lingkaran statis tipis */}
+            <div className="absolute inset-0 rounded-full border-[1px] border-slate-200 dark:border-slate-700/50"></div>
+
+            {/* Lingkaran berputar elegan */}
+            <div className="absolute inset-0 rounded-full border-[2px] border-accent-500 border-r-transparent border-b-transparent animate-[spin_1.5s_cubic-bezier(0.4,0,0.2,1)_infinite]"></div>
+            <div className="absolute inset-[6px] rounded-full border-[1.5px] border-accent-300 dark:border-accent-700 border-l-transparent border-t-transparent animate-[spin_2s_cubic-bezier(0.4,0,0.2,1)_infinite_reverse]"></div>
+
+            {/* Logo mark di tengah */}
+            <div className="w-14 h-14 rounded-[1.25rem] bg-gradient-to-br from-accent-500 to-accent-600 dark:from-accent-400 dark:to-accent-600 flex items-center justify-center shadow-[0_4px_18px_rgba(var(--color-accent-500),0.4)]">
+              <span className="font-heading font-black text-2xl text-white">{initialLoading}</span>
+            </div>
+          </div>
+
+          {/* Tipografi Bersih */}
+          <div className="text-center space-y-1.5 mb-2">
+            <h1 className="font-heading text-2xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-500 dark:from-white dark:to-slate-400 tracking-tight">
+              {appNameLoading}
+            </h1>
+            <p className="font-body text-sm font-medium text-slate-400 dark:text-slate-500">
+              {isSyncing ? 'Menyinkronkan ekosistem...' : 'Menyiapkan ruang kerjamu...'}
+            </p>
+          </div>
+
+          {/* Indikator Progress Casual */}
+          <div className="mt-6 flex flex-col items-center gap-3 w-full">
+            {syncStep && (
+              <p className="font-body text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] text-center animate-pulse">
+                {syncStep}
+              </p>
+            )}
+            <div className="w-40 h-[3px] bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full w-1/3 bg-gradient-to-r from-accent-400 via-accent-500 to-accent-400 rounded-full loadbar-fill"></div>
+            </div>
+          </div>
         </div>
-
-        <div className="text-center">
-          <h1 className="font-heading font-extrabold text-2xl text-slate-900">Mamam Kasir</h1>
-          <p className="font-body text-sm text-slate-400 mt-1">
-            {isSyncing ? 'Sinkronisasi data...' : 'Memuat data lokal...'}
-          </p>
-        </div>
-
-        {/* Spinner */}
-        <div className="relative w-12 h-12">
-          <div className="spin-slow absolute inset-0 rounded-full border-4 border-orange-100 border-t-orange-500" />
-        </div>
-
-        {/* Step label */}
-        {syncStep ? (
-          <p className="font-body text-xs text-slate-500 text-center max-w-[240px] leading-relaxed">
-            {syncStep}
-          </p>
-        ) : null}
-
-        {/* Titik animasi */}
-        <div className="flex gap-1.5 mt-1">
-          <span className="dot1 w-2 h-2 rounded-full bg-accent-400 inline-block" />
-          <span className="dot2 w-2 h-2 rounded-full bg-accent-400 inline-block" />
-          <span className="dot3 w-2 h-2 rounded-full bg-accent-400 inline-block" />
-        </div>
-
-        {/* Info hemat kuota */}
-        {isSyncing && (
-          <p className="font-body text-[11px] text-slate-300 text-center mt-2 max-w-[240px]">
-            Mengambil data terbaru dari server.<br />Push akan aktif setelah sinkronisasi selesai.
-          </p>
-        )}
       </div>
     );
   }
@@ -1086,6 +1099,22 @@ export default function App() {
               <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[200] pointer-events-none exit-toast animate-in fade-in slide-in-from-bottom-4 duration-300">
                 <div className="flex items-center gap-2 bg-accent-600/95 dark:bg-accent-500/95 text-white text-sm font-semibold px-5 py-3 rounded-full shadow-2xl backdrop-blur-sm border border-white/20 dark:border-orange-400/30 whitespace-nowrap">
                   <span>Ketuk sekali lagi untuk keluar</span>
+                </div>
+              </div>
+            )}
+
+            {/* Badge status koneksi — pojok kanan atas, nempel selama offline */}
+            {!isOnline && (
+              <div
+                className="fixed right-4 z-[190] animate-in fade-in slide-in-from-top-3 duration-300"
+                style={{ top: 'calc(env(safe-area-inset-top, 0px) + 1rem)' }}
+              >
+                <div className="flex items-center gap-1.5 bg-slate-800/95 dark:bg-slate-900/95 text-slate-100 text-[11px] font-semibold pl-2.5 pr-3 py-1.5 rounded-full shadow-lg backdrop-blur-sm border border-white/10 whitespace-nowrap">
+                  <span className="relative flex h-2 w-2">
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-400"></span>
+                  </span>
+                  <WifiOff className="w-3.5 h-3.5 shrink-0" />
+                  <span>Offline</span>
                 </div>
               </div>
             )}
