@@ -52,14 +52,14 @@ const VARIANTS = {
     hover:text-slate-700 dark:hover:text-slate-300
   `,
   success: `
-    bg-green-50 dark:bg-green-500/10
-    text-green-600 dark:text-green-400
-    hover:bg-green-100 dark:hover:bg-green-500/15
+    bg-emerald-50 dark:bg-emerald-500/10
+    text-emerald-600 dark:text-emerald-400
+    hover:bg-emerald-100 dark:hover:bg-emerald-500/15
   `,
   warning: `
-    bg-yellow-50 dark:bg-yellow-500/10
-    text-yellow-600 dark:text-yellow-400
-    hover:bg-yellow-100 dark:hover:bg-yellow-500/15
+    bg-amber-50 dark:bg-amber-500/10
+    text-amber-600 dark:text-amber-400
+    hover:bg-amber-100 dark:hover:bg-amber-500/15
   `,
 };
 
@@ -103,8 +103,8 @@ export default function IconButton({
       disabled={disabled}
       className={`
         inline-flex items-center gap-1.5
-        rounded-lg transition-colors duration-150
-        disabled:opacity-40 disabled:cursor-not-allowed
+        rounded-xl transition-all duration-300 active:scale-95
+        disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100
         ${toneClasses}
         ${SIZES[size]       ?? SIZES.md}
         ${label ? 'pr-2.5' : ''}

@@ -44,25 +44,25 @@ import { AlertCircle, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 // ── Color tokens ─────────────────────────────────────────────────────────────
 const COLORS = {
   error: {
-    bg:         'bg-accent-50    dark:bg-accent-500/10',
+    bg:         'bg-red-50    dark:bg-red-500/10',
     border:     'border-red-100  dark:border-red-500/20',
     borderB:    'border-red-100  dark:border-red-500/20',
-    text:       'text-accent-500    dark:text-accent-400',
-    textStrong: 'text-accent-700    dark:text-accent-300',
-    icon:       'text-accent-500    dark:text-accent-400',
+    text:       'text-red-500    dark:text-red-400',
+    textStrong: 'text-red-700    dark:text-red-300',
+    icon:       'text-red-500    dark:text-red-400',
   },
   success: {
-    bg:         'bg-green-50   dark:bg-green-500/10',
-    border:     'border-green-100 dark:border-green-500/20',
-    borderB:    'border-green-100 dark:border-green-500/20',
-    text:       'text-green-600   dark:text-green-400',
-    textStrong: 'text-green-700   dark:text-green-300',
-    icon:       'text-green-600   dark:text-green-400',
+    bg:         'bg-emerald-50   dark:bg-emerald-500/10',
+    border:     'border-emerald-100 dark:border-emerald-500/20',
+    borderB:    'border-emerald-100 dark:border-emerald-500/20',
+    text:       'text-emerald-600   dark:text-emerald-400',
+    textStrong: 'text-emerald-700   dark:text-emerald-300',
+    icon:       'text-emerald-600   dark:text-emerald-400',
   },
   warning: {
     bg:         'bg-accent-50  dark:bg-accent-500/10',
-    border:     'border-orange-200 dark:border-orange-500/30',
-    borderB:    'border-orange-200 dark:border-orange-500/30',
+    border:     'border-accent-200 dark:border-accent-500/30',
+    borderB:    'border-accent-200 dark:border-accent-500/30',
     text:       'text-accent-600  dark:text-accent-400',
     textStrong: 'text-accent-700  dark:text-accent-300',
     icon:       'text-accent-500  dark:text-accent-400',
@@ -113,7 +113,7 @@ export default function Alert({
       <div
         className={`
           w-full ${c.bg} ${c.text}
-          text-xs font-bold p-2.5 rounded-xl text-center
+          text-xs font-bold p-2.5 rounded-2xl text-center
           border ${c.border}
           ${shouldAnimate ? 'animate-in zoom-in duration-200' : ''}
           ${className}
@@ -144,7 +144,7 @@ export default function Alert({
       <div
         className={`
           ${c.bg} ${c.textStrong}
-          p-3 rounded-xl text-xs
+          p-3 rounded-2xl text-xs
           flex items-start gap-2
           border ${c.border}
           ${shouldAnimate ? 'animate-in fade-in slide-in-from-top-1 duration-300' : ''}

@@ -112,7 +112,7 @@ export default function Card({
       className={`
         ${VARIANTS[variant] ?? VARIANTS.default}
         ${PADDINGS[padding] ?? PADDINGS.md}
-        ${isClickable ? 'cursor-pointer hover:shadow-md transition-shadow duration-200' : ''}
+        ${isClickable ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all duration-300' : ''}
         ${className}
       `}
       {...rest}

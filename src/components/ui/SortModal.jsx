@@ -59,7 +59,7 @@ export default function SortModal({
               key={opt.key}
               type="button"
               onClick={() => handleSelect(opt.key)}
-              className={`w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-colors
+              className={`w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-2xl text-sm font-bold transition-all duration-300
                 ${active
                   ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400'
                   : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}

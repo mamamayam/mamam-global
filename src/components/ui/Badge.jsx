@@ -17,18 +17,18 @@
  */
 
 const VARIANTS = {
-  success: 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400',
-  warning: 'bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
-  danger:  'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400',
+  success: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  warning: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  danger:  'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400',
   info:    'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400',
   orange:  'bg-accent-50 dark:bg-accent-500/10 text-accent-700 dark:text-accent-400',
   neutral: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400',
 };
 
 const DOT_COLORS = {
-  success: 'bg-green-500 dark:bg-green-400',
-  warning: 'bg-yellow-500 dark:bg-yellow-400',
-  danger:  'bg-accent-500 dark:bg-accent-400',
+  success: 'bg-emerald-500 dark:bg-emerald-400',
+  warning: 'bg-amber-500 dark:bg-amber-400',
+  danger:  'bg-red-500 dark:bg-red-400',
   info:    'bg-blue-500 dark:bg-blue-400',
   orange:  'bg-accent-500 dark:bg-accent-400',
   neutral: 'bg-slate-400 dark:bg-slate-500',

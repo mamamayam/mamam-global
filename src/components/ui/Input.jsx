@@ -72,10 +72,10 @@ const base = (variant) => `
   ${FIELD_VARIANTS[variant] ?? FIELD_VARIANTS.default}
   border border-slate-200 dark:border-slate-700
   text-slate-800 dark:text-slate-100
-  rounded-xl outline-none
-  focus:border-orange-500 dark:focus:border-orange-500
+  rounded-2xl outline-none
+  focus:border-accent-500 dark:focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20
   placeholder:text-slate-300 dark:placeholder:text-slate-600
-  transition-colors duration-150
+  transition-all duration-300
   disabled:opacity-50 disabled:cursor-not-allowed
 `;
 

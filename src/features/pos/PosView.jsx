@@ -249,7 +249,7 @@ const PosView = () => {
             )}
 
             {/* ── Header sticky ──────────────────────────────────────────── */}
-            <div className="px-4 pt-4 pb-3 bg-white dark:bg-slate-900 shadow-sm z-10 sticky top-0">
+            <div className="px-4 pt-4 pb-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl shadow-sm z-10 sticky top-0">
 
                 {/* Search bar */}
                 <div className="relative mb-3">
@@ -257,7 +257,7 @@ const PosView = () => {
                     <input
                         type="text"
                         placeholder="Cari menu pesanan..."
-                        className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50 dark:bg-slate-950 transition-all text-sm font-medium"
+                        className="w-full pl-10 pr-10 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-all duration-300 text-sm font-medium"
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                     />
@@ -287,20 +287,21 @@ const PosView = () => {
                                     onDrop={(e) => handleDrop(e, idx)}
                                     onDragEnd={() => setDraggedIdx(null)}
                                     onClick={() => !isReorderMode && handleCategoryClick(cat)}
+                                    data-active={isActive}
                                     className={`
-                        shrink-0 rounded-full font-bold border transition-all 
+                        shrink-0 rounded-2xl font-bold border transition-all duration-300
                         whitespace-nowrap select-none flex items-center gap-2
                         
                         {/* UTAMA: Ukuran besar di HP, normal di PC */}
                         px-6 py-3.5 text-base md:px-5 md:py-2.5 md:text-sm
                         
                         ${isActive
-                                            ? 'bg-orange-600 text-white border-transparent shadow-md'
-                                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200'
+                                            ? 'bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white border-transparent shadow-[0_4px_16px_rgba(var(--color-accent-500),0.35)]'
+                                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                                         } 
                         ${isReorderMode
                                             ? 'cursor-grab active:cursor-grabbing hover:bg-slate-50 dark:hover:bg-slate-700 border-dashed border-2 border-slate-400'
-                                            : 'cursor-pointer'
+                                            : 'cursor-pointer active:scale-95'
                                         }
                         ${isDragging ? 'opacity-40 scale-95 shadow-inner' : 'opacity-100'}
                     `}
@@ -315,9 +316,9 @@ const PosView = () => {
                     {/* Tombol toggle mode reorder (Ikut membesar di HP) */}
                     <button
                         onClick={() => setIsReorderMode(!isReorderMode)}
-                        className={`rounded-xl border transition-colors shrink-0 p-3.5 md:p-2.5 ${isReorderMode
-                            ? 'bg-accent-600 text-white border-accent-600'
-                            : 'bg-white dark:bg-slate-800 border-slate-200 text-slate-600'
+                        className={`rounded-2xl border transition-all duration-300 shrink-0 p-3.5 md:p-2.5 active:scale-95 ${isReorderMode
+                            ? 'bg-gradient-to-br from-accent-600 to-accent-500 text-white border-transparent shadow-[0_4px_14px_rgba(var(--color-accent-500),0.35)]'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                             }`}
                     >
                         {isReorderMode ? <Check size={22} className="md:w-5 md:h-5" /> : <Settings2 size={22} className="md:w-5 md:h-5" />}
@@ -326,7 +327,7 @@ const PosView = () => {
             </div>
 
             {isSearching && (
-                <div className="px-4 py-2 bg-accent-50 border-b border-orange-100 flex items-center gap-2 text-xs text-accent-700 animate-in fade-in">
+                <div className="px-4 py-2 bg-accent-50 dark:bg-accent-500/10 border-b border-accent-100 dark:border-accent-500/20 flex items-center gap-2 text-xs text-accent-700 dark:text-accent-400 animate-in fade-in">
                     <Search className="w-3.5 h-3.5 shrink-0" />
                     <span><span className="font-bold">{filteredMenus.length}</span> menu ditemukan untuk "{searchQuery}"</span>
                 </div>
@@ -346,9 +347,9 @@ const PosView = () => {
                         <div
                             key={menu.id}
                             onClick={() => handleMenuClick(menu)}
-                            className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-3 md:p-4 flex flex-col items-center text-center cursor-pointer hover:shadow-md hover:border-orange-200 dark:hover:border-orange-500/30 active:scale-95 transition-all duration-300 relative overflow-hidden group"
+                            className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-3 md:p-4 flex flex-col items-center text-center cursor-pointer hover:shadow-md hover:-translate-y-0.5 hover:border-accent-200 dark:hover:border-accent-500/30 active:scale-95 transition-all duration-300 relative overflow-hidden group"
                         >
-                            <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-orange-50 dark:from-orange-500/10 to-orange-100 dark:to-orange-500/15 rounded-full flex items-center justify-center mb-2 md:mb-3 group-hover:scale-110 transition-transform duration-300">
+                            <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-accent-50 dark:from-accent-500/10 to-accent-100 dark:to-accent-500/15 rounded-2xl flex items-center justify-center mb-2 md:mb-3 group-hover:scale-110 transition-transform duration-300">
                                 {menu.category === 'Minuman'
                                     ? <Coffee className="w-6 h-6 md:w-8 md:h-8 text-accent-600 dark:text-accent-400" />
                                     : <UtensilsCrossed className="w-6 h-6 md:w-8 md:h-8 text-accent-600 dark:text-accent-400" />
@@ -362,7 +363,7 @@ const PosView = () => {
                                 {formatRupiah(menu.price)}
                             </p>
                             {menu.variantGroupIds.length > 0 && (
-                                <div className="absolute top-2 right-2"><span className="w-2 h-2 rounded-full bg-yellow-400 dark:bg-yellow-500 block" /></div>
+                                <div className="absolute top-2 right-2"><span className="w-2 h-2 rounded-full bg-amber-400 dark:bg-amber-500 block" /></div>
                             )}
                         </div>
                     ))}
@@ -380,18 +381,18 @@ const PosView = () => {
             <div className="fixed bottom-20 right-6 z-50">
                 <button
                     onClick={() => setIsCartOpen(true)}
-                    className="bg-slate-800 text-white rounded-full py-3 px-5 shadow-[0_10px_25px_rgba(0,0,0,0.3)] flex items-center gap-3 hover:bg-slate-900 transition-all active:scale-95 border border-slate-700 dark:border-slate-300"
+                    className="bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white rounded-2xl py-3 px-5 shadow-[0_10px_28px_rgba(var(--color-accent-500),0.4)] flex items-center gap-3 hover:-translate-y-0.5 hover:shadow-[0_14px_32px_rgba(var(--color-accent-500),0.45)] transition-all duration-300 active:scale-95"
                 >
                     <div className="relative">
                         <ShoppingCart className="w-5 h-5" />
                         {cart.length > 0 && (
-                            <span className="absolute -top-2.5 -right-2.5 bg-accent-600 dark:bg-accent-500 text-white text-[10px] font-bold rounded-full w-[18px] h-[18px] flex items-center justify-center border-2 border-slate-800 dark:border-slate-100 animate-in zoom-in duration-300">
+                            <span className="absolute -top-2.5 -right-2.5 bg-white text-accent-600 text-[10px] font-bold rounded-full w-[18px] h-[18px] flex items-center justify-center border-2 border-accent-600 animate-in zoom-in duration-300">
                                 {cart.reduce((sum, item) => sum + item.qty, 0)}
                             </span>
                         )}
                     </div>
-                    <div className="border-l border-slate-700 dark:border-slate-300 pl-3 flex flex-col items-start leading-tight">
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">Total</span>
+                    <div className="border-l border-white/25 pl-3 flex flex-col items-start leading-tight">
+                        <span className="text-[10px] text-white/75 font-medium">Total</span>
                         <span className="font-bold text-sm">{formatRupiah(getTotal())}</span>
                     </div>
                 </button>

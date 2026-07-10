@@ -59,10 +59,10 @@ import { formatRupiah } from '../../utils/formatters';
  */
 
 const HIGHLIGHT_TONES = {
-  default: 'bg-slate-800 dark:bg-slate-700 text-white',
-  success: 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-500/20',
-  danger:  'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 border border-red-100 dark:border-red-500/20',
-  orange:  'bg-accent-50 dark:bg-accent-500/10 text-accent-700 dark:text-accent-400 border border-orange-100 dark:border-orange-500/20',
+  default: 'bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 text-white',
+  success: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20',
+  danger:  'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-500/20',
+  orange:  'bg-accent-50 dark:bg-accent-500/10 text-accent-700 dark:text-accent-400 border border-accent-100 dark:border-accent-500/20',
 };
 
 // Row dianggap "kosong" dan otomatis disembunyikan, kecuali alwaysShow.
@@ -163,7 +163,7 @@ export default function DetailModal({
         </div>
         <button
           onClick={onClose}
-          className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
+          className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 dark:text-slate-500 hover:bg-accent-100 dark:hover:bg-accent-500/20 hover:text-accent-600 dark:hover:text-accent-400 active:scale-95 transition-all duration-300 shrink-0"
         >
           <X className="w-4 h-4" />
         </button>
@@ -178,7 +178,7 @@ export default function DetailModal({
                 {section.title}
               </p>
             )}
-            <div className="bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800 px-4 divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800 px-4 divide-y divide-slate-100 dark:divide-slate-800">
               {section.rows.map((row, j) => <DetailRow key={j} row={row} />)}
             </div>
           </div>
@@ -189,7 +189,7 @@ export default function DetailModal({
             <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5 px-1">
               {itemsTitle} ({items.length})
             </p>
-            <div className="bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
               {items.map((it, idx) => (
                 <div key={idx} className="flex justify-between items-start gap-3 p-3">
                   <div className="min-w-0">
@@ -226,7 +226,7 @@ export default function DetailModal({
         {highlights.length > 0 && (
           <div className={`grid gap-2 ${highlights.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} mt-4`}>
             {highlights.map((h, i) => (
-              <div key={i} className={`rounded-xl p-3.5 ${HIGHLIGHT_TONES[h.tone] || HIGHLIGHT_TONES.default}`}>
+              <div key={i} className={`rounded-2xl p-3.5 ${HIGHLIGHT_TONES[h.tone] || HIGHLIGHT_TONES.default}`}>
                 <p className="text-[10px] font-bold uppercase tracking-wider opacity-80 mb-0.5">{h.label}</p>
                 <p className="text-lg font-black">{h.type === 'text' ? h.value : formatRupiah(h.value)}</p>
               </div>

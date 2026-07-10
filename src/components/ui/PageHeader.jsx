@@ -33,12 +33,12 @@ export default function PageHeader({
     <div className={`flex items-center justify-between mb-6 ${className}`}>
       <div className="flex items-center gap-2.5 min-w-0">
         {icon && (
-          <span className="text-slate-800 dark:text-slate-100 shrink-0">
+          <span className="text-accent-500 dark:text-accent-400 shrink-0">
             {icon}
           </span>
         )}
         <div className="min-w-0">
-          <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 leading-tight truncate">
+          <h2 className="font-heading text-xl md:text-2xl font-black tracking-tight leading-tight truncate bg-clip-text text-transparent bg-gradient-to-br from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">
             {title}
           </h2>
           {subtitle && (

@@ -44,22 +44,22 @@
 
 const ACTIVE_TONES = {
   orange: `
-    bg-accent-600 dark:bg-accent-500 text-white
-    border-orange-600 dark:border-orange-500
-    shadow-sm
+    bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white
+    border-transparent
+    shadow-[0_4px_14px_rgba(var(--color-accent-500),0.3)]
   `,
   green: `
-    bg-green-600 dark:bg-green-500 text-white
-    border-green-600 dark:border-green-500
-    shadow-sm
+    bg-gradient-to-r from-emerald-600 to-emerald-500 dark:from-emerald-500 dark:to-emerald-600 text-white
+    border-transparent
+    shadow-[0_4px_14px_rgba(16,185,129,0.3)]
   `,
   red: `
-    bg-accent-500 dark:bg-accent-600 text-white
-    border-red-500 dark:border-red-600
-    shadow-sm
+    bg-gradient-to-r from-red-600 to-red-500 dark:from-red-500 dark:to-red-600 text-white
+    border-transparent
+    shadow-[0_4px_14px_rgba(239,68,68,0.3)]
   `,
   'red-soft': `
-    bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400
+    bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400
     border-red-200 dark:border-red-500/30
   `,
 };
@@ -92,7 +92,7 @@ export default function SegmentedControl({
             type="button"
             onClick={() => onChange(opt.value)}
             className={`
-              flex-1 rounded-xl font-bold border transition-all duration-200
+              flex-1 rounded-2xl font-bold border transition-all duration-300 active:scale-[0.98]
               ${SIZES[size] ?? SIZES.md}
               ${isActive ? (ACTIVE_TONES[opt.tone] ?? ACTIVE_TONES.orange) : INACTIVE}
             `}

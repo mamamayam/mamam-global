@@ -39,34 +39,30 @@
  */
 
 const VARIANTS = {
-  // Ganti semua 'orange' menjadi 'accent'
+  // Gradient accent — senada tombol aktif Sidebar/BottomNav/FAB
   primary: `
-    bg-accent-600 dark:bg-accent-500 text-white
-    hover:bg-accent-700 dark:hover:bg-accent-600
-    hover:shadow-md hover:-translate-y-0.5
-    shadow-sm
+    bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white
+    hover:shadow-[0_6px_20px_rgba(var(--color-accent-500),0.35)] hover:-translate-y-0.5
+    shadow-[0_4px_14px_rgba(var(--color-accent-500),0.25)]
   `,
   secondary: `
     bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200
     hover:bg-slate-200 dark:hover:bg-slate-700
   `,
   danger: `
-    bg-accent-500 dark:bg-accent-600 text-white
-    hover:bg-accent-600 dark:hover:bg-accent-500
-    hover:shadow-md hover:-translate-y-0.5
-    shadow-sm
+    bg-gradient-to-r from-red-600 to-red-500 dark:from-red-500 dark:to-red-600 text-white
+    hover:shadow-[0_6px_20px_rgba(239,68,68,0.35)] hover:-translate-y-0.5
+    shadow-[0_4px_14px_rgba(239,68,68,0.25)]
   `,
   success: `
-    bg-green-600 dark:bg-green-500 text-white
-    hover:bg-green-700 dark:hover:bg-green-600
-    hover:shadow-md hover:-translate-y-0.5
-    shadow-sm
+    bg-gradient-to-r from-emerald-600 to-emerald-500 dark:from-emerald-500 dark:to-emerald-600 text-white
+    hover:shadow-[0_6px_20px_rgba(16,185,129,0.35)] hover:-translate-y-0.5
+    shadow-[0_4px_14px_rgba(16,185,129,0.25)]
   `,
   dark: `
-    bg-slate-800 dark:bg-slate-700 text-white
-    hover:bg-slate-900 dark:hover:bg-slate-600
-    hover:shadow-md hover:-translate-y-0.5
-    shadow-sm
+    bg-slate-900 dark:bg-white text-white dark:text-slate-900
+    hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] hover:-translate-y-0.5
+    shadow-[0_4px_14px_rgba(0,0,0,0.1)]
   `,
   // Ganti semua 'orange' menjadi 'accent'
   ghost: `
@@ -75,14 +71,14 @@ const VARIANTS = {
     hover:bg-accent-100 dark:hover:bg-accent-500/15
   `,
   'ghost-danger': `
-    bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400
+    bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400
     border border-red-200 dark:border-red-500/30
-    hover:bg-accent-100 dark:hover:bg-accent-500/15
+    hover:bg-red-100 dark:hover:bg-red-500/15
   `,
   'ghost-success': `
-    bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400
-    border border-green-200 dark:border-green-500/30
-    hover:bg-green-100 dark:hover:bg-green-500/15
+    bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400
+    border border-emerald-200 dark:border-emerald-500/30
+    hover:bg-emerald-100 dark:hover:bg-emerald-500/15
   `,
 };
 
@@ -116,8 +112,9 @@ export default function Button({
       disabled={isDisabled}
       className={`
         inline-flex items-center justify-center gap-2
-        font-bold rounded-xl transition-all duration-300
-        disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-none
+        font-bold rounded-2xl transition-all duration-300
+        active:scale-[0.98]
+        disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-none disabled:active:scale-100
         ${VARIANTS[variant] ?? VARIANTS.primary}
         ${SIZES[size]       ?? SIZES.md}
         ${className}
