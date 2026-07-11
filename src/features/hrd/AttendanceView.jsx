@@ -397,16 +397,16 @@ export default function Attendance() {
       />
 
       {currentShift && isShiftCarriedOver && (
-        <div className="mb-4 border-2 border-red-500 bg-accent-50 dark:bg-accent-950/40 rounded-xl p-4">
+        <div className="mb-4 border-2 border-red-200 dark:border-red-500/40 bg-red-50 dark:bg-red-950/40 rounded-2xl p-4">
           <div className="flex items-start gap-3">
-            <div className="shrink-0 w-10 h-10 bg-accent-100 dark:bg-accent-900/60 rounded-full flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5 text-accent-600 dark:text-accent-400" />
+            <div className="shrink-0 w-10 h-10 bg-red-100 dark:bg-red-900/60 rounded-full flex items-center justify-center">
+              <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-accent-700 dark:text-accent-400 text-sm">
+              <p className="font-bold text-red-700 dark:text-red-400 text-sm">
                 ⚠️ Dompet Belum Ditutup dari Hari Sebelumnya
               </p>
-              <p className="text-xs text-accent-600 dark:text-accent-500 mt-0.5">
+              <p className="text-xs text-red-600 dark:text-red-500 mt-0.5">
                 Dompet {currentShift.id} masih kebuka sejak {new Date(currentShift.startTime).toLocaleString('id-ID')}. Cek menu Manajemen Dompet untuk segera ditutup sebelum transaksi hari ini kecampur sama shift lama.
               </p>
             </div>
@@ -415,16 +415,16 @@ export default function Attendance() {
       )}
 
       {autoClosedEmployees.length > 0 && (
-        <div className="mb-4 border-2 border-red-500 bg-accent-50 dark:bg-accent-950/40 rounded-xl p-4">
+        <div className="mb-4 border-2 border-red-200 dark:border-red-500/40 bg-red-50 dark:bg-red-950/40 rounded-2xl p-4">
           <div className="flex items-start gap-3">
-            <div className="shrink-0 w-10 h-10 bg-accent-100 dark:bg-accent-900/60 rounded-full flex items-center justify-center">
-              <AlarmClock className="w-5 h-5 text-accent-600 dark:text-accent-400" />
+            <div className="shrink-0 w-10 h-10 bg-red-100 dark:bg-red-900/60 rounded-full flex items-center justify-center">
+              <AlarmClock className="w-5 h-5 text-red-600 dark:text-red-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-accent-700 dark:text-accent-400 text-sm">
+              <p className="font-bold text-red-700 dark:text-red-400 text-sm">
                 ⚠️ Absen Pulang Otomatis — Dicatat Jam {OUTLET_CLOSE_HOUR}:00
               </p>
-              <p className="text-xs text-accent-600 dark:text-accent-500 mt-0.5 mb-2">
+              <p className="text-xs text-red-600 dark:text-red-500 mt-0.5 mb-2">
                 Karyawan berikut tidak absen pulang sampai jam {AUTO_CLOSE_HOUR}:00, sehingga jam pulang dicatat otomatis
                 pukul <span className="font-semibold">{OUTLET_CLOSE_HOUR}:00</span> (jam tutup outlet). Admin bisa melakukan pengeditan secara manual jika diperlukan.
                 Yang bertanda <span className="font-semibold italic">(jam bolong)</span> — pulang dicatat saat mereka keluar bolong karena tidak absen balik.
@@ -436,7 +436,7 @@ export default function Attendance() {
                 {autoClosedEmployees.map(({ name, fromBolong, isLibur }) => (
                   <span
                     key={name}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent-100 dark:bg-accent-900/60 text-accent-800 dark:text-accent-300 text-xs font-bold"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-300 text-xs font-bold"
                   >
                     {name}
                     {fromBolong && <span className="font-normal opacity-70">(jam bolong)</span>}
@@ -449,7 +449,7 @@ export default function Attendance() {
             <button
               onClick={() => setAutoClosedEmployees([])}
               title="Tutup peringatan"
-              className="shrink-0 text-accent-400 hover:text-accent-600 dark:text-accent-500 dark:hover:text-accent-300 transition-colors"
+              className="shrink-0 text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-300 transition-all duration-300 active:scale-90"
             >
               <X className="w-4 h-4" />
             </button>
@@ -585,13 +585,13 @@ export default function Attendance() {
                       <button
                         onClick={() => handleAddManualRecord(employee.id, employee.name)}
                         disabled={!editTime}
-                        className="text-xs font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 hover:bg-green-100 disabled:opacity-40 px-3 py-1.5 rounded-lg transition"
+                        className="text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 disabled:opacity-40 px-3 py-1.5 rounded-xl transition-all duration-300 active:scale-95"
                       >
                         Simpan
                       </button>
                       <button
                         onClick={() => setEditEmployeeId(null)}
-                        className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1.5 rounded-lg transition"
+                        className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1.5 rounded-xl transition-all duration-300 active:scale-95"
                       >
                         Batal
                       </button>
@@ -666,7 +666,7 @@ export default function Attendance() {
             <select
               value={empFilter}
               onChange={e => setEmpFilter(e.target.value)}
-              className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-accent-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+              className="w-full appearance-none pl-4 pr-8 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-300 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
             >
               <option value="semua">Semua Karyawan</option>
               {uniqueLogEmployees.map(e => (
@@ -680,7 +680,7 @@ export default function Attendance() {
             <select
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value)}
-              className="w-full appearance-none pl-4 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-accent-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
+              className="w-full appearance-none pl-4 pr-8 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-300 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
             >
               {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -690,7 +690,7 @@ export default function Attendance() {
           <button
             type="button"
             onClick={() => setIsSortOpen(true)}
-            className="w-full sm:w-44 flex items-center justify-between gap-2 pl-4 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-accent-300 dark:hover:border-accent-500/40 transition-colors text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+            className="w-full sm:w-44 flex items-center justify-between gap-2 pl-4 pr-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-accent-300 dark:hover:border-accent-500/40 active:scale-[0.98] transition-all duration-300 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
           >
             <span className="truncate">{SORT_OPTIONS.find(o => o.key === sortKey)?.label || 'Urutkan'}</span>
             <ArrowUpDown className="text-slate-400 dark:text-slate-500 w-4 h-4 shrink-0" />
@@ -703,7 +703,7 @@ export default function Attendance() {
               placeholder="Cari nama karyawan..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-accent-500 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+              className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-300 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
             />
           </div>
         </Card>
@@ -735,14 +735,14 @@ export default function Attendance() {
               {visibleLogs.map(r => (
                 <div
                   key={r.id}
-                  className={`p-3.5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${isAdminMode && selectedIds.has(r.id) ? 'bg-orange-50/60 dark:bg-orange-500/5' : ''}`}
+                  className={`p-3.5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${isAdminMode && selectedIds.has(r.id) ? 'bg-accent-50/60 dark:bg-accent-500/5' : ''}`}
                 >
                   {isAdminMode && (
                     <input
                       type="checkbox"
                       checked={selectedIds.has(r.id)}
                       onChange={() => toggleSelectOne(r.id)}
-                      className="w-4 h-4 rounded accent-orange-500 cursor-pointer shrink-0"
+                      className="w-4 h-4 rounded accent-[#ea580c] dark:accent-[#f97316] cursor-pointer shrink-0"
                     />
                   )}
                   <div className="min-w-0 flex-1">

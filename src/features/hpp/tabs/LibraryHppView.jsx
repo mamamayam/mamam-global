@@ -141,12 +141,12 @@ const LibraryHppView = () => {
                     <input
                         type="text"
                         placeholder="Cari menu..."
-                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all text-sm"
+                        className="w-full pl-10 pr-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-300 text-sm"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                     {searchQuery && (
-                        <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 transition-all">
+                        <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all duration-300">
                             <X className="w-4 h-4" />
                         </button>
                     )}
@@ -155,7 +155,7 @@ const LibraryHppView = () => {
                 <button
                     type="button"
                     onClick={() => setIsSortOpen(true)}
-                    className="w-full sm:w-48 flex items-center justify-between gap-2 pl-4 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-orange-300 transition-colors text-sm bg-white dark:bg-slate-900"
+                    className="w-full sm:w-48 flex items-center justify-between gap-2 pl-4 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-accent-300 dark:hover:border-accent-500/40 active:scale-[0.98] transition-all duration-300 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
                 >
                     <span className="truncate">{sortOptions.find(o => o.key === sortKey)?.label || 'Urutkan'}</span>
                     <ArrowUpDown className="text-slate-400 w-4 h-4 shrink-0" />
@@ -215,7 +215,7 @@ const LibraryHppView = () => {
                                                             </div>
                                                             <div className="text-right">
                                                                 <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Margin Aktual</span>
-                                                                <span className={`font-black text-sm px-2 py-1 rounded-md ${isMarginDanger ? 'bg-accent-100 text-accent-600' : 'bg-green-100 text-green-700'}`}>
+                                                                <span className={`font-black text-sm px-2 py-1 rounded-md ${isMarginDanger ? 'bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-400' : 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'}`}>
                                                                     {item.actualMarginPercent.toFixed(1)}%
                                                                 </span>
                                                             </div>
@@ -224,7 +224,7 @@ const LibraryHppView = () => {
                                                 </div>
 
                                                 {isMarginDanger && (
-                                                    <div className="mt-2 pt-3 border-t border-red-100 flex items-start gap-2 text-accent-600">
+                                                    <div className="mt-2 pt-3 border-t border-red-100 dark:border-red-500/20 flex items-start gap-2 text-red-600 dark:text-red-400">
                                                         <TrendingDown className="w-4 h-4 shrink-0 mt-0.5" />
                                                         <p className="text-[11px] font-bold leading-relaxed">Margin kritis! Periksa harga bahan baku / prep Anda.</p>
                                                     </div>
@@ -267,9 +267,9 @@ const LibraryHppView = () => {
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center text-sm">
                                     <span className="font-bold text-slate-300">Target Profit Margin (%)</span>
-                                    <span className="font-black text-accent-400 text-base bg-accent-950/50 px-3 py-1 rounded-lg border border-orange-500/50">{editMargin}%</span>
+                                    <span className="font-black text-accent-400 text-base bg-accent-950/50 px-3 py-1 rounded-lg border border-accent-500/50">{editMargin}%</span>
                                 </div>
-                                <input type="range" min="5" max="95" className="w-full accent-orange-600 cursor-pointer h-2 bg-slate-700 rounded-lg appearance-none" value={editMargin} onChange={e => setEditMargin(Number(e.target.value))} />
+                                <input type="range" min="5" max="95" className="w-full accent-[#ea580c] cursor-pointer h-2 bg-slate-700 rounded-lg appearance-none" value={editMargin} onChange={e => setEditMargin(Number(e.target.value))} />
                                 <div className="grid grid-cols-4 gap-2 mt-2">
                                     {[20, 35, 50, 70].map(m => <button key={m} onClick={() => setEditMargin(m)} className={`py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${editMargin === m ? 'bg-accent-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>{m}%</button>)}
                                 </div>
@@ -284,7 +284,7 @@ const LibraryHppView = () => {
                                 <label className="block text-xs font-bold text-slate-300 uppercase mt-4">Tentukan Harga Jual Final</label>
                                 <div className="relative">
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">Rp</span>
-                                    <input type="number" className="w-full p-4 pl-12 bg-slate-800 border border-slate-700 rounded-xl outline-none focus:border-orange-500 text-base font-bold text-white transition-all shadow-inner" value={editFinalPrice} onChange={e => setEditFinalPrice(e.target.value)} placeholder={String(modalRecommendedPrice)} />
+                                    <input type="number" className="w-full p-4 pl-12 bg-slate-800 border border-slate-700 rounded-xl outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 text-base font-bold text-white transition-all duration-200 shadow-inner" value={editFinalPrice} onChange={e => setEditFinalPrice(e.target.value)} placeholder={String(modalRecommendedPrice)} />
                                 </div>
                             </div>
 
@@ -292,11 +292,11 @@ const LibraryHppView = () => {
                             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 mt-2">
                                 <div className="flex justify-between items-center text-sm">
                                     <span className="text-slate-400 font-medium">Estimasi Laba / Porsi:</span>
-                                    <span className={`font-black ${modalActualProfit >= 0 ? 'text-green-400' : 'text-accent-400'}`}>{formatRupiah(modalActualProfit)}</span>
+                                    <span className={`font-black ${modalActualProfit >= 0 ? 'text-emerald-400' : 'text-accent-400'}`}>{formatRupiah(modalActualProfit)}</span>
                                 </div>
                                 <div className="flex justify-between items-center text-sm">
                                     <span className="text-slate-400 font-medium">Margin Aktual:</span>
-                                    <span className={`font-black ${modalActualProfitPercent >= 0 ? 'text-green-400' : 'text-accent-400'}`}>{modalActualProfitPercent.toFixed(1)}%</span>
+                                    <span className={`font-black ${modalActualProfitPercent >= 0 ? 'text-emerald-400' : 'text-accent-400'}`}>{modalActualProfitPercent.toFixed(1)}%</span>
                                 </div>
                             </div>
                         </div>

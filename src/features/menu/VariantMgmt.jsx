@@ -68,8 +68,8 @@ function useDragReorder(onReorder) {
 }
 
 function getDragRowClass(isDragging, isDropTarget, baseClass, idleClass) {
-  if (isDragging) return `${baseClass} opacity-50 ring-2 ring-orange-400 z-10`;
-  if (isDropTarget) return `${baseClass} border-orange-400 bg-accent-50/60 dark:bg-accent-500/10`;
+  if (isDragging) return `${baseClass} opacity-50 ring-2 ring-accent-400 z-10`;
+  if (isDropTarget) return `${baseClass} border-accent-400 bg-accent-50/60 dark:bg-accent-500/10`;
   return `${baseClass} ${idleClass}`;
 }
 
@@ -87,7 +87,7 @@ const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete,
       className={getDragRowClass(
         isDraggingCat, 
         isDropTargetCat, 
-        "animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-xl p-2 -mx-2 transition-all", 
+        "animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-2xl p-2 -mx-2 transition-all duration-300", 
         "border border-transparent hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
       )}
     >
@@ -96,7 +96,7 @@ const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete,
         <div className="flex items-center gap-2">
           <div 
             onPointerDown={categoryDrag?.startDrag(category)}
-            className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-500 shrink-0 p-1 -ml-1 touch-none"
+            className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-accent-500 shrink-0 p-1 -ml-1 touch-none transition-colors duration-200"
             title="Tahan & geser untuk mengurutkan kategori"
           >
             <GripVertical className="w-5 h-5" />
@@ -106,7 +106,7 @@ const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete,
         </div>
         <button 
           onClick={() => setIsExpanded(!isExpanded)}
-          className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+          className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl hover:bg-accent-50 dark:hover:bg-accent-500/10 hover:text-accent-600 dark:hover:text-accent-400 active:scale-90 transition-all duration-300"
           title={isExpanded ? "Tutup Kategori" : "Buka Kategori"}
         >
           {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
@@ -126,8 +126,8 @@ const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete,
                 className={getDragRowClass(
                   isDragging,
                   isDropTarget,
-                  "group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-xl border shadow-sm transition-all gap-3 sm:gap-4",
-                  "border-slate-100 dark:border-slate-800 hover:border-orange-200 dark:hover:border-orange-500/30"
+                  "group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-2xl border shadow-sm transition-all duration-300 gap-3 sm:gap-4",
+                  "border-slate-100 dark:border-slate-800 hover:border-accent-200 dark:hover:border-accent-500/30 hover:shadow-md"
                 )}
               >
                 {/* --- Drag handle + Info Kiri --- */}
@@ -327,7 +327,7 @@ const VariantManagement = () => {
         <button onClick={() => setIsEditing(false)} className="mb-4 text-slate-500 dark:text-slate-400 flex items-center gap-2 hover:text-slate-800 dark:hover:text-slate-100 font-medium transition-colors">
           <ChevronLeft className="w-5 h-5" /> Kembali
         </button>
-        <h2 className="font-heading text-2xl font-bold mb-6 text-slate-800 dark:text-slate-100">
+        <h2 className="font-heading text-2xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-br from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">
           {formData.id ? 'Edit Grup Varian' : 'Tambah Grup Varian Baru'}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
@@ -348,7 +348,7 @@ const VariantManagement = () => {
             </div>
             <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-3">
               <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" className="w-5 h-5 accent-orange-600 cursor-pointer" checked={formData.isRequired} onChange={e => setFormData({ ...formData, isRequired: e.target.checked })} />
+                <input type="checkbox" className="w-5 h-5 accent-[#ea580c] dark:accent-[#f97316] cursor-pointer" checked={formData.isRequired} onChange={e => setFormData({ ...formData, isRequired: e.target.checked })} />
                 <div>
                   <p className="font-bold text-sm text-slate-800 dark:text-slate-100">Wajib Dipilih</p>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">Pelanggan harus memilih minimal satu opsi.</p>
@@ -362,7 +362,7 @@ const VariantManagement = () => {
           </div>
           <div className="space-y-4">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Opsi Pilihan Varian</h3>
-            <div className={`flex gap-2 items-end p-3 rounded-xl border transition-colors ${editingOptionId ? 'bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/30' : 'bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800'}`}>
+            <div className={`flex gap-2 items-end p-3 rounded-xl border transition-colors ${editingOptionId ? 'bg-accent-50 dark:bg-accent-500/10 border-accent-200 dark:border-accent-500/30' : 'bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800'}`}>
               <div className="flex-1 min-w-0">
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nama Opsi</label>
                 <input type="text" placeholder="Misal: Mozzarella" className="w-full p-2 text-xs border border-slate-200 rounded-lg" value={newOption.name} onChange={e => setNewOption({ ...newOption, name: e.target.value })} />
@@ -387,7 +387,7 @@ const VariantManagement = () => {
                   const isDropTarget = optionsDrag.overId === opt.id && optionsDrag.dragId !== null && optionsDrag.dragId !== opt.id;
                   const isBeingEdited = editingOptionId === opt.id;
                   return (
-                    <div key={opt.id} ref={optionsDrag.registerRef(opt.id)} className={getDragRowClass(isDragging, isDropTarget, `flex justify-between items-center p-2.5 bg-white border rounded-xl shadow-sm transition-all ${isBeingEdited ? 'border-orange-400 ring-1 ring-orange-300 bg-orange-50/60' : ''}`, "border-slate-100")}>
+                    <div key={opt.id} ref={optionsDrag.registerRef(opt.id)} className={getDragRowClass(isDragging, isDropTarget, `flex justify-between items-center p-2.5 bg-white dark:bg-slate-900 border rounded-2xl shadow-sm transition-all duration-300 ${isBeingEdited ? 'border-accent-400 ring-1 ring-accent-300 bg-accent-50/60 dark:bg-accent-500/10' : ''}`, "border-slate-100 dark:border-slate-800")}>
                       <div className="flex items-center gap-2 min-w-0">
                         <div onPointerDown={optionsDrag.startDrag(opt.id)} className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-400 shrink-0 p-1 touch-none">
                           <GripVertical className="w-4 h-4" />

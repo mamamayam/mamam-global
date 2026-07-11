@@ -429,7 +429,7 @@ const ShiftView = () => {
           <div className="space-y-1.5 text-xs print:text-black">
             <div className="flex justify-between font-bold"><span>Total Seharusnya di Dompet</span> <span>{formatRupiah(closedShiftData.stats.expectedCash)}</span></div>
             <div className="flex justify-between font-bold"><span>Saldo Aktual</span> <span>{formatRupiah(closedShiftData.actualCash)}</span></div>
-            <div className={`flex justify-between font-bold pt-2 mt-2 border-t border-slate-200 dark:border-slate-700 print:border-black ${closedShiftData.difference < 0 ? 'text-accent-500 dark:text-accent-400' : closedShiftData.difference > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'}`}>
+            <div className={`flex justify-between font-bold pt-2 mt-2 border-t border-slate-200 dark:border-slate-700 print:border-black ${closedShiftData.difference < 0 ? 'text-accent-500 dark:text-accent-400' : closedShiftData.difference > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-100'}`}>
               <span>{closedShiftData.difference < 0 ? 'SELISIH MINUS' : closedShiftData.difference > 0 ? 'SELISIH LEBIH' : 'BALANCE (PAS)'}</span>
               <span>{formatRupiah(closedShiftData.difference)}</span>
             </div>
@@ -459,7 +459,8 @@ const ShiftView = () => {
             </Button>
             
             <Button
-              className="flex-1 !bg-green-600 hover:!bg-green-700 !text-white !border-green-600"
+              variant="success"
+              className="flex-1"
               icon={<Share2 className="w-4 h-4" />}
               onClick={handleShareImage}
             >
@@ -484,7 +485,7 @@ const ShiftView = () => {
       {/* Menggunakan komponen PageHeader */}
       <PageHeader 
         title="Manajemen Dompet" 
-        icon={<Clock className="w-6 h-6" />} 
+        icon={<Clock className="w-6 h-6 text-accent-500 dark:text-accent-400" />} 
       />
 
       {/* =========================================================================
@@ -492,11 +493,11 @@ const ShiftView = () => {
           ========================================================================= */}
       {currentShift && isShiftCarriedOver && (
         <div className="max-w-4xl mb-6 shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="bg-accent-50 dark:bg-accent-500/10 border-2 border-red-100 dark:border-red-500/20 text-accent-700 dark:text-accent-400 p-4 rounded-2xl flex items-start gap-3">
+          <div className="bg-red-50 dark:bg-red-500/10 border-2 border-red-100 dark:border-red-500/20 text-red-700 dark:text-red-400 p-4 rounded-2xl flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
             <div>
-              <p className="font-bold text-sm text-accent-700 dark:text-accent-300">Dompet Belum Ditutup dari Hari Sebelumnya!</p>
-              <p className="text-xs text-accent-600/90 dark:text-accent-400/80 mt-0.5">
+              <p className="font-bold text-sm text-red-700 dark:text-red-300">Dompet Belum Ditutup dari Hari Sebelumnya!</p>
+              <p className="text-xs text-red-600/90 dark:text-red-400/80 mt-0.5">
                 Dibuka sejak {new Date(currentShift.startTime).toLocaleString('id-ID')}. Transaksi hari ini bisa kecampur sama shift lama — segera hitung & tutup dompet sebelum lanjut jualan.
               </p>
             </div>
@@ -506,10 +507,10 @@ const ShiftView = () => {
 
       {!currentShift ? (
         <Card variant="elevated" className="max-w-md mx-auto text-center mt-10 mb-8 shrink-0">
-          <div className="w-16 h-16 bg-blue-50 dark:bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-gradient-to-br from-accent-50 to-accent-100 dark:from-accent-500/10 dark:to-accent-500/15 text-accent-500 dark:text-accent-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Clock className="w-8 h-8" />
           </div>
-          <h3 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100 mb-2">Dompet Belom Dibuka</h3>
+          <h3 className="font-heading text-2xl font-black bg-clip-text text-transparent bg-gradient-to-br from-slate-900 to-slate-600 dark:from-white dark:to-slate-400 mb-2">Dompet Belom Dibuka</h3>
           <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">Masukkan jumlah uang tunai yang ada di dalam dompet saat ini sebagai modal harian.</p>
 
           <div className="text-left mb-6">
@@ -529,7 +530,7 @@ const ShiftView = () => {
             <select
               value={openedByEmployeeId}
               onChange={e => setOpenedByEmployeeId(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm font-medium px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm font-medium px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-accent-500/30 focus:border-accent-500 dark:focus:border-accent-500 transition-all duration-200"
             >
               <option value="">-- Pilih Karyawan --</option>
               {(employees || []).filter(e => e.status !== 'resign').map(e => (
@@ -555,7 +556,7 @@ const ShiftView = () => {
               <h3 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100 mt-4 mb-1">{currentShift.id}</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">Waktu Buka: {currentShift.startTime.toLocaleString('id-ID')}</p>
               {currentShift.openedByEmployeeName && (
-                <p className="text-sm font-semibold text-orange-600 dark:text-orange-400 mt-1 flex items-center gap-1.5">
+                <p className="text-sm font-semibold text-accent-600 dark:text-accent-400 mt-1 flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5" /> {currentShift.openedByEmployeeName}
                 </p>
               )}
@@ -579,11 +580,11 @@ const ShiftView = () => {
               </div>
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
                 <span className="text-sm text-slate-500 dark:text-slate-400">Penjualan (Khusus Tunai)</span>
-                <span className="font-bold text-green-600 dark:text-green-400">+{formatRupiah(shiftStats?.cashSales)}</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">+{formatRupiah(shiftStats?.cashSales)}</span>
               </div>
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
                 <span className="text-sm text-slate-500 dark:text-slate-400">Pemasukan Lain (Tunai)</span>
-                <span className="font-bold text-green-600 dark:text-green-400">+{formatRupiah(shiftStats?.cashIncomes)}</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">+{formatRupiah(shiftStats?.cashIncomes)}</span>
               </div>
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
                 <span className="text-sm text-slate-500 dark:text-slate-400">Pengeluaran Kasir</span>
@@ -685,15 +686,15 @@ const ShiftView = () => {
           </Card>
           <Card padding="sm" className="flex flex-col justify-center">
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-1">Total Pendapatan Tunai</p>
-            <h4 className="font-heading text-base md:text-lg font-black text-green-600 dark:text-green-400">{formatRupiah(rekapShiftStats.totalSales)}</h4>
+            <h4 className="font-heading text-base md:text-lg font-black text-emerald-600 dark:text-emerald-400">{formatRupiah(rekapShiftStats.totalSales)}</h4>
           </Card>
           <Card padding="sm" className="flex flex-col justify-center">
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-1">Total Kas Seharusnya</p>
             <h4 className="font-heading text-base md:text-lg font-black text-slate-800 dark:text-slate-100">{formatRupiah(rekapShiftStats.totalExpected)}</h4>
           </Card>
-          <Card padding="sm" className={`flex flex-col justify-center ${rekapShiftStats.totalDifference < 0 ? 'bg-accent-50 dark:bg-accent-500/10 border-red-100 dark:border-red-500/20' : rekapShiftStats.totalDifference > 0 ? 'bg-green-50 dark:bg-green-500/10 border-green-100 dark:border-green-500/20' : ''}`}>
+          <Card padding="sm" className={`flex flex-col justify-center ${rekapShiftStats.totalDifference < 0 ? 'bg-accent-50 dark:bg-accent-500/10 border-red-100 dark:border-red-500/20' : rekapShiftStats.totalDifference > 0 ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20' : ''}`}>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mb-1">Total Selisih (Short/Over)</p>
-            <h4 className={`font-heading text-base md:text-lg font-black ${rekapShiftStats.totalDifference < 0 ? 'text-accent-600 dark:text-accent-400' : rekapShiftStats.totalDifference > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'}`}>{formatRupiah(rekapShiftStats.totalDifference)}</h4>
+            <h4 className={`font-heading text-base md:text-lg font-black ${rekapShiftStats.totalDifference < 0 ? 'text-accent-600 dark:text-accent-400' : rekapShiftStats.totalDifference > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-100'}`}>{formatRupiah(rekapShiftStats.totalDifference)}</h4>
           </Card>
         </div>
 
@@ -712,14 +713,14 @@ const ShiftView = () => {
               )}
               <button
                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
-                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isSelecting ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
+                className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all duration-300 active:scale-95 ${isSelecting ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
               >
                 {isSelecting ? 'Batal' : 'Pilih'}
               </button>
               <button
                 type="button"
                 onClick={() => setIsSortOpen(true)}
-                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 transition-all duration-300 active:scale-95"
               >
                 <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>
@@ -753,14 +754,14 @@ const ShiftView = () => {
                 const statusLabel = shift.difference < 0 ? 'Minus' : shift.difference > 0 ? 'Lebih' : 'Pas (Balance)';
 
                 return (
-                  <div key={shift.id} className={`p-4 hover:bg-slate-50 dark:hover:bg-slate-950/50 transition-colors animate-in fade-in slide-in-from-left-2 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${selectedIds.has(shift.id) ? 'bg-orange-50/60 dark:bg-orange-500/5' : ''}`}>
+                  <div key={shift.id} className={`p-4 hover:bg-slate-50 dark:hover:bg-slate-950/50 transition-colors animate-in fade-in slide-in-from-left-2 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${selectedIds.has(shift.id) ? 'bg-accent-50/60 dark:bg-accent-500/5' : ''}`}>
                     <div className="flex items-start gap-3 flex-1">
                       {isSelecting && (
                         <input
                           type="checkbox"
                           checked={selectedIds.has(shift.id)}
                           onChange={() => toggleSelectOne(shift.id)}
-                          className="w-4 h-4 mt-1 rounded accent-orange-500 cursor-pointer shrink-0"
+                          className="w-4 h-4 mt-1 rounded accent-[#ea580c] dark:accent-[#f97316] cursor-pointer shrink-0"
                         />
                       )}
                       <div className="space-y-1 flex-1">
@@ -772,7 +773,7 @@ const ShiftView = () => {
                           Buka: {new Date(shift.startTime).toLocaleString('id-ID')} | Tutup: {new Date(shift.endTime).toLocaleString('id-ID')}
                         </p>
                         {shift.openedByEmployeeName && (
-                          <p className="text-[11px] text-orange-600 dark:text-orange-400 font-semibold">
+                          <p className="text-[11px] text-accent-600 dark:text-accent-400 font-semibold">
                             Kasir: {shift.openedByEmployeeName}
                           </p>
                         )}
@@ -789,7 +790,7 @@ const ShiftView = () => {
                       </div>
                       <div className="text-right">
                         <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mb-1">Selisih</p>
-                        <p className={`font-black text-sm ${shift.difference < 0 ? 'text-accent-500 dark:text-accent-400' : shift.difference > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'}`}>
+                        <p className={`font-black text-sm ${shift.difference < 0 ? 'text-accent-500 dark:text-accent-400' : shift.difference > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-100'}`}>
                           {shift.difference > 0 ? '+' : ''}{formatRupiah(shift.difference)}
                         </p>
                       </div>
@@ -962,7 +963,7 @@ const ShiftView = () => {
                     const previewDifference = Number(editActualCashInput) - previewExpected;
                     return (
                       <p className={`font-black text-lg ${previewDifference < 0 ? 'text-accent-500 dark:text-accent-400' :
-                        previewDifference > 0 ? 'text-green-500 dark:text-green-400' : 'text-slate-800 dark:text-slate-100'
+                        previewDifference > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-100'
                         }`}>
                         {formatRupiah(previewDifference)}
                       </p>

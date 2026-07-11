@@ -104,7 +104,7 @@ const PayslipModal = () => {
         }
       `}} />
 
-      <div className="bg-white dark:bg-slate-900 rounded-lg w-full max-w-[800px] shadow-2xl relative font-sans text-sm animate-in zoom-in-95 duration-300 ease-out print:shadow-none print:w-[210mm] print:max-w-none my-8 flex flex-col max-h-[90vh] print:max-h-none print:my-0">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-[800px] shadow-2xl relative font-sans text-sm animate-in zoom-in-95 duration-300 ease-out print:shadow-none print:w-[210mm] print:max-w-none my-8 flex flex-col max-h-[90vh] print:max-h-none print:my-0">
         <div id="payslip-content" className="p-8 print:p-0 overflow-y-auto custom-scrollbar flex-1">
 
           <div className="text-center border-b-2 border-slate-300 dark:border-slate-600 pb-6 mb-6 print:pb-4 print:mb-4">
@@ -158,7 +158,7 @@ const PayslipModal = () => {
                         </td>
                       ) : null}
                       <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top">{item.desc}</td>
-                      <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top text-right text-green-600 dark:text-green-400 print:text-black">
+                      <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top text-right text-emerald-600 dark:text-emerald-400 print:text-black">
                         {item.in > 0 ? formatRupiah(item.in) : '-'}
                       </td>
                       <td className="py-2 px-3 border border-slate-200 dark:border-slate-700 print:border-gray-300 align-top text-right text-accent-600 dark:text-accent-400 print:text-black">
@@ -184,7 +184,7 @@ const PayslipModal = () => {
               </div>
               <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-700 print:border-gray-300">
                 <span>Total Tambahan</span>
-                <span className="font-bold text-green-600 dark:text-green-400 print:text-black">(+) {formatRupiah(data.totalAdditions)}</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 print:text-black">(+) {formatRupiah(data.totalAdditions)}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-700 print:border-gray-300">
                 <span>Total Potongan</span>
@@ -212,11 +212,11 @@ const PayslipModal = () => {
 
         </div>
 
-        <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-b-lg border-t border-slate-200 dark:border-slate-700 flex gap-4 print:hidden mt-auto">
-          <button onClick={handleSharePDF} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg hover:bg-slate-900 flex justify-center items-center gap-2 transition-colors">
+        <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-b-3xl border-t border-slate-200 dark:border-slate-700 flex gap-4 print:hidden mt-auto">
+          <button onClick={handleSharePDF} className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white font-bold shadow-[0_4px_14px_rgba(var(--color-accent-500),0.35)] hover:shadow-[0_6px_20px_rgba(var(--color-accent-500),0.4)] hover:-translate-y-0.5 active:scale-[0.98] flex justify-center items-center gap-2 transition-all duration-300">
             <Share2 className="w-5 h-5" /> Bagikan PDF
           </button>
-          <button onClick={() => setPayslipModal({ isOpen: false, data: null })} className="flex-1 py-3 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-600 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+          <button onClick={() => setPayslipModal({ isOpen: false, data: null })} className="flex-1 py-3 rounded-2xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-600 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-[0.98] transition-all duration-300">
             Tutup
           </button>
         </div>

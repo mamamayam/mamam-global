@@ -19,9 +19,9 @@ import {
 } from '../utils/payrollLogic';
 
 const StatField = ({ label, value, highlight }) => (
-  <div className="bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5">
-    <p className="text-[11px] font-bold text-slate-400 mb-1">{label}</p>
-    <p className={`text-sm font-bold ${highlight ? 'text-green-700' : 'text-slate-700'}`}>{value || '-'}</p>
+  <div className="bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-2xl px-3 py-2.5">
+    <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 mb-1">{label}</p>
+    <p className={`text-sm font-bold ${highlight ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}`}>{value || '-'}</p>
   </div>
 );
 
@@ -76,16 +76,16 @@ const AdjRow = ({ item, onRemove, formatRupiah }) => {
   const isAddition = item._type === 'addition';
   const isAuto = item.isAuto || AUTO_ADJUSTMENT_CATEGORIES.includes(item.category);
   return (
-    <div className={`flex items-center justify-between gap-2 p-2.5 rounded-lg border ${isAddition ? 'bg-green-50/60 border-green-100' : 'bg-red-50/60 border-red-100'}`}>
+    <div className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border transition-all duration-300 ${isAddition ? 'bg-emerald-50/60 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20' : 'bg-red-50/60 dark:bg-red-500/10 border-red-100 dark:border-red-500/20'}`}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${isAddition ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{item.category}</span>
-          {isAuto && <span className="text-[10px] font-semibold text-slate-400">Otomatis</span>}
+          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${isAddition ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400'}`}>{item.category}</span>
+          {isAuto && <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">Otomatis</span>}
         </div>
-        {item.note && <p className="text-[11px] text-slate-500 truncate mt-1">{item.note}</p>}
+        {item.note && <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-1">{item.note}</p>}
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className={`text-sm font-bold ${isAddition ? 'text-green-700' : 'text-red-700'}`}>{isAddition ? '+' : '-'}{formatRupiah(item.amount)}</span>
+        <span className={`text-sm font-bold ${isAddition ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>{isAddition ? '+' : '-'}{formatRupiah(item.amount)}</span>
         {!isAuto && <IconButton variant="delete" onClick={() => onRemove(item._type, item.id)}><Trash2 className="w-3.5 h-3.5" /></IconButton>}
       </div>
     </div>
@@ -492,7 +492,7 @@ const InputDailyTab = () => {
           <Card padding="lg" className="flex flex-col h-fit relative">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <Wallet className="w-5 h-5 text-green-600" />
+                <Wallet className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                 <h3 className="font-heading font-bold">Tambahan & Potongan</h3>
               </div>
               {hasAdjustments && <Badge variant="warning" className="animate-in zoom-in duration-200">Mode Edit</Badge>}
@@ -553,7 +553,7 @@ const InputDailyTab = () => {
 
               {adjustmentRows.length > 0 && (
                 <div className="space-y-1 pt-3 border-t border-slate-100 text-xs">
-                  <div className="flex justify-between text-slate-500"><span>Total Tambahan</span><span className="font-bold text-green-700">+{formatRupiah(totalAdditions)}</span></div>
+                  <div className="flex justify-between text-slate-500"><span>Total Tambahan</span><span className="font-bold text-emerald-700 dark:text-emerald-400">+{formatRupiah(totalAdditions)}</span></div>
                   <div className="flex justify-between text-slate-500"><span>Total Potongan</span><span className="font-bold text-red-700">-{formatRupiah(totalDeductions)}</span></div>
                   <div className="flex justify-between font-bold text-slate-800 pt-1.5 border-t border-slate-100"><span>Net</span><span>{netAdjustment >= 0 ? '+' : ''}{formatRupiah(netAdjustment)}</span></div>
                 </div>
@@ -582,7 +582,7 @@ const InputDailyTab = () => {
               </button>
               <button
                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
-                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isSelecting ? 'bg-green-50 text-green-600' : 'text-slate-500'}`}
+                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isSelecting ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}
               >
                 {isSelecting ? 'Batal' : 'Pilih'}
               </button>
@@ -648,7 +648,7 @@ const InputDailyTab = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2.5 shrink-0">
-                    {empTotalAdd > 0 && <span className="text-[11px] font-bold text-green-700 bg-green-50 border border-green-100 px-2 py-0.5 rounded-md">+{formatRupiah(empTotalAdd)}</span>}
+                    {empTotalAdd > 0 && <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 px-2 py-0.5 rounded-lg">+{formatRupiah(empTotalAdd)}</span>}
                     {empTotalDed > 0 && <span className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-md">-{formatRupiah(empTotalDed)}</span>}
                     {isCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                   </div>
@@ -664,17 +664,17 @@ const InputDailyTab = () => {
                       const hasAdj = (rec.additions?.length || 0) + (rec.deductions?.length || 0) + recDerivedKasbon.length > 0;
 
                       return (
-                        <div key={rec.id} className={`px-3 py-2.5 bg-white ${selectedIds.has(rec.id) ? 'bg-orange-50/60' : ''}`}>
+                        <div key={rec.id} className={`px-3 py-2.5 bg-white dark:bg-slate-900 ${selectedIds.has(rec.id) ? 'bg-accent-50/60 dark:bg-accent-500/5' : ''}`}>
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-start gap-2 flex-1 min-w-0">
                               {isSelecting && (
-                                <input type="checkbox" checked={selectedIds.has(rec.id)} onChange={() => toggleSelectOne(rec.id)} className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0" />
+                                <input type="checkbox" checked={selectedIds.has(rec.id)} onChange={() => toggleSelectOne(rec.id)} className="w-4 h-4 mt-0.5 rounded accent-[#ea580c] dark:accent-[#f97316] cursor-pointer shrink-0" />
                               )}
                               <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md font-mono">{rec.dateStr}</span>
+                                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md font-mono">{rec.dateStr}</span>
                                 {rec.isDayOff ? <Badge variant="neutral">Libur</Badge> : (
-                                  <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                                  <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
                                     <Clock className="w-3 h-3" />
                                     {formatJam(rec.hoursWorked) ? `${formatJam(rec.hoursWorked)} jam` : 'Belum clock-out'}
                                   </span>
@@ -682,10 +682,10 @@ const InputDailyTab = () => {
                               </div>
                               {hasAdj ? (
                                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                                  {recTotalAdd > 0 && <span className="text-[11px] font-semibold text-green-700 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded-md">+{formatRupiah(recTotalAdd)}</span>}
-                                  {recTotalDed > 0 && <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-md">-{formatRupiah(recTotalDed)}</span>}
+                                  {recTotalAdd > 0 && <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 px-1.5 py-0.5 rounded-lg">+{formatRupiah(recTotalAdd)}</span>}
+                                  {recTotalDed > 0 && <span className="text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 px-1.5 py-0.5 rounded-lg">-{formatRupiah(recTotalDed)}</span>}
                                 </div>
-                              ) : <p className="text-[11px] text-slate-400 mt-1">Belum ada rincian tambahan/potongan.</p>}
+                              ) : <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Belum ada rincian tambahan/potongan.</p>}
                               </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
@@ -719,7 +719,7 @@ const InputDailyTab = () => {
                                       <p className="text-[11px] font-bold text-slate-500 mb-2">Rincian Tambahan / Potongan</p>
                                       <div className="space-y-1">
                                         {[...(rec.additions || []).map(a => ({ ...a, _type: 'addition' })), ...(rec.deductions || []).map(d => ({ ...d, _type: 'deduction' })), ...recDerivedKasbon].map(item => (
-                                          <div key={item.id} className={`flex justify-between items-center text-[11px] px-2 py-1.5 rounded-md ${item._type === 'addition' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                                          <div key={item.id} className={`flex justify-between items-center text-[11px] px-2 py-1.5 rounded-md ${item._type === 'addition' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400'}`}>
                                             <span className="font-semibold truncate pr-2">{item.category}{item.isAuto ? ' (Otomatis)' : ''}{item.note ? ` · ${item.note}` : ''}</span>
                                             <span className="font-bold shrink-0">{item._type === 'addition' ? '+' : '-'}{formatRupiah(item.amount)}</span>
                                           </div>
@@ -802,7 +802,7 @@ const InputDailyTab = () => {
               </div>
               {editAdjRows.length > 0 && (
                 <div className="space-y-1 pt-3 border-t border-slate-100 text-xs">
-                  <div className="flex justify-between text-slate-500"><span>Total Tambahan</span><span className="font-bold text-green-700">+{formatRupiah(editTotalAdditions)}</span></div>
+                  <div className="flex justify-between text-slate-500"><span>Total Tambahan</span><span className="font-bold text-emerald-700 dark:text-emerald-400">+{formatRupiah(editTotalAdditions)}</span></div>
                   <div className="flex justify-between text-slate-500"><span>Total Potongan</span><span className="font-bold text-red-700">-{formatRupiah(editTotalDeductions)}</span></div>
                   <div className="flex justify-between font-bold text-slate-800 pt-1.5 border-t border-slate-100"><span>Net</span><span>{editNetAdjustment >= 0 ? '+' : ''}{formatRupiah(editNetAdjustment)}</span></div>
                 </div>

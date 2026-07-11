@@ -87,12 +87,12 @@ const BahanBakuView = () => {
                     <input
                         type="text"
                         placeholder="Cari bahan baku..."
-                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all text-sm"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-300 text-sm"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                     {searchQuery && (
-                        <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 transition-all">
+                        <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all duration-300">
                             <X className="w-4 h-4" />
                         </button>
                     )}
@@ -101,7 +101,7 @@ const BahanBakuView = () => {
                 <button
                     type="button"
                     onClick={() => setIsSortOpen(true)}
-                    className="w-full sm:w-48 flex items-center justify-between gap-2 pl-4 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-orange-300 transition-colors text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+                    className="w-full sm:w-48 flex items-center justify-between gap-2 pl-4 pr-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-accent-300 dark:hover:border-accent-500/40 active:scale-[0.98] transition-all duration-300 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
                 >
                     <span className="truncate">{sortOptions.find(o => o.key === sortKey)?.label || 'Urutkan'}</span>
                     <ArrowUpDown className="text-slate-400 w-4 h-4 shrink-0" />
@@ -133,8 +133,8 @@ const BahanBakuView = () => {
                                             <td className="p-4 font-black text-accent-600 dark:text-accent-400">{formatRupiah(rm.price)}</td>
                                             <td className="p-4">
                                                 <div className="flex items-center gap-1.5">
-                                                    <Clock className={`w-3.5 h-3.5 ${isUpdatedToday ? 'text-green-500' : 'text-slate-400'}`} />
-                                                    <span className={`text-xs font-semibold ${isUpdatedToday ? 'text-green-600 bg-green-50 px-2 py-0.5 rounded-full' : 'text-slate-500'}`}>
+                                                    <Clock className={`w-3.5 h-3.5 ${isUpdatedToday ? 'text-emerald-500' : 'text-slate-400'}`} />
+                                                    <span className={`text-xs font-semibold ${isUpdatedToday ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full' : 'text-slate-500'}`}>
                                                         {rm.lastUpdated ? new Date(rm.lastUpdated).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
                                                     </span>
                                                 </div>

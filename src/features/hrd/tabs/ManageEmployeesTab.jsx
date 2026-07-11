@@ -76,7 +76,7 @@ const ManageEmployeesTab = () => {
           <IconButton variant="neutral" label="Kembali" className="mb-4" onClick={() => setIsEditingEmp(false)}>
             <ChevronLeft className="w-5 h-5" />
           </IconButton>
-          <h2 className="font-heading text-xl font-bold mb-6 text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">
+          <h2 className="font-heading text-xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-br from-slate-900 to-slate-600 dark:from-white dark:to-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2">
             {empFormData.id ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -103,11 +103,11 @@ const ManageEmployeesTab = () => {
           <Card className="flex justify-between items-center">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Briefcase className="w-5 h-5 text-slate-700 dark:text-slate-200" /> Daftar Karyawan</h3>
             <div className="flex items-center gap-2">
-              <select value={empStatusFilter} onChange={e => setEmpStatusFilter(e.target.value)} className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 bg-transparent focus:outline-none">
+              <select value={empStatusFilter} onChange={e => setEmpStatusFilter(e.target.value)} className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 bg-transparent focus:outline-none focus:ring-2 focus:ring-accent-500/30 transition-all duration-300">
                 <option value="semua">Semua Status</option>
                 {EMPLOYEE_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
-              <button type="button" onClick={() => setIsEmpSortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-orange-600 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5">
+              <button type="button" onClick={() => setIsEmpSortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 active:scale-95 transition-all duration-300">
                 <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>
               <Button variant="dark" icon={<Plus className="w-4 h-4" />} onClick={() => { setEmpFormData(createEmptyEmployeeForm()); setIsEditingEmp(true); }}>
@@ -118,13 +118,13 @@ const ManageEmployeesTab = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-10">
             {sortedEmployees.map(emp => (
-              <Card key={emp.id} padding="lg" className="relative group hover:shadow-md transition-shadow duration-300">
+              <Card key={emp.id} padding="lg" className="relative group hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
                 <div className="absolute top-4 right-4 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
                   <IconButton variant="edit" ghost onClick={() => { setEmpFormData({ status: 'aktif', resignDate: '', overtimeRate30: OVERTIME_RATE_PER_30MIN, ...emp }); setIsEditingEmp(true); }}><Edit3 className="w-4 h-4" /></IconButton>
                   <IconButton variant="delete" ghost onClick={() => handleDeleteEmployee(emp.id)}><Trash2 className="w-4 h-4" /></IconButton>
                 </div>
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-full flex items-center justify-center font-heading font-black text-xl">{emp.name.charAt(0).toUpperCase()}</div>
+                  <div className="w-12 h-12 bg-gradient-to-br from-accent-500 to-accent-600 dark:from-accent-400 dark:to-accent-600 text-white rounded-2xl shadow-[0_4px_12px_rgba(var(--color-accent-500),0.3)] flex items-center justify-center font-heading font-black text-xl">{emp.name.charAt(0).toUpperCase()}</div>
                   <div>
                     <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base leading-tight pr-10">{emp.name}</h4>
                     <div className="flex items-center gap-1.5 mt-1">
@@ -136,8 +136,8 @@ const ManageEmployeesTab = () => {
                   </div>
                 </div>
                 <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-800 pt-3 text-sm">
-                  <div className="flex justify-between"><span className="text-slate-500 font-medium">Upah/Jam:</span><span className="font-bold text-orange-600">{formatRupiah(emp.hourlyRate)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500 font-medium">Lembur/30m:</span><span className="font-bold text-orange-600">{formatRupiah(emp.overtimeRate30 || OVERTIME_RATE_PER_30MIN)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 font-medium">Upah/Jam:</span><span className="font-bold text-accent-600 dark:text-accent-400">{formatRupiah(emp.hourlyRate)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 font-medium">Lembur/30m:</span><span className="font-bold text-accent-600 dark:text-accent-400">{formatRupiah(emp.overtimeRate30 || OVERTIME_RATE_PER_30MIN)}</span></div>
                 </div>
               </Card>
             ))}

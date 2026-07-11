@@ -22,10 +22,10 @@ export default function LoginView() {
 
         {/* Brand */}
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="w-16 h-16 rounded-2xl bg-accent-600 dark:bg-accent-500 flex items-center justify-center mb-4 shadow-lg shadow-accent-600/20">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-500 to-accent-600 dark:from-accent-400 dark:to-accent-600 flex items-center justify-center mb-4 shadow-[0_8px_24px_rgba(var(--color-accent-500),0.35)]">
             <ShieldCheck className="w-8 h-8 text-white" />
           </div>
-          <h1 className="font-heading font-black text-2xl text-slate-800 dark:text-slate-50 tracking-tight">
+          <h1 className="font-heading font-black text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-accent-600 to-accent-400 dark:from-accent-400 dark:to-accent-500">
             MAMAM AYAM
           </h1>
           <p className="font-body text-sm text-slate-400 dark:text-slate-500 mt-1">
@@ -34,7 +34,7 @@ export default function LoginView() {
         </div>
 
         {/* Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-800 p-6">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-[0_8px_40px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_40px_rgb(0,0,0,0.4)] border border-slate-100 dark:border-slate-800 p-6">
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <Input
               label="Email"
@@ -67,7 +67,7 @@ export default function LoginView() {
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-[34px] text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+                className="absolute right-3 top-[34px] text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 active:scale-90 transition-all duration-300"
                 tabIndex={-1}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

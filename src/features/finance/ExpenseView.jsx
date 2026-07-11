@@ -315,7 +315,7 @@ const ExpenseView = () => {
               )}
               <button
                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
-                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isSelecting ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
+                className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all duration-300 active:scale-95 ${isSelecting ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
               >
                 {isSelecting ? 'Batal' : 'Pilih'}
               </button>
@@ -324,7 +324,7 @@ const ExpenseView = () => {
                   <select
                     value={filterMode}
                     onChange={e => setFilterMode(e.target.value)}
-                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900"
+                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
                   >
                     <option value="month">Per Bulan</option>
                     <option value="range">Rentang Tanggal</option>
@@ -336,7 +336,7 @@ const ExpenseView = () => {
                       type="month"
                       value={filterMonth}
                       onChange={e => setFilterMonth(e.target.value)}
-                      className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
+                      className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
                     />
                   )}
 
@@ -347,7 +347,7 @@ const ExpenseView = () => {
                         value={filterStartDate}
                         onChange={e => setFilterStartDate(e.target.value)}
                         max={filterEndDate || undefined}
-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
+                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
                       />
                       <span className="text-xs text-slate-400">-</span>
                       <input
@@ -355,7 +355,7 @@ const ExpenseView = () => {
                         value={filterEndDate}
                         onChange={e => setFilterEndDate(e.target.value)}
                         min={filterStartDate || undefined}
-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
+                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
                       />
                     </div>
                   )}
@@ -364,14 +364,14 @@ const ExpenseView = () => {
               <button
                 type="button"
                 onClick={() => setIsSortOpen(true)}
-                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 transition-all duration-300 active:scale-95"
               >
                 <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>
             </div>
           </div>
-          <div className="p-3 bg-accent-50 dark:bg-accent-500/10 border-b border-red-100 dark:border-red-500/20 flex justify-between items-center">
-            <span className="text-xs font-bold text-accent-700 dark:text-accent-300">Total Periode Ini:</span>
+          <div className="p-3 bg-red-50 dark:bg-red-500/10 border-b border-red-100 dark:border-red-500/20 flex justify-between items-center">
+            <span className="text-xs font-bold text-red-700 dark:text-red-300">Total Periode Ini:</span>
             <span className="text-sm font-black text-red-700 dark:text-red-300">
               {formatRupiah(activeTotal)}
             </span>
@@ -405,14 +405,14 @@ const ExpenseView = () => {
                   : null;
 
                 return (
-                  <div key={exp.id} className={`flex justify-between items-center p-3.5 border rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700 transition-all duration-200 animate-in slide-in-from-left-2 duration-300 ${selectedIds.has(exp.id) ? 'border-orange-500 ring-1 ring-orange-500' : 'border-slate-100 dark:border-slate-800'}`}>
+                  <div key={exp.id} className={`flex justify-between items-center p-3.5 border rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700 hover:shadow-sm transition-all duration-300 animate-in slide-in-from-left-2 duration-300 ${selectedIds.has(exp.id) ? 'border-red-400 ring-1 ring-red-400' : 'border-slate-100 dark:border-slate-800'}`}>
                     <div className="flex items-start gap-2 flex-1 pr-4">
                       {isSelecting && (
                         <input
                           type="checkbox"
                           checked={selectedIds.has(exp.id)}
                           onChange={() => toggleSelectOne(exp.id)}
-                          className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                          className="w-4 h-4 mt-0.5 rounded accent-[#dc2626] cursor-pointer shrink-0"
                         />
                       )}
                       <div className="flex-1">
@@ -427,7 +427,7 @@ const ExpenseView = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <p className="font-bold text-accent-500 dark:text-accent-400 bg-accent-50 dark:bg-accent-500/10 px-3 py-1.5 rounded-lg text-sm border border-red-100 dark:border-red-500/20">-{formatRupiah(exp.amount)}</p>
+                      <p className="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-3 py-1.5 rounded-xl text-sm border border-red-100 dark:border-red-500/20">-{formatRupiah(exp.amount)}</p>
                       <div className="flex gap-1">
                         {showTrash ? (
                           isAdminMode && (

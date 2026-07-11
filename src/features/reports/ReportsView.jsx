@@ -14,6 +14,7 @@ const ReportsView = () => {
   const [dateFilter, setDateFilter] = useState('semua');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [activePointIndex, setActivePointIndex] = useState(null);
 
   const filterTabs = [
     { id: 'semua', label: 'Semua Waktu' },
@@ -57,6 +58,12 @@ const ReportsView = () => {
   const filteredSales = useMemo(() => {
     return activeOnly(salesHistory).filter(order => isWithinDateRange(order.date, dateFilter));
   }, [salesHistory, dateFilter, customStartDate, customEndDate]);
+
+  // Reset titik grafik yang lagi aktif setiap kali filter tanggal berganti,
+  // supaya tooltip gak nyantol nunjuk titik yang datanya udah berubah/hilang.
+  React.useEffect(() => {
+    setActivePointIndex(null);
+  }, [dateFilter, customStartDate, customEndDate]);
 
   const filteredIncomes = useMemo(() => {
     return activeOnly(incomes).filter(inc => isWithinDateRange(inc.date, dateFilter));
@@ -137,7 +144,7 @@ const ReportsView = () => {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
         <PageHeader
           title="Dashboard Laporan"
-          icon={<BarChart3 className="w-6 h-6" />}
+          icon={<BarChart3 className="w-6 h-6 text-accent-500 dark:text-accent-400" />}
         />
       </div>
 
@@ -154,7 +161,7 @@ const ReportsView = () => {
               variant={dateFilter === tab.id ? 'dark' : 'secondary'}
               size="sm"
               onClick={() => setDateFilter(tab.id)}
-              className="flex-shrink-0 whitespace-nowrap rounded-full"
+              className="flex-shrink-0 whitespace-nowrap rounded-full active:scale-95"
             >
               {tab.label}
             </Button>
@@ -163,14 +170,14 @@ const ReportsView = () => {
 
         {/* Card 2: Input Khusus Tanggal Kustom */}
         {dateFilter === 'kustom' && (
-          <Card className="flex items-center gap-2 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl max-w-fit shadow-sm">
+          <Card className="flex items-center gap-2 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-fit shadow-sm">
             <div className="flex flex-col">
               <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">Dari Tanggal</label>
               <input
                 type="date"
                 value={customStartDate}
                 onChange={(e) => setCustomStartDate(e.target.value)}
-                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-500 text-slate-700 dark:text-slate-200"
+                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-200 text-slate-700 dark:text-slate-200"
               />
             </div>
             <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 mt-4" />
@@ -180,7 +187,7 @@ const ReportsView = () => {
                 type="date"
                 value={customEndDate}
                 onChange={(e) => setCustomEndDate(e.target.value)}
-                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500 dark:focus:ring-accent-500 text-slate-700 dark:text-slate-200"
+                className="text-sm px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-200 text-slate-700 dark:text-slate-200"
               />
             </div>
           </Card>
@@ -203,7 +210,7 @@ const ReportsView = () => {
             <div className="relative z-10">
               {/* Status dot + label */}
               <div className="flex items-center gap-2 mb-5">
-                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <p className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">
                   Laba Bersih
                 </p>
@@ -225,7 +232,7 @@ const ReportsView = () => {
           <div className="lg:w-2/3 grid grid-cols-2 gap-4">
 
             {/* Penjualan */}
-            <Card padding="lg" className="flex flex-col justify-center hover:shadow-md transition-shadow duration-200">
+            <Card padding="lg" className="flex flex-col justify-center hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
               <div className="flex items-center gap-2 mb-2">
                 <ShoppingBag className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -235,11 +242,11 @@ const ReportsView = () => {
               <h3 className="font-heading text-xl font-bold text-slate-900 dark:text-slate-100">
                 {formatRupiah(totalRevenue)}
               </h3>
-              <p className="text-[10px] text-slate-400 mt-1">{filteredSales.length} transaksi</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{filteredSales.length} transaksi</p>
             </Card>
 
             {/* Pemasukan lain */}
-            <Card padding="lg" className="flex flex-col justify-center hover:shadow-md transition-shadow duration-200">
+            <Card padding="lg" className="flex flex-col justify-center hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
               <div className="flex items-center gap-2 mb-2">
                 <Wallet className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -249,11 +256,11 @@ const ReportsView = () => {
               <h3 className="font-heading text-xl font-bold text-slate-900 dark:text-slate-100">
                 {formatRupiah(totalOtherIncome)}
               </h3>
-              <p className="text-[10px] text-slate-400 mt-1">Luar pendapatan penjualan</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Luar pendapatan penjualan</p>
             </Card>
 
             {/* HPP */}
-            <Card padding="lg" className="flex flex-col justify-center hover:shadow-md transition-shadow duration-200">
+            <Card padding="lg" className="flex flex-col justify-center hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
               <div className="flex items-center gap-2 mb-2">
                 <Package className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -263,11 +270,11 @@ const ReportsView = () => {
               <h3 className="font-heading text-xl font-bold text-slate-900 dark:text-slate-100">
                 {formatRupiah(totalHPP)}
               </h3>
-              <p className="text-[10px] text-slate-400 mt-1">Harga pokok penjualan</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Harga pokok penjualan</p>
             </Card>
 
             {/* Pengeluaran — orange accent untuk "biaya" */}
-            <Card padding="lg" className="flex flex-col justify-center hover:shadow-md transition-shadow duration-200">
+            <Card padding="lg" className="flex flex-col justify-center hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
               <div className="flex items-center gap-2 mb-2">
                 <Receipt className="w-4 h-4 text-accent-500 dark:text-accent-400" />
                 <p className="text-[11px] font-bold text-accent-500 dark:text-accent-400 uppercase tracking-wider">
@@ -277,7 +284,7 @@ const ReportsView = () => {
               <h3 className="font-heading text-xl font-bold text-accent-600 dark:text-accent-400">
                 {formatRupiah(totalExpense)}
               </h3>
-              <p className="text-[10px] text-slate-400 mt-1">{filteredExpenses.length} catatan biaya operasional</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{filteredExpenses.length} catatan biaya operasional</p>
             </Card>
 
           </div>
@@ -289,7 +296,7 @@ const ReportsView = () => {
           {/* Grafik 1: Tren Penjualan Harian */}
           <Card padding="lg" className="flex flex-col">
             <div className="flex items-center gap-2 mb-6">
-              <TrendingUp className="w-4 h-4 text-accent-500" />
+              <TrendingUp className="w-4 h-4 text-accent-500 dark:text-accent-400" />
               <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
                 Tren Penjualan Harian
               </h3>
@@ -298,9 +305,13 @@ const ReportsView = () => {
             <div className="flex-1 flex items-center justify-center min-h-[180px]">
               {lineChartData ? (
                 <svg
-                  className="w-full h-full"
+                  className="w-full h-full overflow-visible"
                   viewBox={`0 0 ${lineChartData.width} ${lineChartData.height}`}
                   preserveAspectRatio="xMidYMid meet"
+                  onClick={(e) => {
+                    // Klik area kosong (bukan titik) menutup tooltip yang lagi aktif
+                    if (e.target === e.currentTarget) setActivePointIndex(null);
+                  }}
                 >
                   <defs>
                     <linearGradient id="areaGradOrange" x1="0" y1="0" x2="0" y2="1">
@@ -354,29 +365,113 @@ const ReportsView = () => {
                     />
                   )}
 
+                  {/* Garis vertikal penunjuk titik aktif */}
+                  {activePointIndex !== null && lineChartData.points[activePointIndex] && (
+                    <line
+                      x1={lineChartData.points[activePointIndex].x}
+                      y1={lineChartData.paddingTop}
+                      x2={lineChartData.points[activePointIndex].x}
+                      y2={lineChartData.height - lineChartData.paddingBottom}
+                      stroke={ACCENT}
+                      strokeWidth="1"
+                      strokeDasharray="3 3"
+                      strokeOpacity="0.4"
+                    />
+                  )}
+
                   {/* Dots + axis labels */}
                   {lineChartData.points.map((p, i) => {
                     const showLabel = lineChartData.points.length <= 7
                       || i % Math.ceil(lineChartData.points.length / 7) === 0
                       || i === lineChartData.points.length - 1;
+                    const isActive = activePointIndex === i;
                     return (
                       <g key={i}>
+                        {/* Target klik lebih besar dari dot visual, biar gampang di-tap di HP */}
+                        <circle
+                          cx={p.x}
+                          cy={p.y}
+                          r="14"
+                          fill="transparent"
+                          className="cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePointIndex(prev => prev === i ? null : i);
+                          }}
+                        />
                         {/* Outer ring */}
-                        <circle cx={p.x} cy={p.y} r="5" fill={ACCENT} fillOpacity="0.15" />
+                        <circle
+                          cx={p.x}
+                          cy={p.y}
+                          r={isActive ? '8' : '5'}
+                          fill={ACCENT}
+                          fillOpacity={isActive ? '0.2' : '0.15'}
+                          className="transition-all duration-200 pointer-events-none"
+                        />
                         {/* Inner dot */}
-                        <circle cx={p.x} cy={p.y} r="3" fill="#ffffff" stroke={ACCENT} strokeWidth="2" />
+                        <circle
+                          cx={p.x}
+                          cy={p.y}
+                          r={isActive ? '4.5' : '3'}
+                          fill="#ffffff"
+                          stroke={ACCENT}
+                          strokeWidth={isActive ? '2.5' : '2'}
+                          className="transition-all duration-200 pointer-events-none"
+                        />
                         {showLabel && (
                           <text
                             x={p.x}
                             y={lineChartData.height - lineChartData.paddingBottom + 16}
                             fontSize="8"
-                            fill="#64748b"
+                            fill={isActive ? ACCENT : '#64748b'}
+                            fontWeight={isActive ? '800' : '600'}
                             textAnchor="middle"
-                            fontWeight="600"
+                            className="pointer-events-none transition-all duration-200"
                           >
                             {p.label}
                           </text>
                         )}
+
+                        {/* Tooltip bubble — muncul saat titik ini diklik */}
+                        {isActive && (() => {
+                          const bubbleText = formatRupiah(p.val);
+                          const bubbleWidth = Math.max(52, bubbleText.length * 6 + 18);
+                          const bubbleHeight = 22;
+                          const bubbleGap = 10;
+                          // Clamp posisi horizontal biar bubble gak kepotong di tepi kiri/kanan grafik
+                          let bubbleX = p.x - bubbleWidth / 2;
+                          bubbleX = Math.max(2, Math.min(bubbleX, lineChartData.width - bubbleWidth - 2));
+                          const bubbleY = Math.max(2, p.y - bubbleHeight - bubbleGap);
+                          const arrowX = Math.min(Math.max(p.x, bubbleX + 10), bubbleX + bubbleWidth - 10);
+                          const arrowY = bubbleY + bubbleHeight;
+
+                          return (
+                            <g className="pointer-events-none animate-in fade-in zoom-in-95 duration-200">
+                              <rect
+                                x={bubbleX}
+                                y={bubbleY}
+                                width={bubbleWidth}
+                                height={bubbleHeight}
+                                rx="7"
+                                fill="#1e293b"
+                              />
+                              <polygon
+                                points={`${arrowX - 5},${arrowY} ${arrowX + 5},${arrowY} ${arrowX},${arrowY + 5}`}
+                                fill="#1e293b"
+                              />
+                              <text
+                                x={bubbleX + bubbleWidth / 2}
+                                y={bubbleY + bubbleHeight / 2 + 3.5}
+                                fontSize="9"
+                                fontWeight="700"
+                                fill="#ffffff"
+                                textAnchor="middle"
+                              >
+                                {bubbleText}
+                              </text>
+                            </g>
+                          );
+                        })()}
                       </g>
                     );
                   })}
@@ -393,7 +488,7 @@ const ReportsView = () => {
           {/* Grafik 2: Menu Paling Laris */}
           <Card padding="lg" className="flex flex-col">
             <div className="flex items-center gap-2 mb-6">
-              <Award className="w-4 h-4 text-accent-500" />
+              <Award className="w-4 h-4 text-accent-500 dark:text-accent-400" />
               <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
                 5 Menu Terlaris
               </h3>
@@ -409,7 +504,7 @@ const ReportsView = () => {
                     /* Rank badge color — #1 pakai orange, lainnya netral */
                     const rankColor = idx === 0
                       ? 'text-accent-500 dark:text-accent-400'
-                      : 'text-slate-400';
+                      : 'text-slate-400 dark:text-slate-500';
 
                     return (
                       <div key={idx} className="space-y-1.5 animate-in fade-in duration-300">
@@ -451,7 +546,7 @@ const ReportsView = () => {
         <Card padding="none" className="overflow-hidden flex flex-col mb-6">
           {/* Section header */}
           <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
-            <History className="w-4 h-4 text-slate-400" />
+            <History className="w-4 h-4 text-slate-400 dark:text-slate-500" />
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
               Riwayat Transaksi Penjualan
             </h3>
@@ -467,9 +562,9 @@ const ReportsView = () => {
                   <div>
                     <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
                       {order.id}
-                      <span className="font-normal text-slate-400"> — {order.customerName}</span>
+                      <span className="font-normal text-slate-400 dark:text-slate-500"> — {order.customerName}</span>
                     </p>
-                    <span className="text-[10px] text-slate-400 font-medium">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
                       {new Date(order.date).toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>

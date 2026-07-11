@@ -68,8 +68,8 @@ function useDragReorder(onReorder) {
 }
 
 function getDragRowClass(isDragging, isDropTarget, baseClass, idleClass) {
-  if (isDragging) return `${baseClass} opacity-50 ring-2 ring-orange-400 z-10`;
-  if (isDropTarget) return `${baseClass} border-orange-400 bg-accent-50/60 dark:bg-accent-500/10`;
+  if (isDragging) return `${baseClass} opacity-50 ring-2 ring-accent-400 z-10`;
+  if (isDropTarget) return `${baseClass} border-accent-400 bg-accent-50/60 dark:bg-accent-500/10`;
   return `${baseClass} ${idleClass}`;
 }
 
@@ -97,7 +97,7 @@ const MenuCategorySection = ({
       className={getDragRowClass(
         isDraggingCat, 
         isDropTargetCat, 
-        "animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-xl p-2 -mx-2 transition-all", 
+        "animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-2xl p-2 -mx-2 transition-all duration-300", 
         "border border-transparent hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
       )}
     >
@@ -107,7 +107,7 @@ const MenuCategorySection = ({
           {isDragEnabled && (
             <div 
               onPointerDown={categoryDrag?.startDrag(category)}
-              className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-500 shrink-0 p-1 -ml-1 touch-none"
+              className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-accent-500 shrink-0 p-1 -ml-1 touch-none transition-colors duration-200"
               title="Tahan & geser untuk mengurutkan kategori"
             >
               <GripVertical className="w-5 h-5" />
@@ -118,7 +118,7 @@ const MenuCategorySection = ({
         </div>
         <button 
           onClick={() => setIsExpanded(!isExpanded)}
-          className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+          className="p-1.5 text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 rounded-xl hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-90 transition-all duration-300"
           title={isExpanded ? "Tutup Kategori" : "Buka Kategori"}
         >
           {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
@@ -139,8 +139,8 @@ const MenuCategorySection = ({
                 className={getDragRowClass(
                   isDragging,
                   isDropTarget,
-                  "group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-xl border shadow-sm transition-all gap-3 sm:gap-4",
-                  "border-slate-100 dark:border-slate-800 hover:border-orange-200 dark:hover:border-orange-500/30"
+                  "group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-2xl border shadow-sm transition-all duration-300 gap-3 sm:gap-4",
+                  "border-slate-100 dark:border-slate-800 hover:border-accent-200 dark:hover:border-accent-500/30 hover:shadow-md"
                 )}
               >
                 {/* --- Info Kiri: Drag Handle, Nama, HPP, Varian --- */}
@@ -296,10 +296,10 @@ const MenuManagement = () => {
     // Form Edit / Tambah Menu - (Sama dengan aslinya, dipersingkat untuk render)
     return (
       <div className="p-4 md:p-6 bg-white dark:bg-slate-900 flex-1 animate-in fade-in slide-in-from-right-4 duration-300 h-full overflow-y-auto ease-out">
-        <button onClick={() => setIsEditing(false)} className="mb-4 text-slate-500 dark:text-slate-400 flex items-center gap-2 hover:text-slate-800 dark:hover:text-slate-100 font-medium transition-colors">
+        <button onClick={() => setIsEditing(false)} className="mb-4 text-slate-500 dark:text-slate-400 flex items-center gap-2 hover:text-accent-600 dark:hover:text-accent-400 font-medium transition-all duration-300 active:scale-95">
           <ChevronLeft className="w-5 h-5" /> Kembali
         </button>
-        <h2 className="font-heading text-2xl font-bold mb-6 text-slate-800 dark:text-slate-100">
+        <h2 className="font-heading text-2xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-br from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">
           {formData.id ? 'Edit Menu' : 'Tambah Menu Baru'}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
@@ -331,8 +331,8 @@ const MenuManagement = () => {
                 <p className="text-sm italic text-slate-400 dark:text-slate-500">Belum ada grup varian. Tambahkan di menu Library Varian.</p>
               ) : (
                 variantGroups.map(vg => (
-                  <label key={vg.id} className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-all duration-200 ${formData.variantGroupIds.includes(vg.id) ? 'bg-accent-50 dark:bg-accent-500/10 border-orange-200 shadow-sm' : 'bg-slate-50 dark:bg-slate-950 hover:bg-slate-100'}`}>
-                    <input type="checkbox" className="w-5 h-5 accent-orange-600 cursor-pointer" checked={formData.variantGroupIds.includes(vg.id)} onChange={() => setFormData(prev => ({ ...prev, variantGroupIds: prev.variantGroupIds.includes(vg.id) ? prev.variantGroupIds.filter(id => id !== vg.id) : [...prev.variantGroupIds, vg.id] }))} />
+                  <label key={vg.id} className={`flex items-center gap-3 p-3 border rounded-2xl cursor-pointer transition-all duration-300 ${formData.variantGroupIds.includes(vg.id) ? 'bg-accent-50 dark:bg-accent-500/10 border-accent-200 dark:border-accent-500/30 shadow-sm' : 'bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900'}`}>
+                    <input type="checkbox" className="w-5 h-5 accent-[#ea580c] dark:accent-[#f97316] cursor-pointer" checked={formData.variantGroupIds.includes(vg.id)} onChange={() => setFormData(prev => ({ ...prev, variantGroupIds: prev.variantGroupIds.includes(vg.id) ? prev.variantGroupIds.filter(id => id !== vg.id) : [...prev.variantGroupIds, vg.id] }))} />
                     <div className="flex-1">
                       <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{vg.name}</p>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400">{vg.options.map(o => o.name).join(', ')}</p>
@@ -389,12 +389,12 @@ const MenuManagement = () => {
         <input
           type="text"
           placeholder="Cari nama menu atau kategori..."
-          className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all text-sm"
+          className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-300 text-sm"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
         {searchQuery && (
-          <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:bg-slate-100 transition-all"><X className="w-4 h-4" /></button>
+          <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 active:scale-90 transition-all duration-300"><X className="w-4 h-4" /></button>
         )}
       </div>
 

@@ -142,12 +142,12 @@ const BahanSetengahJadiView = () => {
                     <input
                         type="text"
                         placeholder="Cari bahan setengah jadi..."
-                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all text-sm"
+                        className="w-full pl-10 pr-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-300 text-sm"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                     {searchQuery && (
-                        <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 transition-all">
+                        <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-90 transition-all duration-300">
                             <X className="w-4 h-4" />
                         </button>
                     )}
@@ -156,7 +156,7 @@ const BahanSetengahJadiView = () => {
                 <button
                     type="button"
                     onClick={() => setIsSortOpen(true)}
-                    className="w-full sm:w-48 flex items-center justify-between gap-2 pl-4 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-orange-300 transition-colors text-sm bg-white dark:bg-slate-900"
+                    className="w-full sm:w-48 flex items-center justify-between gap-2 pl-4 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-accent-300 dark:hover:border-accent-500/40 active:scale-[0.98] transition-all duration-300 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
                 >
                     <span className="truncate">{sortOptions.find(o => o.key === sortKey)?.label || 'Urutkan'}</span>
                     <ArrowUpDown className="text-slate-400 w-4 h-4 shrink-0" />
@@ -185,7 +185,7 @@ const BahanSetengahJadiView = () => {
                                         <tr key={prep.id} className="hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors group">
                                             <td className="p-4 font-bold text-slate-800 dark:text-slate-100 group-hover:text-accent-600 transition-colors">{prep.name.replace(' [Prep]', '')} <Badge variant="orange" size="sm" className="ml-2">PREP</Badge></td>
                                             <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">{prep.unit}</td>
-                                            <td className="p-4 font-black text-green-600 dark:text-green-400">{formatRupiah(prep.price)}</td>
+                                            <td className="p-4 font-black text-emerald-600 dark:text-emerald-400">{formatRupiah(prep.price)}</td>
                                             <td className="p-4 text-slate-500 font-medium text-sm">
                                                 {prep.lastUpdated ? new Date(prep.lastUpdated).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
                                             </td>
@@ -236,7 +236,7 @@ const BahanSetengahJadiView = () => {
                                                     <div className="col-span-12 md:col-span-4">
                                                         {index === 0 && <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Nama Bahan Mentah</label>}
                                                         <select
-                                                            className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-orange-500 text-sm"
+                                                            className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 text-sm transition-all duration-200"
                                                             value={ing.name}
                                                             onChange={e => {
                                                                 const val = e.target.value;
@@ -267,10 +267,10 @@ const BahanSetengahJadiView = () => {
                                                     </div>
                                                     <div className="col-span-10 sm:col-span-3 md:col-span-2">
                                                         {index === 0 && <label className="block text-xs font-bold text-slate-500 mb-2 text-center uppercase">Biaya</label>}
-                                                        <div className="p-2.5 bg-accent-50 dark:bg-accent-500/10 border border-orange-200 dark:border-orange-500/30 rounded-lg text-sm text-accent-700 dark:text-accent-300 font-bold text-center truncate">{formatRupiah(getIngredientCost(ing))}</div>
+                                                        <div className="p-2.5 bg-accent-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/30 rounded-xl text-sm text-accent-700 dark:text-accent-300 font-bold text-center truncate">{formatRupiah(getIngredientCost(ing))}</div>
                                                     </div>
                                                     <div className={`col-span-2 sm:col-span-1 md:col-span-1 flex justify-center ${index === 0 ? 'md:pt-6' : ''}`}>
-                                                        <button onClick={() => handleRemoveIngredient(ing.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl"><Trash2 className="w-4 h-4" /></button>
+                                                        <button onClick={() => handleRemoveIngredient(ing.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 active:scale-90 rounded-xl transition-all duration-300"><Trash2 className="w-4 h-4" /></button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -292,11 +292,11 @@ const BahanSetengahJadiView = () => {
                                         <div className="flex justify-between text-slate-400"><span>Biaya Produksi:</span><span className="font-bold text-white">{formatRupiah(Number(laborCost) + Number(overheadCost))}</span></div>
                                         <div className="h-px bg-slate-700 my-2"></div>
                                         <div className="flex justify-between items-center text-slate-300"><span>Total 1 Batch:</span><span className="font-bold text-accent-400">{formatRupiah(totalIngredientCost + Number(laborCost) + Number(overheadCost))}</span></div>
-                                        <div className="flex justify-between items-center text-slate-300"><span>Yield:</span><span className="font-bold text-accent-400 bg-accent-950/50 px-2 py-0.5 rounded border border-orange-500/40">{yieldQty || 0} {resultUnit || 'Unit'}</span></div>
+                                        <div className="flex justify-between items-center text-slate-300"><span>Yield:</span><span className="font-bold text-accent-400 bg-accent-950/50 px-2 py-0.5 rounded-lg border border-accent-500/40">{yieldQty || 0} {resultUnit || 'Unit'}</span></div>
                                     </div>
                                     <div className="bg-slate-800 p-4 rounded-xl text-center mt-6 border border-slate-700 shadow-inner">
                                         <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">HPP per {resultUnit || 'Satuan'}</span>
-                                        <span className="block text-3xl font-heading font-black text-green-400">{formatRupiah(livePrepCostPerUnit)}</span>
+                                        <span className="block text-3xl font-heading font-black text-emerald-400">{formatRupiah(livePrepCostPerUnit)}</span>
                                     </div>
                                 </div>
                             </div>

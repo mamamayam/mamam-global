@@ -25,7 +25,7 @@ const COLOR_THEMES = [
 const TextInput = ({ label, icon: Icon, placeholder, value, onChange, type = "text", helperText }) => (
   <div>
     <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">{label}</label>
-    <div className="flex items-center gap-3 border border-slate-200 dark:border-slate-700 rounded-xl px-3 bg-slate-50 dark:bg-slate-950 focus-within:border-slate-800 dark:focus-within:border-slate-100 focus-within:bg-white dark:focus-within:bg-slate-900 transition-colors">
+    <div className="flex items-center gap-3 border border-slate-200 dark:border-slate-700 rounded-xl px-3 bg-slate-50 dark:bg-slate-950 focus-within:border-accent-500 dark:focus-within:border-accent-500 focus-within:ring-2 focus-within:ring-accent-500/20 focus-within:bg-white dark:focus-within:bg-slate-900 transition-all duration-300">
       {Icon && <Icon className="w-4 h-4 text-slate-400 dark:text-slate-500" />}
       {type === "textarea" ? (
         <textarea
@@ -184,8 +184,8 @@ const SettingsView = () => {
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 max-w-5xl">
-        <h2 className="font-heading text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-          <Settings className="w-6 h-6 text-accent-500 dark:text-accent-400" /> Pengaturan
+        <h2 className="font-heading text-xl md:text-2xl font-black tracking-tight flex items-center gap-2 bg-clip-text text-transparent bg-gradient-to-br from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">
+          <Settings className="w-6 h-6 text-accent-500 dark:text-accent-400" style={{ WebkitTextFillColor: 'initial' }} /> Pengaturan
         </h2>
       </div>
 
@@ -197,7 +197,7 @@ const SettingsView = () => {
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
 
               {/* Profil Aplikasi */}
-              <div className="flex items-center gap-2 border-b pb-2">
+              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
                 <Store className="w-5 h-5 text-slate-700 dark:text-slate-200" />
                 <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Profil Aplikasi</h3>
               </div>
@@ -217,7 +217,7 @@ const SettingsView = () => {
               />
 
               {/* Profil Struk */}
-              <div className="flex items-center gap-2 border-b pb-2">
+              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
                 <ReceiptText className="w-5 h-5 text-slate-700 dark:text-slate-200" />
                 <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Profil Struk</h3>
               </div>
@@ -254,21 +254,21 @@ const SettingsView = () => {
               />
 
               {/* Pajak */}
-              <div className="flex items-center gap-2 border-b pb-2">
+              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
                 <Calculator className="w-5 h-5 text-slate-700 dark:text-slate-200" />
                 <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Pajak & Biaya Tambahan</h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Pajak PB1 / PPN</label>
-                  <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-xl px-3 bg-slate-50 dark:bg-slate-950 focus-within:border-slate-800 dark:focus-within:border-slate-100 transition-colors">
+                  <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-xl px-3 bg-slate-50 dark:bg-slate-950 focus-within:border-accent-500 dark:focus-within:border-accent-500 focus-within:ring-2 focus-within:ring-accent-500/20 transition-all duration-300">
                     <input type="number" min="0" max="100" className="w-full py-3 bg-transparent outline-none font-bold text-slate-800 dark:text-slate-100" placeholder="0" value={localSettings.taxRate === 0 ? '' : (localSettings.taxRate ?? '')} onChange={e => handleNumberChange('taxRate', e.target.value)} />
                     <span className="text-slate-400 dark:text-slate-500 font-bold">%</span>
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Service Charge</label>
-                  <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-xl px-3 bg-slate-50 dark:bg-slate-950 focus-within:border-slate-800 dark:focus-within:border-slate-100 transition-colors">
+                  <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-xl px-3 bg-slate-50 dark:bg-slate-950 focus-within:border-accent-500 dark:focus-within:border-accent-500 focus-within:ring-2 focus-within:ring-accent-500/20 transition-all duration-300">
                     <input type="number" min="0" max="100" className="w-full py-3 bg-transparent outline-none font-bold text-slate-800 dark:text-slate-100" placeholder="0" value={localSettings.serviceCharge === 0 ? '' : (localSettings.serviceCharge ?? '')} onChange={e => handleNumberChange('serviceCharge', e.target.value)} />
                     <span className="text-slate-400 dark:text-slate-500 font-bold">%</span>
                   </div>
@@ -303,7 +303,7 @@ const SettingsView = () => {
                 <button
                   type="button"
                   onClick={() => setTheme('light')}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all duration-300 active:scale-95
                     ${theme === 'light'
                       ? 'border-accent-500 bg-accent-50 dark:bg-accent-500/10'
                       : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
@@ -315,7 +315,7 @@ const SettingsView = () => {
                 <button
                   type="button"
                   onClick={() => setTheme('dark')}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all duration-300 active:scale-95
                     ${theme === 'dark'
                       ? 'border-accent-500 bg-accent-50 dark:bg-accent-500/10'
                       : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
@@ -343,7 +343,7 @@ const SettingsView = () => {
                       type="button"
                       onClick={() => setColorTheme(id)}
                       style={{ borderColor: isActive ? hex : undefined }}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all duration-200
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 transition-all duration-300 active:scale-95
                         ${isActive
                           ? 'bg-slate-50 dark:bg-slate-800 shadow-sm scale-105'
                           : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
@@ -392,7 +392,7 @@ const SettingsView = () => {
               <BtPermissionBanner />
 
               {savedPrinter ? (
-                <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-500/30 p-4 rounded-xl flex items-center justify-between">
+                <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-500/30 p-4 rounded-2xl flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-500/15 flex items-center justify-center">
                       <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -405,7 +405,7 @@ const SettingsView = () => {
                   <button
                     type="button"
                     onClick={handleDisconnectPrinter}
-                    className="p-2 text-accent-500 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
+                    className="p-2 text-accent-500 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-90 rounded-xl transition-all duration-300"
                     title="Putuskan Printer"
                   >
                     <Unplug className="w-5 h-5" />
@@ -417,7 +417,7 @@ const SettingsView = () => {
                     type="button"
                     onClick={handleScanBluetooth}
                     disabled={isScanning || btStatus === 'denied'}
-                    className="w-full py-3 rounded-xl bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full py-3 rounded-2xl bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 active:scale-[0.98] text-white font-bold text-sm flex items-center justify-center gap-2 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
                   >
                     {isScanning ? (
                       <><BluetoothSearching className="w-4 h-4 animate-pulse" /> Mencari Perangkat...</>
@@ -434,7 +434,7 @@ const SettingsView = () => {
                           key={idx}
                           type="button"
                           onClick={() => handleConnectPrinter(device)}
-                          className="w-full text-left p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500/50 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-xl transition-all flex items-center justify-between group"
+                          className="w-full text-left p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500/50 hover:bg-blue-50 dark:hover:bg-blue-500/10 active:scale-[0.98] rounded-2xl transition-all duration-300 flex items-center justify-between group"
                         >
                           <div>
                             <p className="font-bold text-sm text-slate-700 dark:text-slate-200 group-hover:text-blue-700 dark:group-hover:text-blue-300">{device.name || 'Unknown Device'}</p>

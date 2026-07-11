@@ -143,7 +143,7 @@ const ReportsTab = () => {
   return (
     <div className="space-y-6 h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
       <Card className="flex justify-between items-center">
-        <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PieChart className="w-5 h-5 text-orange-600 dark:text-orange-400" /> Rekap Penggajian</h3>
+        <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><PieChart className="w-5 h-5 text-accent-600 dark:text-accent-400" /> Rekap Penggajian</h3>
         <div className="flex items-center gap-2">
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Bulan Laporan:</label>
           <div className="w-40"><Input type="month" variant="muted" value={reportMonth} onChange={e => setReportMonth(e.target.value)} /></div>
@@ -162,14 +162,14 @@ const ReportsTab = () => {
       </div>
 
       <Card padding="none" className="overflow-hidden">
-        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-          <h3 className="font-heading font-bold text-slate-800 text-sm">Performa & Rincian Gaji Karyawan</h3>
-          <button type="button" onClick={() => setIsPerfSortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-orange-600 border border-slate-200 rounded-lg px-2 py-1.5"><ArrowUpDown className="w-3.5 h-3.5" /> Urutkan</button>
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-between items-center">
+          <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">Performa & Rincian Gaji Karyawan</h3>
+          <button type="button" onClick={() => setIsPerfSortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 active:scale-95 transition-all duration-300"><ArrowUpDown className="w-3.5 h-3.5" /> Urutkan</button>
         </div>
-        <div className="divide-y divide-slate-100 overflow-x-auto custom-scrollbar">
+        <div className="divide-y divide-slate-100 dark:divide-slate-800 overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
-              <tr className="bg-white text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              <tr className="bg-white dark:bg-slate-900 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 <th className="p-4">Nama Karyawan</th>
                 <th className="p-4 text-center">Total Jam</th>
                 <th className="p-4 text-center">Lembur</th> {/* Tambahan kolom baru */}
@@ -185,10 +185,10 @@ const ReportsTab = () => {
               ) : (
                 sortedEmployeePerformance.map(p => (
                   <React.Fragment key={p.employeeId}>
-                    <tr className="hover:bg-slate-50 transition-colors">
-                      <td className="p-4"><p className="font-bold text-sm text-slate-800">{p.employee.name}</p></td>
-                      <td className="p-4 text-center font-semibold text-slate-700 text-sm">{p.totalHours.toFixed(1).replace('.', ',')}</td>
-                      <td className="p-4 text-center font-semibold text-orange-500 text-sm">
+                    <tr className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors duration-300">
+                      <td className="p-4"><p className="font-bold text-sm text-slate-800 dark:text-slate-100">{p.employee.name}</p></td>
+                      <td className="p-4 text-center font-semibold text-slate-700 dark:text-slate-300 text-sm">{p.totalHours.toFixed(1).replace('.', ',')}</td>
+                      <td className="p-4 text-center font-semibold text-accent-600 dark:text-accent-400 text-sm">
                         {p.totalOvertimeMinutes > 0 ? (
                           <button
                             type="button"
@@ -201,22 +201,22 @@ const ReportsTab = () => {
                           </button>
                         ) : '-'}
                       </td>
-                      <td className="p-4 text-right font-bold text-green-600 text-sm">+{formatRupiah(p.totalAdditions)}</td>
+                      <td className="p-4 text-right font-bold text-emerald-600 dark:text-emerald-400 text-sm">+{formatRupiah(p.totalAdditions)}</td>
                       <td className="p-4 text-right font-bold text-red-500 text-sm">-{formatRupiah(p.totalDeductions)}</td>
-                      <td className="p-4 text-right font-black text-slate-900 text-sm">{formatRupiah(p.netPay)}</td>
+                      <td className="p-4 text-right font-black text-slate-900 dark:text-slate-100 text-sm">{formatRupiah(p.netPay)}</td>
                       <td className="p-4 text-center">
                         <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>Cetak Slip</Button>
                       </td>
                     </tr>
                     {expandedEmpId === p.employeeId && (
-                      <tr className="bg-orange-50/40">
+                      <tr className="bg-accent-50/40 dark:bg-accent-500/5">
                         <td colSpan="7" className="p-4">
-                          <p className="text-xs font-bold text-slate-500 mb-2">Rincian Lembur Harian — {p.employee.name} (Rp{p.overtimeRate.toLocaleString('id-ID')}/30 menit)</p>
+                          <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">Rincian Lembur Harian — {p.employee.name} (Rp{p.overtimeRate.toLocaleString('id-ID')}/30 menit)</p>
                           <div className="flex flex-wrap gap-2">
                             {p.overtimeByDay.map(d => (
-                              <span key={d.dateStr} className="text-xs bg-white border border-orange-200 rounded-lg px-2.5 py-1.5">
-                                <span className="font-semibold text-slate-700">{d.dateStr}</span>
-                                <span className="text-orange-600 font-bold ml-1.5">{(d.overtimeMinutes / 60).toFixed(1).replace('.', ',')} jam</span>
+                              <span key={d.dateStr} className="text-xs bg-white dark:bg-slate-900 border border-accent-200 dark:border-accent-500/30 rounded-xl px-2.5 py-1.5">
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">{d.dateStr}</span>
+                                <span className="text-accent-600 dark:text-accent-400 font-bold ml-1.5">{(d.overtimeMinutes / 60).toFixed(1).replace('.', ',')} jam</span>
                                 <span className="text-slate-400 ml-1.5">({formatRupiah(d.pay)})</span>
                               </span>
                             ))}

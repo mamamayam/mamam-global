@@ -82,18 +82,27 @@ export default function HppView() {
                     <PageHeader title="Kalkulator HPP Cerdas" />
 
                     <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 pt-2 pb-5 mb-8 overflow-x-auto hide-scrollbar shrink-0">
-                        <Button variant={activeTab === 'materials' ? 'dark' : 'secondary'} onClick={() => setActiveTab('materials')}>
-                            Database Bahan Baku
-                        </Button>
-                        <Button variant={activeTab === 'semi-finished' ? 'dark' : 'secondary'} onClick={() => setActiveTab('semi-finished')}>
-                            Bahan Setengah Jadi (Prep)
-                        </Button>
-                        <Button variant={activeTab === 'calculator' ? 'dark' : 'secondary'} onClick={() => setActiveTab('calculator')}>
-                            {editingRecipe ? '✏️ Edit Resep Menu' : 'Kalkulator HPP Final'}
-                        </Button>
-                        <Button variant={activeTab === 'library' ? 'dark' : 'secondary'} onClick={() => setActiveTab('library')}>
-                            Library Menu ({hppLibrary.length})
-                        </Button>
+                        {[
+                            { key: 'materials', label: 'Database Bahan Baku' },
+                            { key: 'semi-finished', label: 'Bahan Setengah Jadi (Prep)' },
+                            { key: 'calculator', label: editingRecipe ? '✏️ Edit Resep Menu' : 'Kalkulator HPP Final' },
+                            { key: 'library', label: `Library Menu (${hppLibrary.length})` },
+                        ].map(tab => {
+                            const isActive = activeTab === tab.key;
+                            return (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setActiveTab(tab.key)}
+                                    className={`shrink-0 px-5 py-2.5 rounded-2xl font-bold text-sm whitespace-nowrap transition-all duration-300 active:scale-95 ${
+                                        isActive
+                                            ? 'bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white shadow-[0_4px_16px_rgba(var(--color-accent-500),0.35)]'
+                                            : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                                    }`}
+                                >
+                                    {tab.label}
+                                </button>
+                            );
+                        })}
                     </div>
 
                     {activeTab === 'materials' && <BahanBakuView />}

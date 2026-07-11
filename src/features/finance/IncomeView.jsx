@@ -190,7 +190,7 @@ const IncomeView = () => {
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <PageHeader
         title="Pemasukan"
-        icon={<TrendingUp className="w-6 h-6 text-green-500 dark:text-green-400" />}
+        icon={<TrendingUp className="w-6 h-6 text-emerald-500 dark:text-emerald-400" />}
       />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card padding="none" className="lg:col-span-1 p-5 space-y-4 h-fit transition-shadow duration-300 hover:shadow-md">
@@ -246,7 +246,7 @@ const IncomeView = () => {
           <Button
             onClick={handleAddIncome}
             size="full"
-            variant={editingId ? 'primary' : 'danger'}
+            variant={editingId ? 'primary' : 'success'}
             icon={<Save className="w-4 h-4" />}
             className="mt-2"
           >
@@ -268,7 +268,7 @@ const IncomeView = () => {
               )}
               <button
                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
-                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isSelecting ? 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
+                className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all duration-300 active:scale-95 ${isSelecting ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
               >
                 {isSelecting ? 'Batal' : 'Pilih'}
               </button>
@@ -277,7 +277,7 @@ const IncomeView = () => {
                   <select
                     value={filterMode}
                     onChange={e => setFilterMode(e.target.value)}
-                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900"
+                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
                   >
                     <option value="month">Per Bulan</option>
                     <option value="range">Rentang Tanggal</option>
@@ -289,7 +289,7 @@ const IncomeView = () => {
                       type="month"
                       value={filterMonth}
                       onChange={e => setFilterMonth(e.target.value)}
-                      className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
+                      className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
                     />
                   )}
 
@@ -300,7 +300,7 @@ const IncomeView = () => {
                         value={filterStartDate}
                         onChange={e => setFilterStartDate(e.target.value)}
                         max={filterEndDate || undefined}
-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
+                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
                       />
                       <span className="text-xs text-slate-400">-</span>
                       <input
@@ -308,7 +308,7 @@ const IncomeView = () => {
                         value={filterEndDate}
                         onChange={e => setFilterEndDate(e.target.value)}
                         min={filterStartDate || undefined}
-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-600 dark:text-slate-300"
+                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
                       />
                     </div>
                   )}
@@ -317,15 +317,15 @@ const IncomeView = () => {
               <button
                 type="button"
                 onClick={() => setIsSortOpen(true)}
-                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5"
+                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 transition-all duration-300 active:scale-95"
               >
                 <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>
             </div>
           </div>
-          <div className="p-3 bg-green-50 dark:bg-green-500/10 border-b border-green-100 dark:border-green-500/20 flex justify-between items-center">
-            <span className="text-xs font-bold text-accent-700 dark:text-accent-300">Total Periode Ini:</span>
-            <span className="text-sm font-black text-green-700 dark:text-green-300">
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 border-b border-emerald-100 dark:border-emerald-500/20 flex justify-between items-center">
+            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">Total Periode Ini:</span>
+            <span className="text-sm font-black text-emerald-700 dark:text-emerald-300">
               {formatRupiah(activeTotal)}
             </span>
           </div>
@@ -349,14 +349,14 @@ const IncomeView = () => {
               />
             ) : (
               sortedIncomes.map(inc => (
-                <div key={inc.id} className={`flex justify-between items-center p-3.5 border rounded-xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700 transition-all duration-200 animate-in slide-in-from-left-2 duration-300 ${selectedIds.has(inc.id) ? 'border-orange-500 ring-1 ring-orange-500' : 'border-slate-100 dark:border-slate-800'}`}>
+                <div key={inc.id} className={`flex justify-between items-center p-3.5 border rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-950 hover:border-slate-200 dark:hover:border-slate-700 hover:shadow-sm transition-all duration-300 animate-in slide-in-from-left-2 duration-300 ${selectedIds.has(inc.id) ? 'border-emerald-400 ring-1 ring-emerald-400' : 'border-slate-100 dark:border-slate-800'}`}>
                   <div className="flex items-start gap-2 flex-1 pr-4">
                     {isSelecting && (
                       <input
                         type="checkbox"
                         checked={selectedIds.has(inc.id)}
                         onChange={() => toggleSelectOne(inc.id)}
-                        className="w-4 h-4 mt-0.5 rounded accent-orange-500 cursor-pointer shrink-0"
+                        className="w-4 h-4 mt-0.5 rounded accent-[#059669] cursor-pointer shrink-0"
                       />
                     )}
                     <div className="flex-1">
@@ -365,7 +365,7 @@ const IncomeView = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <p className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-3 py-1.5 rounded-lg text-sm border border-green-100 dark:border-green-500/20">+{formatRupiah(inc.amount)}</p>
+                    <p className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 rounded-xl text-sm border border-emerald-100 dark:border-emerald-500/20">+{formatRupiah(inc.amount)}</p>
                     <div className="flex gap-1">
                       {showTrash ? (
                         isAdminMode && (

@@ -121,7 +121,7 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
               {mode === 'verify' ? 'Masukkan PIN' : mode === 'super' ? 'Super Master PIN' : 'Buat PIN Baru'}
             </span>
           </div>
-          <button onClick={handleClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 p-1 bg-slate-50 dark:bg-slate-950 rounded-full">
+          <button onClick={handleClose} className="text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-90 p-1 bg-slate-50 dark:bg-slate-950 rounded-full transition-all duration-300">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -141,11 +141,11 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
           {[...Array(6)].map((_, i) => (
             <div
               key={i}
-              className={`w-4 h-4 rounded-full border-2 transition-all ${errorMessage
-                  ? 'border-red-300 dark:border-red-500/40 bg-accent-50 dark:bg-accent-500/10'
+              className={`w-4 h-4 rounded-full border-2 transition-all duration-300 ${errorMessage
+                  ? 'border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10'
                   : mode === 'reset' && i < pinInput.length
                     ? 'bg-blue-500 dark:bg-blue-600 scale-110 border-blue-500 dark:border-blue-500'
-                    : i < pinInput.length ? 'bg-slate-800 scale-110 border-slate-800 dark:border-slate-100' : 'bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-600'
+                    : i < pinInput.length ? 'bg-gradient-to-br from-accent-600 to-accent-500 scale-110 border-transparent shadow-[0_2px_8px_rgba(var(--color-accent-500),0.4)]' : 'bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-600'
                 }`}
             />
           ))}
@@ -157,21 +157,21 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
             <button
               key={num}
               onClick={() => handleNumberClick(num.toString())}
-              className="py-3.5 bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 text-slate-800 dark:text-slate-100 font-black text-xl rounded-2xl border border-slate-100 dark:border-slate-800 transition-colors"
+              className="py-3.5 bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 active:bg-slate-200 dark:active:bg-slate-700 text-slate-800 dark:text-slate-100 font-black text-xl rounded-2xl border border-slate-100 dark:border-slate-800 transition-all duration-200"
             >
               {num}
             </button>
           ))}
-          <button onClick={handleClear} className="text-xs font-bold text-accent-500 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-2xl border border-transparent transition-colors">
+          <button onClick={handleClear} className="text-xs font-bold text-accent-500 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-95 rounded-2xl border border-transparent transition-all duration-200">
             Clear
           </button>
           <button
             onClick={() => handleNumberClick('0')}
-            className="py-3.5 bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 text-slate-800 dark:text-slate-100 font-black text-xl rounded-2xl border border-slate-100 dark:border-slate-800 transition-colors"
+            className="py-3.5 bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 active:bg-slate-200 dark:active:bg-slate-700 text-slate-800 dark:text-slate-100 font-black text-xl rounded-2xl border border-slate-100 dark:border-slate-800 transition-all duration-200"
           >
             0
           </button>
-          <button onClick={handleBackspace} className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950 rounded-2xl border border-transparent transition-colors">
+          <button onClick={handleBackspace} className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950 active:scale-95 rounded-2xl border border-transparent transition-all duration-200">
             Del
           </button>
         </div>
@@ -180,10 +180,10 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
         <button
           onClick={handleSubmit}
           disabled={pinInput.length !== 6}
-          className={`w-full mt-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all ${pinInput.length === 6
+          className={`w-full mt-6 py-3 rounded-2xl font-bold text-sm transition-all duration-300 active:scale-[0.98] ${pinInput.length === 6
               ? mode === 'reset'
-                ? 'bg-blue-600 dark:bg-blue-500 text-white hover:bg-blue-700 dark:hover:bg-blue-600'
-                : 'bg-slate-800 text-white hover:bg-slate-900'
+                ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-[0_4px_14px_rgba(59,130,246,0.35)] hover:-translate-y-0.5'
+                : 'bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white shadow-[0_4px_14px_rgba(var(--color-accent-500),0.35)] hover:-translate-y-0.5'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none'
             }`}
         >
