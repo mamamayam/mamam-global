@@ -243,7 +243,7 @@ const PerformanceTab = () => {
   }, [employees]);
 
   return (
-    <div className="space-y-6 h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
+    <div className="space-y-6 pt-2 border-t border-slate-200 dark:border-slate-800">
       <Card className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
