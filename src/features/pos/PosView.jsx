@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react';
-import { GripHorizontal, Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package, Star, X, ChevronLeft, ChevronRight, Settings2, Check } from 'lucide-react';
+import { GripHorizontal, Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package, Star, X, Settings2, Check } from 'lucide-react';
 import CartDrawer from '../pos/CartDrawer';
 import PaymentModal from './PaymentModal';
 import VariantSelectionModal from './VariantSelectionModal';
@@ -10,71 +10,66 @@ import { usePosStore } from '../../store/usePosStore';
 // 2. IMPORT CONTEXT LAMA
 import { useAppContext } from '../../context/AppContext';
 
-// ─── Hook drag & drop reorder HORIZONTAL (Khusus Tab Kategori) ───
-function useHorizontalDragReorder(onReorder) {
-    const [dragId, setDragId] = useState(null);
-    const [overId, setOverId] = useState(null);
-    const overIdRef = useRef(null);
-    const itemRefs = useRef({});
+// 3. DRAG & DROP REORDER TAB KATEGORI (pointer-based, jalan di touch & mouse)
+import { DndContext, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
+import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
-    const registerRef = useCallback((id) => (el) => {
-        if (el) itemRefs.current[id] = el;
-        else delete itemRefs.current[id];
-    }, []);
+// ─── Tombol Tab Kategori yang sortable (drag reorder pakai dnd-kit) ───
+// Kenapa dnd-kit: HTML5 native drag-and-drop (draggable=true + onDragStart/
+// onDrop) itu API mouse-only, gak ada event touch-nya sama sekali di HP.
+// dnd-kit's PointerSensor jalan di touch & mouse, jadi reorder-mode ini
+// beneran bisa dipakai dari layar HP, bukan cuma pas di-test pake mouse.
+function SortableCategoryTab({ cat, isActive, isReorderMode, onClick }) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: cat, disabled: !isReorderMode });
 
-    const startDrag = useCallback((id) => (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try { e.target.setPointerCapture?.(e.pointerId); } catch (_) { }
-        overIdRef.current = id;
-        setDragId(id);
-        setOverId(id);
-    }, []);
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        // touch-action: none WAJIB pas lagi bisa di-drag, biar browser gak
+        // rebutan sama dnd-kit buat interpretasiin gesture-nya. Di luar mode
+        // reorder, dibiarin default (pan-x dari class hide-scrollbar) supaya
+        // strip-nya tetep bisa di-scroll normal.
+        touchAction: isReorderMode ? 'none' : undefined,
+    };
 
-    useEffect(() => {
-        if (dragId === null) return;
-        const getX = (e) => (e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX);
+    return (
+        <button
+            ref={setNodeRef}
+            style={style}
+            {...(isReorderMode ? attributes : {})}
+            {...(isReorderMode ? listeners : {})}
+            type="button"
+            onClick={() => !isReorderMode && onClick(cat)}
+            data-active={isActive}
+            className={`
+                shrink-0 rounded-2xl font-bold border transition-all duration-300
+                whitespace-nowrap select-none flex items-center gap-2
 
-        const handleMove = (e) => {
-            const x = getX(e);
-            if (x == null) return;
-            let closestId = null;
-            let closestDist = Infinity;
-            Object.entries(itemRefs.current).forEach(([id, el]) => {
-                if (!el) return;
-                const rect = el.getBoundingClientRect();
-                // Hitung titik tengah elemen secara horizontal
-                const mid = rect.left + rect.width / 2;
-                const dist = Math.abs(x - mid);
-                if (dist < closestDist) { closestDist = dist; closestId = id; }
-            });
-            if (closestId !== null && closestId !== overIdRef.current) {
-                overIdRef.current = closestId;
-                setOverId(closestId);
-            }
-        };
+                px-6 py-3.5 text-base md:px-5 md:py-2.5 md:text-sm
 
-        const finishDrag = () => {
-            const finalOverId = overIdRef.current;
-            if (dragId !== null && finalOverId !== null && dragId !== finalOverId) {
-                onReorder(dragId, finalOverId);
-            }
-            setDragId(null);
-            setOverId(null);
-            overIdRef.current = null;
-        };
-
-        window.addEventListener('pointermove', handleMove);
-        window.addEventListener('pointerup', finishDrag);
-        window.addEventListener('pointercancel', finishDrag);
-        return () => {
-            window.removeEventListener('pointermove', handleMove);
-            window.removeEventListener('pointerup', finishDrag);
-            window.removeEventListener('pointercancel', finishDrag);
-        };
-    }, [dragId, onReorder]);
-
-    return { dragId, overId, registerRef, startDrag };
+                ${isActive
+                    ? 'bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white border-transparent shadow-[0_4px_16px_rgba(var(--color-accent-500),0.35)]'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                }
+                ${isReorderMode
+                    ? 'cursor-grab active:cursor-grabbing hover:bg-slate-50 dark:hover:bg-slate-700 border-dashed border-2 border-slate-400'
+                    : 'cursor-pointer active:scale-95'
+                }
+                ${isDragging ? 'opacity-40 scale-95 shadow-inner' : 'opacity-100'}
+            `}
+        >
+            {isReorderMode && <GripHorizontal className="w-5 h-5 md:w-4 md:h-4 text-slate-400" />}
+            {cat}
+        </button>
+    );
 }
 
 const PosView = () => {
@@ -95,31 +90,6 @@ const PosView = () => {
         salesHistory, setCurrentView, variantGroups
     } = useAppContext();
 
-    const [draggedIdx, setDraggedIdx] = useState(null);
-
-    const handleDragStart = (e, index) => {
-        setDraggedIdx(index);
-        e.dataTransfer.effectAllowed = "move";
-    };
-
-    const handleDragOver = (e, index) => {
-        e.preventDefault(); // Wajib agar bisa di-drop
-    };
-
-    const handleDrop = (e, index) => {
-        e.preventDefault();
-        if (draggedIdx === null || draggedIdx === index) return;
-
-        const newTabs = [...tabs];
-        const draggedItem = newTabs[draggedIdx];
-
-        newTabs.splice(draggedIdx, 1);
-        newTabs.splice(index, 0, draggedItem);
-
-        setTabs(newTabs);
-        setDraggedIdx(null);
-    };
-
     const [isReorderMode, setIsReorderMode] = useState(false);
 
     const categoryTabsRef = useRef(null);
@@ -138,15 +108,6 @@ const PosView = () => {
 
     // ─── Manajemen Urutan Kategori (Bisa di-drag) ──────────────────────────
     const [tabs, setTabs] = useState(['Favorit', 'Semua']);
-
-    const moveTab = (index, direction) => {
-        const newTabs = [...tabs];
-        const newIndex = index + direction;
-        if (newIndex >= 0 && newIndex < newTabs.length) {
-            [newTabs[index], newTabs[newIndex]] = [newTabs[newIndex], newTabs[index]];
-            setTabs(newTabs);
-        }
-    };
 
     // Sinkronisasi kategori baru tanpa merusak urutan yang sudah diatur pengguna
     useEffect(() => {
@@ -182,7 +143,17 @@ const PosView = () => {
         });
     }, []);
 
-    const tabDrag = useHorizontalDragReorder(handleReorderTab);
+    // dnd-kit: PointerSensor jalan di touch & mouse. distance:8 biar tap
+    // biasa (buat pilih kategori) gak kepicu jadi drag secara gak sengaja.
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    );
+
+    const handleDragEnd = useCallback((event) => {
+        const { active, over } = event;
+        if (!over) return;
+        handleReorderTab(active.id, over.id);
+    }, [handleReorderTab]);
 
     // ─── Menu favorit & Filter Menu ─────────────────────────────────────────
     const FAVORITE_LIMIT = 12;
@@ -273,45 +244,24 @@ const PosView = () => {
 
                 {/* Tab kategori (Draggable & Lebih Besar di HP) */}
                 <div className="flex items-center gap-2 mt-3">
-                    <div ref={categoryTabsRef} className="flex-1 flex overflow-x-auto hide-scrollbar gap-2 p-1 snap-x">
-                        {tabs.map((cat, idx) => {
-                            const isActive = selectedCategory === cat && !isSearching;
-                            const isDragging = draggedIdx === idx;
-
-                            return (
-                                <button
-                                    key={cat}
-                                    draggable={isReorderMode}
-                                    onDragStart={(e) => handleDragStart(e, idx)}
-                                    onDragOver={(e) => handleDragOver(e, idx)}
-                                    onDrop={(e) => handleDrop(e, idx)}
-                                    onDragEnd={() => setDraggedIdx(null)}
-                                    onClick={() => !isReorderMode && handleCategoryClick(cat)}
-                                    data-active={isActive}
-                                    className={`
-                        shrink-0 rounded-2xl font-bold border transition-all duration-300
-                        whitespace-nowrap select-none flex items-center gap-2
-                        
-                        {/* UTAMA: Ukuran besar di HP, normal di PC */}
-                        px-6 py-3.5 text-base md:px-5 md:py-2.5 md:text-sm
-                        
-                        ${isActive
-                                            ? 'bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white border-transparent shadow-[0_4px_16px_rgba(var(--color-accent-500),0.35)]'
-                                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                                        } 
-                        ${isReorderMode
-                                            ? 'cursor-grab active:cursor-grabbing hover:bg-slate-50 dark:hover:bg-slate-700 border-dashed border-2 border-slate-400'
-                                            : 'cursor-pointer active:scale-95'
-                                        }
-                        ${isDragging ? 'opacity-40 scale-95 shadow-inner' : 'opacity-100'}
-                    `}
-                                >
-                                    {isReorderMode && <GripHorizontal className="w-5 h-5 md:w-4 md:h-4 text-slate-400" />}
-                                    {cat}
-                                </button>
-                            );
-                        })}
-                    </div>
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                        <SortableContext items={tabs} strategy={horizontalListSortingStrategy}>
+                            <div ref={categoryTabsRef} className="flex-1 flex overflow-x-auto hide-scrollbar gap-2 p-1 snap-x">
+                                {tabs.map((cat) => {
+                                    const isActive = selectedCategory === cat && !isSearching;
+                                    return (
+                                        <SortableCategoryTab
+                                            key={cat}
+                                            cat={cat}
+                                            isActive={isActive}
+                                            isReorderMode={isReorderMode}
+                                            onClick={handleCategoryClick}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        </SortableContext>
+                    </DndContext>
 
                     {/* Tombol toggle mode reorder (Ikut membesar di HP) */}
                     <button
