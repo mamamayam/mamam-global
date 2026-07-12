@@ -85,3 +85,31 @@
   --accent-800:  17  94  89;
   --accent-900:  19  78  74;
 }
+
+/* ======================================================
+   SCROLL HORIZONTAL RESPONSIF (tab & kategori strip)
+   ======================================================
+   Tanpa touch-action, browser mobile menunda gesture geser
+   ke samping karena masih menebak apakah user mau scroll
+   halaman (vertikal) atau strip ini (horizontal). Dengan
+   touch-action: pan-x, browser tahu dari awal sentuhan
+   bahwa elemen ini hanya boleh digeser ke samping, jadi
+   geseran langsung jalan tanpa delay/harus "ditekan dulu".
+   ====================================================== */
+.hide-scrollbar,
+.scroll-x-smooth,
+.scrollbar-hide {
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.hide-scrollbar,
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

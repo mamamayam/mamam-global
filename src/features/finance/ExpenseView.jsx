@@ -200,8 +200,8 @@ const ExpenseView = () => {
         title="Pengeluaran"
         icon={<TrendingDown className="w-6 h-6 text-accent-500 dark:text-accent-400" />}
       />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card padding="none" className="lg:col-span-1 p-5 space-y-4 h-fit transition-shadow duration-300 hover:shadow-md">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full min-w-0">
+        <Card padding="none" className="lg:col-span-1 p-5 space-y-4 h-fit w-full min-w-0 transition-shadow duration-300 hover:shadow-md">
           {editingId && (
             <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300 p-3 rounded-xl text-xs font-bold flex justify-between items-center">
               <span>Mode Edit Admin Aktif</span>
@@ -301,21 +301,21 @@ const ExpenseView = () => {
           </Button>
         </Card>
 
-        <Card padding="none" className="lg:col-span-2 flex flex-col h-[600px]">
-          <div className="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
-            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Pengeluaran'}</h3>
-            <div className="flex items-center gap-2">
+        <Card padding="none" className="lg:col-span-2 flex flex-col h-[600px] w-full min-w-0">
+          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
+            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0"><History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Pengeluaran'}</h3>
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               {isAdminMode && (
                 <button
                   onClick={() => { setShowTrash(v => !v); resetSelection(); setIsSelecting(false); }}
-                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
+                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors shrink-0"
                 >
                   {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
                 </button>
               )}
               <button
                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
-                className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all duration-300 active:scale-95 ${isSelecting ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
+                className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all duration-300 active:scale-95 shrink-0 ${isSelecting ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
               >
                 {isSelecting ? 'Batal' : 'Pilih'}
               </button>
@@ -324,7 +324,7 @@ const ExpenseView = () => {
                   <select
                     value={filterMode}
                     onChange={e => setFilterMode(e.target.value)}
-                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
+                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0"
                   >
                     <option value="month">Per Bulan</option>
                     <option value="range">Rentang Tanggal</option>
@@ -336,26 +336,26 @@ const ExpenseView = () => {
                       type="month"
                       value={filterMonth}
                       onChange={e => setFilterMonth(e.target.value)}
-                      className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
+                      className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[140px]"
                     />
                   )}
 
                   {filterMode === 'range' && (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-wrap min-w-0">
                       <input
                         type="date"
                         value={filterStartDate}
                         onChange={e => setFilterStartDate(e.target.value)}
                         max={filterEndDate || undefined}
-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
+                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
                       />
-                      <span className="text-xs text-slate-400">-</span>
+                      <span className="text-xs text-slate-400 shrink-0">-</span>
                       <input
                         type="date"
                         value={filterEndDate}
                         onChange={e => setFilterEndDate(e.target.value)}
                         min={filterStartDate || undefined}
-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200"
+                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
                       />
                     </div>
                   )}
@@ -364,7 +364,7 @@ const ExpenseView = () => {
               <button
                 type="button"
                 onClick={() => setIsSortOpen(true)}
-                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 transition-all duration-300 active:scale-95"
+                className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 transition-all duration-300 active:scale-95 shrink-0"
               >
                 <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>

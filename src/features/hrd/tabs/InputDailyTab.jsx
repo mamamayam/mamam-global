@@ -485,9 +485,9 @@ const InputDailyTab = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full animate-in fade-in slide-in-from-right-4 duration-300">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full w-full min-w-0 animate-in fade-in slide-in-from-right-4 duration-300">
       {/* ─── KOLOM KIRI ─── */}
-      <div className="lg:col-span-1 flex flex-col gap-6">
+      <div className="lg:col-span-1 flex flex-col gap-6 w-full min-w-0">
         <div>
           <Card padding="lg" className="flex flex-col h-fit relative">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
@@ -570,43 +570,43 @@ const InputDailyTab = () => {
       </div>
 
       {/* ─── KOLOM KANAN ─── */}
-      <Card padding="none" className="lg:col-span-2 flex flex-col h-[700px]">
+      <Card padding="none" className="lg:col-span-2 flex flex-col h-[700px] w-full min-w-0">
         <div className="p-4 border-b border-slate-100 bg-slate-50 rounded-t-2xl space-y-3">
-          <div className="flex justify-between items-center">
-            <h3 className="font-heading font-bold flex items-center gap-2">
+          <div className="flex flex-wrap gap-2 justify-between items-center">
+            <h3 className="font-heading font-bold flex items-center gap-2 shrink-0">
               <History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Input'}
             </h3>
-            <div className="flex gap-3">
-              <button onClick={() => { setShowTrash(!showTrash); resetSelection(); setIsSelecting(false); }} className="text-xs font-bold text-slate-500">
+            <div className="flex flex-wrap gap-2 min-w-0">
+              <button onClick={() => { setShowTrash(!showTrash); resetSelection(); setIsSelecting(false); }} className="text-xs font-bold text-slate-500 shrink-0">
                 {showTrash ? 'Kembali' : 'Recycle Bin'}
               </button>
               <button
                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
-                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isSelecting ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}
+                className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors shrink-0 ${isSelecting ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}
               >
                 {isSelecting ? 'Batal' : 'Pilih'}
               </button>
-              <button onClick={() => setIsDailySortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 border rounded-lg px-2 py-1.5">
+              <button onClick={() => setIsDailySortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 border rounded-lg px-2 py-1.5 shrink-0">
                 <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>
             </div>
           </div>
 
           {!showTrash && (
-            <div className="flex flex-wrap items-center gap-2">
-              <Select value={filterMode} onChange={e => setFilterMode(e.target.value)} className="py-1.5 px-2 text-xs font-bold">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <Select value={filterMode} onChange={e => setFilterMode(e.target.value)} className="py-1.5 px-2 text-xs font-bold shrink-0">
                 <option value="month">Per Bulan</option>
                 <option value="range">Rentang Tanggal</option>
                 <option value="all">Semua</option>
               </Select>
               {filterMode === 'month' && (
-                <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="py-1.5 px-2 text-xs font-bold" />
+                <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[140px]" />
               )}
               {filterMode === 'range' && (
-                <div className="flex items-center gap-1">
-                  <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} max={filterEndDate || undefined} className="py-1.5 px-2 text-xs font-bold" />
-                  <span className="text-xs text-slate-400">-</span>
-                  <Input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} min={filterStartDate || undefined} className="py-1.5 px-2 text-xs font-bold" />
+                <div className="flex items-center gap-1 flex-wrap min-w-0">
+                  <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} max={filterEndDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
+                  <span className="text-xs text-slate-400 shrink-0">-</span>
+                  <Input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} min={filterStartDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
                 </div>
               )}
             </div>

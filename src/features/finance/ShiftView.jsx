@@ -544,7 +544,7 @@ const ShiftView = () => {
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl mb-8 shrink-0">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl mb-8 shrink-0 w-full min-w-0">
           {/* Card Info Shift Aktif */}
           <Card variant="elevated" className="flex flex-col justify-between relative overflow-hidden animate-in slide-in-from-left-4 duration-500">
             <div className="absolute top-0 right-0 p-8 opacity-5 dark:opacity-10">
