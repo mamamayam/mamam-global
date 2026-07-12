@@ -50,10 +50,22 @@ export default function AppLayout({
         isHorizontalSwipe.current = Math.abs(dx) > Math.abs(dy);
       }
 
-      // Kalau ini swipe horizontal, rebut gesture-nya dari browser/Android
-      // (edge-swipe-back) — preventDefault cuma ngefek karena listener ini
-      // didaftarkan passive:false di touchmove (lihat addEventListener bawah).
-      if (isHorizontalSwipe.current) {
+      if (!isHorizontalSwipe.current) return;
+
+      // FIX: dulu preventDefault() dipanggil utk SEMUA swipe horizontal di
+      // mana pun di layar — termasuk pas user geser strip tab/kategori yang
+      // overflow-x-auto (itu sebabnya kerasa nyangkut/delay walau elemennya
+      // udah punya touch-action: pan-x, soalnya listener non-passive di sini
+      // duluan motong gesture-nya sebelum sempet native-scroll). Sekarang
+      // cuma direbut kalau memang KANDIDAT gesture sidebar:
+      //  - buka: sidebar tertutup, mulai geser dari EDGE_ZONE kiri, ke kanan
+      //  - tutup: sidebar lagi kebuka, geser ke kiri (dari mana aja, sama
+      //    kayak logic asli di handleTouchEnd)
+      const { isSidebarOpen: open } = stateRef.current;
+      const isOpenCandidate = !open && touchStartX.current < EDGE_ZONE && dx > 0;
+      const isCloseCandidate = open && dx < 0;
+
+      if (isOpenCandidate || isCloseCandidate) {
         e.preventDefault();
       }
     };
