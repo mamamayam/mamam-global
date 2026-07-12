@@ -1,4 +1,4 @@
- export const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
+export const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
 
  export const generateUUID = () =>
   typeof crypto.randomUUID === 'function'
@@ -34,3 +34,25 @@ export const toLocalDateString = (date = new Date()) => {
  * pengelompokan/laporan bulanan berdasarkan tanggal lokal device).
  */
 export const toLocalMonthString = (date = new Date()) => toLocalDateString(date).slice(0, 7);
+
+/**
+ * Rentang minggu BERJALAN (Senin s/d Minggu) yang memuat `date`, dibalikin
+ * sebagai string "YYYY-MM-DD" (local, konsisten sama toLocalDateString) —
+ * dipakai buat default filter "Per Minggu" (mis. Rekap Kinerja Karyawan).
+ *
+ * Kenapa Senin sebagai awal minggu: mengikuti konvensi kalender kerja
+ * Indonesia (ISO-8601), bukan Minggu seperti kalender AS.
+ */
+export const getWeekRange = (date = new Date()) => {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 = Minggu, 1 = Senin, ... 6 = Sabtu
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  return { start: toLocalDateString(monday), end: toLocalDateString(sunday) };
+};

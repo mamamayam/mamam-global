@@ -4,6 +4,7 @@ import { UserCog } from 'lucide-react';
 import PayslipModal from '../hrd/modals/PayslipModal';
 import InputDailyTab from './tabs/InputDailyTab';
 import ReportsTab from './tabs/ReportsTab';
+import PerformanceTab from './tabs/PerformanceTab';
 import ManageEmployeesTab from './tabs/ManageEmployeesTab';
 
 const EmployeesView = () => {
@@ -17,7 +18,8 @@ const EmployeesView = () => {
         <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 pt-2 pb-5 mb-2 overflow-x-auto hide-scrollbar">
           {[
             { key: 'input', label: 'Input Harian' },
-            { key: 'reports', label: 'Rekap Laporan' },
+            { key: 'reports', label: 'Penggajian' },
+            { key: 'performance', label: 'Kinerja' },
             { key: 'manage', label: 'Kelola Karyawan' },
           ].map(tab => {
             const isActive = activeTab === tab.key;
@@ -41,6 +43,7 @@ const EmployeesView = () => {
       <div className="flex-1 overflow-y-auto min-h-0 relative">
         {activeTab === 'input' && <InputDailyTab />}
         {activeTab === 'reports' && <ReportsTab />}
+        {activeTab === 'performance' && <PerformanceTab />}
         {activeTab === 'manage' && <ManageEmployeesTab />}
       </div>
       
