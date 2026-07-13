@@ -13,6 +13,12 @@ import Sidebar from '../app/layout/Sidebar';
 import Header from '../app/layout/Header';
 import BottomNav from '../app/layout/BottomNav';
 import ReceiptModal from '../features/pos/ReceiptModal';
+import { toLocalDateString } from '../utils/formatters';
+import { activeOnly } from '../utils/softDelete';
+import {
+  getEmployeeStatus, computeAttendanceFromLogs,
+  snapshotEmployeeForPayroll, mergeAutoAdjustments,
+} from '../features/hrd/utils/payrollLogic';
 
 import {
   AlertCircle,
@@ -73,6 +79,13 @@ import {
 // runAutoSync cuma push kalau BENERAN ada yang beda (gak ada network call
 // kalau nggak ada perubahan).
 const AUTO_SYNC_INTERVAL_MS = 10 * 60 * 1000;
+
+// Batas mundur (hari) buat watchdog backfill "Libur" otomatis (lihat
+// useEffect di bawah). 60 hari cukup longgar buat nutup kasus "app gak
+// dibuka berminggu-minggu", tapi tetap mencegah karyawan lama (bertahun-
+// tahun kerja) tiba-tiba nge-generate ratusan/ribuan record "Libur"
+// backdated sekaligus pas app dibuka lagi setelah lama nganggur.
+const AUTO_LIBUR_BACKFILL_DAYS = 60;
 
 
 
@@ -429,6 +442,113 @@ export default function App() {
 
   useEffect(() => () => clearTimeout(connectionToastTimerRef.current), []);
 
+  // ── Watchdog backfill "Libur" otomatis ──────────────────────────────────
+  // Karyawan yang SAMA SEKALI gak absen (gak login/logout, gak ada
+  // attendanceLog apa pun) di suatu hari harusnya otomatis kehitung "Libur"
+  // di employeeDailyRecords. Sebelumnya ini cuma ditangani lewat 2 jalur
+  // yang SAMA-SAMA cuma jalan kalau ada device yang MEMBUKA halaman
+  // tertentu hari itu:
+  //   1. AttendanceView.jsx (toAutoLibur, watchdog checkAutoClose) — cuma
+  //      jalan kalau tab Absensi kebuka.
+  //   2. InputDailyTab.jsx (computeAttendanceFromLogs via pairsMap) — cuma
+  //      jalan buat karyawan yang PUNYA minimal 1 attendanceLog hari itu,
+  //      dan cuma kalau tab Input Harian/Rekap Laporan kebuka.
+  // Kalau di suatu hari gak ada satu device pun yang buka salah satu dari
+  // 2 halaman itu, karyawan yang nihil absen hari itu gak pernah ke-mark
+  // Libur — hilang dari rekap kinerja, bukan kehitung 0.
+  //
+  // Fix: watchdog ini jalan di level App.jsx (ROOT), sama seperti pola
+  // auto-sync berkala di atas — jadi ke-trigger begitu app dibuka lewat
+  // MODUL MANAPUN (Kasir, HRD, dst), gak perlu masuk ke menu HRD dulu.
+  // Sifatnya lazy/computed-on-read (dihitung ulang tiap kali jalan
+  // berdasarkan tanggal SEKARANG vs tanggal yang di-scan) — BUKAN
+  // bergantung pada jam tertentu, sama seperti bulletproofing auto
+  // clock-out yang sudah ada. AttendanceView.jsx (toAutoLibur) TETAP
+  // dibiarkan seperti aslinya — watchdog ini cuma nutup celah kalau
+  // kebetulan tab Absensi gak sempat kebuka hari itu.
+  useEffect(() => {
+    // Data belum selesai dimuat dari Dexie → jangan jalan dulu, nanti bisa
+    // salah backfill berdasarkan data kosong/parsial.
+    if (!allDataLoaded) return;
+    if (!employees || employees.length === 0) return;
+
+    const todayStr = toLocalDateString();
+
+    setEmployeeDailyRecords(prev => {
+      const existingRecordKeys = new Set(
+        activeOnly(prev).map(r => `${r.employeeId}|${r.dateStr}`)
+      );
+      const earliestBackfillDate = new Date();
+      earliestBackfillDate.setDate(earliestBackfillDate.getDate() - AUTO_LIBUR_BACKFILL_DAYS);
+
+      const pairsToBackfill = [];
+      employees.forEach(emp => {
+        // Karyawan resign gak perlu terus di-backfill.
+        if (getEmployeeStatus(emp) === 'resign') return;
+
+        const empStart = emp.startDate ? new Date(`${emp.startDate}T00:00:00`) : null;
+        const scanStart = empStart && empStart > earliestBackfillDate ? empStart : earliestBackfillDate;
+
+        const cursor = new Date(scanStart);
+        cursor.setHours(0, 0, 0, 0);
+        const cutoff = new Date(); // hari ini gak ikut — biar computeAttendanceFromLogs yang nentuin (masih bisa "Belum Absen" sebelum jam 19:00)
+        cutoff.setHours(0, 0, 0, 0);
+
+        while (cursor < cutoff) {
+          const dateStr = toLocalDateString(cursor);
+          const key = `${emp.id}|${dateStr}`;
+          if (dateStr !== todayStr && !existingRecordKeys.has(key)) {
+            pairsToBackfill.push({ employeeId: emp.id, dateStr });
+          }
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      });
+
+      if (pairsToBackfill.length === 0) return prev;
+
+      let next = [...prev]; let changed = false;
+      pairsToBackfill.forEach(({ employeeId: empId, dateStr }) => {
+        // computeAttendanceFromLogs dipanggil dengan attendanceLog kosong
+        // buat pasangan ini secara definisi (kalau dia PUNYA log, harusnya
+        // udah ke-cover oleh existingRecordKeys atau jalur InputDailyTab).
+        // Cabang isPast7PM otomatis aktif (dateStr < todayStr selalu true
+        // untuk tanggal-tanggal lampau) → hasilnya selalu "Libur".
+        const result = computeAttendanceFromLogs(empId, dateStr, attendanceLog);
+        if (result.status === 'Belum Absen' && !result.isDayOff) return;
+
+        const emp = employees.find(e => e.id === empId);
+        const prevIndex = next.findIndex(r => !r.deletedAt && r.employeeId === empId && r.dateStr === dateStr);
+        const prevExisting = prevIndex >= 0 ? next[prevIndex] : null;
+        if (prevExisting) return; // sudah ada (race dgn effect lain) — jangan timpa
+
+        const employeeSnapshot = snapshotEmployeeForPayroll(emp);
+        const baseFields = {
+          isDayOff: result.isDayOff,
+          clockIn: result.clockIn,
+          clockOut: result.clockOut,
+          hoursWorked: result.hoursWorked,
+          bolongMinutes: result.bolongMinutes,
+          overtimeMinutes: result.overtimeMinutes,
+        };
+        const recordSnapshot = { ...baseFields, employeeId: empId, dateStr };
+        const recalculatedAdditions = mergeAutoAdjustments(undefined, recordSnapshot, employeeSnapshot);
+
+        changed = true;
+        next.unshift({
+          id: `AUTO-LIBUR-BACKFILL-${empId}-${dateStr}`,
+          employeeId: empId,
+          date: new Date(dateStr),
+          dateStr,
+          ...baseFields,
+          additions: recalculatedAdditions,
+          deductions: [],
+          employeeSnapshot,
+        });
+      });
+      return changed ? next : prev;
+    });
+  }, [allDataLoaded, employees, attendanceLog, setEmployeeDailyRecords]);
+
   // ── Auto-sync berkala — GANTI cara lama (cek jam 21:00 yang cuma jalan
   // kalau layar BackupView lagi kebuka). Ini jalan di level App.jsx, tiap
   // AUTO_SYNC_INTERVAL_MS, SELAMA app kebuka — gak peduli user lagi di layar
@@ -550,6 +670,7 @@ export default function App() {
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null });
 
   const [payslipModal, setPayslipModal] = useState({ isOpen: false, data: null, month: '' });
+  const [perfShareModal, setPerfShareModal] = useState({ isOpen: false, data: null, rangeLabel: '' });
 
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
@@ -837,6 +958,7 @@ export default function App() {
     additionCategories, setAdditionCategories,
     deductionCategories, setDeductionCategories,
     payslipModal, setPayslipModal,
+    perfShareModal, setPerfShareModal,
 
     // Inventory / HPP / Materials
     availableMaterials,

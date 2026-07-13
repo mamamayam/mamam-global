@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PageHeader } from '../../components/ui';
 import { UserCog } from 'lucide-react';
 import PayslipModal from '../hrd/modals/PayslipModal';
+import PerformanceShareModal from './modals/PerformanceShareModal';
 import InputDailyTab from './tabs/InputDailyTab';
 import ReportsTab from './tabs/ReportsTab';
 import ManageEmployeesTab from './tabs/ManageEmployeesTab';
@@ -45,6 +46,7 @@ const EmployeesView = () => {
       </div>
       
       <PayslipModal />
+      <PerformanceShareModal />
     </div>
   );
 };

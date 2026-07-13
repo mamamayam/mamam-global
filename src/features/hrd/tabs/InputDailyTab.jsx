@@ -12,10 +12,10 @@ import {
 import {
   WORK_START_MINUTES, WORK_END_MINUTES, EARLY_OVERTIME_THRESHOLD_MINUTES, OVERTIME_THRESHOLD_MINUTES,
   LEMBUR_CATEGORY_KEYWORD, KASBON_CATEGORY_KEYWORD,
-  getEmployeeStatus, calculateRegularMinutes, formatTimeFromDate, timeStrToMinutes,
-  calculateBolongMinutes, getOvertimeRate, calculateOvertimePay,
+  getEmployeeStatus, calculateRegularMinutes, timeStrToMinutes, getOvertimeRate, calculateOvertimePay,
   AUTO_ADJUSTMENT_CATEGORIES, mergeAutoAdjustments,
   snapshotEmployeeForPayroll, resolveEmployeeForRecord,
+  computeAttendanceFromLogs,
 } from '../utils/payrollLogic';
 
 const StatField = ({ label, value, highlight }) => (
@@ -25,51 +25,14 @@ const StatField = ({ label, value, highlight }) => (
   </div>
 );
 
-const computeAttendanceFromLogs = (employeeId, dateStr, logs) => {
-  const todayStr = toLocalDateString();
-  const isPast7PM = (dateStr < todayStr) || (dateStr === todayStr && new Date().getHours() >= 19);
-
-  const empLogs = activeOnly(logs ?? [])
-    .filter(r => r.employeeId === employeeId && r.dateStr === dateStr)
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  const hasMasuk = empLogs.some(r => r.type === 'masuk');
-  const hasLibur = empLogs.some(r => r.type === 'libur'); // [+] Cek apakah ada record libur
-
-  let status = '', cIn = '', cOut = '', cBolong = 0, cHours = 0, cDayOff = false, cOvertime = 0;
-
-  if (hasLibur) { // [+] Jika ada libur, langsung prioritaskan hari ini menjadi day off
-    status = 'Libur'; cDayOff = true;
-  } else if (hasMasuk) {
-    status = 'Hadir';
-    const masukRec = empLogs.find(r => r.type === 'masuk');
-    const keluarRec = [...empLogs].reverse().find(r => r.type === 'keluar');
-    cIn = formatTimeFromDate(masukRec.date);
-    if (keluarRec) {
-      cOut = formatTimeFromDate(keluarRec.date);
-      const bolongFallbackEnd = new Date(`${dateStr}T${cOut}:00`);
-      cBolong = calculateBolongMinutes(empLogs, bolongFallbackEnd);
-      const inMins = timeStrToMinutes(cIn);
-      const outMins = timeStrToMinutes(cOut);
-      const earlyOvertimeMins = inMins <= EARLY_OVERTIME_THRESHOLD_MINUTES ? WORK_START_MINUTES - inMins : 0;
-      const lateOvertimeMins = outMins >= OVERTIME_THRESHOLD_MINUTES ? outMins - WORK_END_MINUTES : 0;
-      cOvertime = earlyOvertimeMins + lateOvertimeMins;
-      const regularMinutes = calculateRegularMinutes(cIn, cOut, earlyOvertimeMins, lateOvertimeMins);
-      const rawHours = Number((regularMinutes / 60).toFixed(2));
-      const netHours = Number((rawHours - (cBolong / 60)).toFixed(4));
-      cHours = netHours > 0 ? Math.ceil(netHours * 10) / 10 : 0;
-    } else {
-      cBolong = calculateBolongMinutes(empLogs, new Date());
-      cOut = '';
-    }
-  } else if (isPast7PM) {
-    status = 'Libur'; cDayOff = true;
-  } else {
-    status = 'Belum Absen';
-  }
-
-  return { status, clockIn: cIn, clockOut: cOut, bolongMinutes: cBolong, hoursWorked: cHours, overtimeMinutes: cOvertime, isDayOff: cDayOff, hasMasuk };
-};
+// computeAttendanceFromLogs (resolve status kehadiran 1 karyawan pada 1
+// tanggal) sekarang tinggal di payrollLogic.js — jadi shared utility yang
+// juga dipakai App.jsx buat watchdog backfill "Libur" di level root (lihat
+// komentar lengkap di payrollLogic.js & App.jsx). Backfill retroaktif
+// (karyawan yang gak absen SAMA SEKALI, tanpa log apa pun) juga sudah
+// dipindah ke App.jsx, supaya ke-trigger begitu app dibuka lewat modul
+// manapun — gak cuma pas tab Input Harian/Rekap Laporan/Absensi yang
+// kebuka.
 
 /* ─────────────────────────────────────────────────────── */
 const AdjRow = ({ item, onRemove, formatRupiah }) => {
@@ -182,6 +145,17 @@ const InputDailyTab = () => {
     return r && (r.additions?.length > 0 || r.deductions?.length > 0);
   }, [dailyEmpId, dailyDate, employeeDailyRecords]);
 
+  // Generator record harian otomatis: begitu attendanceLog berubah (atau
+  // pas komponen ini mount), resolve ulang status kehadiran tiap pasangan
+  // employeeId|dateStr yang punya minimal 1 log hari itu, lalu tulis/update
+  // employeeDailyRecords via computeAttendanceFromLogs (payrollLogic.js).
+  //
+  // Backfill retroaktif untuk karyawan yang SAMA SEKALI gak punya log apa
+  // pun (gak login/logout sama sekali) TIDAK lagi ditangani di sini —
+  // sekarang jadi watchdog terpisah di App.jsx (level root), supaya
+  // ke-trigger begitu app dibuka lewat modul MANAPUN (Kasir, dst), bukan
+  // cuma pas tab Input Harian/Rekap Laporan/Absensi yang kebuka. Lihat
+  // useEffect "Watchdog backfill Libur otomatis" di App.jsx untuk detailnya.
   useEffect(() => {
     if (!attendanceLog) return;
     const activeLogs = activeOnly(attendanceLog);

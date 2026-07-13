@@ -1,4 +1,6 @@
 import { createSnapshot, resolveSnapshot } from '../../../utils/snapshot';
+import { activeOnly } from '../../../utils/softDelete';
+import { toLocalDateString } from '../../../utils/formatters';
 
 export const WORK_START_MINUTES = 9 * 60;
 export const WORK_END_MINUTES = 19 * 60;
@@ -145,6 +147,66 @@ export function calculateBolongMinutes(sortedLogs, fallbackEndDate = null) {
     }
   }
   return totalMinutes;
+}
+
+/**
+ * Resolve status kehadiran 1 karyawan pada 1 tanggal berdasarkan
+ * attendanceLog mentah. Dipindahin ke sini (dari InputDailyTab, dulu private
+ * function) supaya jadi SATU sumber kebenaran yang bisa dipanggil dari mana
+ * aja — InputDailyTab (Rekap Penggajian & Kinerja) MAUPUN App.jsx (watchdog
+ * backfill "Libur" di level root, lihat App.jsx) — hasilnya selalu konsisten
+ * gak peduli jalur pemanggilnya.
+ *
+ * Cabang `isPast7PM` di bawah ini BULLETPROOF/LAZY: dihitung ulang tiap kali
+ * fungsi ini dipanggil berdasarkan `dateStr` vs tanggal SEKARANG — jadi gak
+ * butuh app kebuka pas jam tertentu buat "menangkap" statusnya. Ini sengaja
+ * disamakan pola dengan auto clock-out (uang lembur/jam pulang otomatis)
+ * yang juga lazy-computed, bukan bergantung watchdog interval semata.
+ */
+export function computeAttendanceFromLogs(employeeId, dateStr, logs) {
+  const todayStr = toLocalDateString();
+  const isPast7PM = (dateStr < todayStr) || (dateStr === todayStr && new Date().getHours() >= 19);
+
+  const empLogs = activeOnly(logs ?? [])
+    .filter(r => r.employeeId === employeeId && r.dateStr === dateStr)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const hasMasuk = empLogs.some(r => r.type === 'masuk');
+  const hasLibur = empLogs.some(r => r.type === 'libur');
+
+  let status = '', cIn = '', cOut = '', cBolong = 0, cHours = 0, cDayOff = false, cOvertime = 0;
+
+  if (hasLibur) {
+    status = 'Libur'; cDayOff = true;
+  } else if (hasMasuk) {
+    status = 'Hadir';
+    const masukRec = empLogs.find(r => r.type === 'masuk');
+    const keluarRec = [...empLogs].reverse().find(r => r.type === 'keluar');
+    cIn = formatTimeFromDate(masukRec.date);
+    if (keluarRec) {
+      cOut = formatTimeFromDate(keluarRec.date);
+      const bolongFallbackEnd = new Date(`${dateStr}T${cOut}:00`);
+      cBolong = calculateBolongMinutes(empLogs, bolongFallbackEnd);
+      const inMins = timeStrToMinutes(cIn);
+      const outMins = timeStrToMinutes(cOut);
+      const earlyOvertimeMins = inMins <= EARLY_OVERTIME_THRESHOLD_MINUTES ? WORK_START_MINUTES - inMins : 0;
+      const lateOvertimeMins = outMins >= OVERTIME_THRESHOLD_MINUTES ? outMins - WORK_END_MINUTES : 0;
+      cOvertime = earlyOvertimeMins + lateOvertimeMins;
+      const regularMinutes = calculateRegularMinutes(cIn, cOut, earlyOvertimeMins, lateOvertimeMins);
+      const rawHours = Number((regularMinutes / 60).toFixed(2));
+      const netHours = Number((rawHours - (cBolong / 60)).toFixed(4));
+      cHours = netHours > 0 ? Math.ceil(netHours * 10) / 10 : 0;
+    } else {
+      cBolong = calculateBolongMinutes(empLogs, new Date());
+      cOut = '';
+    }
+  } else if (isPast7PM) {
+    status = 'Libur'; cDayOff = true;
+  } else {
+    status = 'Belum Absen';
+  }
+
+  return { status, clockIn: cIn, clockOut: cOut, bolongMinutes: cBolong, hoursWorked: cHours, overtimeMinutes: cOvertime, isDayOff: cDayOff, hasMasuk };
 }
 
 /* ═══════════════════════════════════════════════════════════════ */

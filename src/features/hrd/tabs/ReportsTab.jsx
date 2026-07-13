@@ -6,7 +6,7 @@ import { applySort } from '../../../utils/sortUtils';
 import { activeOnly } from '../../../utils/softDelete';
 import {
   PieChart, Printer, ArrowUpDown, Activity, ChevronDown,
-  TrendingUp, Clock, CalendarCheck, AlarmClockOff,
+  TrendingUp, Clock, CalendarCheck, AlarmClockOff, Share2,
 } from 'lucide-react';
 import {
   AUTO_ADJUSTMENT_CATEGORIES, summarizeAutoBonuses, resolveEmployeeForRecord,
@@ -64,7 +64,7 @@ const SectionHeader = ({ step, icon, title, action }) => (
 );
 
 const ReportsTab = () => {
-  const { employees, employeeDailyRecords, expenses, setPayslipModal, formatRupiah } = useAppContext();
+  const { employees, employeeDailyRecords, expenses, setPayslipModal, setPerfShareModal, formatRupiah } = useAppContext();
 
   // ==========================================================================
   // SECTION 1 — Rekap Penggajian (ringkas, per bulan)
@@ -435,31 +435,31 @@ const ReportsTab = () => {
               <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
             </button>
           </div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800 overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse min-w-[420px]">
-              <thead>
-                <tr className="bg-white dark:bg-slate-900 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                  <th className="p-4">Nama Karyawan</th>
-                  <th className="p-4 text-right">Gaji Bersih (Net)</th>
-                  <th className="p-4 text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedEmployeePayroll.length === 0 ? (
-                  <tr><td colSpan="3"><EmptyState size="sm" icon={<PieChart className="w-8 h-8" />} title="Tidak ada data penggajian pada bulan ini." /></td></tr>
-                ) : (
-                  sortedEmployeePayroll.map(p => (
-                    <tr key={p.employeeId} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors duration-300">
-                      <td className="p-4"><p className="font-bold text-sm text-slate-800 dark:text-slate-100">{p.employee.name}</p></td>
-                      <td className="p-4 text-right font-black text-slate-900 dark:text-slate-100 text-sm">{formatRupiah(p.netPay)}</td>
-                      <td className="p-4 text-center">
-                        <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>Cetak Slip</Button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          {/* Header grid — 3 kolom sama lebar, sinkron dengan baris data di bawah */}
+          <div className="grid grid-cols-3 bg-white dark:bg-slate-900 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+            <div className="p-4 text-left">Nama Karyawan</div>
+            <div className="p-4 text-center">Gaji Bersih (Net)</div>
+            <div className="p-4 text-center">Aksi</div>
+          </div>
+
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {sortedEmployeePayroll.length === 0 ? (
+              <EmptyState size="sm" icon={<PieChart className="w-8 h-8" />} title="Tidak ada data penggajian pada bulan ini." />
+            ) : (
+              sortedEmployeePayroll.map(p => (
+                <div key={p.employeeId} className="grid grid-cols-3 items-center hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors duration-300">
+                  <div className="p-4 text-left min-w-0">
+                    <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{p.employee.name}</p>
+                  </div>
+                  <div className="p-4 text-center font-black text-slate-900 dark:text-slate-100 text-sm">
+                    {formatRupiah(p.netPay)}
+                  </div>
+                  <div className="p-4 flex justify-center">
+                    <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>Cetak Slip</Button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </Card>
 
@@ -564,6 +564,16 @@ const ReportsTab = () => {
                           <p className="font-black text-sm text-slate-900 dark:text-slate-100">{formatRupiah(p.netPay)}</p>
                           <p className="text-[11px] text-slate-400 dark:text-slate-500">{p.totalHours.toFixed(1).replace('.', ',')} jam kerja</p>
                         </div>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); setPerfShareModal({ isOpen: true, data: p, rangeLabel: perfRangeLabel }); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setPerfShareModal({ isOpen: true, data: p, rangeLabel: perfRangeLabel }); } }}
+                          title="Bagikan laporan kinerja"
+                          className="w-8 h-8 rounded-xl bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0 hover:bg-accent-100 dark:hover:bg-accent-500/20 active:scale-95 transition-all duration-300"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                        </span>
                         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
                       </div>
                     </button>
