@@ -157,15 +157,21 @@ export function calculateBolongMinutes(sortedLogs, fallbackEndDate = null) {
  * backfill "Libur" di level root, lihat App.jsx) — hasilnya selalu konsisten
  * gak peduli jalur pemanggilnya.
  *
- * Cabang `isPast7PM` di bawah ini BULLETPROOF/LAZY: dihitung ulang tiap kali
- * fungsi ini dipanggil berdasarkan `dateStr` vs tanggal SEKARANG — jadi gak
- * butuh app kebuka pas jam tertentu buat "menangkap" statusnya. Ini sengaja
- * disamakan pola dengan auto clock-out (uang lembur/jam pulang otomatis)
- * yang juga lazy-computed, bukan bergantung watchdog interval semata.
+ * Cabang `isPastCloseHour` di bawah ini BULLETPROOF/LAZY: dihitung ulang tiap
+ * kali fungsi ini dipanggil berdasarkan `dateStr` vs tanggal SEKARANG — jadi
+ * gak butuh app kebuka pas jam tertentu buat "menangkap" statusnya. Ini
+ * sengaja disamakan pola dengan auto clock-out (uang lembur/jam pulang
+ * otomatis) yang juga lazy-computed, bukan bergantung watchdog interval saja.
+ *
+ * Ambang jamnya SENGAJA dirujuk dari WORK_END_MINUTES (bukan angka 19
+ * literal) — supaya kalau nanti jam tutup toko berubah (mis. jadi setting
+ * yang bisa diubah dari UI), cabang ini otomatis ikut menyesuaikan tanpa
+ * perlu diingat-ingat untuk diedit manual di tempat terpisah.
  */
 export function computeAttendanceFromLogs(employeeId, dateStr, logs) {
   const todayStr = toLocalDateString();
-  const isPast7PM = (dateStr < todayStr) || (dateStr === todayStr && new Date().getHours() >= 19);
+  const isPastCloseHour = (dateStr < todayStr) ||
+    (dateStr === todayStr && new Date().getHours() >= WORK_END_MINUTES / 60);
 
   const empLogs = activeOnly(logs ?? [])
     .filter(r => r.employeeId === employeeId && r.dateStr === dateStr)
@@ -200,7 +206,7 @@ export function computeAttendanceFromLogs(employeeId, dateStr, logs) {
       cBolong = calculateBolongMinutes(empLogs, new Date());
       cOut = '';
     }
-  } else if (isPast7PM) {
+  } else if (isPastCloseHour) {
     status = 'Libur'; cDayOff = true;
   } else {
     status = 'Belum Absen';
