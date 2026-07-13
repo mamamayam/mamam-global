@@ -100,17 +100,17 @@ const ManageEmployeesTab = () => {
         </Card>
       ) : (
         <div className="space-y-6">
-          <Card className="flex justify-between items-center">
+          <Card className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center">
             <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Briefcase className="w-5 h-5 text-slate-700 dark:text-slate-200" /> Daftar Karyawan</h3>
-            <div className="flex items-center gap-2">
-              <select value={empStatusFilter} onChange={e => setEmpStatusFilter(e.target.value)} className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 bg-transparent focus:outline-none focus:ring-2 focus:ring-accent-500/30 transition-all duration-300">
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={empStatusFilter} onChange={e => setEmpStatusFilter(e.target.value)} className="flex-1 min-w-0 md:flex-none text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 bg-transparent focus:outline-none focus:ring-2 focus:ring-accent-500/30 transition-all duration-300">
                 <option value="semua">Semua Status</option>
                 {EMPLOYEE_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
-              <button type="button" onClick={() => setIsEmpSortOpen(true)} className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 active:scale-95 transition-all duration-300">
+              <button type="button" onClick={() => setIsEmpSortOpen(true)} className="flex-1 min-w-0 md:flex-none flex items-center justify-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 active:scale-95 transition-all duration-300">
                 <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>
-              <Button variant="dark" icon={<Plus className="w-4 h-4" />} onClick={() => { setEmpFormData(createEmptyEmployeeForm()); setIsEditingEmp(true); }}>
+              <Button variant="dark" className="w-full md:w-auto" icon={<Plus className="w-4 h-4" />} onClick={() => { setEmpFormData(createEmptyEmployeeForm()); setIsEditingEmp(true); }}>
                 Tambah Karyawan
               </Button>
             </div>
