@@ -36,23 +36,23 @@ export const toLocalDateString = (date = new Date()) => {
 export const toLocalMonthString = (date = new Date()) => toLocalDateString(date).slice(0, 7);
 
 /**
- * Rentang minggu BERJALAN (Senin s/d Minggu) yang memuat `date`, dibalikin
+ * Rentang minggu BERJALAN (Jumat s/d Kamis) yang memuat `date`, dibalikin
  * sebagai string "YYYY-MM-DD" (local, konsisten sama toLocalDateString) —
  * dipakai buat default filter "Per Minggu" (mis. Rekap Kinerja Karyawan).
  *
- * Kenapa Senin sebagai awal minggu: mengikuti konvensi kalender kerja
- * Indonesia (ISO-8601), bukan Minggu seperti kalender AS.
+ * Kenapa Jumat sebagai awal minggu: mengikuti siklus minggu kerja/gajian
+ * internal Mamam Ayam, BUKAN Senin (ISO-8601) atau Minggu (kalender AS).
  */
 export const getWeekRange = (date = new Date()) => {
   const d = new Date(date);
-  const day = d.getDay(); // 0 = Minggu, 1 = Senin, ... 6 = Sabtu
-  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const day = d.getDay(); // 0 = Minggu, 1 = Senin, ... 5 = Jumat, 6 = Sabtu
+  const diffToFriday = (day - 5 + 7) % 7; // jarak mundur dari `date` ke Jumat terdekat (atau hari ini kalau Jumat)
 
-  const monday = new Date(d);
-  monday.setDate(d.getDate() + diffToMonday);
+  const friday = new Date(d);
+  friday.setDate(d.getDate() - diffToFriday);
 
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
+  const thursday = new Date(friday);
+  thursday.setDate(friday.getDate() + 6);
 
-  return { start: toLocalDateString(monday), end: toLocalDateString(sunday) };
+  return { start: toLocalDateString(friday), end: toLocalDateString(thursday) };
 };

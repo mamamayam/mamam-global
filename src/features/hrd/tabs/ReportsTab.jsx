@@ -387,9 +387,18 @@ const ReportsTab = () => {
     { key: 'telat-desc', label: 'Paling Sering Telat' },
   ];
 
+  // Format "YYYY-MM-DD" -> "Jum, 10 Jul 2026" — dipakai khusus buat label
+  // periode aktif, supaya hari & tanggal kelihatan sekaligus (gak cuma
+  // angka mentah yang bikin keder harus itung manual itu hari apa).
+  const formatTanggalDenganHari = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(`${dateStr}T12:00:00`);
+    return d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
   const perfRangeLabel = perfActiveRange.start === perfActiveRange.end
-    ? perfActiveRange.start
-    : `${perfActiveRange.start} s/d ${perfActiveRange.end}`;
+    ? formatTanggalDenganHari(perfActiveRange.start)
+    : `${formatTanggalDenganHari(perfActiveRange.start)} s/d ${formatTanggalDenganHari(perfActiveRange.end)}`;
 
   const employeeOptions = useMemo(() => {
     return [...(employees || [])].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'id'));
@@ -416,17 +425,6 @@ const ReportsTab = () => {
             }
           />
         </Card>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card variant="dark" padding="lg" className="flex flex-col justify-center">
-            <p className="text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400">Total Expenses Payroll</p>
-            <h3 className="font-heading text-2xl font-black text-white">{formatRupiah(totalPayrollExpense)}</h3>
-          </Card>
-          <Card padding="lg" className="flex flex-col justify-center">
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Karyawan Aktif (Bulan Ini)</p>
-            <h3 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100">{employeePayroll.length} Orang</h3>
-          </Card>
-        </div>
 
         <Card padding="none" className="overflow-hidden">
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-between items-center">
@@ -461,6 +459,18 @@ const ReportsTab = () => {
               ))
             )}
           </div>
+
+          {sortedEmployeePayroll.length > 0 && (
+            <div className="grid grid-cols-3 items-center bg-slate-900 dark:bg-slate-950 border-t border-slate-800">
+              <div className="p-4 text-left">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Expenses Payroll</p>
+              </div>
+              <div className="p-4 text-center font-heading text-lg font-black text-white">
+                {formatRupiah(totalPayrollExpense)}
+              </div>
+              <div className="p-4" />
+            </div>
+          )}
         </Card>
 
         <SortModal isOpen={isPayrollSortOpen} onClose={() => setIsPayrollSortOpen(false)} value={payrollSortKey} onChange={setPayrollSortKey} options={payrollSortOptions} />
