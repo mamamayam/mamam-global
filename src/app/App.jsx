@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useEffect, createContext, useContext, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
 import { usePersistState } from '../hook/usePersistState';
 import { useOnlineStatus } from '../hook/useOnlineStatus';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
-import { AppContext, useAppContext } from '../context/AppContext';
+import { AppContext } from '../context/AppContext';
 import { usePosStore } from '../store/usePosStore';
 import { Modal, Button } from '../components/ui';
 import PinModal from '../auth/PinModal';
@@ -24,50 +24,20 @@ import {
   AlertCircle,
   Briefcase,
   Calculator,
-  Calendar,
   CheckCircle2,
   TrendingDown,
   Clock,
-  Coffee,
-  Copy,
-  CreditCard,
-  DollarSign,
-  Download,
-  Edit3,
-  FileText,
   Fingerprint,
   History,
-  Home,
-  Info,
   Layers,
   List,
-  Menu as MenuIcon,
-  Minus,
-  MoreHorizontal,
-  Motorbike,
-  Package,
-  Pencil,
-  PieChart,
-  Plus,
-  Printer,
-  QrCode,
-  Receipt,
   RefreshCw,
-  Save,
-  Search,
   Settings,
   ShoppingCart,
-  SplitSquareHorizontal,
-  Store,
-  Ticket,
-  Trash2,
   TrendingUp,
-  Truck,
   UserCog,
   Users,
-  UtensilsCrossed,
-  Wallet,
-  X,
+  Download,
   Warehouse,
   BarChart3,
   Wifi,
@@ -98,7 +68,6 @@ export default function App() {
   const [showExitToast, setShowExitToast] = useState(false);
   const lastBackPressRef = useRef(null);
   const exitToastTimerRef = useRef(null);
-  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const [variantCategories, setVariantCategories] = useState(['Lainnya']);
 
@@ -110,10 +79,6 @@ export default function App() {
 
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
-
-  const handleAdminLogin = () => {
-    setIsAdminMode(true);
-  };
 
   const [currentView, setCurrentView] = useState('kasir');
   const [activeTab, setActiveTab] = useState('materials');
@@ -255,7 +220,7 @@ export default function App() {
   }, [theme]);
 
   // Semua data dari Dexie sudah selesai dimuat?
-  const allDataLoaded = ![l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l24].some(Boolean);
+  const allDataLoaded = ![l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24].some(Boolean);
 
   // ── Map setter remote — dipakai oleh realtime callback ──────────────────
   const remoteSetterMap = useRef({});
@@ -310,7 +275,7 @@ export default function App() {
       try {
         ({ isSupabaseConfigured } = await import('../storage/syncClient'));
         ({ initRealtimeSync } = await import('../storage/realtimeSync'));
-      } catch (e) {
+      } catch {
         syncGateRef.current.resolveSync?.();
         return;
       }
@@ -395,7 +360,6 @@ export default function App() {
       clearTimeout(timeoutId);
       cleanupRef.current?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDataLoaded]);
 
   // ── Toast koneksi: reaksi ke transisi online/offline ────────────────────
@@ -430,7 +394,7 @@ export default function App() {
               : sent > 0 ? `Tersinkronisasi — ${sent} perubahan terkirim` : 'Tersinkronisasi ✓',
             type: 'online',
           });
-        } catch (e) {
+        } catch {
           setConnectionToast({ msg: 'Online, tapi sync gagal — coba manual sync', type: 'online' });
         } finally {
           connectionToastTimerRef.current = setTimeout(() => setConnectionToast(null), 3500);
@@ -511,7 +475,7 @@ export default function App() {
         // computeAttendanceFromLogs dipanggil dengan attendanceLog kosong
         // buat pasangan ini secara definisi (kalau dia PUNYA log, harusnya
         // udah ke-cover oleh existingRecordKeys atau jalur InputDailyTab).
-        // Cabang isPast7PM otomatis aktif (dateStr < todayStr selalu true
+        // Cabang isPastCloseHour otomatis aktif (dateStr < todayStr selalu true
         // untuk tanggal-tanggal lampau) → hasilnya selalu "Libur".
         const result = computeAttendanceFromLogs(empId, dateStr, attendanceLog);
         if (result.status === 'Belum Absen' && !result.isDayOff) return;
@@ -670,7 +634,6 @@ export default function App() {
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null });
 
   const [payslipModal, setPayslipModal] = useState({ isOpen: false, data: null, month: '' });
-  const [perfShareModal, setPerfShareModal] = useState({ isOpen: false, data: null, rangeLabel: '' });
 
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
@@ -958,7 +921,6 @@ export default function App() {
     additionCategories, setAdditionCategories,
     deductionCategories, setDeductionCategories,
     payslipModal, setPayslipModal,
-    perfShareModal, setPerfShareModal,
 
     // Inventory / HPP / Materials
     availableMaterials,
@@ -1348,35 +1310,5 @@ export default function App() {
       />
 
     </AppContext.Provider>
-  );
-}
-
-function SyncStatusBadge({ status }) {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (status === 'ready') {
-      setVisible(true);
-      const t = setTimeout(() => setVisible(false), 3000);
-      return () => clearTimeout(t);
-    }
-    if (status === 'error') {
-      setVisible(true);
-    }
-  }, [status]);
-
-  if (status === 'idle' || !visible) return null;
-
-  const cfg = status === 'ready'
-    ? { bg: 'bg-emerald-500', text: 'Tersinkronisasi ✓' }
-    : { bg: 'bg-accent-500', text: 'Sync gagal — data lokal' };
-
-  return (
-    <div
-      className={`fixed bottom-4 right-4 z-50 px-3 py-1.5 rounded-full text-white text-xs font-medium shadow-lg transition-opacity duration-500 ${cfg.bg}`}
-      style={{ fontFamily: 'Inter, sans-serif' }}
-    >
-      {cfg.text}
-    </div>
   );
 }
