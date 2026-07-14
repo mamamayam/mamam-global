@@ -123,12 +123,12 @@ export default function Modal({
       >
         {/* Header opsional */}
         {title && (
-          <div className="flex items-center justify-between p-5 pb-0 shrink-0">
-            <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg">{title}</h3>
+          <div className="flex items-start justify-between gap-3 p-5 pb-0 shrink-0">
+            <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg min-w-0 truncate">{title}</h3>
             {onClose && (
               <button
                 onClick={onClose}
-                className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 dark:text-slate-500 hover:bg-accent-100 dark:hover:bg-accent-500/20 hover:text-accent-600 dark:hover:text-accent-400 active:scale-95 transition-all duration-300"
+                className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 dark:text-slate-500 hover:bg-accent-100 dark:hover:bg-accent-500/20 hover:text-accent-600 dark:hover:text-accent-400 active:scale-95 transition-all duration-300 shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
