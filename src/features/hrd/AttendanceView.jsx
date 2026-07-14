@@ -3,7 +3,6 @@ import {
   Fingerprint, Users, Trash2, RotateCcw,
   AlertTriangle, Camera, AlarmClock, X, PenLine,
   History, Search, Calendar, ChevronRight, Filter, ArrowUpDown,
-  UserX,
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { toLocalDateString } from '../../utils/formatters';
@@ -15,20 +14,13 @@ import {
 } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
-import { OVERTIME_THRESHOLD_MINUTES, WORK_END_MINUTES, WORK_START_MINUTES } from './utils/payrollLogic';
+import { OVERTIME_THRESHOLD_MINUTES, WORK_END_MINUTES } from './utils/payrollLogic';
 
 const AUTO_CLOSE_HOUR = 21; // Sistem mendeteksi kelalaian jika sudah lewat jam 21:00
 // Jam pulang otomatis yang akan dicatat — diturunkan dari WORK_END_MINUTES
 // (payrollLogic.js) supaya selalu sama dengan jam tutup kerja yang dipakai
 // untuk hitung Bonus Full Time & lembur, bukan angka 19 yang berdiri sendiri.
 const OUTLET_CLOSE_HOUR = WORK_END_MINUTES / 60;
-// Jam buka toko — diturunkan dari WORK_START_MINUTES (payrollLogic.js),
-// SATU-SATUNYA sumber kebenaran jam masuk resmi (juga dipakai buat hitung
-// telat & lembur pagi). Kalau jam buka toko berubah di masa depan, cukup
-// ubah WORK_START_MINUTES di payrollLogic.js — notice "Belum Clock-in" di
-// bawah otomatis ikut menyesuaikan, gak perlu diutak-atik lagi di sini.
-const OUTLET_OPEN_HOUR = WORK_START_MINUTES / 60;
-
 const LOG_FILTER_TABS = [
   { id: 'hari-ini', label: 'Hari Ini' },
   { id: '7-hari', label: '7 Hari' },
@@ -109,20 +101,6 @@ export default function Attendance() {
   const [sortKey, setSortKey] = useState('date-desc');
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-
-  // Tick ringan (cuma angka, bukan objek Date) yang naik tiap 1 menit — dipakai
-  // SATU-SATUNYA buat notice "Belum Clock-in" di bawah, supaya notice itu
-  // otomatis muncul begitu jam berganti lewat jam buka toko, TANPA perlu
-  // reload halaman. Sengaja gak numpang di watchdog checkAutoClose/
-  // checkShiftCarriedOver di atas (walau sama-sama tiap 1 menit) karena kedua
-  // fungsi itu memang gak butuh trigger re-render — nempelin trigger baru di
-  // situ berisiko bikin keduanya "keikutan" re-render tanpa alasan yang jelas
-  // buat pembaca kode nanti. Satu concern, satu useEffect.
-  const [nowMinuteTick, setNowMinuteTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setNowMinuteTick(t => t + 1), 60000);
-    return () => clearInterval(id);
-  }, []);
 
   // Watchdog gabungan: (1) auto-close jam 21:00 — otomatis insert record
   // keluar pukul 19:00 bagi karyawan yang lupa absen pulang, dan (2) recheck
@@ -282,29 +260,6 @@ export default function Attendance() {
   }), [employees, todayActive]);
 
   const sudahMasukCount = employeeStatuses.filter(s => s.masuk).length;
-
-  // Karyawan yang belum ada log 'masuk' MAUPUN 'libur' hari ini, DAN sekarang
-  // sudah lewat jam buka toko (OUTLET_OPEN_HOUR, diturunkan dari
-  // WORK_START_MINUTES — otomatis ikut menyesuaikan kalau jam buka berubah
-  // di masa depan). Notice ini persisten sepanjang hari (bukan sekali muncul
-  // lalu hilang) selama masih ada karyawan yang statusnya begini — beda dari
-  // auto-libur di jam 19:00 yang final & otomatis, ini cuma REMINDER supaya
-  // admin bisa cek/konfirmasi lebih awal kalau ternyata karyawannya emang
-  // libur, tanpa perlu nunggu sampai jam tutup.
-  const belumClockInEmployees = useMemo(() => {
-    const nowDate = new Date();
-    // Pakai timeStrToMinutes-style comparison (menit-dalam-hari) biar konsisten
-    // dengan cara WORK_START_MINUTES dipakai di tempat lain (payrollLogic.js),
-    // daripada bandingin jam & menit terpisah yang gampang salah tulis.
-    const nowMinutesOfDay = nowDate.getHours() * 60 + nowDate.getMinutes();
-    const isPastOpenHour = nowMinutesOfDay >= WORK_START_MINUTES;
-    if (!isPastOpenHour) return [];
-
-    return employeeStatuses
-      .filter(s => !s.masuk && !s.libur)
-      .map(s => s.employee);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employeeStatuses, nowMinuteTick]);
 
   // Konfirmasi cepat "Libur" dari notice "Belum Clock-in" — beda dari
   // handleAddManualRecord (form edit lengkap, pilih jam & tipe manual): ini
@@ -522,50 +477,6 @@ export default function Attendance() {
         </div>
       )}
 
-      {/* Notice "Belum Clock-in" — persisten sepanjang hari (gak ada tombol
-          tutup) selama masih ada karyawan yang belum ada log 'masuk' atau
-          'libur' hari ini, DAN sekarang sudah lewat jam buka toko. Beda dari
-          card auto-close (merah, di atas): ini reminder, bukan laporan
-          kelalaian yang sudah terjadi — makanya dipakai warna amber, dan
-          card ini otomatis hilang sendiri begitu karyawan clock-in atau
-          jam 19:00 kelewat (jatuh ke auto-libur di atas). */}
-      {belumClockInEmployees.length > 0 && (
-        <div className="mb-4 border-2 border-amber-200 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-950/40 rounded-2xl p-4">
-          <div className="flex items-start gap-3">
-            <div className="shrink-0 w-10 h-10 bg-amber-100 dark:bg-amber-900/60 rounded-full flex items-center justify-center">
-              <UserX className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-amber-700 dark:text-amber-400 text-sm">
-                ⏰ Belum Clock-in — Sudah Lewat Jam Buka ({OUTLET_OPEN_HOUR}:00)
-              </p>
-              <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5 mb-2">
-                Karyawan berikut belum ada catatan absen masuk hari ini. Kalau memang masuk, biarkan saja —
-                notice ini otomatis hilang begitu mereka clock-in sendiri. Kalau memang libur, konfirmasi
-                lewat tombol di samping nama supaya gak perlu menunggu sampai jam {AUTO_CLOSE_HOUR}:00.
-              </p>
-              <div className="flex flex-col gap-1.5">
-                {belumClockInEmployees.map(emp => (
-                  <div
-                    key={emp.id}
-                    className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-500/30 rounded-xl px-3 py-2"
-                  >
-                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{emp.name}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleQuickConfirmLibur(emp.id, emp.name)}
-                    >
-                      Libur
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {!isSupabaseConfigured() && (
         <Alert type="callout" variant="warning" className="mb-4">
           Sinkronisasi cloud belum aktif. Karyawan belum bisa absen lewat HP sendiri
@@ -640,7 +551,18 @@ export default function Attendance() {
                     ) : lastRecord?.type === 'masuk' ? (
                       <Badge variant="success" dot>Masuk</Badge>
                     ) : (
-                      <Badge variant="warning" dot>Belum Absen</Badge>
+                      <>
+                        <Badge variant="warning" dot>Belum Absen</Badge>
+                        {isAdminMode && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleQuickConfirmLibur(employee.id, employee.name)}
+                          >
+                            Libur
+                          </Button>
+                        )}
+                      </>
                     )}
                     {isAdminMode && (
                       <IconButton

@@ -208,16 +208,6 @@ const IncomeView = () => {
             onChange={e => setDateInput(e.target.value)}
           />
 
-          <Input
-            type="number"
-            label="Nominal"
-            icon={<span className="font-bold">Rp</span>}
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            placeholder="0"
-            className="text-lg font-bold"
-          />
-
           <div>
             <div className="flex justify-between items-center mb-1.5">
               <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Kategori</label>
@@ -235,6 +225,16 @@ const IncomeView = () => {
               {incomeCategories.map(c => <option key={c} value={c}>{c}</option>)}
             </Select>
           </div>
+
+          <Input
+            type="number"
+            label="Nominal"
+            icon={<span className="font-bold">Rp</span>}
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            placeholder="0"
+            className="text-lg font-bold"
+          />
 
           <Input
             label="Catatan Tambahan"

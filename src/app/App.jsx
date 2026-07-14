@@ -634,6 +634,7 @@ export default function App() {
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null });
 
   const [payslipModal, setPayslipModal] = useState({ isOpen: false, data: null, month: '' });
+  const [perfShareModal, setPerfShareModal] = useState({ isOpen: false, data: null, rangeLabel: '' });
 
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
@@ -921,6 +922,7 @@ export default function App() {
     additionCategories, setAdditionCategories,
     deductionCategories, setDeductionCategories,
     payslipModal, setPayslipModal,
+    perfShareModal, setPerfShareModal,
 
     // Inventory / HPP / Materials
     availableMaterials,
