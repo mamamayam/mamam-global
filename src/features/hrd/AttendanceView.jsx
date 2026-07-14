@@ -10,7 +10,7 @@ import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/s
 import { isSupabaseConfigured } from '../../storage/syncClient';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 import {
-  Card, Button, PageHeader, EmptyState, Badge, IconButton, Alert, SortModal, BulkSelectBar, Modal, Select,
+  Card, Button, PageHeader, EmptyState, Badge, IconButton, Alert, SortModal, BulkSelectBar, Modal,
 } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
@@ -41,15 +41,6 @@ const TYPE_OPTIONS = [
 
 const TYPE_LABEL = { masuk: 'Masuk', keluar: 'Pulang', bolong: 'Mulai Bolong', masuk_lagi: 'Masuk Lagi', libur: 'Libur' }; // [+] Tambah Libur
 const TYPE_VARIANT = { masuk: 'success', keluar: 'neutral', bolong: 'warning', masuk_lagi: 'success', libur: 'neutral' }; // [+] Tambah Libur
-
-// Opsi jam untuk modal "Tambah Record Manual", per 15 menit sepanjang hari (00.00–23.45).
-// Pakai Select kit alih-alih <input type="time"> supaya tampilannya konsisten dengan
-// field lain (bukan native time picker OS yang gayanya beda-beda tiap device).
-const MANUAL_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, i) => {
-  const h = String(Math.floor(i / 4)).padStart(2, '0');
-  const m = String((i % 4) * 15).padStart(2, '0');
-  return `${h}:${m}`;
-});
 
 const SORT_OPTIONS = [
   { key: 'date-desc', label: 'Terbaru Dulu' },
@@ -850,30 +841,38 @@ export default function Attendance() {
       <Modal
         isOpen={!!editEmployeeId}
         onClose={closeManualModal}
-        title={`Tambah Record Manual — ${editEmployeeName}`}
+        title="Tambah Record Manual"
       >
-        <div className="flex flex-col gap-3">
-          <Select
-            label="Tipe Absen"
-            value={editType}
-            onChange={e => setEditType(e.target.value)}
-          >
-            <option value="masuk">Masuk</option>
-            <option value="bolong">Jam Bolong</option>
-            <option value="masuk_lagi">Masuk Lagi</option>
-            <option value="keluar">Keluar</option>
-            <option value="libur">Libur</option>
-          </Select>
-          <Select
-            label="Jam"
-            value={editTime}
-            onChange={e => setEditTime(e.target.value)}
-          >
-            <option value="" disabled>Pilih jam</option>
-            {MANUAL_TIME_OPTIONS.map(t => (
-              <option key={t} value={t}>{t.replace(':', '.')}</option>
-            ))}
-          </Select>
+        <div className="px-5 pb-5 pt-1 flex flex-col gap-3">
+          <p className="text-sm text-slate-500 dark:text-slate-400 -mt-1 truncate">
+            {editEmployeeName}
+          </p>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Tipe Absen
+            </label>
+            <select
+              value={editType}
+              onChange={e => setEditType(e.target.value)}
+              className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-400"
+            >
+              <option value="masuk">Masuk</option>
+              <option value="bolong">Jam Bolong</option>
+              <option value="masuk_lagi">Masuk Lagi</option>
+              <option value="keluar">Keluar</option>
+              <option value="libur">Libur</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Jam
+            </label>
+            <input
+              type="time" value={editTime}
+              onChange={e => setEditTime(e.target.value)}
+              className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-400"
+            />
+          </div>
           <div className="flex items-center gap-2 justify-end mt-2">
             <Button variant="ghost" size="sm" onClick={closeManualModal}>
               Batal
