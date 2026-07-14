@@ -10,7 +10,7 @@ import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/s
 import { isSupabaseConfigured } from '../../storage/syncClient';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 import {
-  Card, Button, PageHeader, EmptyState, Badge, IconButton, Alert, SortModal, BulkSelectBar,
+  Card, Button, PageHeader, EmptyState, Badge, IconButton, Alert, SortModal, BulkSelectBar, Modal,
 } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
@@ -86,10 +86,17 @@ export default function Attendance() {
     );
   }, [currentShift]);
 
-  // Koreksi manual (Status Hari Ini)
+  // Koreksi manual (Status Hari Ini) — sekarang tampil sebagai popup/modal,
+  // bukan panel inline di bawah baris karyawan. editEmployeeId tetap dipakai
+  // sebagai penanda "modal ini untuk karyawan siapa" sekaligus flag buka/tutup.
   const [editEmployeeId, setEditEmployeeId] = useState(null);
+  const [editEmployeeName, setEditEmployeeName] = useState('');
   const [editType, setEditType] = useState('masuk');
   const [editTime, setEditTime] = useState('');
+
+  // Tab "Status Hari Ini" vs "Riwayat" — dipisah biar gak numpuk dalam satu
+  // scroll panjang.
+  const [activeTab, setActiveTab] = useState('status');
 
   // History section
   const [showHistoryTrash, setShowHistoryTrash] = useState(false);
@@ -342,7 +349,9 @@ export default function Attendance() {
   }, [attendanceLog, showHistoryTrash, dateFilter, customStartDate, customEndDate, typeFilter, empFilter, sortKey, searchTerm]);
 
   const handleDeleteRecord = (id) =>
-    setAttendanceLog(prev => prev.map(r => r.id === id ? markDeleted(r) : r));
+    triggerConfirm('Pindahkan record absen ini ke Recycle Bin?', () => {
+      setAttendanceLog(prev => prev.map(r => r.id === id ? markDeleted(r) : r));
+    });
 
   const handleRestoreRecord = (id) =>
     setAttendanceLog(prev => prev.map(r => r.id === id ? restoreItem(r) : r));
@@ -386,21 +395,26 @@ export default function Attendance() {
     });
   };
 
-  const handleAddManualRecord = (employeeId, employeeName) => {
-    if (!editTime) return;
+  const closeManualModal = () => {
+    setEditEmployeeId(null);
+    setEditEmployeeName('');
+  };
+
+  const handleAddManualRecord = () => {
+    if (!editTime || !editEmployeeId) return;
     const [h, m] = editTime.split(':').map(Number);
     const date = new Date(); date.setHours(h, m, 0, 0);
     setAttendanceLog(prev => [...prev, {
-      id: `MANUAL-${employeeId}-${editType}-${Date.now()}`,
-      employeeId,
-      employeeName,
+      id: `MANUAL-${editEmployeeId}-${editType}-${Date.now()}`,
+      employeeId: editEmployeeId,
+      employeeName: editEmployeeName,
       type: editType,
       date: date.toISOString(),
       dateStr: toLocalDateString(),
       isManual: true,
       deletedAt: null,
     }]);
-    setEditEmployeeId(null);
+    closeManualModal();
   };
 
   const fmtTime = (d) => new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -484,6 +498,24 @@ export default function Attendance() {
         </Alert>
       )}
 
+      <div className="p-2 flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-3 mb-6 overflow-x-auto hide-scrollbar">
+        <Button
+          variant={activeTab === 'status' ? 'primary' : 'secondary'}
+          onClick={() => setActiveTab('status')}
+          className="whitespace-nowrap"
+        >
+          Status Hari Ini
+        </Button>
+        <Button
+          variant={activeTab === 'riwayat' ? 'primary' : 'secondary'}
+          onClick={() => setActiveTab('riwayat')}
+          className="whitespace-nowrap"
+        >
+          Riwayat
+        </Button>
+      </div>
+
+      {activeTab === 'status' && (
       <Card padding="none" className="mb-6 overflow-hidden">
         <div className="p-4 border-b border-slate-100 dark:border-slate-800">
           <h3 className="font-bold text-sm text-slate-700 dark:text-slate-200 flex items-center gap-2">
@@ -569,72 +601,26 @@ export default function Attendance() {
                         variant="neutral" ghost
                         title="Tambah record manual"
                         onClick={() => {
-                          if (editEmployeeId === employee.id) { setEditEmployeeId(null); return; }
                           const d = new Date();
                           setEditTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
                           setEditType('masuk');
                           setEditEmployeeId(employee.id);
+                          setEditEmployeeName(employee.name);
                         }}
                       >
                         <PenLine className="w-4 h-4" />
                       </IconButton>
                     )}
-                    {isAdminMode && lastRecord && (
-                      <IconButton
-                        variant="delete" ghost
-                        title={`Hapus record ${lastRecord.type} terakhir`}
-                        onClick={() => handleDeleteRecord(lastRecord.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </IconButton>
-                    )}
                   </div>
                 </div>
-
-                {isAdminMode && editEmployeeId === employee.id && (
-                  <div className="px-4 pb-4 bg-slate-50 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-800">
-                    <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider pt-3 mb-2">
-                      Tambah Record Manual
-                    </p>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <select
-                        value={editType}
-                        onChange={e => setEditType(e.target.value)}
-                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-accent-400"
-                      >
-                        <option value="masuk">Masuk</option>
-                        <option value="bolong">Jam Bolong</option>
-                        <option value="masuk_lagi">Masuk Lagi</option>
-                        <option value="keluar">Keluar</option>
-                        <option value="libur">Libur</option>
-                      </select>
-                      <input
-                        type="time" value={editTime}
-                        onChange={e => setEditTime(e.target.value)}
-                        className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-accent-400"
-                      />
-                      <button
-                        onClick={() => handleAddManualRecord(employee.id, employee.name)}
-                        disabled={!editTime}
-                        className="text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 disabled:opacity-40 px-3 py-1.5 rounded-xl transition-all duration-300 active:scale-95"
-                      >
-                        Simpan
-                      </button>
-                      <button
-                        onClick={() => setEditEmployeeId(null)}
-                        className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1.5 rounded-xl transition-all duration-300 active:scale-95"
-                      >
-                        Batal
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             ))}
           </div>
         )}
       </Card>
+      )}
 
+      {activeTab === 'riwayat' && (
       <div className="mb-10">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-sm text-slate-700 dark:text-slate-200 flex items-center gap-2">
@@ -850,6 +836,50 @@ export default function Attendance() {
           {filteredLogs.length > 300 ? ' · menampilkan 300 terbaru' : ''}
         </p>
       </div>
+      )}
+
+      <Modal
+        isOpen={!!editEmployeeId}
+        onClose={closeManualModal}
+        title={`Tambah Record Manual — ${editEmployeeName}`}
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Tipe Absen
+            </label>
+            <select
+              value={editType}
+              onChange={e => setEditType(e.target.value)}
+              className="text-sm border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-400"
+            >
+              <option value="masuk">Masuk</option>
+              <option value="bolong">Jam Bolong</option>
+              <option value="masuk_lagi">Masuk Lagi</option>
+              <option value="keluar">Keluar</option>
+              <option value="libur">Libur</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Jam
+            </label>
+            <input
+              type="time" value={editTime}
+              onChange={e => setEditTime(e.target.value)}
+              className="text-sm border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-accent-400"
+            />
+          </div>
+          <div className="flex items-center gap-2 justify-end mt-2">
+            <Button variant="ghost" size="sm" onClick={closeManualModal}>
+              Batal
+            </Button>
+            <Button variant="dark" size="sm" onClick={handleAddManualRecord} disabled={!editTime}>
+              Simpan
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <SortModal
         isOpen={isSortOpen}
