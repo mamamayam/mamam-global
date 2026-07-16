@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react'; // 💡 Ditambahkan useEffect
-import { X, Lock, Key, ShieldAlert } from 'lucide-react';
+import { X, Lock, Key, ShieldAlert, Fingerprint, ShieldCheck } from 'lucide-react';
 import Alert from '../components/ui/Alert';
+import {
+  isBiometricSupported,
+  hasBiometricCredential,
+  registerBiometric,
+  verifyBiometric,
+  clearBiometricCredential,
+} from './useBiometric';
 
 const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
 
@@ -15,11 +22,24 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
   const [successMessage, setSuccessMessage] = useState('');
   const [mode, setMode] = useState('verify'); // 'verify', 'super', 'reset'
 
+  // 💡 Fingerprint state
+  const [bioSupported, setBioSupported] = useState(false);
+  const [bioRegistered, setBioRegistered] = useState(hasBiometricCredential());
+  const [bioBusy, setBioBusy] = useState(false);
+  const [bioOfferAfterPin, setBioOfferAfterPin] = useState(false); // tawarin aktifkan setelah PIN benar
+
+  useEffect(() => {
+    if (!isOpen) return;
+    isBiometricSupported().then(setBioSupported);
+    setBioRegistered(hasBiometricCredential());
+  }, [isOpen]);
+
   const resetModalState = () => {
     setPinInput('');
     setErrorMessage('');
     setSuccessMessage('');
     setMode('verify');
+    setBioOfferAfterPin(false);
   };
 
   const handleClose = () => {
@@ -49,6 +69,15 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
   const handleSubmit = () => {
     if (mode === 'verify') {
       if (pinInput === activePin) {
+        // Kalau fingerprint didukung tapi belum diaktifkan, tawarin dulu
+        // alih-alih langsung nutup modal.
+        if (bioSupported && !bioRegistered) {
+          setPinInput('');
+          setErrorMessage('');
+          setSuccessMessage('PIN Benar!');
+          setBioOfferAfterPin(true);
+          return;
+        }
         onSuccess();
         resetModalState();
         onClose();
@@ -73,6 +102,67 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
       setErrorMessage('');
       setSuccessMessage('PIN berhasil direset! Silakan gunakan PIN baru Anda.');
     }
+  };
+
+  // 💡 Verifikasi via fingerprint — jalur alternatif dari PIN
+  const handleBiometricVerify = async () => {
+    if (bioBusy) return;
+    setBioBusy(true);
+    setErrorMessage('');
+    const { success, error } = await verifyBiometric();
+    setBioBusy(false);
+
+    if (success) {
+      onSuccess();
+      resetModalState();
+      onClose();
+    } else {
+      setErrorMessage(error || 'Verifikasi fingerprint gagal.');
+    }
+  };
+
+  // 💡 Daftarkan fingerprint (dipanggil setelah PIN benar, atau lewat tombol manual)
+  const handleBiometricRegister = async () => {
+    if (bioBusy) return;
+    setBioBusy(true);
+    setErrorMessage('');
+    const { success, error } = await registerBiometric();
+    setBioBusy(false);
+
+    if (success) {
+      setBioRegistered(true);
+      setSuccessMessage('Fingerprint berhasil diaktifkan!');
+      if (typeof triggerAlert === 'function') {
+        triggerAlert('success', 'Fingerprint diaktifkan untuk PIN kasir.');
+      }
+      // Kalau ini dipicu dari alur "PIN benar dulu", langsung lanjut masuk
+      if (bioOfferAfterPin) {
+        setTimeout(() => {
+          onSuccess();
+          resetModalState();
+          onClose();
+        }, 600);
+      }
+    } else {
+      setErrorMessage(error || 'Gagal mengaktifkan fingerprint.');
+      // Kalau lagi di alur setelah-PIN-benar, tetap kasih jalan masuk manual
+      if (bioOfferAfterPin) {
+        setBioOfferAfterPin(false);
+      }
+    }
+  };
+
+  const handleSkipBiometricOffer = () => {
+    setBioOfferAfterPin(false);
+    onSuccess();
+    resetModalState();
+    onClose();
+  };
+
+  const handleDisableBiometric = () => {
+    clearBiometricCredential();
+    setBioRegistered(false);
+    setSuccessMessage('Fingerprint dimatikan di device ini.');
   };
 
   // 💡 Fitur Akses Keyboard Laptop
@@ -107,6 +197,54 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
   // Kondisi render dipindah ke sini agar tidak melanggar aturan Hooks
   if (!isOpen) return null;
 
+  // 💡 Layar tawaran aktifkan fingerprint setelah PIN benar
+  if (bioOfferAfterPin) {
+    return (
+      <div className="fixed inset-0 bg-slate-500/30 dark:bg-slate-800/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="bg-white dark:bg-slate-900 w-full max-w-xs rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-6 animate-in zoom-in-95 duration-250 flex flex-col items-center">
+          <div className="w-full flex justify-between items-center mb-4">
+            <div className="flex items-center gap-2 text-slate-800 dark:text-slate-100">
+              <Fingerprint className="w-4 h-4 text-accent-500 dark:text-accent-400" />
+              <span className="font-bold text-sm">Aktifkan Fingerprint?</span>
+            </div>
+            <button onClick={handleSkipBiometricOffer} className="text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-90 p-1 bg-slate-50 dark:bg-slate-950 rounded-full transition-all duration-300">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {successMessage && (
+            <Alert variant="success" className="w-full mb-2">{successMessage}</Alert>
+          )}
+          {errorMessage && (
+            <Alert className="w-full mb-2">{errorMessage}</Alert>
+          )}
+
+          <div className="w-16 h-16 rounded-full bg-accent-50 dark:bg-accent-500/10 flex items-center justify-center mb-4">
+            <Fingerprint className="w-8 h-8 text-accent-500 dark:text-accent-400" />
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 text-center mb-6">
+            Lain kali buka kasir, kamu bisa pakai sidik jari langsung tanpa ketik PIN.
+          </p>
+
+          <button
+            onClick={handleBiometricRegister}
+            disabled={bioBusy}
+            className="w-full py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white shadow-[0_4px_14px_rgba(var(--color-accent-500),0.35)] hover:-translate-y-0.5 transition-all duration-300 active:scale-[0.98] disabled:opacity-60 disabled:hover:translate-y-0"
+          >
+            {bioBusy ? 'Menunggu Sensor...' : 'Ya, Aktifkan'}
+          </button>
+          <button
+            onClick={handleSkipBiometricOffer}
+            className="w-full mt-3 py-2 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 font-medium transition-colors"
+          >
+            Nanti Saja
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
 <div className="fixed inset-0 bg-slate-500/30 dark:bg-slate-800/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4 animate-in fade-in duration-200">      <div className="bg-white dark:bg-slate-900 w-full max-w-xs rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-6 animate-in zoom-in-95 duration-250 flex flex-col items-center">
 
@@ -134,6 +272,18 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
         {/* Pesan Sukses */}
         {successMessage && !errorMessage && (
           <Alert variant="success" className="mt-2">{successMessage}</Alert>
+        )}
+
+        {/* 💡 Tombol Fingerprint — hanya muncul di mode verify, device support, dan sudah terdaftar */}
+        {mode === 'verify' && bioSupported && bioRegistered && (
+          <button
+            onClick={handleBiometricVerify}
+            disabled={bioBusy}
+            className="w-full mt-3 py-3 rounded-2xl border-2 border-dashed border-accent-300 dark:border-accent-500/40 text-accent-600 dark:text-accent-400 font-bold text-sm flex items-center justify-center gap-2 hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-[0.98] transition-all duration-200 disabled:opacity-60"
+          >
+            <Fingerprint className="w-4 h-4" />
+            {bioBusy ? 'Menunggu Sensor...' : 'Gunakan Fingerprint'}
+          </button>
         )}
 
         {/* Display PIN (Bulatan) */}
@@ -190,20 +340,44 @@ const PinModal = ({ isOpen, onClose, onSuccess, triggerAlert }) => {
           {mode === 'verify' ? 'Konfirmasi PIN' : mode === 'super' ? 'Verifikasi Super PIN' : 'Simpan PIN Baru'}
         </button>
 
-        {/* Tombol Lupa PIN / Batal */}
-        <div className="mt-4 text-center w-full">
+        {/* Tombol Lupa PIN / Batal / Kelola Fingerprint */}
+        <div className="mt-4 text-center w-full flex flex-col gap-2">
           {mode === 'verify' ? (
-            <button
-              onClick={() => {
-                setMode('super');
-                setPinInput('');
-                setErrorMessage('');
-                setSuccessMessage('');
-              }}
-              className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 font-medium underline underline-offset-2 transition-colors"
-            >
-              Lupa PIN?
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  setMode('super');
+                  setPinInput('');
+                  setErrorMessage('');
+                  setSuccessMessage('');
+                }}
+                className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 font-medium underline underline-offset-2 transition-colors"
+              >
+                Lupa PIN?
+              </button>
+
+              {/* 💡 Tombol manual aktifkan/matikan fingerprint */}
+              {bioSupported && !bioRegistered && (
+                <button
+                  onClick={() => {
+                    setSuccessMessage('');
+                    setBioOfferAfterPin(false);
+                    setErrorMessage('Masukkan PIN yang benar dulu untuk mengaktifkan fingerprint.');
+                  }}
+                  className="text-xs text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 font-medium flex items-center justify-center gap-1 transition-colors"
+                >
+                  <Fingerprint className="w-3 h-3" /> Aktifkan Fingerprint
+                </button>
+              )}
+              {bioSupported && bioRegistered && (
+                <button
+                  onClick={handleDisableBiometric}
+                  className="text-xs text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 font-medium flex items-center justify-center gap-1 transition-colors"
+                >
+                  <ShieldCheck className="w-3 h-3" /> Matikan Fingerprint
+                </button>
+              )}
+            </>
           ) : (
             <button
               onClick={() => {
