@@ -4,7 +4,7 @@ import { toLocalDateString } from '../../../utils/formatters';
 import { Card, Button, Input, Select, IconButton, Badge, SortModal } from '../../../components/ui';
 import { applySort } from '../../../utils/sortUtils';
 import { Plus, Edit3, Trash2, Briefcase, ArrowUpDown, ChevronLeft } from 'lucide-react';
-import { EMPLOYEE_STATUS_OPTIONS, getEmployeeStatus, getEmployeeStatusInfo, OVERTIME_RATE_PER_30MIN } from '../utils/payrollLogic';
+import { EMPLOYEE_STATUS_OPTIONS, getEmployeeStatus, getEmployeeStatusInfo, EMPLOYEE_ROLE_OPTIONS, getEmployeeRole, getEmployeeRoleInfo, OVERTIME_RATE_PER_30MIN } from '../utils/payrollLogic';
 
 // Form kosong dipakai di 3 tempat (state awal, reset setelah simpan, tombol
 // "Tambah Karyawan") — disatukan di sini biar gak ada 3 salinan object literal
@@ -13,6 +13,7 @@ const createEmptyEmployeeForm = () => ({
   id: '', name: '', phone: '', address: '',
   hourlyRate: 0, fullTimeBonus: 0, overtimeRate30: OVERTIME_RATE_PER_30MIN,
   startDate: toLocalDateString(), status: 'aktif', resignDate: '',
+  role: 'kasir',
 });
 
 const ManageEmployeesTab = () => {
@@ -23,6 +24,7 @@ const ManageEmployeesTab = () => {
   const [empSortKey, setEmpSortKey] = useState('name-asc');
   const [isEmpSortOpen, setIsEmpSortOpen] = useState(false);
   const [empStatusFilter, setEmpStatusFilter] = useState('semua');
+  const [empRoleFilter, setEmpRoleFilter] = useState('semua');
 
   const handleSaveEmployee = () => {
     if (!empFormData.name || empFormData.hourlyRate <= 0) return triggerAlert('Nama dan Upah per jam harus diisi dengan benar!');
@@ -51,15 +53,18 @@ const ManageEmployeesTab = () => {
   };
 
   const sortedEmployees = useMemo(() => {
-    const filtered = empStatusFilter === 'semua'
+    let filtered = empStatusFilter === 'semua'
       ? employees
       : employees.filter(e => getEmployeeStatus(e) === empStatusFilter);
+    if (empRoleFilter !== 'semua') {
+      filtered = filtered.filter(e => getEmployeeRole(e) === empRoleFilter);
+    }
     return applySort(filtered, empSortKey, {
       name: e => e.name || '',
       rate: e => e.hourlyRate || 0,
       date: e => new Date(e.startDate),
     });
-  }, [employees, empStatusFilter, empSortKey]);
+  }, [employees, empStatusFilter, empRoleFilter, empSortKey]);
 
   const empListSortOptions = [
     { key: 'name-asc', label: 'Nama (A-Z)' },
@@ -85,6 +90,9 @@ const ManageEmployeesTab = () => {
             <Select label="Status Karyawan" variant="muted" value={empFormData.status || 'aktif'} onChange={e => setEmpFormData({ ...empFormData, status: e.target.value })}>
               {EMPLOYEE_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </Select>
+            <Select label="Role" variant="muted" value={empFormData.role || 'kasir'} onChange={e => setEmpFormData({ ...empFormData, role: e.target.value })}>
+              {EMPLOYEE_ROLE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </Select>
             {empFormData.status === 'resign' && (
               <Input type="date" label="Tanggal Resign" variant="muted" value={empFormData.resignDate || ''} onChange={e => setEmpFormData({ ...empFormData, resignDate: e.target.value })} />
             )}
@@ -107,6 +115,10 @@ const ManageEmployeesTab = () => {
                 <option value="semua">Semua Status</option>
                 {EMPLOYEE_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
+              <select value={empRoleFilter} onChange={e => setEmpRoleFilter(e.target.value)} className="flex-1 min-w-0 md:flex-none text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 bg-transparent focus:outline-none focus:ring-2 focus:ring-accent-500/30 transition-all duration-300">
+                <option value="semua">Semua Role</option>
+                {EMPLOYEE_ROLE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
               <button type="button" onClick={() => setIsEmpSortOpen(true)} className="flex-1 min-w-0 md:flex-none flex items-center justify-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 active:scale-95 transition-all duration-300">
                 <ArrowUpDown className="w-3.5 h-3.5" /> Urutkan
               </button>
@@ -120,15 +132,16 @@ const ManageEmployeesTab = () => {
             {sortedEmployees.map(emp => (
               <Card key={emp.id} padding="lg" className="relative group hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
                 <div className="absolute top-4 right-4 flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                  <IconButton variant="edit" ghost onClick={() => { setEmpFormData({ status: 'aktif', resignDate: '', overtimeRate30: OVERTIME_RATE_PER_30MIN, ...emp }); setIsEditingEmp(true); }}><Edit3 className="w-4 h-4" /></IconButton>
+                  <IconButton variant="edit" ghost onClick={() => { setEmpFormData({ status: 'aktif', resignDate: '', overtimeRate30: OVERTIME_RATE_PER_30MIN, role: 'kasir', ...emp }); setIsEditingEmp(true); }}><Edit3 className="w-4 h-4" /></IconButton>
                   <IconButton variant="delete" ghost onClick={() => handleDeleteEmployee(emp.id)}><Trash2 className="w-4 h-4" /></IconButton>
                 </div>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 bg-gradient-to-br from-accent-500 to-accent-600 dark:from-accent-400 dark:to-accent-600 text-white rounded-2xl shadow-[0_4px_12px_rgba(var(--color-accent-500),0.3)] flex items-center justify-center font-heading font-black text-xl">{emp.name.charAt(0).toUpperCase()}</div>
                   <div>
                     <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-base leading-tight pr-10">{emp.name}</h4>
-                    <div className="flex items-center gap-1.5 mt-1">
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                       <Badge size="sm" variant={getEmployeeStatusInfo(getEmployeeStatus(emp)).badgeVariant}>{getEmployeeStatusInfo(getEmployeeStatus(emp)).label}</Badge>
+                      <Badge size="sm" variant={getEmployeeRoleInfo(getEmployeeRole(emp)).badgeVariant}>{getEmployeeRoleInfo(getEmployeeRole(emp)).label}</Badge>
                       {currentShift?.openedByEmployeeId === emp.id && (
                         <Badge size="sm" variant="success">🟢 Sedang Jaga</Badge>
                       )}

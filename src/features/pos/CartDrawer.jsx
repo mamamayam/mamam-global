@@ -16,7 +16,9 @@ import {
   Ticket,
   ChevronRight,
   Users,
-  Pencil
+  Pencil,
+  Eye,
+  XCircle
 } from 'lucide-react';
 
 const CartDrawer = () => {
@@ -31,14 +33,15 @@ const CartDrawer = () => {
 
   // Tambahan: Destructure 'setCustomers' dari appContext
   const { 
-    menus, setCurrentView, savedBills, triggerConfirm, formatRupiah, activeCustomer, 
+    menus, setCurrentView, savedBills, setSavedBills, triggerConfirm, formatRupiah, activeCustomer, 
     customerName, setCustomerName, setSelectedCustomerId,
     customers, setCustomers, orderType, setOrderType, deliveryFee, setDeliveryFee, 
-    customDeliveryFee, setCustomDeliveryFee, updateCartQty, updateCartItemNote, 
+    customDeliveryFee, setCustomDeliveryFee, setDeliveryCourierId, setDeliveryPaidTo, updateCartQty, updateCartItemNote, 
     voucherInputCode, setVoucherInputCode, vouchers, appliedVoucher, setAppliedVoucher, 
     getSubtotal, triggerAlert, pointsToRedeem, setPointsToRedeem, getPointDiscount, 
     manualDiscount, setManualDiscount, getManualDiscountAmount, storeSettings, getDiscount, 
-    getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill 
+    getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill,
+    setReceiptModal
   } = useAppContext();
 
   // Modal pilih/tambah pelanggan — satu-satunya jalur buat set customerName/selectedCustomerId
@@ -56,6 +59,8 @@ const CartDrawer = () => {
     setOrderType('Takeaway'); // sesuaikan kalau default order type bukan ini
     setDeliveryFee(0);
     setCustomDeliveryFee('');
+    setDeliveryCourierId('');
+    setDeliveryPaidTo('kasir');
     setVoucherInputCode('');
     setAppliedVoucher(null);
     setPointsToRedeem(0);
@@ -66,6 +71,48 @@ const CartDrawer = () => {
   const handleClearCustomer = () => {
     setCustomerName('');
     setSelectedCustomerId(null);
+  };
+
+  // ─── BILL TERSIMPAN: Batalkan & Lihat/Cetak ───────────────────────────
+  // Batalkan: hapus permanen dari savedBills (beda dari "Lanjut" yang
+  // narik bill itu balik ke cart aktif). Pakai triggerConfirm yang sudah
+  // ada — modal konfirmasi generik, gak bikin modal baru.
+  const handleCancelBill = (bill) => {
+    triggerConfirm(
+      `Batalkan bill "${bill.customerName}" (${bill.cart.length} item)? Bill ini akan dihapus permanen dan tidak bisa dikembalikan.`,
+      () => {
+        setSavedBills(savedBills.filter(b => b.id !== bill.id));
+        triggerAlert('Bill berhasil dibatalkan.');
+      }
+    );
+  };
+
+  // Lihat + opsi cetak: pakai ReceiptModal yang sudah ada (sama seperti
+  // yang dipakai handleOpenBill), status 'OPEN' bikin modal otomatis
+  // sembunyikan bagian "Bayar/Kembalian" (lihat isOpenBill di
+  // ReceiptModal.jsx) dan tombol cetak tetap muncul seperti biasa.
+  // Bill tersimpan cuma nyimpen `cart` mentah (belum ada subtotal/pajak/
+  // diskon terhitung — itu semua baru dihitung pas checkout beneran),
+  // jadi di sini subtotal dihitung ulang langsung dari cart.
+  const handleViewBill = (bill) => {
+    const subtotal = bill.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    setReceiptModal({
+      isOpen: true,
+      data: {
+        id: bill.id,
+        date: bill.date,
+        orderType: bill.orderType,
+        customerName: bill.customerName,
+        customerId: bill.customerId || null,
+        items: bill.cart,
+        subtotal,
+        total: subtotal,
+        status: 'OPEN',
+        paymentMethod: 'Belum Bayar',
+        isKitchenSlip: true
+      },
+      kembalian: 0
+    });
   };
 
   const handleEditVariant = (cartItem) => {
@@ -124,9 +171,17 @@ const CartDrawer = () => {
                           <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{bill.customerName}</p>
                           <p className="text-[10px] text-slate-500 dark:text-slate-400">{bill.cart.length} Item • {bill.date.toLocaleTimeString('id-ID')}</p>
                         </div>
-                        <button onClick={() => loadSavedBill(bill)} className="px-3 py-1.5 bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 rounded-lg text-xs font-bold hover:bg-accent-200 dark:hover:bg-accent-500/20 transition-colors">
-                          Lanjut
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button onClick={() => handleCancelBill(bill)} title="Batalkan Bill" className="p-1.5 bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-500/25 transition-colors">
+                            <XCircle className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleViewBill(bill)} title="Lihat / Cetak Pesanan" className="p-1.5 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => loadSavedBill(bill)} className="px-3 py-1.5 bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 rounded-lg text-xs font-bold hover:bg-accent-200 dark:hover:bg-accent-500/20 transition-colors">
+                            Lanjut
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

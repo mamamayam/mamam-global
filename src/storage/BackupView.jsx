@@ -562,6 +562,7 @@ const BackupView = ({ onBack }) => {
           salesHistory: 'Riwayat Penjualan', expenses: 'Pengeluaran',
           incomes: 'Pemasukan', employees: 'Karyawan',
           employeeDailyRecords: 'Absensi', shiftHistory: 'Riwayat Shift', customers: 'Pelanggan',
+          cashTransfers: 'Setoran Kurir',
         };
         for (const [key, name] of Object.entries(sheets)) {
           if (data[key]?.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data[key]), name);

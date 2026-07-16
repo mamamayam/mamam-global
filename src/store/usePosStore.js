@@ -47,6 +47,13 @@ export const usePosStore = create(
       orderType: 'Takeaway',
       deliveryFee: 0,
       customDeliveryFee: '',
+      // Khusus orderType 'Delivery': siapa yang antar, dan apakah customer
+      // bayar cash langsung ke kurir (COD) atau sudah lunas di kasir.
+      // 'kasir' = uang masuk laci kasir seperti biasa (default, gak ada
+      // perubahan perilaku). 'kurir' = uang dipegang kurir, ditandai
+      // cashHolder di record order-nya — lihat utils/cashHolders.js
+      deliveryCourierId: '',
+      deliveryPaidTo: 'kasir',
       manualDiscount: { type: 'fixed', value: 0 },
       pointsToRedeem: 0,
 
@@ -124,6 +131,8 @@ export const usePosStore = create(
       setOrderType: (type) => set({ orderType: type }),
       setDeliveryFee: (fee) => set({ deliveryFee: fee }),
       setCustomDeliveryFee: (fee) => set({ customDeliveryFee: fee }),
+      setDeliveryCourierId: (id) => set({ deliveryCourierId: id }),
+      setDeliveryPaidTo: (paidTo) => set({ deliveryPaidTo: paidTo }),
       setManualDiscount: (discount) => set({ manualDiscount: discount }),
       setPointsToRedeem: (points) => set({ pointsToRedeem: points }),
 
@@ -138,6 +147,8 @@ export const usePosStore = create(
         orderType: 'Takeaway',
         deliveryFee: 0,
         customDeliveryFee: '',
+        deliveryCourierId: '',
+        deliveryPaidTo: 'kasir',
         manualDiscount: { type: 'fixed', value: 0 },
         pointsToRedeem: 0,
       }),
@@ -155,6 +166,8 @@ export const usePosStore = create(
         orderType: state.orderType,
         deliveryFee: state.deliveryFee,
         customDeliveryFee: state.customDeliveryFee,
+        deliveryCourierId: state.deliveryCourierId,
+        deliveryPaidTo: state.deliveryPaidTo,
         manualDiscount: state.manualDiscount,
         pointsToRedeem: state.pointsToRedeem,
       }),

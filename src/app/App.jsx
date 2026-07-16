@@ -40,6 +40,7 @@ import {
   Download,
   Warehouse,
   BarChart3,
+  Bike,
   Wifi,
   WifiOff,
 } from 'lucide-react';
@@ -176,6 +177,10 @@ export default function App() {
   const [expenses, setExpenses, l10, setExpensesRemote] = usePersistState('expenses', [], { syncMode: 'transaction', syncReadyPromise });
   const [incomeCategories, setIncomeCategories, l11, setIncomeCategoriesRemote] = usePersistState('incomeCategories', ['Modal Tambahan', 'Pendapatan Lain', 'Titipan Uang'], { syncMode: 'config', syncReadyPromise });
   const [incomes, setIncomes, l12, setIncomesRemote] = usePersistState('incomes', [], { syncMode: 'transaction', syncReadyPromise });
+  // Setoran kurir -> kasir. Ledger TERPISAH dari expenses/incomes (bukan
+  // pemasukan/pengeluaran bisnis, cuma perpindahan kas internal) — lihat
+  // penjelasan lengkap di utils/cashHolders.js
+  const [cashTransfers, setCashTransfers, l25, setCashTransfersRemote] = usePersistState('cashTransfers', [], { syncMode: 'transaction', syncReadyPromise });
 
   // --- SHIFT ---
   const [currentShift, setCurrentShift, l13, setCurrentShiftRemote] = usePersistState('currentShift', null, { syncMode: 'live', syncReadyPromise });
@@ -220,7 +225,7 @@ export default function App() {
   }, [theme]);
 
   // Semua data dari Dexie sudah selesai dimuat?
-  const allDataLoaded = ![l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24].some(Boolean);
+  const allDataLoaded = ![l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19, l20, l21, l22, l23, l24, l25].some(Boolean);
 
   // ── Map setter remote — dipakai oleh realtime callback ──────────────────
   const remoteSetterMap = useRef({});
@@ -238,6 +243,7 @@ export default function App() {
       expenses: setExpensesRemote,
       incomeCategories: setIncomeCategoriesRemote,
       incomes: setIncomesRemote,
+      cashTransfers: setCashTransfersRemote,
       currentShift: setCurrentShiftRemote,
       shiftHistory: setShiftHistoryRemote,
       customers: setCustomersRemote,
@@ -622,6 +628,10 @@ export default function App() {
   const setDeliveryFee = usePosStore((state) => state.setDeliveryFee);
   const customDeliveryFee = usePosStore((state) => state.customDeliveryFee);
   const setCustomDeliveryFee = usePosStore((state) => state.setCustomDeliveryFee);
+  const deliveryCourierId = usePosStore((state) => state.deliveryCourierId);
+  const setDeliveryCourierId = usePosStore((state) => state.setDeliveryCourierId);
+  const deliveryPaidTo = usePosStore((state) => state.deliveryPaidTo);
+  const setDeliveryPaidTo = usePosStore((state) => state.setDeliveryPaidTo);
   const manualDiscount = usePosStore((state) => state.manualDiscount);
   const setManualDiscount = usePosStore((state) => state.setManualDiscount);
   const pointsToRedeem = usePosStore((state) => state.pointsToRedeem);
@@ -809,6 +819,8 @@ export default function App() {
     setOrderType('Takeaway');
     setDeliveryFee(0);
     setCustomDeliveryFee('');
+    setDeliveryCourierId('');
+    setDeliveryPaidTo('kasir');
     setIsCartOpen(false);
   };
 
@@ -908,6 +920,8 @@ export default function App() {
     selectedCustomerId, setSelectedCustomerId,
     orderType, setOrderType,
     deliveryFee, setDeliveryFee,
+    deliveryCourierId, setDeliveryCourierId,
+    deliveryPaidTo, setDeliveryPaidTo,
     customDeliveryFee, setCustomDeliveryFee,
 
     // Customer
@@ -941,6 +955,7 @@ export default function App() {
     claimsHistory, setClaimsHistory,
     expenses, setExpenses,
     incomes, setIncomes,
+    cashTransfers, setCashTransfers,
     reportDateRange, setReportDateRange,
     salesHistory, setSalesHistory,
     shiftHistory, setShiftHistory,
@@ -988,6 +1003,7 @@ export default function App() {
     { id: 'riwayat', icon: History, label: 'Riwayat Pesanan' },
     { id: 'pemasukan', icon: TrendingUp, label: 'Pemasukan' },
     { id: 'pengeluaran', icon: TrendingDown, label: 'Pengeluaran' },
+    { id: 'setoranKurir', icon: Bike, label: 'Setoran Kurir' },
     { id: 'laporan', icon: BarChart3, label: 'Laporan & Profit' },
     { id: 'karyawan', icon: Briefcase, label: 'Manajemen Pegawai' },
     { id: 'menu', icon: List, label: 'Manajemen Menu' },
@@ -1004,7 +1020,7 @@ export default function App() {
   const visibleMenus = isAdminMode
     ? menuItems
     : menuItems.filter(item =>
-      ['dompet', 'absensi', 'riwayat', 'pengeluaran', 'pemasukan', 'menu', 'varian', 'backup'].includes(item.id)
+      ['dompet', 'absensi', 'riwayat', 'pengeluaran', 'pemasukan', 'setoranKurir', 'menu', 'varian', 'backup'].includes(item.id)
     );
 
   useEffect(() => {

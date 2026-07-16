@@ -77,6 +77,28 @@ export function getEmployeeStatusInfo(status) {
   return EMPLOYEE_STATUS_OPTIONS.find(s => s.value === status) || EMPLOYEE_STATUS_OPTIONS[0];
 }
 
+// Role operasional karyawan — dipakai buat nentuin siapa yang bisa jadi
+// "pemegang kas" (cash holder) di modul Pengeluaran/Setoran Kurir.
+// Simple & satu role per karyawan (bukan multi-role) sesuai kebutuhan saat ini.
+export const EMPLOYEE_ROLE_OPTIONS = [
+  { value: 'kasir', label: 'Kasir', badgeVariant: 'info' },
+  { value: 'kurir', label: 'Kurir', badgeVariant: 'warning' },
+];
+
+export function getEmployeeRole(emp) {
+  return emp?.role || 'kasir';
+}
+
+export function getEmployeeRoleInfo(role) {
+  return EMPLOYEE_ROLE_OPTIONS.find(r => r.value === role) || EMPLOYEE_ROLE_OPTIONS[0];
+}
+
+// Dipakai di ExpenseView/CashTransfer buat nge-list karyawan yang bisa jadi
+// pemegang kas kurir. Cuma karyawan aktif yang boleh dipilih.
+export function getActiveCouriers(employees) {
+  return (employees || []).filter(e => getEmployeeRole(e) === 'kurir' && getEmployeeStatus(e) !== 'resign');
+}
+
 export function calculateHoursFromTimes(clockInStr, clockOutStr) {
   const [inHours, inMinutes] = clockInStr.split(':').map(Number);
   const [outHours, outMinutes] = clockOutStr.split(':').map(Number);

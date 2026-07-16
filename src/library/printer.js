@@ -55,17 +55,29 @@ export const getESCPOSData = (data, storeSettings, kembalian, sisaPoin) => {
     const rp = (n) => Number(n).toLocaleString('id-ID');
 
     const isOpenBill = data.status === 'OPEN' || data.status === 'UNPAID';
+    // Slip dapur: dicetak dari tombol "Lihat" di Bill Tersimpan, buat
+    // dikasih fisik ke dapur kalau lagi crowded/gak sempat cek HP. Fokus
+    // ke nama item + qty + catatan; harga/subtotal/poin gak relevan buat
+    // dapur, sama seperti versi layar di ReceiptModal.jsx.
+    const isKitchenSlip = !!data.isKitchenSlip;
 
     lines.push('\x1B\x40'); // Init Printer
 
     // --- HEADER STRUK ---
     lines.push('\x1B\x61\x31'); // Rata Tengah
-    lines.push(`${storeSettings?.storeName || 'Mamam Ayam'}\n`);
-    if (storeSettings?.storeAddress) lines.push(`${storeSettings.storeAddress}\n`);
-    if (storeSettings?.storePhone) lines.push(`WA: ${storeSettings.storePhone}\n`);
+    if (isKitchenSlip) {
+        lines.push('SLIP DAPUR\n');
+    } else {
+        lines.push(`${storeSettings?.storeName || 'Mamam Ayam'}\n`);
+        if (storeSettings?.storeAddress) lines.push(`${storeSettings.storeAddress}\n`);
+        if (storeSettings?.storePhone) lines.push(`WA: ${storeSettings.storePhone}\n`);
+    }
     lines.push('--------------------------------\n');
 
-    if (isOpenBill) {
+    if (isKitchenSlip) {
+        lines.push('*** BELUM DIBAYAR ***\n');
+        lines.push('--------------------------------\n');
+    } else if (isOpenBill) {
         lines.push('*** BILL SEMENTARA ***\n');
         lines.push('--------------------------------\n');
     }
@@ -74,82 +86,97 @@ export const getESCPOSData = (data, storeSettings, kembalian, sisaPoin) => {
     lines.push('\x1B\x61\x30'); // Rata Kiri
     lines.push(justifyBetween(
         new Date(data.date).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }).replace(',', ''),
-        'Kasir: Admin'
+        isKitchenSlip ? '' : 'Kasir: Admin'
     ) + '\n');
     lines.push(justifyBetween(`No: ${data.id}`, data.orderType) + '\n');
 
     if (data.customerName) {
         lines.push(justifyBetween('Pelanggan:', data.customerName) + '\n');
 
-        const pointsUsed = (data.pointDiscount || 0) / 100;
+        if (!isKitchenSlip) {
+            const pointsUsed = (data.pointDiscount || 0) / 100;
 
-        // 2. GUNAKAN 'sisaPoin' YANG BERASAL DARI DATABASE
-        const finalPoin = sisaPoin !== undefined ? sisaPoin : (data.customerPoints || 0);
+            // 2. GUNAKAN 'sisaPoin' YANG BERASAL DARI DATABASE
+            const finalPoin = sisaPoin !== undefined ? sisaPoin : (data.customerPoints || 0);
 
-        lines.push('\x1B\x61\x31'); // Set Rata Tengah
-        lines.push('\x1B\x45\x31'); // Set Bold ON
-        lines.push('\x1B\x21\x10'); // Set Font Double Height
-        lines.push(`\nSISA POIN: ${finalPoin}\n\n`);
-        lines.push('\x1B\x21\x00'); // Reset ukuran Font normal
-        lines.push('\x1B\x45\x30'); // Reset Bold OFF
+            lines.push('\x1B\x61\x31'); // Set Rata Tengah
+            lines.push('\x1B\x45\x31'); // Set Bold ON
+            lines.push('\x1B\x21\x10'); // Set Font Double Height
+            lines.push(`\nSISA POIN: ${finalPoin}\n\n`);
+            lines.push('\x1B\x21\x00'); // Reset ukuran Font normal
+            lines.push('\x1B\x45\x30'); // Reset Bold OFF
 
-        if (pointsUsed > 0) {
-            lines.push(`(Poin Dipakai: ${pointsUsed})\n`);
+            if (pointsUsed > 0) {
+                lines.push(`(Poin Dipakai: ${pointsUsed})\n`);
+            }
+            lines.push('\x1B\x61\x30'); // Set Rata Kiri kembali
         }
-        lines.push('\x1B\x61\x30'); // Set Rata Kiri kembali
     }
 
     lines.push('--------------------------------\n');
 
     // --- DAFTAR BARANG ---
     data.items.forEach(item => {
-        lines.push(`${item.name}\n`);
+        if (isKitchenSlip) {
+            lines.push('\x1B\x45\x31'); // Bold ON — item lebih jelas kebaca dari dapur
+            lines.push(`${item.qty}x ${item.name}\n`);
+            lines.push('\x1B\x45\x30'); // Bold OFF
+        } else {
+            lines.push(`${item.name}\n`);
+        }
         if (item.variantName) lines.push(`  - ${item.variantName}\n`);
         if (item.note) lines.push(`  * ${item.note}\n`);
 
-        const qtyPrice = `  ${item.qty} x ${rp(item.price)}`;
-        const totalItem = rp(item.price * item.qty);
-        lines.push(justifyBetween(qtyPrice, totalItem) + '\n');
+        if (!isKitchenSlip) {
+            const qtyPrice = `  ${item.qty} x ${rp(item.price)}`;
+            const totalItem = rp(item.price * item.qty);
+            lines.push(justifyBetween(qtyPrice, totalItem) + '\n');
+        }
     });
 
     lines.push('--------------------------------\n');
 
-    // --- TOTALAN ---
-    lines.push(justifyBetween('Subtotal', rp(data.subtotal)) + '\n');
-    if (data.discount > 0) lines.push(justifyBetween('Diskon Vcr', '-' + rp(data.discount)) + '\n');
-    if (data.pointDiscount > 0) lines.push(justifyBetween('Potong Poin', '-' + rp(data.pointDiscount)) + '\n');
-    if (data.manualDiscountAmount > 0) lines.push(justifyBetween('Diskon Man', '-' + rp(data.manualDiscountAmount)) + '\n');
-    if (data.taxAmount > 0) lines.push(justifyBetween('Pajak', rp(data.taxAmount)) + '\n');
-    if (data.serviceAmount > 0) lines.push(justifyBetween('Service', rp(data.serviceAmount)) + '\n');
-    if (data.deliveryFee > 0) lines.push(justifyBetween('Ongkir', rp(data.deliveryFee)) + '\n');
+    if (!isKitchenSlip) {
+        // --- TOTALAN ---
+        lines.push(justifyBetween('Subtotal', rp(data.subtotal)) + '\n');
+        if (data.discount > 0) lines.push(justifyBetween('Diskon Vcr', '-' + rp(data.discount)) + '\n');
+        if (data.pointDiscount > 0) lines.push(justifyBetween('Potong Poin', '-' + rp(data.pointDiscount)) + '\n');
+        if (data.manualDiscountAmount > 0) lines.push(justifyBetween('Diskon Man', '-' + rp(data.manualDiscountAmount)) + '\n');
+        if (data.taxAmount > 0) lines.push(justifyBetween('Pajak', rp(data.taxAmount)) + '\n');
+        if (data.serviceAmount > 0) lines.push(justifyBetween('Service', rp(data.serviceAmount)) + '\n');
+        if (data.deliveryFee > 0) lines.push(justifyBetween('Ongkir', rp(data.deliveryFee)) + '\n');
 
-    lines.push('--------------------------------\n');
+        lines.push('--------------------------------\n');
 
-    // --- PEMBAYARAN ---
-    lines.push(justifyBetween('TOTAL TAGIHAN', rp(data.total)) + '\n');
+        // --- PEMBAYARAN ---
+        lines.push(justifyBetween('TOTAL TAGIHAN', rp(data.total)) + '\n');
 
-    if (!isOpenBill) {
-        if (data.paymentMethod === 'Split Payment') {
-            data.splitDetails.forEach(p => {
-                lines.push(justifyBetween(`Bayar (${p.method})`, rp(p.amount)) + '\n');
-            });
+        if (!isOpenBill) {
+            if (data.paymentMethod === 'Split Payment') {
+                data.splitDetails.forEach(p => {
+                    lines.push(justifyBetween(`Bayar (${p.method})`, rp(p.amount)) + '\n');
+                });
+            } else {
+                const uangDiterima = data.total + (kembalian || 0);
+                lines.push(justifyBetween(`Bayar (${data.paymentMethod})`, rp(uangDiterima)) + '\n');
+            }
+
+            if (kembalian > 0) lines.push(justifyBetween('Kembali', rp(kembalian)) + '\n');
         } else {
-            const uangDiterima = data.total + (kembalian || 0);
-            lines.push(justifyBetween(`Bayar (${data.paymentMethod})`, rp(uangDiterima)) + '\n');
+            lines.push('\n');
+            lines.push('\x1B\x61\x31'); // Rata Tengah
+            lines.push('[ B E L U M   L U N A S ]\n');
         }
 
-        if (kembalian > 0) lines.push(justifyBetween('Kembali', rp(kembalian)) + '\n');
-    } else {
-        lines.push('\n');
-        lines.push('\x1B\x61\x31'); // Rata Tengah
-        lines.push('[ B E L U M   L U N A S ]\n');
+        lines.push('--------------------------------\n');
     }
-
-    lines.push('--------------------------------\n');
 
     // --- FOOTER ---
     lines.push('\x1B\x61\x31'); // Rata Tengah
-    if (isOpenBill) {
+    if (isKitchenSlip) {
+        const totalQty = data.items.reduce((sum, item) => sum + item.qty, 0);
+        lines.push(`Total ${totalQty} item - belum dibayar\n\n`);
+    } else if (isOpenBill) {
         lines.push(`Silakan bawa struk ini\n`);
         lines.push(`ke kasir untuk pembayaran\n\n`);
     } else {
@@ -157,11 +184,13 @@ export const getESCPOSData = (data, storeSettings, kembalian, sisaPoin) => {
         lines.push('Selamat Menikmati Hidangan Kami\n\n');
     }
 
-    lines.push('--------------------------------\n');
-    lines.push('Ketentuan Penukaran Poin:\n');
-    lines.push('1 Poin = 100 Rupiah\n');
-    lines.push('Setiap pembelian 10.000 dan\n');
-    lines.push('kelipatannya mendapat 1 Poin\n');
+    if (!isKitchenSlip) {
+        lines.push('--------------------------------\n');
+        lines.push('Ketentuan Penukaran Poin:\n');
+        lines.push('1 Poin = 100 Rupiah\n');
+        lines.push('Setiap pembelian 10.000 dan\n');
+        lines.push('kelipatannya mendapat 1 Poin\n');
+    }
     lines.push('--------------------------------\n\n\n\n');
 
     return lines.join('');

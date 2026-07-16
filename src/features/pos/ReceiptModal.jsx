@@ -18,6 +18,13 @@ const ReceiptModal = () => {
     const { data, kembalian } = receiptModal;
 
     const isOpenBill = data.status === 'OPEN' || data.status === 'UNPAID';
+    // Slip dapur: dibuka lewat tombol "Lihat" di Bill Tersimpan (CartDrawer),
+    // buat orang dapur ngecek pesanan yang udah diinput kasir tapi belum
+    // bayar. Beda tujuan dari struk customer — dapur cuma butuh nama item,
+    // qty, varian, & catatan; harga/subtotal/total gak relevan dan cuma
+    // bikin ramai tampilan. Tombol Cetak tetap ada (opsi kalau dapur lagi
+    // gak pegang HP, kasir cetak lalu kasih fisik ke dapur).
+    const isKitchenSlip = !!data.isKitchenSlip;
 
     // Fix: prioritaskan customerId (reliable, ID-based). Fallback nama cuma
     // buat struk/order lama yang dibuat sebelum field customerId ada —
@@ -113,7 +120,7 @@ const ReceiptModal = () => {
 
                 <div id="receipt-content" className="w-[300px] bg-white dark:bg-slate-900 p-4 font-mono text-[11px] leading-tight text-black dark:text-white mx-auto relative">
 
-                    {isOpenBill && (
+                    {(isOpenBill || isKitchenSlip) && (
                         <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none overflow-hidden">
                             <div className="border-4 border-gray-300 dark:border-slate-600 text-gray-300 dark:text-slate-600 text-3xl font-black uppercase tracking-widest p-2 rotate-[-35deg] opacity-60">
                                 BELUM LUNAS
@@ -123,25 +130,38 @@ const ReceiptModal = () => {
 
                     <div className="relative z-10">
                         <div className="text-center mb-3">
-                            <div className="font-bold text-lg uppercase tracking-wide">
-                                {storeSettings?.storeName || "Mamam Ayam"}
-                            </div>
-                            {storeSettings?.storeAddress && <div className="text-[10px] mt-1">{storeSettings.storeAddress}</div>}
-                            {storeSettings?.storePhone && <div className="text-[10px]">WA: {storeSettings.storePhone}</div>}
+                            {isKitchenSlip ? (
+                                <div className="font-bold text-lg uppercase tracking-wide">SLIP DAPUR</div>
+                            ) : (
+                                <>
+                                    <div className="font-bold text-lg uppercase tracking-wide">
+                                        {storeSettings?.storeName || "Mamam Ayam"}
+                                    </div>
+                                    {storeSettings?.storeAddress && <div className="text-[10px] mt-1">{storeSettings.storeAddress}</div>}
+                                    {storeSettings?.storePhone && <div className="text-[10px]">WA: {storeSettings.storePhone}</div>}
+                                </>
+                            )}
                         </div>
 
                         <div className="text-center font-bold mb-2 pb-2 border-b border-dashed border-gray-500 dark:border-slate-400">
-                            {isOpenBill ? '*** BILL SEMENTARA ***' : '*** LUNAS ***'}
+                            {isKitchenSlip ? '*** BELUM DIBAYAR ***' : (isOpenBill ? '*** BILL SEMENTARA ***' : '*** LUNAS ***')}
                         </div>
 
                         <div className="flex justify-between mb-1">
                             <span>{new Date(data.date).toLocaleString("id-ID", { dateStyle: 'short', timeStyle: 'short' }).replace(',', '')}</span>
-                            <span>Kasir: Admin</span>
+                            {!isKitchenSlip && <span>Kasir: Admin</span>}
                         </div>
                         <div className="flex justify-between mb-1">
                             <span>No: {data.id}</span>
                             <span>{data.orderType}</span>
                         </div>
+
+                        {data.cashHolder?.type === 'kurir' && (
+                            <div className="flex justify-between mb-1 font-bold">
+                                <span>COD via:</span>
+                                <span>{data.cashHolder.employeeName}</span>
+                            </div>
+                        )}
 
                         {data.customerName && (
                             <>
@@ -150,17 +170,19 @@ const ReceiptModal = () => {
                                     <span>{data.customerName}</span>
                                 </div>
 
-                                <div className="text-center my-3 py-2 border-y border-dashed border-gray-500 dark:border-slate-400">
-                                    <div className="text-[10px] font-bold text-gray-600 dark:text-gray-300">SISA POIN ANDA</div>
-                                    <div className="text-2xl font-black text-black dark:text-white">
-                                        {sisaPoin}
-                                    </div>
-                                    {pointsUsed > 0 && (
-                                        <div className="text-[9px] text-gray-500 dark:text-slate-400 mt-1">
-                                            (Poin dipakai transaksi ini: {pointsUsed})
+                                {!isKitchenSlip && (
+                                    <div className="text-center my-3 py-2 border-y border-dashed border-gray-500 dark:border-slate-400">
+                                        <div className="text-[10px] font-bold text-gray-600 dark:text-gray-300">SISA POIN ANDA</div>
+                                        <div className="text-2xl font-black text-black dark:text-white">
+                                            {sisaPoin}
                                         </div>
-                                    )}
-                                </div>
+                                        {pointsUsed > 0 && (
+                                            <div className="text-[9px] text-gray-500 dark:text-slate-400 mt-1">
+                                                (Poin dipakai transaksi ini: {pointsUsed})
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </>
                         )}
 
@@ -169,17 +191,21 @@ const ReceiptModal = () => {
                         <div className="mb-2">
                             {data.items.map((item, idx) => (
                                 <div key={idx} className="mb-2">
-                                    <div className="font-bold">{item.name}</div>
+                                    <div className="font-bold">{isKitchenSlip ? `${item.qty}x ${item.name}` : item.name}</div>
                                     {item.variantName && <div className="pl-2 text-[10px] text-gray-700 dark:text-slate-200">- {item.variantName}</div>}
-                                    {item.note && <div className="pl-2 text-[10px] text-gray-700 dark:text-slate-200">* {item.note}</div>}
-                                    <div className="flex justify-between pl-2 mt-0.5">
-                                        <span>{item.qty} x {formatRupiah(item.price)}</span>
-                                        <span>{formatRupiah(item.price * item.qty)}</span>
-                                    </div>
+                                    {item.note && <div className="pl-2 text-[10px] font-bold text-gray-700 dark:text-slate-200">* {item.note}</div>}
+                                    {!isKitchenSlip && (
+                                        <div className="flex justify-between pl-2 mt-0.5">
+                                            <span>{item.qty} x {formatRupiah(item.price)}</span>
+                                            <span>{formatRupiah(item.price * item.qty)}</span>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
 
+                        {!isKitchenSlip && (
+                        <>
                         <div className="border-b border-dashed border-gray-500 dark:border-slate-400 my-2"></div>
 
                         <div className="flex flex-col gap-1 mb-2">
@@ -228,11 +254,17 @@ const ReceiptModal = () => {
                                 </>
                             )}
                         </div>
+                        </>
+                        )}
 
                         <div className="border-b border-dashed border-gray-500 dark:border-slate-400 mb-3"></div>
 
                         <div className="text-center text-[10px]">
-                            {isOpenBill ? (
+                            {isKitchenSlip ? (
+                                <div className="font-bold text-gray-600 dark:text-slate-300">
+                                    Total {data.items.reduce((sum, item) => sum + item.qty, 0)} item — belum dibayar
+                                </div>
+                            ) : isOpenBill ? (
                                 <div className="font-bold text-gray-600 dark:text-slate-300">
                                     Silakan bayar di kasir<br />saat Anda selesai.
                                 </div>
@@ -242,11 +274,13 @@ const ReceiptModal = () => {
                                 </div>
                             )}
 
+                            {!isKitchenSlip && (
                             <div className="mt-4 pt-3 border-t border-dotted border-gray-500 dark:border-slate-400 text-[9px] leading-relaxed text-gray-600 dark:text-slate-300">
                                 <strong>Ketentuan Penukaran Poin:</strong><br />
                                 1 Poin = 100 Rupiah<br />
                                 Setiap pembelian 10.000 dan kelipatannya mendapatkan 1 Poin
                             </div>
+                            )}
                         </div>
                     </div>
                 </div>

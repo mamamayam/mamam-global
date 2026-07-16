@@ -8,6 +8,8 @@ import { applySort } from '../../utils/sortUtils';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 import { useBulkSelect } from '../../hook/useBulkSelect';
+import { getActiveCouriers } from '../../features/hrd/utils/payrollLogic';
+import { CASH_HOLDER_KASIR, makeCourierCashHolder, getCashHolder, cashHolderLabel } from '../../utils/cashHolders';
 
 const KASBON_CATEGORY = 'Kasbon Karyawan';
 
@@ -30,6 +32,9 @@ const ExpenseView = () => {
   const [dateInput, setDateInput] = useState(toLocalDateString());
   const [paymentMethod, setPaymentMethod] = useState('Tunai');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  // 'kasir' = uang toko/laci kasir (default). employeeId kurir = uang yang
+  // sedang dipegang kurir tsb (belum disetor) — lihat utils/cashHolders.js
+  const [cashHolderId, setCashHolderId] = useState('kasir');
   const [filterMode, setFilterMode] = useState('month');
   const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
   const [filterStartDate, setFilterStartDate] = useState('');
@@ -51,6 +56,8 @@ const ExpenseView = () => {
     }
     return filterMonth === '' || toLocalMonthString(date) === filterMonth;
   };
+
+  const couriers = useMemo(() => getActiveCouriers(employees), [employees]);
 
   const activeTotal = useMemo(() => {
     return activeOnly(expenses)
@@ -75,6 +82,11 @@ const ExpenseView = () => {
       ? (employees.find(e => e.id === selectedEmployeeId)?.name || null)
       : null;
 
+    // Resolve "siapa yang pegang uangnya" -> object cashHolder yang dibekukan
+    // (snapshot nama kurir), mengikuti pola snapshot yang sudah ada di kasbon.
+    const courier = cashHolderId !== 'kasir' ? couriers.find(c => c.id === cashHolderId) : null;
+    const cashHolder = courier ? makeCourierCashHolder(courier) : CASH_HOLDER_KASIR;
+
     if (editingId) {
       setExpenses(expenses.map(exp => exp.id === editingId ? {
         ...exp,
@@ -84,11 +96,12 @@ const ExpenseView = () => {
         date: expenseDate,
         paymentMethod,
         employeeId: isKasbon ? selectedEmployeeId : null,
-        employeeName
+        employeeName,
+        cashHolder
       } : exp));
 
       setEditingId(null);
-      setAmount(''); setNote(''); setSelectedEmployeeId('');
+      setAmount(''); setNote(''); setSelectedEmployeeId(''); setCashHolderId('kasir');
       triggerAlert('Pengeluaran berhasil diperbarui!');
     } else {
       const newExp = {
@@ -99,11 +112,12 @@ const ExpenseView = () => {
         date: expenseDate,
         paymentMethod,
         employeeId: isKasbon ? selectedEmployeeId : null,
-        employeeName
+        employeeName,
+        cashHolder
       };
 
       setExpenses([newExp, ...expenses]);
-      setAmount(''); setNote(''); setSelectedEmployeeId('');
+      setAmount(''); setNote(''); setSelectedEmployeeId(''); setCashHolderId('kasir');
       triggerAlert('Pengeluaran berhasil dicatat!');
     }
   };
@@ -116,6 +130,8 @@ const ExpenseView = () => {
     setDateInput(toLocalDateString(exp.date));
     setPaymentMethod(exp.paymentMethod || 'Tunai');
     setSelectedEmployeeId(exp.employeeId || '');
+    const holder = getCashHolder(exp);
+    setCashHolderId(holder.type === 'kurir' ? holder.employeeId : 'kasir');
   };
 
   const handleDeleteExpense = (id) => {
@@ -145,6 +161,7 @@ const ExpenseView = () => {
     setAmount('');
     setNote('');
     setSelectedEmployeeId('');
+    setCashHolderId('kasir');
     setDateInput(toLocalDateString());
   };
 
@@ -290,6 +307,24 @@ const ExpenseView = () => {
             </div>
           </div>
 
+          {paymentMethod === 'Tunai' && couriers.length > 0 && (
+            <div>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">Dibayar Pakai Uang Siapa?</label>
+              <Select
+                value={cashHolderId}
+                onChange={e => setCashHolderId(e.target.value)}
+              >
+                <option value="kasir">Kasir / Toko</option>
+                {couriers.map(c => <option key={c.id} value={c.id}>{c.name} (Kurir)</option>)}
+              </Select>
+              {cashHolderId !== 'kasir' && (
+                <p className="text-[10px] text-accent-600 dark:text-accent-400 mt-1 italic">
+                  *Dicatat pakai cash yang lagi dipegang kurir ini (belum disetor). Cek saldo kurir di tab Setoran Kurir.
+                </p>
+              )}
+            </div>
+          )}
+
           <Button
             onClick={handleAddExpense}
             size="full"
@@ -420,6 +455,7 @@ const ExpenseView = () => {
                           {exp.category}
                           <Badge variant="neutral">{new Date(exp.date).toLocaleDateString('id-ID')}</Badge>
                           {exp.paymentMethod === 'Non-Tunai' && <Badge variant="info">Bank</Badge>}
+                          {getCashHolder(exp).type === 'kurir' && <Badge variant="warning">💰 {cashHolderLabel(exp)}</Badge>}
                         </p>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                           {isKasbon && empName ? `[${empName}] ` : ''}{exp.note || 'Tanpa catatan'}

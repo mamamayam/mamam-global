@@ -2,6 +2,8 @@ import React from "react";
 import { usePosStore } from '../../store/usePosStore';
 import { useAppContext } from '../../context/AppContext';
 import { generateUUID } from '../../utils/formatters';
+import { makeCourierCashHolder } from '../../utils/cashHolders';
+import { getActiveCouriers } from '../../features/hrd/utils/payrollLogic';
 import {
   SplitSquareHorizontal,
   X,
@@ -28,7 +30,8 @@ const PaymentModal = () => {
     customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount,
     manualDiscount, setManualDiscount, getManualDiscountAmount, customerName,
     orderType, getSubtotal, getDiscount, getTaxAmount, getServiceChargeAmount,
-    deliveryFee, salesHistory, setSalesHistory, setCustomerName, setAppliedVoucher,
+    deliveryFee, deliveryCourierId, setDeliveryCourierId, employees, salesHistory, setSalesHistory,
+    setCustomerName, setAppliedVoucher,
     setVoucherInputCode, setPointsToRedeem, setReceiptModal, storeSettings,
     triggerAlert, navigate, resetDraft
   } = useAppContext();
@@ -39,6 +42,7 @@ const PaymentModal = () => {
   const total = getRoundedTotal();
   const roundingAdjustment = getRoundingAdjustment();
   const { isSplitMode, splitPayments, method, amountPaid, status, ojolName, orderNumber } = paymentModal;
+  const couriers = getActiveCouriers(employees);
 
   // Hitungan untuk Single Payment
   const kembalian = method === 'Tunai' && !isSplitMode ? (Number(amountPaid) - total) : 0;
@@ -72,6 +76,15 @@ const PaymentModal = () => {
       setClaimsHistory([{ id: `cl-${generateUUID()}`, customerId: activeCustomer.id, customerName: activeCustomer.name, rewardName: `Potongan Belanja ${formatRupiah(getPointDiscount())}`, pointsUsed: pointsToRedeem, date: new Date() }, ...claimsHistory]);
     }
 
+    // COD ke kurir: begitu kasir pilih kurir di sini (cuma muncul saat
+    // Delivery + bayar Tunai), otomatis dianggap uangnya dipegang kurir
+    // itu, bukan masuk laci kasir. Ditandai cashHolder di record order-nya
+    // sendiri (bukan bikin record income terpisah — lihat penjelasan
+    // lengkap di utils/cashHolders.js). Snapshot nama kurir dibekukan sama
+    // seperti pola snapshot lain di codebase.
+    const isCourierCOD = orderType === 'Delivery' && method === 'Tunai' && !!deliveryCourierId;
+    const courier = isCourierCOD ? (employees || []).find(e => e.id === deliveryCourierId) : null;
+
     const newOrder = {
       id: `ORD-${generateUUID().split('-')[0].toUpperCase()}`, date: new Date(), customerName: customerName || 'Tanpa Nama', customerId: activeCustomer?.id || null, orderType, items: [...cart],
       subtotal: getSubtotal(), discount: getDiscount(), pointDiscount: getPointDiscount(),
@@ -84,7 +97,9 @@ const PaymentModal = () => {
       ojolName: method === 'Ojol' ? ojolName : null,
       orderNumber: method === 'Ojol' ? orderNumber : null,
       splitDetails: isSplitMode ? splitPayments : [],
-      hppTotal: cart.reduce((sum, item) => sum + (item.hpp * item.qty), 0)
+      hppTotal: cart.reduce((sum, item) => sum + (item.hpp * item.qty), 0),
+      courierId: isCourierCOD ? deliveryCourierId : null,
+      cashHolder: courier ? makeCourierCashHolder(courier) : undefined,
     };
 
     // 2. PROSES PENAMBAHAN POIN BARU (BERLAKU UNTUK SINGLE & SPLIT)
@@ -236,6 +251,25 @@ const PaymentModal = () => {
                     <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Kembalian</p>
                     <p className={`text-2xl font-black ${kembalian >= 0 ? 'text-green-500 dark:text-green-400' : 'text-accent-500 dark:text-accent-400'}`}>{kembalian >= 0 ? formatRupiah(kembalian) : 'Uang Kurang'}</p>
                   </div>
+
+                  {orderType === 'Delivery' && couriers.length > 0 && (
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">Diterima Kurir? (opsional)</label>
+                      <select
+                        value={deliveryCourierId}
+                        onChange={(e) => setDeliveryCourierId(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-accent-500 dark:focus:border-accent-500 transition-colors"
+                      >
+                        <option value="">Tidak — Masuk Kasir</option>
+                        {couriers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      {deliveryCourierId && (
+                        <p className="text-[10px] text-accent-600 dark:text-accent-400 mt-1.5 italic">
+                          *Uang gak masuk laci kasir, dicatat sebagai dipegang kurir ini. Cek saldo di tab Setoran Kurir.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
