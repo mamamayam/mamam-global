@@ -1,150 +1,112 @@
 // ============================================================================
-// useBiometric — WebAuthn helper buat fingerprint pengganti PIN kasir
+// useBiometric — fingerprint/FaceID pengganti PIN kasir
 // ============================================================================
-// Kenapa WebAuthn (bukan plugin native)?
-// - Jalan di browser/PWA DAN di APK Capacitor (WebView Android modern sudah
-//   support platform authenticator), tanpa nambah dependency Capacitor baru.
-// - Private key gak pernah keluar dari secure hardware HP (fingerprint sensor).
-//   Yang disimpan di localStorage cuma credentialId (public, gak sensitif).
-// - Kalau device/browser gak support, semua fungsi di sini otomatis
-//   mengembalikan `unsupported` — PinModal tinggal sembunyikan tombolnya.
+// Pakai @aparajita/capacitor-biometric-auth: plugin native Capacitor 8 yang
+// akses BiometricPrompt Android / LocalAuthentication iOS langsung — BUKAN
+// WebAuthn browser API. Ini penting karena WebAuthn di WebView Android
+// (yang dipakai APK Capacitor) sering ditolak/gak lengkap kecuali di-setup
+// Digital Asset Links; plugin native ini gak punya masalah itu.
 //
-// PENTING: WebAuthn butuh secure context (HTTPS, atau localhost pas dev).
-// Kalau app dibuka lewat http:// biasa (bukan localhost), browser akan
-// menolak — itu bukan bug, itu batasan browser.
+// Di web (browser/PWA biasa), plugin ini otomatis pakai simulator built-in
+// (lihat dokumentasinya) — jadi kode yang sama jalan di dua-duanya tanpa
+// cabang if/else platform.
+//
+// Beda penting dari WebAuthn: plugin ini TIDAK menyimpan "credential" —
+// dia cuma verifikasi "orang yang pegang HP ini adalah pemilik sah device"
+// lewat sensor, mirip kayak unlock HP. Makanya status "sudah aktif belum"
+// kita simpan sendiri sebagai flag boolean di localStorage.
 // ============================================================================
 
-const STORAGE_KEY = 'mamam_pin_biometric_credential';
+import { BiometricAuth } from '@aparajita/capacitor-biometric-auth';
 
-// Ganti sesuai domain app kamu kalau perlu (dipakai WebAuthn buat scoping)
-const RP_NAME = 'Mamam Ayam';
-
-function bufToBase64(buf) {
-  const bytes = new Uint8Array(buf);
-  let str = '';
-  for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
-  return btoa(str);
-}
-
-function base64ToBuf(base64) {
-  const str = atob(base64);
-  const bytes = new Uint8Array(str.length);
-  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i);
-  return bytes.buffer;
-}
-
-function randomChallenge() {
-  return crypto.getRandomValues(new Uint8Array(32));
-}
+const ENABLED_FLAG_KEY = 'mamam_pin_biometric_enabled';
 
 /**
- * Cek apakah device/browser ini support fingerprint/FaceID (platform authenticator).
- * Async karena beberapa browser butuh cek availability ke OS.
+ * Cek apakah device ini punya sensor fingerprint/FaceID yang aktif & terdaftar.
+ * Return boolean.
  */
 export async function isBiometricSupported() {
-  if (typeof window === 'undefined') return false;
-  if (!window.PublicKeyCredential) return false;
-  if (!navigator.credentials || !navigator.credentials.create) return false;
-
   try {
-    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-    return Boolean(available);
+    const result = await BiometricAuth.checkBiometry();
+    return Boolean(result.isAvailable);
   } catch {
     return false;
   }
 }
 
-/** Apakah kasir di device ini sudah pernah setup fingerprint. */
+/** Apakah kasir di device ini sudah mengaktifkan fingerprint untuk PIN. */
 export function hasBiometricCredential() {
-  return Boolean(localStorage.getItem(STORAGE_KEY));
+  return localStorage.getItem(ENABLED_FLAG_KEY) === '1';
 }
 
-/** Hapus credential fingerprint dari device ini (mis. tombol "Matikan Fingerprint"). */
+/** Matikan fingerprint untuk PIN kasir di device ini. */
 export function clearBiometricCredential() {
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(ENABLED_FLAG_KEY);
 }
 
 /**
- * Daftarkan fingerprint baru di device ini. Panggil ini SETELAH kasir
- * berhasil verifikasi PIN biasa (jadi fingerprint cuma bisa didaftarkan
- * oleh orang yang sudah tau PIN yang aktif).
+ * Aktifkan fingerprint di device ini. Panggil ini SETELAH kasir berhasil
+ * verifikasi PIN biasa (jadi fingerprint cuma bisa diaktifkan oleh orang
+ * yang sudah tau PIN yang aktif). Sensor akan diminta sekali sebagai
+ * konfirmasi sebelum flag diaktifkan.
  * Return { success, error }.
  */
 export async function registerBiometric() {
   try {
-    const supported = await isBiometricSupported();
-    if (!supported) {
-      return { success: false, error: 'Device ini tidak mendukung fingerprint/FaceID.' };
-    }
-
-    const userId = crypto.getRandomValues(new Uint8Array(16));
-
-    const credential = await navigator.credentials.create({
-      publicKey: {
-        challenge: randomChallenge(),
-        rp: { name: RP_NAME },
-        user: {
-          id: userId,
-          name: 'kasir-pin',
-          displayName: 'PIN Kasir',
-        },
-        pubKeyCredParams: [
-          { type: 'public-key', alg: -7 },   // ES256
-          { type: 'public-key', alg: -257 }, // RS256
-        ],
-        authenticatorSelection: {
-          authenticatorAttachment: 'platform', // wajib sensor built-in (fingerprint/FaceID), bukan security key USB
-          userVerification: 'required',
-          residentKey: 'preferred',
-        },
-        timeout: 60000,
-        attestation: 'none',
-      },
+    await BiometricAuth.authenticate({
+      reason: 'Aktifkan fingerprint untuk PIN kasir',
+      cancelTitle: 'Batal',
+      androidTitle: 'Aktifkan Fingerprint',
+      androidSubtitle: 'Konfirmasi sidik jari untuk mengaktifkan',
+      allowDeviceCredential: false,
     });
 
-    if (!credential) {
-      return { success: false, error: 'Pendaftaran fingerprint dibatalkan.' };
-    }
-
-    localStorage.setItem(STORAGE_KEY, bufToBase64(credential.rawId));
+    localStorage.setItem(ENABLED_FLAG_KEY, '1');
     return { success: true, error: null };
   } catch (err) {
-    // Termasuk kasus user cancel prompt fingerprint
-    return { success: false, error: err?.message || 'Gagal mendaftarkan fingerprint.' };
+    return { success: false, error: mapBiometryError(err) };
   }
 }
 
 /**
- * Minta verifikasi fingerprint. Return { success, error }.
- * success=true artinya sensor mengonfirmasi orang yang sama yang dulu registerBiometric().
+ * Minta verifikasi fingerprint sebagai pengganti PIN.
+ * Return { success, error }.
  */
 export async function verifyBiometric() {
+  if (!hasBiometricCredential()) {
+    return { success: false, error: 'Fingerprint belum diaktifkan di device ini.' };
+  }
+
   try {
-    const storedId = localStorage.getItem(STORAGE_KEY);
-    if (!storedId) {
-      return { success: false, error: 'Fingerprint belum diaktifkan di device ini.' };
-    }
-
-    const assertion = await navigator.credentials.get({
-      publicKey: {
-        challenge: randomChallenge(),
-        allowCredentials: [
-          {
-            type: 'public-key',
-            id: base64ToBuf(storedId),
-          },
-        ],
-        userVerification: 'required',
-        timeout: 60000,
-      },
+    await BiometricAuth.authenticate({
+      reason: 'Verifikasi untuk masuk mode kasir',
+      cancelTitle: 'Batal',
+      androidTitle: 'Verifikasi PIN Kasir',
+      androidSubtitle: 'Gunakan sidik jari yang terdaftar',
+      allowDeviceCredential: false,
     });
-
-    if (!assertion) {
-      return { success: false, error: 'Verifikasi fingerprint dibatalkan.' };
-    }
 
     return { success: true, error: null };
   } catch (err) {
-    return { success: false, error: err?.message || 'Verifikasi fingerprint gagal.' };
+    return { success: false, error: mapBiometryError(err) };
+  }
+}
+
+function mapBiometryError(err) {
+  const code = err?.code;
+
+  switch (code) {
+    case 'userCancel':
+    case 'appCancel':
+    case 'systemCancel':
+      return 'Verifikasi fingerprint dibatalkan.';
+    case 'biometryNotEnrolled':
+      return 'Belum ada sidik jari yang terdaftar di HP ini.';
+    case 'biometryNotAvailable':
+      return 'HP ini tidak mendukung fingerprint/FaceID.';
+    case 'biometryLockout':
+      return 'Sensor fingerprint terkunci sementara, coba lagi nanti atau pakai PIN.';
+    default:
+      return err?.message || 'Verifikasi fingerprint gagal.';
   }
 }
