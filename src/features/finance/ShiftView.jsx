@@ -8,6 +8,8 @@ import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/s
 import { pushTransactionDelete, pushLiveState } from '../../storage/realtimeSync';
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
+import { getActiveCouriers } from '../hrd/utils/payrollLogic';
+import { computeAllCourierBalances } from '../../utils/cashHolders';
 
 // Import komponen UI Design System
 import { 
@@ -28,7 +30,7 @@ const ShiftView = () => {
   const { 
     currentShift, setCurrentShift, shiftHistory, setShiftHistory,
     salesHistory, expenses, incomes, formatRupiah, triggerAlert, triggerConfirm,
-    storeSettings, isAdminMode, employees
+    storeSettings, isAdminMode, employees, cashTransfers, setCashTransfers
   } = useAppContext();
 
   const [initialCashInput, setInitialCashInput] = useState('');
@@ -109,6 +111,51 @@ const ShiftView = () => {
     }
   };
 
+  // Uang Tunai di Kurir — cuma info tambahan biar keliatan total cash yang
+  // masih di luar laci kasir (dipegang kurir dari COD Delivery, belum
+  // disetor). TIDAK mempengaruhi perhitungan expectedCash/Saldo Akhir
+  // dompet di atas — itu tetap murni cash yang ada fisik di laci kasir.
+  // Logic hitungnya sama persis dgn yang dulu dipakai di halaman Setoran
+  // Kurir (lihat utils/cashHolders.js).
+  const couriers = useMemo(() => getActiveCouriers(employees), [employees]);
+  const courierBalances = useMemo(() => computeAllCourierBalances(couriers, {
+    expenses: activeOnly(expenses),
+    salesHistory: activeOnly(salesHistory),
+    cashTransfers: activeOnly(cashTransfers || []),
+  }), [couriers, expenses, salesHistory, cashTransfers]);
+  const totalHeldByCouriers = useMemo(
+    () => courierBalances.reduce((sum, b) => sum + Math.max(b.balance, 0), 0),
+    [courierBalances]
+  );
+
+  // Setor Cepat — jalan pintas dari Dompet biar saldo kurir yang kebawa
+  // nginap dari hari sebelumnya bisa langsung dinolin TANPA reset paksa.
+  // Ini nyatet transaksi cashTransfers penuh sejumlah saldo yang lagi
+  // tercatat (sama persis logicnya kaya "Simpan Setoran" di halaman
+  // Setoran Kurir), BUKAN override manual — supaya uangnya tetap
+  // keauditkan (nyambung ke salesHistory & expenses kurir itu), cuma
+  // gak perlu bolak-balik buka halaman Setoran Kurir tiap mau nutup shift.
+  const handleQuickDeposit = (balanceEntry) => {
+    const { employeeId, employeeName, balance } = balanceEntry;
+    if (balance <= 0) return;
+
+    triggerConfirm(
+      `Catat setoran ${formatRupiah(balance)} dari ${employeeName} ke kasir sekarang?`,
+      () => {
+        const newTransfer = {
+          id: `CTF-${Date.now()}`,
+          employeeId,
+          employeeName,
+          amount: balance,
+          note: 'Setoran cepat dari Dompet',
+          date: new Date(),
+        };
+        setCashTransfers([newTransfer, ...cashTransfers]);
+        triggerAlert(`Setoran ${employeeName} sebesar ${formatRupiah(balance)} berhasil dicatat.`);
+      }
+    );
+  };
+
   // Calculate stats for current shift
   const shiftStats = useMemo(() => {
     if (!currentShift) return null;
@@ -165,6 +212,46 @@ const ShiftView = () => {
     return start.toDateString() !== now.toDateString();
   }, [currentShift]);
 
+  // Reset Harian Saldo Kurir — dipanggil sekali tiap kali BUKA dompet baru.
+  // Ketimbang nyimpen di useEffect (riskan dobel-fire pas multi-device
+  // sync), sengaja ditaruh nempel di aksi user (klik "Buka Dompet") yang
+  // jelas jadi penanda "hari kerja baru dimulai", karena audit fisik kas
+  // dilakukan tiap hari — jadi saldo kurir yang nginap dari SEBELUM hari
+  // ini dianggap lunas (sudah ketutup lewat audit fisik), BUKAN dihapus
+  // diam-diam: tetap dicatat sebagai transaksi `cashTransfers` normal biar
+  // keauditkan & muncul di Riwayat Setoran, cuma otomatis & bukan manual.
+  //
+  // Saldo dari transaksi HARI INI sengaja TIDAK ikut direset (misal COD
+  // baru masuk pas dompet baru dibuka lagi di hari yang sama) — biar gak
+  // nge-reset uang yang belum sempat beneran disetor.
+  const runDailyCourierReset = () => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const priorExpenses = activeOnly(expenses).filter(e => new Date(e.date) < startOfToday);
+    const priorSales = activeOnly(salesHistory).filter(s => new Date(s.date) < startOfToday);
+    const priorTransfers = activeOnly(cashTransfers || []).filter(t => new Date(t.date) < startOfToday);
+
+    const priorBalances = computeAllCourierBalances(couriers, {
+      expenses: priorExpenses,
+      salesHistory: priorSales,
+      cashTransfers: priorTransfers,
+    }).filter(b => b.balance > 0);
+
+    if (priorBalances.length === 0) return;
+
+    const resetTransfers = priorBalances.map(b => ({
+      id: `CTF-${generateUUID().split('-')[0].toUpperCase()}`,
+      employeeId: b.employeeId,
+      employeeName: b.employeeName,
+      amount: b.balance,
+      note: 'Reset Harian (otomatis, saldo nginap sudah ketutup audit fisik)',
+      date: new Date(),
+    }));
+
+    setCashTransfers([...resetTransfers, ...cashTransfers]);
+  };
+
   const handleOpenShift = () => {
     if (!initialCashInput || Number(initialCashInput) < 0) return triggerAlert('Masukkan nominal saldo awal yang valid.');
     const selectedEmployee = employees?.find(e => e.id === openedByEmployeeId);
@@ -175,7 +262,8 @@ const ShiftView = () => {
       openedByEmployeeId: selectedEmployee?.id || null,
       openedByEmployeeName: selectedEmployee?.name || null,
     };
-    setCurrentShift(newShift);    
+    setCurrentShift(newShift);
+    runDailyCourierReset();
     pushLiveState('currentShift', newShift).catch(err => 
       console.warn('Gagal push manual :', err)
     );
@@ -596,9 +684,50 @@ const ShiftView = () => {
                 <span className="font-bold text-accent-600 dark:text-accent-400">-{formatRupiah(shiftStats?.cashExpenses)}</span>
               </div>
               <div className="flex justify-between items-center pt-2">
-                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Saldo Akhir</span>
+                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Saldo Akhir (Laci Kasir)</span>
                 <span className="font-black text-2xl text-slate-800 dark:text-slate-100">{formatRupiah(shiftStats?.expectedCash)}</span>
               </div>
+
+              {/* Ringkasan lokasi cash — dompet kasir vs yang masih di tangan kurir.
+                  "Saldo Akhir" di atas SENGAJA cuma cash fisik laci kasir (dipakai buat
+                  cocokin fisik pas tutup shift), BUKAN total kas bisnis. Total gabungan
+                  (dompet + kurir) baru dijumlah di baris "Total Kas Bisnis" di bawah. */}
+              <div className="mt-2 pt-4 border-t border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Uang Tunai di Dompet</span>
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatRupiah(shiftStats?.expectedCash)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Uang Tunai di Kurir</span>
+                  <span className={`text-sm font-bold ${totalHeldByCouriers > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                    {formatRupiah(totalHeldByCouriers)}
+                  </span>
+                </div>
+                {couriers.length > 0 && totalHeldByCouriers > 0 && (
+                  <div className="pl-2 space-y-1 pt-1">
+                    {courierBalances.filter(b => b.balance > 0).map(b => (
+                      <div key={b.employeeId} className="flex justify-between items-center gap-2">
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">— {b.employeeName}</span>
+                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">{formatRupiah(b.balance)}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickDeposit(b)}
+                          className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 rounded-lg px-1.5 py-0.5 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 active:scale-95 transition-all duration-200 shrink-0"
+                        >
+                          Setor
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex justify-between items-center pt-2 mt-1 border-t border-slate-200 dark:border-slate-800">
+                  <span className="text-xs font-black text-slate-600 dark:text-slate-300">Total Kas Bisnis (Dompet + Kurir)</span>
+                  <span className="text-base font-black text-slate-800 dark:text-slate-100">
+                    {formatRupiah((shiftStats?.expectedCash ?? 0) + totalHeldByCouriers)}
+                  </span>
+                </div>
+              </div>
+
             </div>
           </Card>
 

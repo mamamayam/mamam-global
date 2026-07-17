@@ -40,7 +40,6 @@ import {
   Download,
   Warehouse,
   BarChart3,
-  Bike,
   Wifi,
   WifiOff,
 } from 'lucide-react';
@@ -1003,7 +1002,6 @@ export default function App() {
     { id: 'riwayat', icon: History, label: 'Riwayat Pesanan' },
     { id: 'pemasukan', icon: TrendingUp, label: 'Pemasukan' },
     { id: 'pengeluaran', icon: TrendingDown, label: 'Pengeluaran' },
-    { id: 'setoranKurir', icon: Bike, label: 'Setoran Kurir' },
     { id: 'laporan', icon: BarChart3, label: 'Laporan & Profit' },
     { id: 'karyawan', icon: Briefcase, label: 'Manajemen Pegawai' },
     { id: 'menu', icon: List, label: 'Manajemen Menu' },
@@ -1020,7 +1018,7 @@ export default function App() {
   const visibleMenus = isAdminMode
     ? menuItems
     : menuItems.filter(item =>
-      ['dompet', 'absensi', 'riwayat', 'pengeluaran', 'pemasukan', 'setoranKurir', 'menu', 'varian', 'backup'].includes(item.id)
+      ['dompet', 'absensi', 'riwayat', 'pengeluaran', 'pemasukan', 'menu', 'varian', 'backup'].includes(item.id)
     );
 
   useEffect(() => {

@@ -12,7 +12,6 @@ const VariantManagement = lazy(() => import('../features/menu/VariantMgmt'));
 const HppView           = lazy(() => import('../features/hpp/HppView'));
 const IncomeView        = lazy(() => import('../features/finance/IncomeView'));
 const ExpenseView       = lazy(() => import('../features/finance/ExpenseView'));
-const CashTransferView  = lazy(() => import('../features/finance/CashTransferView'));
 const CustomerView      = lazy(() => import('../features/customer/CustomerView'));
 const ReportsView       = lazy(() => import('../features/reports/ReportsView'));
 const EmployeesView     = lazy(() => import('../features/hrd/EmployeesView'));
@@ -32,7 +31,6 @@ const VIEWS = {
     hpp:         HppView,
     pemasukan:   IncomeView,
     pengeluaran: ExpenseView,
-    setoranKurir: CashTransferView,
     pelanggan:   CustomerView,
     laporan:     ReportsView,
     karyawan:    EmployeesView,

@@ -7,7 +7,7 @@ import { activeOnly, trashedOnly, markDeleted } from '../../../utils/softDelete'
 import { useBulkSelect } from '../../../hook/useBulkSelect';
 import {
   Wallet, Plus, Trash2, Save, History, Clock, Edit3, Settings2,
-  ArrowUpDown, Eye, EyeOff, X, ChevronDown, ChevronRight, User,
+  ArrowUpDown, X, ChevronDown, ChevronRight, User,
 } from 'lucide-react';
 import {
   WORK_START_MINUTES, WORK_END_MINUTES, EARLY_OVERTIME_THRESHOLD_MINUTES, OVERTIME_THRESHOLD_MINUTES,
@@ -605,14 +605,9 @@ const InputDailyTab = () => {
 
           {groupedRecords.map(({ employee, records }) => {
             const empId = employee?.id || records[0]?.employeeId;
-            const isCollapsed = collapsedEmployees.has(empId);
-
-            const empTotalAdd = records.reduce((s, r) => s + (r.additions || []).reduce((ss, a) => ss + (a.amount || 0), 0), 0);
-            const empTotalDed = records.reduce((s, r) => {
-              const manualDed = (r.deductions || []).reduce((ss, d) => ss + (d.amount || 0), 0);
-              const autoKasbon = getDerivedKasbon(r.employeeId, r.dateStr).reduce((ss, d) => ss + (d.amount || 0), 0);
-              return s + manualDed + autoKasbon;
-            }, 0);
+            // Set collapsedEmployees sekarang nyimpen ID yang lagi DIBUKA
+            // (di-expand), jadi default-nya (Set kosong) = semua tertutup.
+            const isCollapsed = !collapsedEmployees.has(empId);
 
             return (
               <div key={empId} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -627,8 +622,6 @@ const InputDailyTab = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2.5 shrink-0">
-                    {empTotalAdd > 0 && <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 px-2 py-0.5 rounded-lg">+{formatRupiah(empTotalAdd)}</span>}
-                    {empTotalDed > 0 && <span className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-md">-{formatRupiah(empTotalDed)}</span>}
                     {isCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                   </div>
                 </button>
@@ -643,45 +636,47 @@ const InputDailyTab = () => {
                       const hasAdj = (rec.additions?.length || 0) + (rec.deductions?.length || 0) + recDerivedKasbon.length > 0;
 
                       return (
-                        <div key={rec.id} className={`px-3 py-2.5 bg-white dark:bg-slate-900 ${selectedIds.has(rec.id) ? 'bg-accent-50/60 dark:bg-accent-500/5' : ''}`}>
-                          <div className="flex items-start justify-between gap-2">
+                        <div key={rec.id} className={`bg-white dark:bg-slate-900 ${selectedIds.has(rec.id) ? 'bg-accent-50/60 dark:bg-accent-500/5' : ''}`}>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedRecordId(isExpanded ? null : rec.id)}
+                            className="w-full flex items-start justify-between gap-2 px-3 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                          >
                             <div className="flex items-start gap-2 flex-1 min-w-0">
                               {isSelecting && (
-                                <input type="checkbox" checked={selectedIds.has(rec.id)} onChange={() => toggleSelectOne(rec.id)} className="w-4 h-4 mt-0.5 rounded accent-[#ea580c] dark:accent-[#f97316] cursor-pointer shrink-0" />
+                                <input type="checkbox" checked={selectedIds.has(rec.id)} onClick={e => e.stopPropagation()} onChange={() => toggleSelectOne(rec.id)} className="w-4 h-4 mt-0.5 rounded accent-[#ea580c] dark:accent-[#f97316] cursor-pointer shrink-0" />
                               )}
                               <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md font-mono">{rec.dateStr}</span>
-                                {rec.isDayOff ? <Badge variant="neutral">Libur</Badge> : (
-                                  <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                                    <Clock className="w-3 h-3" />
-                                    {formatJam(rec.hoursWorked) ? `${formatJam(rec.hoursWorked)} jam` : 'Belum clock-out'}
-                                  </span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md font-mono">{rec.dateStr}</span>
+                                  {rec.isDayOff ? <Badge variant="neutral">Libur</Badge> : (
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      {formatJam(rec.hoursWorked) ? `${formatJam(rec.hoursWorked)} jam` : 'Belum clock-out'}
+                                    </span>
+                                  )}
+                                </div>
+                                {hasAdj && (
+                                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                                    {recTotalAdd > 0 && <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 px-1.5 py-0.5 rounded-lg">+{formatRupiah(recTotalAdd)}</span>}
+                                    {recTotalDed > 0 && <span className="text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 px-1.5 py-0.5 rounded-lg">-{formatRupiah(recTotalDed)}</span>}
+                                  </div>
                                 )}
                               </div>
-                              {hasAdj ? (
-                                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                                  {recTotalAdd > 0 && <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 px-1.5 py-0.5 rounded-lg">+{formatRupiah(recTotalAdd)}</span>}
-                                  {recTotalDed > 0 && <span className="text-[11px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 px-1.5 py-0.5 rounded-lg">-{formatRupiah(recTotalDed)}</span>}
-                                </div>
-                              ) : <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Belum ada rincian tambahan/potongan.</p>}
-                              </div>
                             </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button onClick={() => setExpandedRecordId(isExpanded ? null : rec.id)} className="p-1.5 rounded-md text-blue-400 hover:text-blue-700 hover:bg-blue-50 transition-colors">
-                                {isExpanded ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                              </button>
+                            <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                               {!showTrash && (
                                 <IconButton variant="edit" onClick={() => handleOpenEdit(rec)} title="Edit Tambahan/Potongan"><Edit3 className="w-3.5 h-3.5" /></IconButton>
                               )}
                               <IconButton variant="delete" onClick={() => handleDeleteRecord(rec)} title={showTrash ? "Hapus Permanen" : "Hapus ke Recycle Bin"}>
                                 <Trash2 className="w-3.5 h-3.5" />
                               </IconButton>
+                              {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
                             </div>
-                          </div>
+                          </button>
 
                           {isExpanded && (
-                            <div className="mt-2.5 pt-2.5 border-t border-slate-100 animate-in fade-in duration-200">
+                            <div className="px-3 pb-2.5 pt-2.5 border-t border-slate-100 animate-in fade-in duration-200">
                               {rec.isDayOff ? <p className="text-xs text-slate-400 text-center py-2">Tidak ada data absensi (Libur).</p> : (
                                 <>
                                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">

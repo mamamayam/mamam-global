@@ -428,6 +428,15 @@ export function buildPayslipRows(data) {
       items.push({ desc: d.category + (d.note ? ` (${d.note})` : ''), in: 0, out: d.amount });
     });
 
+    // Tanggal libur yang gak punya tambahan/potongan apa pun bakal punya
+    // items kosong — kalau dibiarkan, baris tanggal itu jadi HILANG total
+    // dari tabel payslip (karena rendering-nya nge-loop lewat items).
+    // Supaya tanggal liburnya tetap kelihatan di slip gaji, kasih 1 baris
+    // keterangan "Libur" tanpa nominal.
+    if (items.length === 0 && rec.isDayOff) {
+      items.push({ desc: 'Libur', in: 0, out: 0 });
+    }
+
     // [+] PERBAIKAN: Mengembalikan format ke bentuk { rec, items }
     return { rec, items }; 
   });

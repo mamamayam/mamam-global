@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { X, History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw, ArrowUpDown, Eye, CreditCard } from 'lucide-react';
 import { formatRupiah } from '../../utils/formatters';
@@ -49,9 +49,6 @@ const HistoryView = () => {
 
     // Mengambil daftar tipe order unik dari data riwayat untuk dropdown
     const uniqueOrderTypes = [...new Set(visibleSalesHistory.map(order => order.orderType).filter(Boolean))];
-
-    // Mengambil daftar metode pembayaran unik dari data riwayat untuk dropdown (Cash, QRIS, Ojol, dll)
-    const uniquePaymentMethods = [...new Set(visibleSalesHistory.map(order => order.paymentMethod).filter(Boolean))];
 
     // Fungsi mengecek apakah tanggal pesanan masuk dalam rentang filter
     const isWithinDateRange = (dateString, filterType) => {
@@ -107,6 +104,35 @@ const HistoryView = () => {
 
         return matchesSearch && matchesDate && matchesOrderType && matchesPaymentMethod;
     });
+
+    // Ringkasan omset per metode pembayaran (Tunai, QRIS, Ojol, dll).
+    // Sengaja TIDAK ikut matchesPaymentMethod, biar kartu ringkasan ini
+    // selalu nunjukin komposisi lengkap semua metode pada periode/tipe
+    // order yang lagi difilter — bukan cuma metode yang lagi kepilih.
+    const paymentBreakdown = useMemo(() => {
+        const historyForBreakdown = visibleSalesHistory.filter(order => {
+            const searchLower = searchTerm.toLowerCase();
+            const matchesSearch =
+                (order.id && String(order.id).toLowerCase().includes(searchLower)) ||
+                (order.orderNumber && String(order.orderNumber).toLowerCase().includes(searchLower)) ||
+                (order.customerName && String(order.customerName).toLowerCase().includes(searchLower));
+            const matchesDate = isWithinDateRange(order.date, dateFilter);
+            const matchesOrderType = orderTypeFilter === 'semua' || order.orderType === orderTypeFilter;
+            return matchesSearch && matchesDate && matchesOrderType;
+        });
+
+        const totals = {};
+        historyForBreakdown.forEach(order => {
+            const key = order.paymentMethod || 'Lainnya';
+            if (!totals[key]) totals[key] = { method: key, total: 0, count: 0 };
+            totals[key].total += order.total || 0;
+            totals[key].count += 1;
+        });
+
+        return Object.values(totals).sort((a, b) => b.total - a.total);
+    }, [visibleSalesHistory, searchTerm, dateFilter, orderTypeFilter, customStartDate, customEndDate]);
+
+    const paymentBreakdownGrandTotal = paymentBreakdown.reduce((sum, p) => sum + p.total, 0);
 
     // Urutkan hasil filter
     const sortedHistory = applySort(filteredHistory, sortKey, {
@@ -244,20 +270,6 @@ const HistoryView = () => {
                         <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
                     </div>
 
-                    <div className="relative w-full sm:w-48">
-                        <select
-                            className="w-full appearance-none pl-4 pr-8 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-300 text-sm bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 cursor-pointer"
-                            value={paymentMethodFilter}
-                            onChange={(e) => setPaymentMethodFilter(e.target.value)}
-                        >
-                            <option value="semua">Semua Metode Bayar</option>
-                            {uniquePaymentMethods.map(method => (
-                                <option key={method} value={method}>{method}</option>
-                            ))}
-                        </select>
-                        <CreditCard className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none" />
-                    </div>
-
                     <button
                         type="button"
                         onClick={() => setIsSortOpen(true)}
@@ -286,6 +298,47 @@ const HistoryView = () => {
                     </div>
                 </Card>
             </div>
+
+            {/* RINGKASAN OMSET PER METODE PEMBAYARAN */}
+            {!showTrash && paymentBreakdown.length > 0 && (
+                <Card className="flex flex-col gap-3 p-4 mb-6">
+                    <div className="flex items-center gap-2">
+                        <CreditCard className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                        <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
+                            Omset per Metode Pembayaran
+                        </h3>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setPaymentMethodFilter('semua')}
+                            className={`flex flex-col items-start gap-0.5 px-3 py-2 rounded-xl border transition-all duration-200 active:scale-[0.98] ${paymentMethodFilter === 'semua'
+                                ? 'bg-slate-800 dark:bg-slate-700 border-slate-800 dark:border-slate-700 text-white'
+                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600'}`}
+                        >
+                            <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">Semua</span>
+                            <span className="text-sm font-black">{formatRupiah(paymentBreakdownGrandTotal)}</span>
+                        </button>
+                        {paymentBreakdown.map(({ method, total, count }) => {
+                            const isActive = paymentMethodFilter === method;
+                            const isOjol = method === 'Ojol';
+                            return (
+                                <button
+                                    key={method}
+                                    type="button"
+                                    onClick={() => setPaymentMethodFilter(isActive ? 'semua' : method)}
+                                    className={`flex flex-col items-start gap-0.5 px-3 py-2 rounded-xl border transition-all duration-200 active:scale-[0.98] ${isActive
+                                        ? (isOjol ? 'bg-accent-600 border-accent-600 text-white' : 'bg-emerald-600 border-emerald-600 text-white')
+                                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600'}`}
+                                >
+                                    <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{method} · {count}x</span>
+                                    <span className="text-sm font-black">{formatRupiah(total)}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </Card>
+            )}
 
             {/* BULK SELECT BAR - MUNCUL SAAT MODE PILIH AKTIF */}
             {isSelecting && sortedHistory.length > 0 && (
