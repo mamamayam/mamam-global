@@ -245,7 +245,7 @@ const CartDrawer = () => {
                       key={type}
                       onClick={() => {
                         setOrderType(type);
-                        if (type !== 'Delivery') { setDeliveryFee(0); setCustomDeliveryFee(''); }
+                        if (type !== 'Delivery') { setDeliveryFee(0); setCustomDeliveryFee(''); setDeliveryCourierId(''); setDeliveryPaidTo('kasir'); }
 
                         // RESET DISKON, POIN, DAN VOUCHER JIKA PILIH OJOL
                         if (type === 'Ojol') {

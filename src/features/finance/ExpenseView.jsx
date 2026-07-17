@@ -90,7 +90,12 @@ const ExpenseView = () => {
 
     // Resolve "siapa yang pegang uangnya" -> object cashHolder yang dibekukan
     // (snapshot nama kurir), mengikuti pola snapshot yang sudah ada di kasbon.
-    const courier = cashHolderId !== 'kasir' ? couriers.find(c => c.id === cashHolderId) : null;
+    // Guard: cashHolder kurir cuma valid untuk paymentMethod 'Tunai'. Kalau
+    // Non-Tunai, paksa 'kasir' walau cashHolderId state kebetulan masih
+    // nyangkut ke kurir (mis. dari sisa state sebelum ganti metode bayar).
+    const courier = (paymentMethod === 'Tunai' && cashHolderId !== 'kasir')
+      ? couriers.find(c => c.id === cashHolderId)
+      : null;
     const cashHolder = courier ? makeCourierCashHolder(courier) : CASH_HOLDER_KASIR;
 
     if (editingId) {
@@ -306,7 +311,7 @@ const ExpenseView = () => {
               <Button
                 size="sm"
                 variant={paymentMethod === 'Non-Tunai' ? 'primary' : 'secondary'}
-                onClick={() => setPaymentMethod('Non-Tunai')}
+                onClick={() => { setPaymentMethod('Non-Tunai'); setCashHolderId('kasir'); }}
               >
                 Non-Tunai
               </Button>
