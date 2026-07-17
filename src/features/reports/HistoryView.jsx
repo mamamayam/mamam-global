@@ -13,7 +13,7 @@ const HistoryView = () => {
 
     // State Filter
     const [searchTerm, setSearchTerm] = useState('');
-    const [dateFilter, setDateFilter] = useState('semua');
+    const [dateFilter, setDateFilter] = useState('hari-ini');
     const [orderTypeFilter, setOrderTypeFilter] = useState('semua');
     const [paymentMethodFilter, setPaymentMethodFilter] = useState('semua');
     const [sortKey, setSortKey] = useState('date-desc');
@@ -28,12 +28,11 @@ const HistoryView = () => {
 
     // Daftar opsi tab periode tanggal
     const filterTabs = [
-        { id: 'semua', label: 'Semua Waktu' },
         { id: 'hari-ini', label: 'Hari Ini' },
-        { id: '7-hari', label: '7 Hari' },
-        { id: '30-hari', label: '30 Hari' },
-        { id: 'bulan-berjalan', label: 'Bulan Ini' },
-        { id: 'kustom', label: 'Pilih Tanggal' }
+        { id: 'kemarin', label: 'Kemarin' },
+        { id: 'bulan-ini', label: 'Bulan Ini' },
+        { id: 'semua', label: 'Semua' },
+        { id: 'tanggal-terpilih', label: 'Tanggal Terpilih' }
     ];
 
     // Daftar opsi urutan buat SortModal
@@ -63,29 +62,31 @@ const HistoryView = () => {
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
         switch (filterType) {
-            case 'hari-ini':
-                return orderDate >= startOfToday;
-            case '7-hari':
-                const sevenDaysAgo = new Date(startOfToday);
-                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-                return orderDate >= sevenDaysAgo;
-            case '30-hari':
-                const thirtyDaysAgo = new Date(startOfToday);
-                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-                return orderDate >= thirtyDaysAgo;
-            case 'bulan-berjalan':
+            case 'hari-ini': {
+                const endOfToday = new Date(startOfToday);
+                endOfToday.setDate(endOfToday.getDate() + 1);
+                return orderDate >= startOfToday && orderDate < endOfToday;
+            }
+            case 'kemarin': {
+                const startOfYesterday = new Date(startOfToday);
+                startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+                return orderDate >= startOfYesterday && orderDate < startOfToday;
+            }
+            case 'bulan-ini':
                 return orderDate.getMonth() === now.getMonth() &&
                     orderDate.getFullYear() === now.getFullYear();
-            case 'kustom':
-                if (!customStartDate || !customEndDate) return true;
+            case 'tanggal-terpilih': {
+                if (!customStartDate) return true;
 
                 const start = new Date(customStartDate);
                 start.setHours(0, 0, 0, 0);
 
-                const end = new Date(customEndDate);
+                // Hybrid: kalau customEndDate kosong, otomatis single-day (= customStartDate)
+                const end = customEndDate ? new Date(customEndDate) : new Date(customStartDate);
                 end.setHours(23, 59, 59, 999);
 
                 return orderDate >= start && orderDate <= end;
+            }
             default:
                 return true;
         }
@@ -204,7 +205,7 @@ const HistoryView = () => {
                     ))}
                 </Card>
 
-                {dateFilter === 'kustom' && (
+                {dateFilter === 'tanggal-terpilih' && (
                     <Card className="flex items-center gap-2 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-fit shadow-sm">
                         <div className="flex flex-col">
                             <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">Dari Tanggal</label>
@@ -217,7 +218,7 @@ const HistoryView = () => {
                         </div>
                         <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 mt-4" />
                         <div className="flex flex-col">
-                            <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">Sampai Tanggal</label>
+                            <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">Sampai Tanggal (opsional)</label>
                             <input
                                 type="date"
                                 value={customEndDate}

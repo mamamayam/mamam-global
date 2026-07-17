@@ -35,8 +35,7 @@ const ExpenseView = () => {
   // 'kasir' = uang toko/laci kasir (default). employeeId kurir = uang yang
   // sedang dipegang kurir tsb (belum disetor) — lihat utils/cashHolders.js
   const [cashHolderId, setCashHolderId] = useState('kasir');
-  const [filterMode, setFilterMode] = useState('month');
-  const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
+  const [filterMode, setFilterMode] = useState('hari-ini');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -46,15 +45,22 @@ const ExpenseView = () => {
   const [isSelecting, setIsSelecting] = useState(false);
 
   const matchesDateFilter = (date) => {
-    if (filterMode === 'all') return true;
-    if (filterMode === 'range') {
-      if (!filterStartDate && !filterEndDate) return true;
-      const d = toLocalDateString(date);
-      if (filterStartDate && d < filterStartDate) return false;
-      if (filterEndDate && d > filterEndDate) return false;
-      return true;
+    const d = toLocalDateString(date);
+    if (filterMode === 'semua') return true;
+    if (filterMode === 'hari-ini') return d === toLocalDateString();
+    if (filterMode === 'kemarin') {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      return d === toLocalDateString(yesterday);
     }
-    return filterMonth === '' || toLocalMonthString(date) === filterMonth;
+    if (filterMode === 'bulan-ini') return toLocalMonthString(date) === toLocalMonthString();
+    if (filterMode === 'tanggal-terpilih') {
+      if (!filterStartDate) return true;
+      // Hybrid: kalau filterEndDate kosong, otomatis single-day (= filterStartDate)
+      const end = filterEndDate || filterStartDate;
+      return d >= filterStartDate && d <= end;
+    }
+    return true;
   };
 
   const couriers = useMemo(() => getActiveCouriers(employees), [employees]);
@@ -63,7 +69,7 @@ const ExpenseView = () => {
     return activeOnly(expenses)
       .filter(inc => matchesDateFilter(inc.date))
       .reduce((s, e) => s + e.amount, 0);
-  }, [expenses, filterMode, filterMonth, filterStartDate, filterEndDate]);
+  }, [expenses, filterMode, filterStartDate, filterEndDate]);
 
   const [editingId, setEditingId] = useState(null);
 
@@ -168,7 +174,7 @@ const ExpenseView = () => {
   const filteredExpenses = useMemo(() => {
     return (showTrash ? trashedOnly(expenses) : activeOnly(expenses))
       .filter(e => matchesDateFilter(e.date));
-  }, [expenses, showTrash, filterMode, filterMonth, filterStartDate, filterEndDate]);
+  }, [expenses, showTrash, filterMode, filterStartDate, filterEndDate]);
 
   const sortedExpenses = useMemo(() => applySort(filteredExpenses, sortKey, {
     date: e => new Date(e.date),
@@ -361,21 +367,14 @@ const ExpenseView = () => {
                     onChange={e => setFilterMode(e.target.value)}
                     className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0"
                   >
-                    <option value="month">Per Bulan</option>
-                    <option value="range">Rentang Tanggal</option>
-                    <option value="all">Semua</option>
+                    <option value="hari-ini">Hari Ini</option>
+                    <option value="kemarin">Kemarin</option>
+                    <option value="bulan-ini">Bulan Ini</option>
+                    <option value="semua">Semua</option>
+                    <option value="tanggal-terpilih">Tanggal Terpilih</option>
                   </select>
 
-                  {filterMode === 'month' && (
-                    <input
-                      type="month"
-                      value={filterMonth}
-                      onChange={e => setFilterMonth(e.target.value)}
-                      className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[140px]"
-                    />
-                  )}
-
-                  {filterMode === 'range' && (
+                  {filterMode === 'tanggal-terpilih' && (
                     <div className="flex items-center gap-1 flex-wrap min-w-0">
                       <input
                         type="date"

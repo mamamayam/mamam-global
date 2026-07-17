@@ -46,9 +46,8 @@ const ShiftView = () => {
   const [isEditingActiveInitial, setIsEditingActiveInitial] = useState(false);
   const [editActiveInitialInput, setEditActiveInitialInput] = useState('');
 
-  // Filter Bulan/Rentang Tanggal untuk Rekapitulasi Riwayat Shift di Bagian Bawah
-  const [filterMode, setFilterMode] = useState('month'); // 'month' | 'range' | 'all'
-  const [filterMonth, setFilterMonth] = useState(toLocalMonthString()); // Default YYYY-MM
+  // Filter tanggal untuk Rekapitulasi Riwayat Shift di Bagian Bawah
+  const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
@@ -303,26 +302,32 @@ const ShiftView = () => {
     });
   };
 
-  // Cek apakah tanggal shift (startTime) lolos filter aktif (mode bulan / rentang tanggal / semua).
+  // Cek apakah tanggal shift (startTime) lolos filter aktif.
   // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
   // aman dibandingkan leksikografis tanpa perlu konversi ke Date/timestamp.
   const matchesDateFilter = (date) => {
-    if (filterMode === 'all') return true;
-    if (filterMode === 'range') {
-      if (!filterStartDate && !filterEndDate) return true;
-      const d = toLocalDateString(date);
-      if (filterStartDate && d < filterStartDate) return false;
-      if (filterEndDate && d > filterEndDate) return false;
-      return true;
+    const d = toLocalDateString(date);
+    if (filterMode === 'semua') return true;
+    if (filterMode === 'hari-ini') return d === toLocalDateString();
+    if (filterMode === 'kemarin') {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      return d === toLocalDateString(yesterday);
     }
-    // default: mode bulan
-    return filterMonth === '' || toLocalMonthString(date) === filterMonth;
+    if (filterMode === 'bulan-ini') return toLocalMonthString(date) === toLocalMonthString();
+    if (filterMode === 'tanggal-terpilih') {
+      if (!filterStartDate) return true;
+      // Hybrid: kalau filterEndDate kosong, otomatis single-day (= filterStartDate)
+      const end = filterEndDate || filterStartDate;
+      return d >= filterStartDate && d <= end;
+    }
+    return true;
   };
 
   const filteredShiftHistory = useMemo(() => {
     const source = showTrash ? trashedOnly(shiftHistory) : activeOnly(shiftHistory);
     return source.filter(shift => matchesDateFilter(shift.startTime));
-  }, [shiftHistory, filterMode, filterMonth, filterStartDate, filterEndDate, showTrash]);
+  }, [shiftHistory, filterMode, filterStartDate, filterEndDate, showTrash]);
 
   // Urutkan hasil filter pakai sortKey terpilih (gak ngubah rekapShiftStats, cuma urutan tampil)
   const sortedShiftHistory = useMemo(() => applySort(filteredShiftHistory, sortKey, {
@@ -642,21 +647,14 @@ const ShiftView = () => {
               onChange={e => setFilterMode(e.target.value)}
               className="py-1.5 px-3 text-xs font-bold"
             >
-              <option value="month">Per Bulan</option>
-              <option value="range">Rentang Tanggal</option>
-              <option value="all">Semua</option>
+              <option value="hari-ini">Hari Ini</option>
+              <option value="kemarin">Kemarin</option>
+              <option value="bulan-ini">Bulan Ini</option>
+              <option value="semua">Semua</option>
+              <option value="tanggal-terpilih">Tanggal Terpilih</option>
             </Select>
 
-            {filterMode === 'month' && (
-              <Input
-                type="month"
-                value={filterMonth}
-                onChange={e => setFilterMonth(e.target.value)}
-                className="py-1.5 px-3 text-xs font-bold"
-              />
-            )}
-
-            {filterMode === 'range' && (
+            {filterMode === 'tanggal-terpilih' && (
               <div className="flex items-center gap-1">
                 <Input
                   type="date"

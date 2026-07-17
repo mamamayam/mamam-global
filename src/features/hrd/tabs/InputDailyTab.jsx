@@ -77,21 +77,27 @@ const InputDailyTab = () => {
   const [collapsedEmployees, setCollapsedEmployees] = useState(new Set());
   const [isSelecting, setIsSelecting] = useState(false);
 
-  const [filterMode, setFilterMode] = useState('month');
-  const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
+  const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
 
   const matchesDateFilter = (dateStr) => {
     if (!dateStr) return true;
-    if (filterMode === 'all') return true;
-    if (filterMode === 'range') {
-      if (!filterStartDate && !filterEndDate) return true;
-      if (filterStartDate && dateStr < filterStartDate) return false;
-      if (filterEndDate && dateStr > filterEndDate) return false;
-      return true;
+    if (filterMode === 'semua') return true;
+    if (filterMode === 'hari-ini') return dateStr === toLocalDateString();
+    if (filterMode === 'kemarin') {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      return dateStr === toLocalDateString(yesterday);
     }
-    return filterMonth === '' || dateStr.slice(0, 7) === filterMonth;
+    if (filterMode === 'bulan-ini') return dateStr.slice(0, 7) === toLocalMonthString();
+    if (filterMode === 'tanggal-terpilih') {
+      if (!filterStartDate) return true;
+      // Hybrid: kalau filterEndDate kosong, otomatis single-day (= filterStartDate)
+      const end = filterEndDate || filterStartDate;
+      return dateStr >= filterStartDate && dateStr <= end;
+    }
+    return true;
   };
 
   const [adjType, setAdjType] = useState('addition');
@@ -433,7 +439,7 @@ const InputDailyTab = () => {
     }
 
     return grouped;
-  }, [employeeDailyRecords, showTrash, dailySortKey, employees, filterMode, filterMonth, filterStartDate, filterEndDate]);
+  }, [employeeDailyRecords, showTrash, dailySortKey, employees, filterMode, filterStartDate, filterEndDate]);
 
   const allVisibleRecords = useMemo(() => groupedRecords.flatMap(g => g.records), [groupedRecords]);
   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(allVisibleRecords);
@@ -569,14 +575,13 @@ const InputDailyTab = () => {
           {!showTrash && (
             <div className="flex flex-wrap items-center gap-2 min-w-0">
               <Select value={filterMode} onChange={e => setFilterMode(e.target.value)} className="py-1.5 px-2 text-xs font-bold shrink-0">
-                <option value="month">Per Bulan</option>
-                <option value="range">Rentang Tanggal</option>
-                <option value="all">Semua</option>
+                <option value="hari-ini">Hari Ini</option>
+                <option value="kemarin">Kemarin</option>
+                <option value="bulan-ini">Bulan Ini</option>
+                <option value="semua">Semua</option>
+                <option value="tanggal-terpilih">Tanggal Terpilih</option>
               </Select>
-              {filterMode === 'month' && (
-                <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[140px]" />
-              )}
-              {filterMode === 'range' && (
+              {filterMode === 'tanggal-terpilih' && (
                 <div className="flex items-center gap-1 flex-wrap min-w-0">
                   <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} max={filterEndDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
                   <span className="text-xs text-slate-400 shrink-0">-</span>

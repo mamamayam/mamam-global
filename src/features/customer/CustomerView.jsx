@@ -16,9 +16,8 @@ const CustomerView = () => {
   const [showTrashCustomers, setShowTrashCustomers] = useState(false);
   const [showTrashVouchers, setShowTrashVouchers] = useState(false);
 
-  /* ── Filter Bulan/Rentang Tanggal untuk Riwayat Klaim Reward (tab Loyalitas) ── */
-  const [filterMode, setFilterMode] = useState('month'); // 'month' | 'range' | 'all'
-  const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
+  /* ── Filter Tanggal untuk Riwayat Klaim Reward (tab Loyalitas) ── */
+  const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
 
@@ -195,25 +194,31 @@ const CustomerView = () => {
 
   const loyalCustomers = useMemo(() => [...activeOnly(customers)].sort((a, b) => b.points - a.points), [customers]);
 
-  // Cek apakah tanggal klaim lolos filter aktif (mode bulan / rentang tanggal / semua).
+  // Cek apakah tanggal klaim lolos filter aktif.
   // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
   // aman dibandingkan leksikografis tanpa perlu konversi ke Date/timestamp.
   const matchesDateFilter = (date) => {
-    if (filterMode === 'all') return true;
-    if (filterMode === 'range') {
-      if (!filterStartDate && !filterEndDate) return true;
-      const d = toLocalDateString(date);
-      if (filterStartDate && d < filterStartDate) return false;
-      if (filterEndDate && d > filterEndDate) return false;
-      return true;
+    const d = toLocalDateString(date);
+    if (filterMode === 'semua') return true;
+    if (filterMode === 'hari-ini') return d === toLocalDateString();
+    if (filterMode === 'kemarin') {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      return d === toLocalDateString(yesterday);
     }
-    // default: mode bulan
-    return filterMonth === '' || toLocalMonthString(date) === filterMonth;
+    if (filterMode === 'bulan-ini') return toLocalMonthString(date) === toLocalMonthString();
+    if (filterMode === 'tanggal-terpilih') {
+      if (!filterStartDate) return true;
+      // Hybrid: kalau filterEndDate kosong, otomatis single-day (= filterStartDate)
+      const end = filterEndDate || filterStartDate;
+      return d >= filterStartDate && d <= end;
+    }
+    return true;
   };
 
   const filteredClaimsHistory = useMemo(() => {
     return claimsHistory.filter(claim => matchesDateFilter(claim.date));
-  }, [claimsHistory, filterMode, filterMonth, filterStartDate, filterEndDate]);
+  }, [claimsHistory, filterMode, filterStartDate, filterEndDate]);
 
   // Daftar pelanggan & voucher yang sedang terlihat (sesuai mode Recycle Bin aktif)
   const visibleCustomers = showTrashCustomers ? trashedOnly(customers) : activeOnly(customers);
@@ -511,21 +516,14 @@ const CustomerView = () => {
                     onChange={e => setFilterMode(e.target.value)}
                     className="py-1.5 px-2 text-xs font-bold"
                   >
-                    <option value="month">Per Bulan</option>
-                    <option value="range">Rentang Tanggal</option>
-                    <option value="all">Semua</option>
+                    <option value="hari-ini">Hari Ini</option>
+                    <option value="kemarin">Kemarin</option>
+                    <option value="bulan-ini">Bulan Ini</option>
+                    <option value="semua">Semua</option>
+                    <option value="tanggal-terpilih">Tanggal Terpilih</option>
                   </Select>
 
-                  {filterMode === 'month' && (
-                    <Input
-                      type="month"
-                      value={filterMonth}
-                      onChange={e => setFilterMonth(e.target.value)}
-                      className="py-1.5 px-2 text-xs font-bold"
-                    />
-                  )}
-
-                  {filterMode === 'range' && (
+                  {filterMode === 'tanggal-terpilih' && (
                     <div className="flex items-center gap-1">
                       <Input
                         type="date"

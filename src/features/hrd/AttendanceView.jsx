@@ -23,11 +23,10 @@ const AUTO_CLOSE_HOUR = 21; // Sistem mendeteksi kelalaian jika sudah lewat jam 
 const OUTLET_CLOSE_HOUR = WORK_END_MINUTES / 60;
 const LOG_FILTER_TABS = [
   { id: 'hari-ini', label: 'Hari Ini' },
-  { id: '7-hari', label: '7 Hari' },
-  { id: '30-hari', label: '30 Hari' },
-  { id: 'bulan-berjalan', label: 'Bulan Ini' },
-  { id: 'semua', label: 'Semua Waktu' },
-  { id: 'kustom', label: 'Pilih Tanggal' },
+  { id: 'kemarin', label: 'Kemarin' },
+  { id: 'bulan-ini', label: 'Bulan Ini' },
+  { id: 'semua', label: 'Semua' },
+  { id: 'tanggal-terpilih', label: 'Tanggal Terpilih' },
 ];
 
 const TYPE_OPTIONS = [
@@ -101,6 +100,9 @@ export default function Attendance() {
   // History section
   const [showHistoryTrash, setShowHistoryTrash] = useState(false);
   const [dateFilter, setDateFilter] = useState('hari-ini');
+  // NB: untuk filter "Tanggal Terpilih" — kalau customEndDate dibiarkan kosong,
+  // filter otomatis jadi single-day (customStartDate aja). Kalau diisi dua-duanya,
+  // jadi range Dari-Sampai (hybrid, sesuai request Agung).
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [typeFilter, setTypeFilter] = useState('semua');
@@ -309,21 +311,22 @@ export default function Attendance() {
     const inRange = (dateString) => {
       const d = new Date(dateString);
       switch (dateFilter) {
-        case 'hari-ini': return d >= todayMid;
-        case '7-hari': {
-          const cutoff = new Date(todayMid); cutoff.setDate(cutoff.getDate() - 7);
-          return d >= cutoff;
+        case 'hari-ini': {
+          const end = new Date(todayMid); end.setDate(end.getDate() + 1);
+          return d >= todayMid && d < end;
         }
-        case '30-hari': {
-          const cutoff = new Date(todayMid); cutoff.setDate(cutoff.getDate() - 30);
-          return d >= cutoff;
+        case 'kemarin': {
+          const start = new Date(todayMid); start.setDate(start.getDate() - 1);
+          return d >= start && d < todayMid;
         }
-        case 'bulan-berjalan':
+        case 'bulan-ini':
           return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        case 'kustom': {
-          if (!customStartDate || !customEndDate) return true;
+        case 'tanggal-terpilih': {
+          if (!customStartDate) return true;
           const start = new Date(customStartDate); start.setHours(0, 0, 0, 0);
-          const end = new Date(customEndDate); end.setHours(23, 59, 59, 999);
+          // Hybrid: kalau customEndDate kosong, otomatis single-day (= customStartDate)
+          const end = customEndDate ? new Date(customEndDate) : new Date(customStartDate);
+          end.setHours(23, 59, 59, 999);
           return d >= start && d <= end;
         }
         case 'semua':
@@ -652,7 +655,7 @@ export default function Attendance() {
           ))}
         </Card>
 
-        {dateFilter === 'kustom' && (
+        {dateFilter === 'tanggal-terpilih' && (
           <Card className="flex items-center gap-2 p-3 mb-3 max-w-fit">
             <div className="flex flex-col">
               <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">
@@ -667,7 +670,7 @@ export default function Attendance() {
             <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 mt-4 shrink-0" />
             <div className="flex flex-col">
               <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1 ml-1">
-                Sampai Tanggal
+                Sampai Tanggal (opsional)
               </label>
               <input
                 type="date" value={customEndDate}

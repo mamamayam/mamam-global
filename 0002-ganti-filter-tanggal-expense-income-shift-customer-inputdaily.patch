@@ -1,0 +1,433 @@
+diff --git a/src/features/customer/CustomerView.jsx b/src/features/customer/CustomerView.jsx
+index e7f1565..0018ab4 100644
+--- a/src/features/customer/CustomerView.jsx
++++ b/src/features/customer/CustomerView.jsx
+@@ -16,9 +16,8 @@ const CustomerView = () => {
+   const [showTrashCustomers, setShowTrashCustomers] = useState(false);
+   const [showTrashVouchers, setShowTrashVouchers] = useState(false);
+ 
+-  /* ── Filter Bulan/Rentang Tanggal untuk Riwayat Klaim Reward (tab Loyalitas) ── */
+-  const [filterMode, setFilterMode] = useState('month'); // 'month' | 'range' | 'all'
+-  const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
++  /* ── Filter Tanggal untuk Riwayat Klaim Reward (tab Loyalitas) ── */
++  const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
+   const [filterStartDate, setFilterStartDate] = useState('');
+   const [filterEndDate, setFilterEndDate] = useState('');
+ 
+@@ -195,25 +194,31 @@ const CustomerView = () => {
+ 
+   const loyalCustomers = useMemo(() => [...activeOnly(customers)].sort((a, b) => b.points - a.points), [customers]);
+ 
+-  // Cek apakah tanggal klaim lolos filter aktif (mode bulan / rentang tanggal / semua).
++  // Cek apakah tanggal klaim lolos filter aktif.
+   // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
+   // aman dibandingkan leksikografis tanpa perlu konversi ke Date/timestamp.
+   const matchesDateFilter = (date) => {
+-    if (filterMode === 'all') return true;
+-    if (filterMode === 'range') {
+-      if (!filterStartDate && !filterEndDate) return true;
+-      const d = toLocalDateString(date);
+-      if (filterStartDate && d < filterStartDate) return false;
+-      if (filterEndDate && d > filterEndDate) return false;
+-      return true;
++    const d = toLocalDateString(date);
++    if (filterMode === 'semua') return true;
++    if (filterMode === 'hari-ini') return d === toLocalDateString();
++    if (filterMode === 'kemarin') {
++      const yesterday = new Date();
++      yesterday.setDate(yesterday.getDate() - 1);
++      return d === toLocalDateString(yesterday);
+     }
+-    // default: mode bulan
+-    return filterMonth === '' || toLocalMonthString(date) === filterMonth;
++    if (filterMode === 'bulan-ini') return toLocalMonthString(date) === toLocalMonthString();
++    if (filterMode === 'tanggal-terpilih') {
++      if (!filterStartDate) return true;
++      // Hybrid: kalau filterEndDate kosong, otomatis single-day (= filterStartDate)
++      const end = filterEndDate || filterStartDate;
++      return d >= filterStartDate && d <= end;
++    }
++    return true;
+   };
+ 
+   const filteredClaimsHistory = useMemo(() => {
+     return claimsHistory.filter(claim => matchesDateFilter(claim.date));
+-  }, [claimsHistory, filterMode, filterMonth, filterStartDate, filterEndDate]);
++  }, [claimsHistory, filterMode, filterStartDate, filterEndDate]);
+ 
+   // Daftar pelanggan & voucher yang sedang terlihat (sesuai mode Recycle Bin aktif)
+   const visibleCustomers = showTrashCustomers ? trashedOnly(customers) : activeOnly(customers);
+@@ -511,21 +516,14 @@ const CustomerView = () => {
+                     onChange={e => setFilterMode(e.target.value)}
+                     className="py-1.5 px-2 text-xs font-bold"
+                   >
+-                    <option value="month">Per Bulan</option>
+-                    <option value="range">Rentang Tanggal</option>
+-                    <option value="all">Semua</option>
++                    <option value="hari-ini">Hari Ini</option>
++                    <option value="kemarin">Kemarin</option>
++                    <option value="bulan-ini">Bulan Ini</option>
++                    <option value="semua">Semua</option>
++                    <option value="tanggal-terpilih">Tanggal Terpilih</option>
+                   </Select>
+ 
+-                  {filterMode === 'month' && (
+-                    <Input
+-                      type="month"
+-                      value={filterMonth}
+-                      onChange={e => setFilterMonth(e.target.value)}
+-                      className="py-1.5 px-2 text-xs font-bold"
+-                    />
+-                  )}
+-
+-                  {filterMode === 'range' && (
++                  {filterMode === 'tanggal-terpilih' && (
+                     <div className="flex items-center gap-1">
+                       <Input
+                         type="date"
+diff --git a/src/features/finance/ExpenseView.jsx b/src/features/finance/ExpenseView.jsx
+index a537ff1..1ba9f7d 100644
+--- a/src/features/finance/ExpenseView.jsx
++++ b/src/features/finance/ExpenseView.jsx
+@@ -35,8 +35,7 @@ const ExpenseView = () => {
+   // 'kasir' = uang toko/laci kasir (default). employeeId kurir = uang yang
+   // sedang dipegang kurir tsb (belum disetor) — lihat utils/cashHolders.js
+   const [cashHolderId, setCashHolderId] = useState('kasir');
+-  const [filterMode, setFilterMode] = useState('month');
+-  const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
++  const [filterMode, setFilterMode] = useState('hari-ini');
+   const [filterStartDate, setFilterStartDate] = useState('');
+   const [filterEndDate, setFilterEndDate] = useState('');
+   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+@@ -46,15 +45,22 @@ const ExpenseView = () => {
+   const [isSelecting, setIsSelecting] = useState(false);
+ 
+   const matchesDateFilter = (date) => {
+-    if (filterMode === 'all') return true;
+-    if (filterMode === 'range') {
+-      if (!filterStartDate && !filterEndDate) return true;
+-      const d = toLocalDateString(date);
+-      if (filterStartDate && d < filterStartDate) return false;
+-      if (filterEndDate && d > filterEndDate) return false;
+-      return true;
++    const d = toLocalDateString(date);
++    if (filterMode === 'semua') return true;
++    if (filterMode === 'hari-ini') return d === toLocalDateString();
++    if (filterMode === 'kemarin') {
++      const yesterday = new Date();
++      yesterday.setDate(yesterday.getDate() - 1);
++      return d === toLocalDateString(yesterday);
+     }
+-    return filterMonth === '' || toLocalMonthString(date) === filterMonth;
++    if (filterMode === 'bulan-ini') return toLocalMonthString(date) === toLocalMonthString();
++    if (filterMode === 'tanggal-terpilih') {
++      if (!filterStartDate) return true;
++      // Hybrid: kalau filterEndDate kosong, otomatis single-day (= filterStartDate)
++      const end = filterEndDate || filterStartDate;
++      return d >= filterStartDate && d <= end;
++    }
++    return true;
+   };
+ 
+   const couriers = useMemo(() => getActiveCouriers(employees), [employees]);
+@@ -63,7 +69,7 @@ const ExpenseView = () => {
+     return activeOnly(expenses)
+       .filter(inc => matchesDateFilter(inc.date))
+       .reduce((s, e) => s + e.amount, 0);
+-  }, [expenses, filterMode, filterMonth, filterStartDate, filterEndDate]);
++  }, [expenses, filterMode, filterStartDate, filterEndDate]);
+ 
+   const [editingId, setEditingId] = useState(null);
+ 
+@@ -168,7 +174,7 @@ const ExpenseView = () => {
+   const filteredExpenses = useMemo(() => {
+     return (showTrash ? trashedOnly(expenses) : activeOnly(expenses))
+       .filter(e => matchesDateFilter(e.date));
+-  }, [expenses, showTrash, filterMode, filterMonth, filterStartDate, filterEndDate]);
++  }, [expenses, showTrash, filterMode, filterStartDate, filterEndDate]);
+ 
+   const sortedExpenses = useMemo(() => applySort(filteredExpenses, sortKey, {
+     date: e => new Date(e.date),
+@@ -361,21 +367,14 @@ const ExpenseView = () => {
+                     onChange={e => setFilterMode(e.target.value)}
+                     className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0"
+                   >
+-                    <option value="month">Per Bulan</option>
+-                    <option value="range">Rentang Tanggal</option>
+-                    <option value="all">Semua</option>
++                    <option value="hari-ini">Hari Ini</option>
++                    <option value="kemarin">Kemarin</option>
++                    <option value="bulan-ini">Bulan Ini</option>
++                    <option value="semua">Semua</option>
++                    <option value="tanggal-terpilih">Tanggal Terpilih</option>
+                   </select>
+ 
+-                  {filterMode === 'month' && (
+-                    <input
+-                      type="month"
+-                      value={filterMonth}
+-                      onChange={e => setFilterMonth(e.target.value)}
+-                      className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[140px]"
+-                    />
+-                  )}
+-
+-                  {filterMode === 'range' && (
++                  {filterMode === 'tanggal-terpilih' && (
+                     <div className="flex items-center gap-1 flex-wrap min-w-0">
+                       <input
+                         type="date"
+diff --git a/src/features/finance/IncomeView.jsx b/src/features/finance/IncomeView.jsx
+index 40ebe05..f1f90ab 100644
+--- a/src/features/finance/IncomeView.jsx
++++ b/src/features/finance/IncomeView.jsx
+@@ -27,8 +27,7 @@ const IncomeView = () => {
+   const [category, setCategory] = useState(incomeCategories[0] || 'Lainnya');
+   const [note, setNote] = useState('');
+   const [dateInput, setDateInput] = useState(toLocalDateString());
+-  const [filterMode, setFilterMode] = useState('month'); // 'month' | 'range' | 'all'
+-  const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
++  const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
+   const [filterStartDate, setFilterStartDate] = useState('');
+   const [filterEndDate, setFilterEndDate] = useState('');
+   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+@@ -37,27 +36,33 @@ const IncomeView = () => {
+   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
+   const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
+ 
+-  // Cek apakah sebuah tanggal transaksi lolos filter aktif (mode bulan / rentang tanggal / semua).
++  // Cek apakah sebuah tanggal transaksi lolos filter aktif.
+   // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
+   // aman dibandingkan leksikografis tanpa perlu konversi ke Date/timestamp.
+   const matchesDateFilter = (date) => {
+-    if (filterMode === 'all') return true;
+-    if (filterMode === 'range') {
+-      if (!filterStartDate && !filterEndDate) return true;
+-      const d = toLocalDateString(date);
+-      if (filterStartDate && d < filterStartDate) return false;
+-      if (filterEndDate && d > filterEndDate) return false;
+-      return true;
++    const d = toLocalDateString(date);
++    if (filterMode === 'semua') return true;
++    if (filterMode === 'hari-ini') return d === toLocalDateString();
++    if (filterMode === 'kemarin') {
++      const yesterday = new Date();
++      yesterday.setDate(yesterday.getDate() - 1);
++      return d === toLocalDateString(yesterday);
+     }
+-    // default: mode bulan
+-    return filterMonth === '' || toLocalMonthString(date) === filterMonth;
++    if (filterMode === 'bulan-ini') return toLocalMonthString(date) === toLocalMonthString();
++    if (filterMode === 'tanggal-terpilih') {
++      if (!filterStartDate) return true;
++      // Hybrid: kalau filterEndDate kosong, otomatis single-day (= filterStartDate)
++      const end = filterEndDate || filterStartDate;
++      return d >= filterStartDate && d <= end;
++    }
++    return true;
+   };
+ 
+   const activeTotal = useMemo(() => {
+     return activeOnly(incomes)
+       .filter(inc => matchesDateFilter(inc.date))
+       .reduce((s, e) => s + e.amount, 0);
+-  }, [incomes, filterMode, filterMonth, filterStartDate, filterEndDate]);
++  }, [incomes, filterMode, filterStartDate, filterEndDate]);
+ 
+ 
+   // State pelacak data edit
+@@ -139,7 +144,7 @@ const IncomeView = () => {
+   const filteredIncomes = useMemo(() => {
+     return (showTrash ? trashedOnly(incomes) : activeOnly(incomes))
+       .filter(inc => matchesDateFilter(inc.date));
+-  }, [incomes, showTrash, filterMode, filterMonth, filterStartDate, filterEndDate]);
++  }, [incomes, showTrash, filterMode, filterStartDate, filterEndDate]);
+ 
+   // Urutkan hasil filter pakai sortKey terpilih
+   const sortedIncomes = useMemo(() => applySort(filteredIncomes, sortKey, {
+@@ -279,21 +284,14 @@ const IncomeView = () => {
+                     onChange={e => setFilterMode(e.target.value)}
+                     className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0"
+                   >
+-                    <option value="month">Per Bulan</option>
+-                    <option value="range">Rentang Tanggal</option>
+-                    <option value="all">Semua</option>
++                    <option value="hari-ini">Hari Ini</option>
++                    <option value="kemarin">Kemarin</option>
++                    <option value="bulan-ini">Bulan Ini</option>
++                    <option value="semua">Semua</option>
++                    <option value="tanggal-terpilih">Tanggal Terpilih</option>
+                   </select>
+ 
+-                  {filterMode === 'month' && (
+-                    <input
+-                      type="month"
+-                      value={filterMonth}
+-                      onChange={e => setFilterMonth(e.target.value)}
+-                      className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[140px]"
+-                    />
+-                  )}
+-
+-                  {filterMode === 'range' && (
++                  {filterMode === 'tanggal-terpilih' && (
+                     <div className="flex items-center gap-1 flex-wrap min-w-0">
+                       <input
+                         type="date"
+diff --git a/src/features/finance/ShiftView.jsx b/src/features/finance/ShiftView.jsx
+index 517af0a..be0abc8 100644
+--- a/src/features/finance/ShiftView.jsx
++++ b/src/features/finance/ShiftView.jsx
+@@ -46,9 +46,8 @@ const ShiftView = () => {
+   const [isEditingActiveInitial, setIsEditingActiveInitial] = useState(false);
+   const [editActiveInitialInput, setEditActiveInitialInput] = useState('');
+ 
+-  // Filter Bulan/Rentang Tanggal untuk Rekapitulasi Riwayat Shift di Bagian Bawah
+-  const [filterMode, setFilterMode] = useState('month'); // 'month' | 'range' | 'all'
+-  const [filterMonth, setFilterMonth] = useState(toLocalMonthString()); // Default YYYY-MM
++  // Filter tanggal untuk Rekapitulasi Riwayat Shift di Bagian Bawah
++  const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
+   const [filterStartDate, setFilterStartDate] = useState('');
+   const [filterEndDate, setFilterEndDate] = useState('');
+   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
+@@ -303,26 +302,32 @@ const ShiftView = () => {
+     });
+   };
+ 
+-  // Cek apakah tanggal shift (startTime) lolos filter aktif (mode bulan / rentang tanggal / semua).
++  // Cek apakah tanggal shift (startTime) lolos filter aktif.
+   // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
+   // aman dibandingkan leksikografis tanpa perlu konversi ke Date/timestamp.
+   const matchesDateFilter = (date) => {
+-    if (filterMode === 'all') return true;
+-    if (filterMode === 'range') {
+-      if (!filterStartDate && !filterEndDate) return true;
+-      const d = toLocalDateString(date);
+-      if (filterStartDate && d < filterStartDate) return false;
+-      if (filterEndDate && d > filterEndDate) return false;
+-      return true;
++    const d = toLocalDateString(date);
++    if (filterMode === 'semua') return true;
++    if (filterMode === 'hari-ini') return d === toLocalDateString();
++    if (filterMode === 'kemarin') {
++      const yesterday = new Date();
++      yesterday.setDate(yesterday.getDate() - 1);
++      return d === toLocalDateString(yesterday);
+     }
+-    // default: mode bulan
+-    return filterMonth === '' || toLocalMonthString(date) === filterMonth;
++    if (filterMode === 'bulan-ini') return toLocalMonthString(date) === toLocalMonthString();
++    if (filterMode === 'tanggal-terpilih') {
++      if (!filterStartDate) return true;
++      // Hybrid: kalau filterEndDate kosong, otomatis single-day (= filterStartDate)
++      const end = filterEndDate || filterStartDate;
++      return d >= filterStartDate && d <= end;
++    }
++    return true;
+   };
+ 
+   const filteredShiftHistory = useMemo(() => {
+     const source = showTrash ? trashedOnly(shiftHistory) : activeOnly(shiftHistory);
+     return source.filter(shift => matchesDateFilter(shift.startTime));
+-  }, [shiftHistory, filterMode, filterMonth, filterStartDate, filterEndDate, showTrash]);
++  }, [shiftHistory, filterMode, filterStartDate, filterEndDate, showTrash]);
+ 
+   // Urutkan hasil filter pakai sortKey terpilih (gak ngubah rekapShiftStats, cuma urutan tampil)
+   const sortedShiftHistory = useMemo(() => applySort(filteredShiftHistory, sortKey, {
+@@ -642,21 +647,14 @@ const ShiftView = () => {
+               onChange={e => setFilterMode(e.target.value)}
+               className="py-1.5 px-3 text-xs font-bold"
+             >
+-              <option value="month">Per Bulan</option>
+-              <option value="range">Rentang Tanggal</option>
+-              <option value="all">Semua</option>
++              <option value="hari-ini">Hari Ini</option>
++              <option value="kemarin">Kemarin</option>
++              <option value="bulan-ini">Bulan Ini</option>
++              <option value="semua">Semua</option>
++              <option value="tanggal-terpilih">Tanggal Terpilih</option>
+             </Select>
+ 
+-            {filterMode === 'month' && (
+-              <Input
+-                type="month"
+-                value={filterMonth}
+-                onChange={e => setFilterMonth(e.target.value)}
+-                className="py-1.5 px-3 text-xs font-bold"
+-              />
+-            )}
+-
+-            {filterMode === 'range' && (
++            {filterMode === 'tanggal-terpilih' && (
+               <div className="flex items-center gap-1">
+                 <Input
+                   type="date"
+diff --git a/src/features/hrd/tabs/InputDailyTab.jsx b/src/features/hrd/tabs/InputDailyTab.jsx
+index f1c7d83..a49774c 100644
+--- a/src/features/hrd/tabs/InputDailyTab.jsx
++++ b/src/features/hrd/tabs/InputDailyTab.jsx
+@@ -77,21 +77,27 @@ const InputDailyTab = () => {
+   const [collapsedEmployees, setCollapsedEmployees] = useState(new Set());
+   const [isSelecting, setIsSelecting] = useState(false);
+ 
+-  const [filterMode, setFilterMode] = useState('month');
+-  const [filterMonth, setFilterMonth] = useState(toLocalMonthString());
++  const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
+   const [filterStartDate, setFilterStartDate] = useState('');
+   const [filterEndDate, setFilterEndDate] = useState('');
+ 
+   const matchesDateFilter = (dateStr) => {
+     if (!dateStr) return true;
+-    if (filterMode === 'all') return true;
+-    if (filterMode === 'range') {
+-      if (!filterStartDate && !filterEndDate) return true;
+-      if (filterStartDate && dateStr < filterStartDate) return false;
+-      if (filterEndDate && dateStr > filterEndDate) return false;
+-      return true;
++    if (filterMode === 'semua') return true;
++    if (filterMode === 'hari-ini') return dateStr === toLocalDateString();
++    if (filterMode === 'kemarin') {
++      const yesterday = new Date();
++      yesterday.setDate(yesterday.getDate() - 1);
++      return dateStr === toLocalDateString(yesterday);
+     }
+-    return filterMonth === '' || dateStr.slice(0, 7) === filterMonth;
++    if (filterMode === 'bulan-ini') return dateStr.slice(0, 7) === toLocalMonthString();
++    if (filterMode === 'tanggal-terpilih') {
++      if (!filterStartDate) return true;
++      // Hybrid: kalau filterEndDate kosong, otomatis single-day (= filterStartDate)
++      const end = filterEndDate || filterStartDate;
++      return dateStr >= filterStartDate && dateStr <= end;
++    }
++    return true;
+   };
+ 
+   const [adjType, setAdjType] = useState('addition');
+@@ -433,7 +439,7 @@ const InputDailyTab = () => {
+     }
+ 
+     return grouped;
+-  }, [employeeDailyRecords, showTrash, dailySortKey, employees, filterMode, filterMonth, filterStartDate, filterEndDate]);
++  }, [employeeDailyRecords, showTrash, dailySortKey, employees, filterMode, filterStartDate, filterEndDate]);
+ 
+   const allVisibleRecords = useMemo(() => groupedRecords.flatMap(g => g.records), [groupedRecords]);
+   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(allVisibleRecords);
+@@ -569,14 +575,13 @@ const InputDailyTab = () => {
+           {!showTrash && (
+             <div className="flex flex-wrap items-center gap-2 min-w-0">
+               <Select value={filterMode} onChange={e => setFilterMode(e.target.value)} className="py-1.5 px-2 text-xs font-bold shrink-0">
+-                <option value="month">Per Bulan</option>
+-                <option value="range">Rentang Tanggal</option>
+-                <option value="all">Semua</option>
++                <option value="hari-ini">Hari Ini</option>
++                <option value="kemarin">Kemarin</option>
++                <option value="bulan-ini">Bulan Ini</option>
++                <option value="semua">Semua</option>
++                <option value="tanggal-terpilih">Tanggal Terpilih</option>
+               </Select>
+-              {filterMode === 'month' && (
+-                <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[140px]" />
+-              )}
+-              {filterMode === 'range' && (
++              {filterMode === 'tanggal-terpilih' && (
+                 <div className="flex items-center gap-1 flex-wrap min-w-0">
+                   <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} max={filterEndDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
+                   <span className="text-xs text-slate-400 shrink-0">-</span>
