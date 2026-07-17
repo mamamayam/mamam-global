@@ -53,6 +53,7 @@ const ShiftView = () => {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
+  const [showCourierLog, setShowCourierLog] = useState(false); // toggle admin-only: riwayat setoran kurir
   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
   const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
@@ -194,6 +195,52 @@ const ShiftView = () => {
     setPartialDepositInput('');
   };
 
+  // Tutup Saldo Lama — nolin saldo kurir yang kebawa dari SEBELUM hari ini
+  // (bukan dihapus, tapi dicatat sebagai transaksi cashTransfers normal
+  // bernote jelas, biar tetap keauditkan & muncul di Riwayat Setoran —
+  // lihat toggle "Riwayat Setoran" khusus admin di bagian Riwayat bawah).
+  // Saldo dari transaksi HARI INI sengaja TIDAK disentuh — biar gak
+  // nge-reset uang yang belum sempat beneran disetor/dilaporkan.
+  //
+  // Dipanggil otomatis tiap kali "Buka Dompet" (lihat handleOpenShift) —
+  // karena di lapangan setoran fisik sering kejadian tanpa sempat dicatat,
+  // jadi ganti hari = anggap lunas.
+  const closeStaleCourierBalances = ({ silent = false } = {}) => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const priorExpenses = activeOnly(expenses).filter(e => new Date(e.date) < startOfToday);
+    const priorSales = activeOnly(salesHistory).filter(s => new Date(s.date) < startOfToday);
+    const priorTransfers = activeOnly(cashTransfers || []).filter(t => new Date(t.date) < startOfToday);
+
+    const staleBalances = computeAllCourierBalances(couriers, {
+      expenses: priorExpenses,
+      salesHistory: priorSales,
+      cashTransfers: priorTransfers,
+    }).filter(b => b.balance > 0);
+
+    if (staleBalances.length === 0) {
+      if (!silent) triggerAlert('Tidak ada saldo kurir dari hari sebelumnya yang perlu ditutup.');
+      return;
+    }
+
+    const closingTransfers = staleBalances.map(b => ({
+      id: generateUUID(),
+      employeeId: b.employeeId,
+      employeeName: b.employeeName,
+      amount: b.balance,
+      note: 'Penutupan saldo lama (otomatis/manual, bukan setoran fisik tercatat)',
+      date: new Date(),
+    }));
+
+    setCashTransfers([...closingTransfers, ...cashTransfers]);
+
+    if (!silent) {
+      const rincian = staleBalances.map(b => `${b.employeeName}: ${formatRupiah(b.balance)}`).join(', ');
+      triggerAlert(`Saldo lama ditutup (${rincian}).`);
+    }
+  };
+
   // Calculate stats for current shift
   const shiftStats = useMemo(() => {
     if (!currentShift) return null;
@@ -304,6 +351,7 @@ const ShiftView = () => {
       openedByEmployeeName: selectedEmployee?.name || null,
     };
     setCurrentShift(newShift);
+    closeStaleCourierBalances({ silent: true }); // ganti hari = saldo kurir kemarin dianggap lunas
     pushLiveState('currentShift', newShift).catch(err => 
       console.warn('Gagal push manual :', err)
     );
@@ -1012,6 +1060,49 @@ const ShiftView = () => {
             )}
           </div>
         </Card>
+
+        {/* --- RIWAYAT SETORAN KURIR (khusus Admin) ---
+            Ditaruh nempel di bawah Riwayat Shift, bukan halaman/menu
+            terpisah, biar seamless dari sisi navigasi. Toggle collapsed
+            by default. Sumber data cashTransfers (lihat closeStaleCourierBalances
+            & handleConfirmPartialDeposit di atas utk siapa yang nulis ke sini). */}
+        {isAdminMode && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setShowCourierLog(v => !v)}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
+            >
+              <Users className="w-3.5 h-3.5" />
+              {showCourierLog ? 'Sembunyikan Riwayat Setoran Kurir' : 'Lihat Riwayat Setoran Kurir'}
+            </button>
+
+            {showCourierLog && (
+              <Card padding="none" className="overflow-hidden flex flex-col mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+                  <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Riwayat Setoran Kurir</h4>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Termasuk setoran manual & penutupan saldo lama otomatis.</p>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto custom-scrollbar">
+                  {activeOnly(cashTransfers || []).length === 0 ? (
+                    <EmptyState size="sm" icon={<History className="w-8 h-8 opacity-30" />} title="Belum ada riwayat setoran." />
+                  ) : (
+                    applySort(activeOnly(cashTransfers || []), 'date-desc', { date: t => new Date(t.date) }).map(t => (
+                      <div key={t.id} className="p-3 flex items-center justify-between gap-3 text-xs">
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{t.employeeName}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{t.note}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(t.date).toLocaleString('id-ID')}</p>
+                        </div>
+                        <span className="font-black text-emerald-600 dark:text-emerald-400 shrink-0">{formatRupiah(t.amount)}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Card>
+            )}
+          </div>
+        )}
       </div>
 
       <SortModal
