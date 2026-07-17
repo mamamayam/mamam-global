@@ -9,7 +9,7 @@ import { pushTransactionDelete, pushLiveState } from '../../storage/realtimeSync
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
 import { getActiveCouriers } from '../hrd/utils/payrollLogic';
-import { computeAllCourierBalances } from '../../utils/cashHolders';
+import { computeAllCourierBalances, isCourierHolder } from '../../utils/cashHolders';
 
 // Import komponen UI Design System
 import { 
@@ -56,6 +56,11 @@ const ShiftView = () => {
   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
   const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
+
+  // State utk Modal Setor Sebagian (Kurir -> Dompet)
+  const [depositTarget, setDepositTarget] = useState(null); // { employeeId, employeeName } | null
+  const [partialDepositInput, setPartialDepositInput] = useState('');
+  const [isDepositSubmitting, setIsDepositSubmitting] = useState(false); // anti double-submit
 
   const handleShareImage = async () => {
     const reportElement = document.getElementById('xreading-content');
@@ -111,10 +116,12 @@ const ShiftView = () => {
     }
   };
 
-  // Uang Tunai di Kurir — cuma info tambahan biar keliatan total cash yang
-  // masih di luar laci kasir (dipegang kurir dari COD Delivery, belum
-  // disetor). TIDAK mempengaruhi perhitungan expectedCash/Saldo Akhir
-  // dompet di atas — itu tetap murni cash yang ada fisik di laci kasir.
+  // Uang Tunai di Kurir — saldo cash yang masih di luar laci kasir
+  // (dipegang kurir dari COD Delivery, belum disetor). Angka ini DIPAKAI
+  // buat ngitung expectedCash/Saldo Akhir Dompet di shiftStats di bawah
+  // (expectedCash = Total Kas Bisnis - totalHeldByCouriers) — jadi begitu
+  // kurir setor & saldo dia turun/nol, Saldo Akhir Dompet otomatis naik
+  // tanpa perlu tracking transaksi setoran secara terpisah.
   // Logic hitungnya sama persis dgn yang dulu dipakai di halaman Setoran
   // Kurir (lihat utils/cashHolders.js).
   const couriers = useMemo(() => getActiveCouriers(employees), [employees]);
@@ -128,32 +135,63 @@ const ShiftView = () => {
     [courierBalances]
   );
 
-  // Setor Cepat — jalan pintas dari Dompet biar saldo kurir yang kebawa
-  // nginap dari hari sebelumnya bisa langsung dinolin TANPA reset paksa.
-  // Ini nyatet transaksi cashTransfers penuh sejumlah saldo yang lagi
-  // tercatat (sama persis logicnya kaya "Simpan Setoran" di halaman
-  // Setoran Kurir), BUKAN override manual — supaya uangnya tetap
-  // keauditkan (nyambung ke salesHistory & expenses kurir itu), cuma
-  // gak perlu bolak-balik buka halaman Setoran Kurir tiap mau nutup shift.
-  const handleQuickDeposit = (balanceEntry) => {
-    const { employeeId, employeeName, balance } = balanceEntry;
-    if (balance <= 0) return;
+  // Tombol "Setor" — SATU-SATUNYA jalur setor kurir->dompet, selalu buka
+  // popup input nominal (gak ada lagi jalur instant tanpa konfirmasi
+  // nominal). Popup punya tombol "Setor Semua" buat auto-isi input dgn
+  // full balance, atau kasir bisa ketik nominal custom buat setor
+  // sebagian. Balance yang dipakai selalu diambil ULANG dari
+  // courierBalances (live, bukan snapshot lama yang nempel di tombol) —
+  // jaga-jaga kalau ada transaksi baru masuk SELAGI popup ini kebuka
+  // (hole #4).
+  const handleOpenDeposit = (balanceEntry) => {
+    setDepositTarget({ employeeId: balanceEntry.employeeId, employeeName: balanceEntry.employeeName });
+    setPartialDepositInput('');
+  };
 
-    triggerConfirm(
-      `Catat setoran ${formatRupiah(balance)} dari ${employeeName} ke kasir sekarang?`,
-      () => {
-        const newTransfer = {
-          id: `CTF-${Date.now()}`,
-          employeeId,
-          employeeName,
-          amount: balance,
-          note: 'Setoran cepat dari Dompet',
-          date: new Date(),
-        };
-        setCashTransfers([newTransfer, ...cashTransfers]);
-        triggerAlert(`Setoran ${employeeName} sebesar ${formatRupiah(balance)} berhasil dicatat.`);
-      }
+  const handleConfirmPartialDeposit = () => {
+    if (!depositTarget || isDepositSubmitting) return; // hole #2: cegah double-submit
+
+    // Re-fetch balance TERKINI, bukan yang di-snapshot pas modal dibuka.
+    const liveEntry = courierBalances.find(b => b.employeeId === depositTarget.employeeId);
+    const liveBalance = Math.max(liveEntry?.balance || 0, 0);
+
+    const amount = Number(partialDepositInput);
+
+    // hole #3: nominal wajib > 0
+    if (!partialDepositInput || !Number.isFinite(amount) || amount <= 0) {
+      triggerAlert('Nominal setoran harus lebih dari Rp 0.');
+      return;
+    }
+    // hole #1: gak boleh setor melebihi saldo yang beneran tercatat
+    if (amount > liveBalance) {
+      triggerAlert(`Nominal melebihi saldo ${depositTarget.employeeName} saat ini (${formatRupiah(liveBalance)}).`);
+      return;
+    }
+
+    setIsDepositSubmitting(true);
+    const isFull = amount === liveBalance;
+    const sisaSetelahSetor = liveBalance - amount;
+
+    const newTransfer = {
+      id: generateUUID(),
+      employeeId: depositTarget.employeeId,
+      employeeName: depositTarget.employeeName,
+      amount,
+      // hole #6: note dibedain biar riwayat tetap keauditkan meski ada
+      // beberapa kali setoran sebagian dari kurir yang sama dalam sehari.
+      note: isFull ? 'Setoran penuh dari Dompet' : `Setoran sebagian dari Dompet (sisa ${formatRupiah(sisaSetelahSetor)})`,
+      date: new Date(),
+    };
+    setCashTransfers([newTransfer, ...cashTransfers]);
+    triggerAlert(
+      isFull
+        ? `Saldo ${depositTarget.employeeName} sebesar ${formatRupiah(amount)} berhasil dipindah ke Dompet.`
+        : `${formatRupiah(amount)} dari saldo ${depositTarget.employeeName} dipindah ke Dompet. Sisa: ${formatRupiah(sisaSetelahSetor)}.`
     );
+
+    setIsDepositSubmitting(false);
+    setDepositTarget(null);
+    setPartialDepositInput('');
   };
 
   // Calculate stats for current shift
@@ -174,7 +212,14 @@ const ShiftView = () => {
     const shiftStartDate = new Date(start);
     const startOfShiftDay = new Date(shiftStartDate.getFullYear(), shiftStartDate.getMonth(), shiftStartDate.getDate());
 
-    // Penjualan Tunai
+    // Penjualan Tunai — SEMUA cash sale, kasir MAUPUN kurir COD. Di level
+    // ini kita hitung "Total Kas Bisnis" (bukan laci kasir doang), jadi
+    // duit COD kurir tetap dihitung sebagai pemasukan cash yang sah —
+    // cuma lokasinya belum tentu di laci. Pemisahan "yang masih di tangan
+    // kurir" diurus BELAKANGAN lewat pengurangan totalHeldByCouriers di
+    // bawah (satu titik saja), BUKAN dengan exclude manual per record di
+    // sini — biar gak ada 2 tempat yang harus saling sinkron soal
+    // "kurir vs bukan kurir".
     const shiftSales = activeOnly(salesHistory).filter(s => new Date(s.date) >= start);
     let cashSalesTotal = 0;
     shiftSales.forEach(sale => {
@@ -184,23 +229,59 @@ const ShiftView = () => {
       }
     });
 
-    // Pemasukan & Pengeluaran (hanya yang Tunai yang mempengaruhi saldo laci)
+    // Pemasukan & Pengeluaran (Tunai) — sama, level Total Kas Bisnis.
+    // Pengeluaran yang dibayar pakai cash kurir (cashHolder: kurir, misal
+    // kurir belanja sebelum sempat setor) TETAP ikut kehitung di
+    // totalCashBisnis (bukan di-exclude), karena itu tetap pengeluaran
+    // cash bisnis yang sah — pemisahan lokasinya (siapa yang megang)
+    // diurus lewat totalHeldByCouriers. TAPI buat keterangan di UI,
+    // kasir & kurir dipisah jadi 2 baris sendiri (bukan digabung jadi
+    // satu angka "Pengeluaran") biar kasir bisa lihat jelas mana yang
+    // keluar dari lacinya sendiri vs mana yang dipotong dari saldo kurir.
     const shiftIncomes = activeOnly(incomes).filter(i => new Date(i.date) >= startOfShiftDay);
     const shiftExpenses = activeOnly(expenses).filter(e => new Date(e.date) >= startOfShiftDay && (e.paymentMethod || 'Tunai') === 'Tunai');
+    const shiftExpensesKasir = shiftExpenses.filter(e => !isCourierHolder(e));
+    const shiftExpensesKurir = shiftExpenses.filter(e => isCourierHolder(e));
 
     const cashIncomeTotal = shiftIncomes.reduce((s, i) => s + i.amount, 0);
-    const cashExpenseTotal = shiftExpenses.reduce((s, e) => s + e.amount, 0);
+    const cashExpenseKasirTotal = shiftExpensesKasir.reduce((s, e) => s + e.amount, 0);
+    const cashExpenseKurirTotal = shiftExpensesKurir.reduce((s, e) => s + e.amount, 0);
+    const cashExpenseTotal = cashExpenseKasirTotal + cashExpenseKurirTotal;
 
-    const expectedCash = currentShift.initialCash + cashSalesTotal + cashIncomeTotal - cashExpenseTotal;
+    // Total Kas Bisnis — gabungan laci kasir + yang masih di tangan kurir,
+    // murni cash-basis, gak peduli lokasi fisiknya di mana saat ini.
+    const totalCashBisnis = currentShift.initialCash + cashSalesTotal + cashIncomeTotal - cashExpenseTotal;
+
+    // Saldo Akhir (Laci Kasir) = Total Kas Bisnis - Saldo yang MASIH
+    // dipegang kurir (belum disetor). Ini SATU-SATUNYA rumus buat nentuin
+    // laci kasir. Konsekuensinya otomatis benar tanpa perlu tracking
+    // manual: begitu kurir setor (tombol "Setor" nge-nolin saldo dia di
+    // totalHeldByCouriers), expectedCash di sini OTOMATIS naik sejumlah
+    // yang disetor — gak perlu nambahin cashTransfers sebagai baris
+    // terpisah lagi. Konsekuensi lain: kalau kurir BELUM setor,
+    // otomatis ke-exclude dari laci kasir juga tanpa perlu filter manual
+    // per record sales/expenses di atas.
+    //
+    // Catatan: totalHeldByCouriers TIDAK di-scope ke jam mulai shift ini
+    // (dia running balance real-time, lihat computeAllCourierBalances di
+    // atas) — sengaja begitu, karena saldo kurir itu murni carry-over
+    // sampai BENERAN disetor lewat tombol "Setor" (lihat handleOpenDeposit
+    // & handleConfirmPartialDeposit). Tidak ada reset
+    // otomatis lintas hari maupun lintas shift — kasir/kurir yang
+    // menentukan kapan setoran dicatat, bukan sistem.
+    const expectedCash = totalCashBisnis - totalHeldByCouriers;
 
     return {
       initialCash: currentShift.initialCash,
       cashSales: cashSalesTotal,
       cashIncomes: cashIncomeTotal,
       cashExpenses: cashExpenseTotal,
+      cashExpensesKasir: cashExpenseKasirTotal,
+      cashExpensesKurir: cashExpenseKurirTotal,
+      totalCashBisnis,
       expectedCash
     };
-  }, [currentShift, salesHistory, expenses, incomes]);
+  }, [currentShift, salesHistory, expenses, incomes, totalHeldByCouriers]);
 
   // Deteksi dompet yang kebawa nginap dari hari sebelumnya (kemungkinan kasir lupa nutup).
   // Sengaja pakai perbandingan TANGGAL, bukan jumlah jam, karena shift resto
@@ -211,46 +292,6 @@ const ShiftView = () => {
     const now = new Date();
     return start.toDateString() !== now.toDateString();
   }, [currentShift]);
-
-  // Reset Harian Saldo Kurir — dipanggil sekali tiap kali BUKA dompet baru.
-  // Ketimbang nyimpen di useEffect (riskan dobel-fire pas multi-device
-  // sync), sengaja ditaruh nempel di aksi user (klik "Buka Dompet") yang
-  // jelas jadi penanda "hari kerja baru dimulai", karena audit fisik kas
-  // dilakukan tiap hari — jadi saldo kurir yang nginap dari SEBELUM hari
-  // ini dianggap lunas (sudah ketutup lewat audit fisik), BUKAN dihapus
-  // diam-diam: tetap dicatat sebagai transaksi `cashTransfers` normal biar
-  // keauditkan & muncul di Riwayat Setoran, cuma otomatis & bukan manual.
-  //
-  // Saldo dari transaksi HARI INI sengaja TIDAK ikut direset (misal COD
-  // baru masuk pas dompet baru dibuka lagi di hari yang sama) — biar gak
-  // nge-reset uang yang belum sempat beneran disetor.
-  const runDailyCourierReset = () => {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
-    const priorExpenses = activeOnly(expenses).filter(e => new Date(e.date) < startOfToday);
-    const priorSales = activeOnly(salesHistory).filter(s => new Date(s.date) < startOfToday);
-    const priorTransfers = activeOnly(cashTransfers || []).filter(t => new Date(t.date) < startOfToday);
-
-    const priorBalances = computeAllCourierBalances(couriers, {
-      expenses: priorExpenses,
-      salesHistory: priorSales,
-      cashTransfers: priorTransfers,
-    }).filter(b => b.balance > 0);
-
-    if (priorBalances.length === 0) return;
-
-    const resetTransfers = priorBalances.map(b => ({
-      id: `CTF-${generateUUID().split('-')[0].toUpperCase()}`,
-      employeeId: b.employeeId,
-      employeeName: b.employeeName,
-      amount: b.balance,
-      note: 'Reset Harian (otomatis, saldo nginap sudah ketutup audit fisik)',
-      date: new Date(),
-    }));
-
-    setCashTransfers([...resetTransfers, ...cashTransfers]);
-  };
 
   const handleOpenShift = () => {
     if (!initialCashInput || Number(initialCashInput) < 0) return triggerAlert('Masukkan nominal saldo awal yang valid.');
@@ -263,7 +304,6 @@ const ShiftView = () => {
       openedByEmployeeName: selectedEmployee?.name || null,
     };
     setCurrentShift(newShift);
-    runDailyCourierReset();
     pushLiveState('currentShift', newShift).catch(err => 
       console.warn('Gagal push manual :', err)
     );
@@ -516,7 +556,15 @@ const ShiftView = () => {
             <div className="flex justify-between"><span>Saldo Awal (Modal)</span> <span>{formatRupiah(closedShiftData.stats.initialCash)}</span></div>
             <div className="flex justify-between"><span>Penjualan Tunai</span> <span>{formatRupiah(closedShiftData.stats.cashSales)}</span></div>
             <div className="flex justify-between"><span>Pemasukan Lain</span> <span>{formatRupiah(closedShiftData.stats.cashIncomes)}</span></div>
-            <div className="flex justify-between text-accent-500 dark:text-accent-400 print:text-black"><span>Pengeluaran Kasir</span> <span>-{formatRupiah(closedShiftData.stats.cashExpenses)}</span></div>
+            {/* Fallback utk shift lama yang stats-nya belum punya field
+                cashExpensesKasir/cashExpensesKurir (sebelum kedua field ini
+                ditambahkan) — cashExpensesKasir di-default ke cashExpenses
+                gabungan (behavior lama), cashExpensesKurir default 0 & baris
+                itu disembunyikan biar gak nampilin Rp 0 yang menyesatkan. */}
+            <div className="flex justify-between text-accent-500 dark:text-accent-400 print:text-black"><span>Pengeluaran Kasir</span> <span>-{formatRupiah(closedShiftData.stats.cashExpensesKasir ?? closedShiftData.stats.cashExpenses)}</span></div>
+            {closedShiftData.stats.cashExpensesKurir > 0 && (
+              <div className="flex justify-between text-accent-500 dark:text-accent-400 print:text-black"><span>Pengeluaran Kurir</span> <span>-{formatRupiah(closedShiftData.stats.cashExpensesKurir)}</span></div>
+            )}
           </div>
 
           <div className="space-y-1.5 text-xs print:text-black">
@@ -653,12 +701,13 @@ const ShiftView = () => {
                   <Users className="w-3.5 h-3.5" /> {currentShift.openedByEmployeeName}
                 </p>
               )}
+              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase mt-2">Khusus Transaksi Tunai</p>
             </div>
 
             <div className="mt-8 space-y-4 relative z-10">
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
                 <span className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                  Saldo Awal
+                  Uang Kas
                   {isAdminMode && (
                     <button
                       onClick={handleOpenEditActiveInitial}
@@ -672,33 +721,39 @@ const ShiftView = () => {
                 <span className="font-bold text-slate-800 dark:text-slate-100">{formatRupiah(shiftStats?.initialCash)}</span>
               </div>
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
-                <span className="text-sm text-slate-500 dark:text-slate-400">Penjualan (Khusus Tunai)</span>
+                <span className="text-sm text-slate-500 dark:text-slate-400">Penjualan</span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">+{formatRupiah(shiftStats?.cashSales)}</span>
               </div>
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
-                <span className="text-sm text-slate-500 dark:text-slate-400">Pemasukan Lain (Tunai)</span>
+                <span className="text-sm text-slate-500 dark:text-slate-400">Pemasukan Non-Penjualan</span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">+{formatRupiah(shiftStats?.cashIncomes)}</span>
               </div>
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
                 <span className="text-sm text-slate-500 dark:text-slate-400">Pengeluaran Kasir</span>
-                <span className="font-bold text-accent-600 dark:text-accent-400">-{formatRupiah(shiftStats?.cashExpenses)}</span>
+                <span className="font-bold text-accent-600 dark:text-accent-400">-{formatRupiah(shiftStats?.cashExpensesKasir)}</span>
               </div>
+              {shiftStats?.cashExpensesKurir > 0 && (
+                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                  <span className="text-sm text-slate-500 dark:text-slate-400">Pengeluaran Kurir</span>
+                  <span className="font-bold text-accent-600 dark:text-accent-400">-{formatRupiah(shiftStats?.cashExpensesKurir)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center pt-2">
-                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Saldo Akhir (Laci Kasir)</span>
-                <span className="font-black text-2xl text-slate-800 dark:text-slate-100">{formatRupiah(shiftStats?.expectedCash)}</span>
+                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Saldo Akhir</span>
+                <span className="font-black text-2xl text-slate-800 dark:text-slate-100">{formatRupiah((shiftStats?.expectedCash || 0) + totalHeldByCouriers)}</span>
               </div>
 
               {/* Ringkasan lokasi cash — dompet kasir vs yang masih di tangan kurir.
-                  "Saldo Akhir" di atas SENGAJA cuma cash fisik laci kasir (dipakai buat
-                  cocokin fisik pas tutup shift), BUKAN total kas bisnis. Total gabungan
-                  (dompet + kurir) baru dijumlah di baris "Total Kas Bisnis" di bawah. */}
+                  "Saldo Akhir" di atas = Saldo Dompet + Saldo Kurir (dihitung
+                  langsung di sini, bukan dari shiftStats.totalCashBisnis,
+                  supaya jelas ini murni penjumlahan dua baris di bawahnya). */}
               <div className="mt-2 pt-4 border-t border-dashed border-slate-200 dark:border-slate-800 space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Uang Tunai di Dompet</span>
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Saldo di Dompet</span>
                   <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatRupiah(shiftStats?.expectedCash)}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Uang Tunai di Kurir</span>
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Saldo di Kurir</span>
                   <span className={`text-sm font-bold ${totalHeldByCouriers > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>
                     {formatRupiah(totalHeldByCouriers)}
                   </span>
@@ -711,7 +766,7 @@ const ShiftView = () => {
                         <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">{formatRupiah(b.balance)}</span>
                         <button
                           type="button"
-                          onClick={() => handleQuickDeposit(b)}
+                          onClick={() => handleOpenDeposit(b)}
                           className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 rounded-lg px-1.5 py-0.5 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 active:scale-95 transition-all duration-200 shrink-0"
                         >
                           Setor
@@ -720,12 +775,6 @@ const ShiftView = () => {
                     ))}
                   </div>
                 )}
-                <div className="flex justify-between items-center pt-2 mt-1 border-t border-slate-200 dark:border-slate-800">
-                  <span className="text-xs font-black text-slate-600 dark:text-slate-300">Total Kas Bisnis (Dompet + Kurir)</span>
-                  <span className="text-base font-black text-slate-800 dark:text-slate-100">
-                    {formatRupiah((shiftStats?.expectedCash ?? 0) + totalHeldByCouriers)}
-                  </span>
-                </div>
               </div>
 
             </div>
@@ -1118,6 +1167,89 @@ const ShiftView = () => {
             </div>
           </>
         )}
+      </Modal>
+
+      {/* =========================================================================
+          MODAL SETOR — Pindahkan saldo Kurir ke Dompet (penuh atau sebagian)
+          ========================================================================= */}
+      <Modal
+        isOpen={!!depositTarget}
+        onClose={() => { setDepositTarget(null); setPartialDepositInput(''); }}
+        title="Setor ke Dompet"
+      >
+        {depositTarget && (() => {
+          // Live balance — dihitung ulang tiap render dari courierBalances,
+          // supaya kalau ada transaksi baru masuk selagi modal ini terbuka,
+          // angka yang ditampilkan & dipakai validasi selalu yang terkini.
+          const liveEntry = courierBalances.find(b => b.employeeId === depositTarget.employeeId);
+          const liveBalance = Math.max(liveEntry?.balance || 0, 0);
+          const amount = Number(partialDepositInput);
+          const isValidAmount = partialDepositInput !== '' && Number.isFinite(amount) && amount > 0 && amount <= liveBalance;
+          const sisaPreview = partialDepositInput !== '' && Number.isFinite(amount) ? liveBalance - amount : liveBalance;
+
+          return (
+            <>
+              <div className="p-4 md:p-6 space-y-4">
+                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                  <span className="text-sm text-slate-500 dark:text-slate-400">Saldo {depositTarget.employeeName} saat ini</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{formatRupiah(liveBalance)}</span>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Nominal yang Disetor</span>
+                    <button
+                      type="button"
+                      onClick={() => setPartialDepositInput(String(liveBalance))}
+                      disabled={liveBalance <= 0}
+                      className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 rounded-lg px-2 py-0.5 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 active:scale-95 transition-all duration-200 disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      Setor Semua
+                    </button>
+                  </div>
+                  <Input
+                    type="number"
+                    icon={<span className="font-bold">Rp</span>}
+                    value={partialDepositInput}
+                    onChange={e => setPartialDepositInput(e.target.value)}
+                    placeholder="0"
+                    className="text-lg font-bold py-3"
+                  />
+                  {partialDepositInput !== '' && amount > liveBalance && (
+                    <p className="text-xs text-accent-500 dark:text-accent-400 mt-1">
+                      Nominal melebihi saldo yang tersedia ({formatRupiah(liveBalance)}).
+                    </p>
+                  )}
+                </div>
+
+                {partialDepositInput !== '' && isValidAmount && (
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Sisa saldo setelah setoran ini:</p>
+                    <p className="font-black text-lg text-slate-800 dark:text-slate-100">{formatRupiah(sisaPreview)}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 md:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => { setDepositTarget(null); setPartialDepositInput(''); }}
+                >
+                  Batal
+                </Button>
+                <Button
+                  variant="primary"
+                  className="flex-1"
+                  onClick={handleConfirmPartialDeposit}
+                  disabled={!isValidAmount || isDepositSubmitting}
+                >
+                  {isDepositSubmitting ? 'Memproses...' : 'Setor'}
+                </Button>
+              </div>
+            </>
+          );
+        })()}
       </Modal>
 
     </div>
