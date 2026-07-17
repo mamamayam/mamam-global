@@ -9,7 +9,7 @@ import { pushTransactionDelete, pushLiveState } from '../../storage/realtimeSync
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
 import { getActiveCouriers } from '../hrd/utils/payrollLogic';
-import { computeAllCourierBalances, isCourierHolder } from '../../utils/cashHolders';
+import { computeAllCourierBalances, isCourierHolder, CASH_TRANSFER_TYPE_WRITEOFF, isWriteoffTransfer } from '../../utils/cashHolders';
 
 // Import komponen UI Design System
 import { 
@@ -62,6 +62,13 @@ const ShiftView = () => {
   const [depositTarget, setDepositTarget] = useState(null); // { employeeId, employeeName } | null
   const [partialDepositInput, setPartialDepositInput] = useState('');
   const [isDepositSubmitting, setIsDepositSubmitting] = useState(false); // anti double-submit
+
+  // State utk Modal Hapus Setoran (write-off saldo kurir yang hilang/gak
+  // balik — TIDAK menaikkan Saldo Dompet, beda dari Setor. Khusus Admin,
+  // lihat isAdminMode check di tombol pemicunya).
+  const [writeoffTarget, setWriteoffTarget] = useState(null); // { employeeId, employeeName } | null
+  const [writeoffInput, setWriteoffInput] = useState('');
+  const [isWriteoffSubmitting, setIsWriteoffSubmitting] = useState(false); // anti double-submit
 
   const handleShareImage = async () => {
     const reportElement = document.getElementById('xreading-content');
@@ -136,6 +143,17 @@ const ShiftView = () => {
     [courierBalances]
   );
 
+  // Total Hapus Setoran (write-off) — dijumlah TERPISAH dari totalHeldByCouriers.
+  // Dipakai buat ngoreksi totalCashBisnis di shiftStats: begitu ada write-off,
+  // saldo kurir turun (lewat totalHeldByCouriers) SAMA seperti setoran biasa,
+  // tapi duitnya beneran hilang — bukan pindah ke laci — jadi totalCashBisnis
+  // (dan ujungnya expectedCash/Saldo Dompet) HARUS ikut turun sejumlah yang
+  // sama, supaya write-off gak keliatan seolah nambah uang di laci kasir.
+  const totalWrittenOff = useMemo(
+    () => activeOnly(cashTransfers || []).filter(isWriteoffTransfer).reduce((sum, t) => sum + (t.amount || 0), 0),
+    [cashTransfers]
+  );
+
   // Tombol "Setor" — SATU-SATUNYA jalur setor kurir->dompet, selalu buka
   // popup input nominal (gak ada lagi jalur instant tanpa konfirmasi
   // nominal). Popup punya tombol "Setor Semua" buat auto-isi input dgn
@@ -193,6 +211,61 @@ const ShiftView = () => {
     setIsDepositSubmitting(false);
     setDepositTarget(null);
     setPartialDepositInput('');
+  };
+
+  // Tombol "Hapus" — buka popup Hapus Setoran (write-off saldo kurir),
+  // khusus Admin. Sama pola dengan handleOpenDeposit: hanya nyimpen
+  // employeeId/employeeName ke state, nominal live selalu diambil ULANG
+  // dari courierBalances pas modal render (lihat handleConfirmWriteoff).
+  const handleOpenWriteoff = (balanceEntry) => {
+    setWriteoffTarget({ employeeId: balanceEntry.employeeId, employeeName: balanceEntry.employeeName });
+    setWriteoffInput('');
+  };
+
+  const handleConfirmWriteoff = () => {
+    if (!writeoffTarget || isWriteoffSubmitting) return;
+
+    const liveEntry = courierBalances.find(b => b.employeeId === writeoffTarget.employeeId);
+    const liveBalance = Math.max(liveEntry?.balance || 0, 0);
+
+    const amount = Number(writeoffInput);
+
+    if (!writeoffInput || !Number.isFinite(amount) || amount <= 0) {
+      triggerAlert('Nominal yang dihapus harus lebih dari Rp 0.');
+      return;
+    }
+    if (amount > liveBalance) {
+      triggerAlert(`Nominal melebihi saldo ${writeoffTarget.employeeName} saat ini (${formatRupiah(liveBalance)}).`);
+      return;
+    }
+
+    setIsWriteoffSubmitting(true);
+    const isFull = amount === liveBalance;
+    const sisaSetelahHapus = liveBalance - amount;
+
+    // type: 'writeoff' — beda dari setoran biasa: turunin saldo kurir
+    // TAPI TIDAK menaikkan Saldo Akhir Dompet (lihat shiftStats di bawah,
+    // totalCashBisnis dikurangi totalWrittenOff persis supaya efeknya
+    // gak nyampur ke expectedCash/laci kasir).
+    const newTransfer = {
+      id: generateUUID(),
+      employeeId: writeoffTarget.employeeId,
+      employeeName: writeoffTarget.employeeName,
+      amount,
+      type: CASH_TRANSFER_TYPE_WRITEOFF,
+      note: isFull ? 'Hapus setoran (write-off, uang hilang/tidak balik)' : `Hapus setoran sebagian (write-off, sisa ${formatRupiah(sisaSetelahHapus)})`,
+      date: new Date(),
+    };
+    setCashTransfers([newTransfer, ...cashTransfers]);
+    triggerAlert(
+      isFull
+        ? `Saldo ${writeoffTarget.employeeName} sebesar ${formatRupiah(amount)} dihapus (dicatat sebagai kerugian).`
+        : `${formatRupiah(amount)} dari saldo ${writeoffTarget.employeeName} dihapus. Sisa: ${formatRupiah(sisaSetelahHapus)}.`
+    );
+
+    setIsWriteoffSubmitting(false);
+    setWriteoffTarget(null);
+    setWriteoffInput('');
   };
 
   // Tutup Saldo Lama — nolin saldo kurir yang kebawa dari SEBELUM hari ini
@@ -297,7 +370,12 @@ const ShiftView = () => {
 
     // Total Kas Bisnis — gabungan laci kasir + yang masih di tangan kurir,
     // murni cash-basis, gak peduli lokasi fisiknya di mana saat ini.
-    const totalCashBisnis = currentShift.initialCash + cashSalesTotal + cashIncomeTotal - cashExpenseTotal;
+    // Dikurangi totalWrittenOff (Hapus Setoran) — itu uang yang beneran
+    // hilang dari bisnis (bukan cuma "belum disetor"), jadi harus ikut
+    // ngurangin Total Kas Bisnis juga, BUKAN cuma totalHeldByCouriers.
+    // Tanpa pengurangan ini, expectedCash di bawah bakal seolah-olah naik
+    // tiap ada write-off — padahal duitnya gak pernah masuk laci.
+    const totalCashBisnis = currentShift.initialCash + cashSalesTotal + cashIncomeTotal - cashExpenseTotal - totalWrittenOff;
 
     // Saldo Akhir (Laci Kasir) = Total Kas Bisnis - Saldo yang MASIH
     // dipegang kurir (belum disetor). Ini SATU-SATUNYA rumus buat nentuin
@@ -328,7 +406,7 @@ const ShiftView = () => {
       totalCashBisnis,
       expectedCash
     };
-  }, [currentShift, salesHistory, expenses, incomes, totalHeldByCouriers]);
+  }, [currentShift, salesHistory, expenses, incomes, totalHeldByCouriers, totalWrittenOff]);
 
   // Deteksi dompet yang kebawa nginap dari hari sebelumnya (kemungkinan kasir lupa nutup).
   // Sengaja pakai perbandingan TANGGAL, bukan jumlah jam, karena shift resto
@@ -458,6 +536,18 @@ const ShiftView = () => {
     triggerConfirm('Pindahkan data dompet ini ke Recycle Bin?', () => {
       setShiftHistory(shiftHistory.map(shift => shift.id === id ? markDeleted(shift) : shift));
       triggerAlert('Data dipindahkan ke Recycle Bin.');
+    });
+  };
+
+  // Hapus 1 baris riwayat setoran kurir (koreksi kalau kasir/admin salah
+  // catat) — soft-delete konsisten sama pola recycle bin di seluruh app
+  // (activeOnly() di list Riwayat Setoran Kurir otomatis nyembunyiin ini).
+  // Beda dari shift, sengaja gak dikasih recycle bin terpisah di sini
+  // karena penggunaannya cuma buat koreksi cepat, bukan alur audit shift.
+  const handleDeleteCourierTransfer = (id) => {
+    triggerConfirm('Hapus baris setoran ini? Saldo kurir terkait akan otomatis kehitung ulang.', () => {
+      setCashTransfers(cashTransfers.map(t => t.id === id ? markDeleted(t) : t));
+      triggerAlert('Baris setoran dihapus.');
     });
   };
 
@@ -819,6 +909,18 @@ const ShiftView = () => {
                         >
                           Setor
                         </button>
+                        {/* Hapus Setoran (write-off) — khusus Admin. Beda dari
+                            Setor: nurunin saldo kurir TAPI gak nambah Saldo
+                            Dompet (lihat handleConfirmWriteoff & totalWrittenOff). */}
+                        {isAdminMode && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenWriteoff(b)}
+                            className="text-[10px] font-bold text-accent-600 dark:text-accent-400 border border-accent-200 dark:border-accent-500/30 rounded-lg px-1.5 py-0.5 hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-95 transition-all duration-200 shrink-0"
+                          >
+                            Hapus
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1094,7 +1196,12 @@ const ShiftView = () => {
                           <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{t.note}</p>
                           <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(t.date).toLocaleString('id-ID')}</p>
                         </div>
-                        <span className="font-black text-emerald-600 dark:text-emerald-400 shrink-0">{formatRupiah(t.amount)}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-black text-emerald-600 dark:text-emerald-400">{formatRupiah(t.amount)}</span>
+                          <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris setoran ini">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </IconButton>
+                        </div>
                       </div>
                     ))
                   )}
@@ -1336,6 +1443,97 @@ const ShiftView = () => {
                   disabled={!isValidAmount || isDepositSubmitting}
                 >
                   {isDepositSubmitting ? 'Memproses...' : 'Setor'}
+                </Button>
+              </div>
+            </>
+          );
+        })()}
+      </Modal>
+
+      {/* =========================================================================
+          MODAL HAPUS SETORAN — Write-off saldo Kurir (khusus Admin)
+          Beda dari Setor: nurunin saldo kurir TAPI TIDAK menaikkan Saldo
+          Dompet — dipakai kalau uang kurir hilang/gak balik (bukan
+          perpindahan kas yang sah). Lihat handleConfirmWriteoff & catatan
+          totalWrittenOff di shiftStats.
+          ========================================================================= */}
+      <Modal
+        isOpen={!!writeoffTarget}
+        onClose={() => { setWriteoffTarget(null); setWriteoffInput(''); }}
+        title="Hapus Setoran (Write-off)"
+      >
+        {writeoffTarget && (() => {
+          const liveEntry = courierBalances.find(b => b.employeeId === writeoffTarget.employeeId);
+          const liveBalance = Math.max(liveEntry?.balance || 0, 0);
+          const amount = Number(writeoffInput);
+          const isValidAmount = writeoffInput !== '' && Number.isFinite(amount) && amount > 0 && amount <= liveBalance;
+          const sisaPreview = writeoffInput !== '' && Number.isFinite(amount) ? liveBalance - amount : liveBalance;
+
+          return (
+            <>
+              <div className="p-4 md:p-6 space-y-4">
+                <div className="flex gap-2 items-start bg-accent-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/30 rounded-xl p-3">
+                  <AlertTriangle className="w-4 h-4 text-accent-500 dark:text-accent-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-accent-700 dark:text-accent-300">
+                    Nominal ini dicatat sebagai kerugian (uang hilang/tidak balik) — <b>TIDAK</b> menambah Saldo Akhir Dompet, beda dari Setor.
+                  </p>
+                </div>
+
+                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                  <span className="text-sm text-slate-500 dark:text-slate-400">Saldo {writeoffTarget.employeeName} saat ini</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{formatRupiah(liveBalance)}</span>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Nominal yang Dihapus</span>
+                    <button
+                      type="button"
+                      onClick={() => setWriteoffInput(String(liveBalance))}
+                      disabled={liveBalance <= 0}
+                      className="text-[11px] font-bold text-accent-600 dark:text-accent-400 border border-accent-200 dark:border-accent-500/30 rounded-lg px-2 py-0.5 hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-95 transition-all duration-200 disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      Hapus Semua
+                    </button>
+                  </div>
+                  <Input
+                    type="number"
+                    icon={<span className="font-bold">Rp</span>}
+                    value={writeoffInput}
+                    onChange={e => setWriteoffInput(e.target.value)}
+                    placeholder="0"
+                    className="text-lg font-bold py-3"
+                  />
+                  {writeoffInput !== '' && amount > liveBalance && (
+                    <p className="text-xs text-accent-500 dark:text-accent-400 mt-1">
+                      Nominal melebihi saldo yang tersedia ({formatRupiah(liveBalance)}).
+                    </p>
+                  )}
+                </div>
+
+                {writeoffInput !== '' && isValidAmount && (
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Sisa saldo setelah dihapus:</p>
+                    <p className="font-black text-lg text-slate-800 dark:text-slate-100">{formatRupiah(sisaPreview)}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 md:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => { setWriteoffTarget(null); setWriteoffInput(''); }}
+                >
+                  Batal
+                </Button>
+                <Button
+                  variant="danger"
+                  className="flex-1"
+                  onClick={handleConfirmWriteoff}
+                  disabled={!isValidAmount || isWriteoffSubmitting}
+                >
+                  {isWriteoffSubmitting ? 'Memproses...' : 'Hapus'}
                 </Button>
               </div>
             </>

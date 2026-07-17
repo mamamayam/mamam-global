@@ -100,7 +100,7 @@ export function mergeValue(local, remote) {
 // Return value: true = beneran kekirim & kesimpen di Supabase, false = gagal
 // (error ATAU timeout). Dipakai runAutoSync buat mutusin key ini boleh
 // dianggap "sudah sinkron" (snapshot maju) atau harus di-retry run berikutnya.
-export async function pushTransactionUpsert(tableKey, item, readyPromise) {
+export async function pushTransactionUpsert(tableKey, item, readyPromise, onFailure) {
   if (!isSupabaseConfigured() || !item?.id) return false;
 
   await waitReadyOrTimeout(readyPromise);
@@ -121,6 +121,7 @@ export async function pushTransactionUpsert(tableKey, item, readyPromise) {
     );
     if (error) {
       console.warn(`[sync] gagal push ${tableKey}/${item.id}:`, error.message);
+      onFailure?.({ tableKey, id: item.id, message: error.message });
       return false;
     }
     localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
@@ -128,6 +129,7 @@ export async function pushTransactionUpsert(tableKey, item, readyPromise) {
     return true;
   } catch (err) {
     console.warn(`[sync] error/timeout push ${tableKey}/${item.id}:`, err.message);
+    onFailure?.({ tableKey, id: item.id, message: err.message });
     return false;
   }
 }
@@ -363,9 +365,12 @@ export function isSyncInFlight() {
  * @param {(info: object) => void} [options.onProgress]
  *   Dipanggil berkali-kali selama proses jalan, buat progress bar di UI.
  *   Shape: { keyIndex, totalKeys, key, phase: 'transaction'|'config'|'live',
- *            doneInKey, totalInKey, sentCount, failedCount }
+ *            doneInKey, totalInKey, sentCount, failedCount, failedItems }
+ *   failedItems: array { tableKey, id, message } — detail tiap record yang
+ *   gagal push, diakumulasi sepanjang proses (dipakai BackupView buat
+ *   nampilin daftar record bermasalah, bukan cuma angka doang).
  *
- * @returns {Promise<{sent: number, failed: number}>}
+ * @returns {Promise<{sent: number, failed: number, failedItems: Array}>}
  */
 export async function runAutoSync({ force = false, onProgress } = {}) {
   if ((!isAutoSyncEnabled() && !force) || !isSupabaseConfigured() || autoSyncInFlight) {
@@ -375,6 +380,7 @@ export async function runAutoSync({ force = false, onProgress } = {}) {
 
   let sentCount = 0;
   let failedCount = 0;
+  const failedItems = []; // { tableKey, id, message } — buat ditampilin di UI (BackupView)
 
   // Total semua key (transaksi + config + live-state) — dipakai buat hitung
   // keyIndex/totalKeys yang konsisten di seluruh progress report.
@@ -385,7 +391,7 @@ export async function runAutoSync({ force = false, onProgress } = {}) {
     onProgress?.({
       keyIndex, totalKeys, key, phase,
       doneInKey, totalInKey,
-      sentCount, failedCount,
+      sentCount, failedCount, failedItems,
     });
   }
 
@@ -404,7 +410,7 @@ export async function runAutoSync({ force = false, onProgress } = {}) {
             let doneInKey = 0;
             report(tableKey, 'transaction', 0, current.length);
             await runInBatches(current, async (item) => {
-              const ok = await pushTransactionUpsert(tableKey, item);
+              const ok = await pushTransactionUpsert(tableKey, item, undefined, (info) => failedItems.push(info));
               if (ok) { sentCount++; pushedMap.set(String(item.id), item); } else { failedCount++; }
               return ok;
             }, () => { doneInKey++; report(tableKey, 'transaction', doneInKey, current.length); });
@@ -427,7 +433,7 @@ export async function runAutoSync({ force = false, onProgress } = {}) {
 
         if (upserts.length > 0) {
           await runInBatches(upserts, async (item) => {
-            const ok = await pushTransactionUpsert(tableKey, item);
+            const ok = await pushTransactionUpsert(tableKey, item, undefined, (info) => failedItems.push(info));
             if (ok) { sentCount++; workingMap.set(String(item.id), item); } else { failedCount++; }
             return ok;
           }, () => { doneInKey++; report(tableKey, 'transaction', doneInKey, totalInKey); });
@@ -533,10 +539,10 @@ export async function runAutoSync({ force = false, onProgress } = {}) {
       console.log(`[sync] ${force ? 'manual' : 'auto'}-sync: tidak ada perubahan`);
     }
 
-    return { sent: sentCount, failed: failedCount };
+    return { sent: sentCount, failed: failedCount, failedItems };
   } catch (err) {
     console.warn(`[sync] ${force ? 'manual' : 'auto'}-sync gagal total:`, err.message);
-    return { sent: sentCount, failed: failedCount };
+    return { sent: sentCount, failed: failedCount, failedItems };
   } finally {
     autoSyncInFlight = false;
   }

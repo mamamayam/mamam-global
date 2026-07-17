@@ -431,6 +431,54 @@ function SyncProgressBar({ progress }) {
   );
 }
 
+// ── FailedSyncList ─────────────────────────────────────────────────────────
+// Nampilin rincian record yang gagal push ke Supabase setelah sync manual
+// selesai — tabel, id, dan pesan error asli dari Supabase/network — biar
+// gak perlu buka console buat tau record mana yang bermasalah & kenapa.
+// Tetap kelihatan sampai sync berikutnya dijalankan (lihat lastFailedItems
+// di BackupView, beda dari syncProgress yang di-reset begitu sync selesai).
+function FailedSyncList({ items }) {
+  const [copied, setCopied] = useState(false);
+  if (!items || items.length === 0) return null;
+
+  const handleCopy = async () => {
+    const text = items.map(i => `${i.tableKey} / ${i.id} — ${i.message}`).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (_) { /* clipboard gak tersedia, diamkan */ }
+  };
+
+  return (
+    <div className="bg-amber-50 dark:bg-amber-500/10 border-2 border-amber-200 dark:border-amber-500/30 rounded-xl p-4 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5" /> {items.length} record gagal tersinkron
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-500/40 rounded-lg px-2 py-1 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors"
+        >
+          {copied ? 'Tersalin ✓' : 'Salin Daftar'}
+        </button>
+      </div>
+      <div className="space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar">
+        {items.map((item, idx) => (
+          <div key={`${item.tableKey}-${item.id}-${idx}`} className="bg-white dark:bg-slate-900 rounded-lg px-3 py-2 border border-amber-100 dark:border-amber-500/20">
+            <p className="text-[11px] font-mono font-bold text-slate-700 dark:text-slate-200">{item.tableKey} / {item.id}</p>
+            <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5 break-words">{item.message}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-amber-600 dark:text-amber-400/80">
+        Record ini otomatis dicoba lagi di sync berikutnya. Kalau terus gagal berulang kali, kemungkinan ada masalah di data record itu sendiri (bukan cuma koneksi).
+      </p>
+    </div>
+  );
+}
+
 // ── BackupView ─────────────────────────────────────────────────────────────
 
 const BackupView = ({ onBack }) => {
@@ -441,7 +489,11 @@ const BackupView = ({ onBack }) => {
   const [dateRangeModal, setDateRangeModal] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
-  const [syncProgress, setSyncProgress] = useState(null); // { keyIndex, totalKeys, key, phase, doneInKey, totalInKey, sentCount, failedCount }
+  const [syncProgress, setSyncProgress] = useState(null); // { keyIndex, totalKeys, key, phase, doneInKey, totalInKey, sentCount, failedCount, failedItems }
+  // Beda dari syncProgress (yang di-null-in begitu sync selesai): ini SENGAJA
+  // dipertahankan setelah sync kelar, biar user tetap bisa lihat record mana
+  // yang gagal push tanpa harus buka console. Direset tiap kali sync baru dimulai.
+  const [lastFailedItems, setLastFailedItems] = useState([]);
   const [storageSize, setStorageSize] = useState('Menghitung...');
   const [recordCount, setRecordCount] = useState('...');
 
@@ -592,14 +644,16 @@ const BackupView = ({ onBack }) => {
     if (!supabaseReady) { showToast('Supabase belum dikonfigurasi di .env', 'error'); return; }
     if (isSyncInFlight()) { showToast('Sync sedang berjalan, tunggu sebentar...', 'error'); return; }
     setIsSyncing(true);
-    setSyncProgress({ keyIndex: 0, totalKeys: 1, key: '', phase: '', doneInKey: 0, totalInKey: 0, sentCount: 0, failedCount: 0 });
+    setLastFailedItems([]); // reset daftar gagal dari run sebelumnya
+    setSyncProgress({ keyIndex: 0, totalKeys: 1, key: '', phase: '', doneInKey: 0, totalInKey: 0, sentCount: 0, failedCount: 0, failedItems: [] });
     try {
       // Tiap item sekarang punya timeout 15 detik (lihat PUSH_TIMEOUT_MS di
       // realtimeSync.js), dan dikirim per-batch paralel (lihat AUTO_SYNC_BATCH_SIZE),
       // jadi proses ini jauh lebih cepat dan gak akan pernah "muter" tanpa
       // batas kayak sebelumnya.
-      const { sent, failed } = await runAutoSync({ force: true, onProgress: setSyncProgress });
+      const { sent, failed, failedItems } = await runAutoSync({ force: true, onProgress: setSyncProgress });
       refreshSyncTime.current();
+      setLastFailedItems(failedItems || []);
       if (failed > 0) {
         showToast(`${sent} terkirim, ${failed} gagal (timeout/koneksi) — otomatis dicoba lagi nanti`, 'error');
       } else {
@@ -738,6 +792,12 @@ const BackupView = ({ onBack }) => {
 
             {/* Progress Bar Sync Manual — muncul cuma selagi isSyncing */}
             {supabaseReady && isSyncing && <SyncProgressBar progress={syncProgress} />}
+
+            {/* Daftar record gagal — selagi sync (live dari syncProgress) ATAU
+                setelah selesai (dari lastFailedItems, yang gak ke-reset). */}
+            {supabaseReady && (
+              <FailedSyncList items={isSyncing ? syncProgress?.failedItems : lastFailedItems} />
+            )}
 
             {/* Info Waktu Sync Terakhir — disembunyikan sementara selagi progress bar tampil */}
             {supabaseReady && !isSyncing && (

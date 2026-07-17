@@ -35,6 +35,25 @@
 // pengeluaran ataupun pemasukan bisnis baru, jadi sengaja gak dicampur ke
 // expenses/incomes supaya gak dobel-hitung di laporan Laba/Rugi — uangnya
 // kan sudah tercatat masuk lewat penjualan Delivery COD itu sendiri).
+//
+// Field `type` pada record cashTransfers (opsional, default 'deposit' utk
+// data lama yang belum punya field ini):
+//   'deposit'  -> setoran normal, uang BENERAN pindah ke laci kasir.
+//                 Menurunkan saldo kurir DAN menaikkan Saldo Akhir Dompet
+//                 (lihat expectedCash di ShiftView.jsx).
+//   'writeoff' -> kerugian/uang hilang (kurir kehilangan uang, dsb).
+//                 Menurunkan saldo kurir SAMA seperti deposit (dari sisi
+//                 computeCourierBalance di bawah, keduanya identik — cuma
+//                 pengurang), TAPI TIDAK menaikkan Saldo Akhir Dompet,
+//                 karena duitnya emang hilang, bukan pindah ke laci.
+//                 ShiftView.jsx yang membedakan efeknya ke expectedCash.
+
+export const CASH_TRANSFER_TYPE_DEPOSIT = 'deposit';
+export const CASH_TRANSFER_TYPE_WRITEOFF = 'writeoff';
+
+export function isWriteoffTransfer(transfer) {
+  return transfer?.type === CASH_TRANSFER_TYPE_WRITEOFF;
+}
 
 export const CASH_HOLDER_KASIR = { type: 'kasir' };
 
