@@ -12,6 +12,11 @@
 
 import { toLocalMonthString } from '../../utils/formatters';
 import { activeOnly } from '../../utils/softDelete';
+import {
+  resolveEmployeeForRecord,
+  summarizeAutoBonuses,
+  AUTO_ADJUSTMENT_CATEGORIES,
+} from '../hrd/utils/payrollLogic';
 
 export const KASBON_CATEGORY = 'Kasbon Karyawan';
 export const BAHAN_BAKU_CATEGORY = 'Belanja';
@@ -31,13 +36,114 @@ export function getTotalPenghasilan(salesHistory, period) {
 }
 
 /**
- * Pisahkan expenses 1 periode jadi 3 kelompok:
+ * Total BIAYA GAJI (upah kotor) untuk 1 periode — dipakai sebagai salah
+ * satu komponen Biaya Operasional di Laba Rugi.
+ *
+ * Sistem penggajian di app ini TIDAK PERNAH mengurangi upah karyawan —
+ * semua dihitung murni akumulasi: (jam kerja × tarif) + Bonus Full Time +
+ * Uang Lembur + tambahan lain (ongkir, potong ayam, dll, lewat
+ * rec.additions). Field rec.deductions ada di struktur data untuk jaga-jaga
+ * fitur potongan manual di masa depan, tapi saat ini kosong/tidak dipakai.
+ *
+ * Kasbon (expenses kategori "Kasbon Karyawan") itu piutang ke karyawan,
+ * BUKAN biaya. Kasbon hanya mengurangi jumlah kas yang perlu dikeluarkan
+ * saat gajian (karena sebagian sudah "dicicil" duluan) — kewajiban gaji
+ * yang dicatat sebagai biaya di Laba Rugi tidak pernah berubah karena
+ * kasbon, berapa pun besarnya.
+ *
+ * PENTING — ini SENGAJA BUKAN netPay (lihat ReportsTab.jsx SECTION 1):
+ *   netPay = basicPay + totalAdditions - totalDeductions
+ * di mana totalDeductions itu SUDAH termasuk kasbon (expenses kategori
+ * "Kasbon Karyawan" ditambahkan langsung ke totalDeductions per karyawan,
+ * karena netPay memang dipakai untuk "berapa yang harus dibayar tunai" —
+ * beda tujuan dengan biaya gaji di Laba Rugi ini).
+ *
+ * Rumus yang dipakai:
+ *   Biaya Gaji = basicPay + totalAdditions - (totalDeductions - totalKasbon)
+ *
+ * Kalau rec.deductions memang selalu kosong (sesuai kondisi sistem saat
+ * ini), maka totalDeductions HANYA berisi kasbon, sehingga
+ * (totalDeductions - totalKasbon) = 0 dan rumus di atas otomatis menjadi
+ * murni akumulasi: Biaya Gaji = basicPay + totalAdditions (upah kotor
+ * penuh, tidak dikurangi apa pun). Kalau nanti fitur potongan manual mulai
+ * dipakai, potongan itu akan otomatis ikut mengurangi biaya gaji — kasbon
+ * tetap tidak pernah dihitung sebagai biaya, berapa pun kondisinya.
+ */
+export function getTotalBiayaGaji(employeeDailyRecords, expenses, employees, period) {
+  const periodRecords = activeOnly(employeeDailyRecords)
+    .filter(rec => toLocalMonthString(rec.date) === period);
+
+  const perf = {}; // employeeId -> { basicPay, totalAdditions, totalDeductions, totalKasbon, records }
+
+  const ensure = (employeeId) => {
+    if (!perf[employeeId]) {
+      perf[employeeId] = { basicPay: 0, totalAdditions: 0, totalDeductions: 0, totalKasbon: 0, records: [] };
+    }
+    return perf[employeeId];
+  };
+
+  periodRecords.forEach(rec => {
+    const data = ensure(rec.employeeId);
+    data.records.push(rec);
+
+    const recEmp = resolveEmployeeForRecord(rec, employees);
+    data.basicPay += (rec.hoursWorked || 0) * (recEmp?.hourlyRate || 0);
+
+    // Tambahan manual non-auto (ongkir, potong ayam, dll) — Bonus Full
+    // Time & Bonus Lembur dihitung terpisah lewat summarizeAutoBonuses di
+    // bawah, sama seperti pola di ReportsTab.jsx, supaya masing-masing
+    // record tetap pakai tarif/konfigurasi yang dibekukan saat itu.
+    data.totalAdditions += (rec.additions || [])
+      .filter(a => !AUTO_ADJUSTMENT_CATEGORIES.includes(a.category))
+      .reduce((sum, a) => sum + a.amount, 0);
+    // rec.deductions saat ini tidak pernah diisi di sistem ini (tidak ada
+    // fitur potongan gaji manual) — baris ini disiapkan untuk kompatibilitas
+    // ke depan saja, hasilnya akan selalu 0 selama field itu tetap kosong.
+    data.totalDeductions += (rec.deductions || []).reduce((sum, d) => sum + d.amount, 0);
+  });
+
+  // Kasbon (expenses kategori "Kasbon Karyawan") bulan ini per karyawan —
+  // dicatat terpisah supaya bisa "dibalikin" dari totalDeductions.
+  activeOnly(expenses || []).forEach(exp => {
+    if (
+      exp.employeeId &&
+      toLocalMonthString(exp.date) === period &&
+      exp.category === KASBON_CATEGORY
+    ) {
+      const data = ensure(exp.employeeId);
+      data.totalKasbon += Number(exp.amount) || 0;
+      // Kasbon manual biasanya JUGA tercatat sebagai deduction di record
+      // harian (lihat ReportsTab.jsx) — supaya konsisten, kasbon yang masuk
+      // lewat expenses ini turut ditambahkan ke totalDeductions dulu,
+      // baru nanti dikurangi balik di bawah. Ini menjaga behaviour sama
+      // persis dengan SECTION 1 ReportsTab.jsx (sumber kebenaran existing).
+      data.totalDeductions += Number(exp.amount) || 0;
+    }
+  });
+
+  let totalBiayaGaji = 0;
+  Object.values(perf).forEach(data => {
+    const { fullTimeBonusTotal, overtimePayTotal } = summarizeAutoBonuses(data.records, employees);
+    const upahKotor = data.basicPay + data.totalAdditions + fullTimeBonusTotal + overtimePayTotal;
+    const potonganNonKasbon = data.totalDeductions - data.totalKasbon;
+    totalBiayaGaji += upahKotor - potonganNonKasbon;
+  });
+
+  return totalBiayaGaji;
+}
+
+/**
+ * Pisahkan expenses 1 periode jadi 2 kelompok:
  * - belanjaBahanBaku: kategori "Belanja" -> masuk komponen HPP
  * - biayaOperasional: semua kategori LAIN selain "Belanja" dan
- *   "Kasbon Karyawan" -> pengurang Laba Kotor
- * - kasbon: kategori "Kasbon Karyawan" -> TIDAK dihitung sama sekali
- *   (itu piutang ke karyawan, sudah otomatis kepotong di payroll,
- *   bukan biaya usaha)
+ *   "Kasbon Karyawan" -> pengurang Laba Kotor (mis. listrik, sewa, dll)
+ *
+ * Expenses kategori "Kasbon Karyawan" tidak masuk ke belanjaBahanBaku
+ * maupun biayaOperasional — kasbon adalah piutang ke karyawan, bukan
+ * pengeluaran usaha. Satu-satunya tempat kasbon relevan adalah
+ * getTotalBiayaGaji() di atas (untuk menyamakan angka dengan
+ * totalDeductions di ReportsTab.jsx), dan di situ pun kasbon tidak pernah
+ * ikut menjadi biaya.
  *
  * Dikembalikan juga breakdown per-kategori untuk biaya operasional,
  * supaya UI bisa nampilin rincian, bukan cuma angka total.
@@ -48,15 +154,13 @@ export function splitExpenses(expenses, period) {
 
   let belanjaBahanBaku = 0;
   let biayaOperasional = 0;
-  let kasbon = 0;
   const operasionalByCategory = {};
 
   for (const exp of periodExpenses) {
     const amount = Number(exp.amount) || 0;
 
     if (exp.category === KASBON_CATEGORY) {
-      kasbon += amount;
-      continue;
+      continue; // kasbon bukan biaya, tidak dihitung di sini — lihat docblock di atas
     }
 
     if (exp.category === BAHAN_BAKU_CATEGORY) {
@@ -71,7 +175,6 @@ export function splitExpenses(expenses, period) {
   return {
     belanjaBahanBaku,
     biayaOperasional,
-    kasbon,
     operasionalByCategory, // { "Biaya": 2500000, "Lain-lain": 650000, ... }
   };
 }
@@ -81,7 +184,7 @@ export function splitExpenses(expenses, period) {
  *
  *   HPP          = Stok Awal + Belanja Bahan Baku − Stok Akhir
  *   Laba Kotor   = Penghasilan − HPP
- *   Laba Bersih  = Laba Kotor − Biaya Operasional
+ *   Laba Bersih  = Laba Kotor − Biaya Operasional − Biaya Gaji
  *
  * stokAwalValue / stokAkhirValue diteruskan dari luar (hasil
  * stockOpnameLogic.js) — fungsi ini sengaja tidak tahu-menahu soal
@@ -91,12 +194,13 @@ export function computeBalance({
   penghasilan,
   belanjaBahanBaku,
   biayaOperasional,
+  biayaGaji,
   stokAwalValue,
   stokAkhirValue,
 }) {
   const hpp = (Number(stokAwalValue) || 0) + belanjaBahanBaku - (Number(stokAkhirValue) || 0);
   const labaKotor = penghasilan - hpp;
-  const labaBersih = labaKotor - biayaOperasional;
+  const labaBersih = labaKotor - biayaOperasional - biayaGaji;
 
   return { hpp, labaKotor, labaBersih };
 }
@@ -110,14 +214,16 @@ export function computeBalance({
  * BalanceTab.jsx akan override stokAwalValue/stokAkhirValue dengan nilai
  * asli begitu snapshot stok opname sudah di-generate.
  */
-export function getBalanceSummary(salesHistory, expenses, period, stok = {}) {
+export function getBalanceSummary(salesHistory, expenses, employeeDailyRecords, employees, period, stok = {}) {
   const penghasilan = getTotalPenghasilan(salesHistory, period);
-  const { belanjaBahanBaku, biayaOperasional, kasbon, operasionalByCategory } = splitExpenses(expenses, period);
+  const { belanjaBahanBaku, biayaOperasional, operasionalByCategory } = splitExpenses(expenses, period);
+  const biayaGaji = getTotalBiayaGaji(employeeDailyRecords, expenses, employees, period);
 
   const hasil = computeBalance({
     penghasilan,
     belanjaBahanBaku,
     biayaOperasional,
+    biayaGaji,
     stokAwalValue: stok.stokAwalValue || 0,
     stokAkhirValue: stok.stokAkhirValue || 0,
   });
@@ -127,7 +233,7 @@ export function getBalanceSummary(salesHistory, expenses, period, stok = {}) {
     penghasilan,
     belanjaBahanBaku,
     biayaOperasional,
-    kasbon, // ditampilkan sebagai info, bukan komponen hitungan
+    biayaGaji,
     operasionalByCategory,
     ...hasil,
   };

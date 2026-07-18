@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
-  Scale, Calendar, Warehouse, ShoppingCart, TrendingUp,
+  Scale, Calendar, Warehouse, ShoppingCart, TrendingUp, Users,
   RefreshCw, AlertTriangle, Package, Receipt, Lock
 } from 'lucide-react';
 import { formatRupiah, toLocalMonthString } from '../../utils/formatters';
@@ -72,7 +72,7 @@ const StatCard = ({ icon, label, value, tone = 'neutral', sub }) => {
 };
 
 const BalanceTab = () => {
-  const { salesHistory, expenses } = useAppContext();
+  const { salesHistory, expenses, employeeDailyRecords, employees } = useAppContext();
 
   const [period, setPeriod] = useState(toLocalMonthString());
   const [stokAkhir, setStokAkhir] = useState(MOCK_STOK_AKHIR_BELUM_GENERATE);
@@ -93,16 +93,17 @@ const BalanceTab = () => {
     }, 900);
   };
 
-  // Penghasilan (dari salesHistory) & Belanja/Biaya (dari expenses) sudah
-  // dihitung dari data ASLI lewat BalanceLogic.js. Sisi stok opname
+  // Penghasilan (salesHistory), Belanja Bahan Baku/Biaya Operasional
+  // (expenses), dan Biaya Gaji (employeeDailyRecords + expenses kasbon)
+  // sudah dihitung dari data ASLI lewat balance.js. Sisi stok opname
   // (stokAwalValue/stokAkhirValue) masih mock sampai stockOpnameLogic.js
   // selesai — begitu itu jadi, cukup ganti 2 baris di bawah ini.
   const ringkasan = useMemo(() => {
-    return getBalanceSummary(salesHistory, expenses, period, {
+    return getBalanceSummary(salesHistory, expenses, employeeDailyRecords, employees, period, {
       stokAwalValue: stokAwal.totalValue,
       stokAkhirValue: stokAkhir ? stokAkhir.totalValue : 0,
     });
-  }, [salesHistory, expenses, period, stokAwal, stokAkhir]);
+  }, [salesHistory, expenses, employeeDailyRecords, employees, period, stokAwal, stokAkhir]);
 
   // Hasil akhir (HPP/Laba Kotor/Laba Bersih) hanya ditampilkan kalau stok
   // akhir bulan ini SUDAH di-generate & dikunci — sebelum itu, HPP belum
@@ -236,10 +237,11 @@ const BalanceTab = () => {
       )}
 
       {/* ── RINGKASAN PENGHASILAN & BIAYA ───────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard icon={<TrendingUp className="w-3.5 h-3.5" />} label="Penghasilan" value={ringkasan.penghasilan} tone="success" />
         <StatCard icon={<ShoppingCart className="w-3.5 h-3.5" />} label="Belanja Bahan Baku" value={ringkasan.belanjaBahanBaku} tone="neutral" />
-        <StatCard icon={<Receipt className="w-3.5 h-3.5" />} label="Biaya Operasional" value={ringkasan.biayaOperasional} tone="neutral" sub="Di luar kasbon karyawan" />
+        <StatCard icon={<Users className="w-3.5 h-3.5" />} label="Biaya Gaji" value={ringkasan.biayaGaji} tone="neutral" sub="Upah kotor karyawan, kasbon tidak dihitung" />
+        <StatCard icon={<Receipt className="w-3.5 h-3.5" />} label="Biaya Operasional" value={ringkasan.biayaOperasional} tone="neutral" sub="Listrik, sewa, dll (di luar gaji)" />
       </div>
 
       {/* ── HASIL LABA RUGI ──────────────────────────────────────────────── */}
@@ -277,7 +279,7 @@ const BalanceTab = () => {
 
           <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
             HPP = Stok Awal ({formatRupiah(stokAwal.totalValue)}) + Belanja Bahan Baku ({formatRupiah(ringkasan.belanjaBahanBaku)}) − Stok Akhir ({formatRupiah(stokAkhir.totalValue)}).
-            Laba Bersih = Laba Kotor − Biaya Operasional (kasbon karyawan tidak dihitung sebagai biaya).
+            Laba Bersih = Laba Kotor − Biaya Operasional − Biaya Gaji ({formatRupiah(ringkasan.biayaGaji)}). Kasbon karyawan tidak dihitung sebagai biaya di mana pun.
           </p>
         </Card>
       )}
