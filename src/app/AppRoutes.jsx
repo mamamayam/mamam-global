@@ -20,6 +20,7 @@ const SettingsView      = lazy(() => import('../features/settings/SettingsView')
 const BackupView        = lazy(() => import('../storage/BackupView'));
 const StockView         = lazy(() => import('../features/stock/StockView'));
 const AccountView       = lazy(() => import('../auth/AccountView'));
+const BalanceTab       = lazy(() => import('../features/balance/BalanceTab'));
 
 const VIEWS = {
     beranda:     HomeView,
@@ -39,6 +40,7 @@ const VIEWS = {
     backup:      BackupView,
     stok:        StockView,
     akun:        AccountView,
+    labarugi:    BalanceTab,
 };
 
 // --- Error Boundary (harus class component, React belum support hooks untuk ini) ---
