@@ -54,6 +54,51 @@ export function resolveEmployeeForRecord(record, employees) {
   return resolveSnapshot(record, 'employeeSnapshot', employees, 'employeeId');
 }
 
+/**
+ * Dedup employeeDailyRecords per (employeeId, dateStr) — ambil SATU record
+ * terbaru saja per hari per karyawan.
+ *
+ * KENAPA INI PERLU: employeeDailyRecords disinkronkan per-record (upsert by
+ * `id`, lihat syncKeys.js TRANSACTION_KEYS). Kalau 2 device sama-sama
+ * memicu watchdog auto-attendance (App.jsx/InputDailyTab.jsx) untuk
+ * employeeId+dateStr yang sama SEBELUM realtime sync sempat menyebarkan
+ * record dari device satu ke device lain, masing-masing device insert
+ * record BARU dengan `id` unik sendiri — jadi bukan saling menimpa
+ * (upsert-nya sah, id-nya memang beda), tapi hasilnya 2 record valid untuk
+ * hari yang sama. Efeknya: kehadiran/keterlambatan/jam kerja hari itu
+ * kehitung dobel di semua laporan (Rekap Penggajian, Rekap Kinerja, dst).
+ *
+ * Dedup dilakukan di titik PEMBACAAN (bukan menghapus data mentahnya),
+ * supaya aman dipanggil berkali-kali & gak butuh migrasi data. Record yang
+ * dipertahankan = yang `updatedAt`/`updated_at` paling baru; kalau field itu
+ * gak ada di keduanya, fallback ke urutan array (record belakangan menang,
+ * konsisten dengan pola upsert prevIndex di InputDailyTab.jsx).
+ *
+ * @param {Array} records - employeeDailyRecords (sudah/belum difilter activeOnly)
+ * @returns {Array} records unik per (employeeId, dateStr)
+ */
+export function dedupeDailyRecords(records) {
+  const byKey = new Map();
+  (records || []).forEach(rec => {
+    if (!rec || !rec.employeeId || !rec.dateStr) return;
+    const key = `${rec.employeeId}|${rec.dateStr}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, rec);
+      return;
+    }
+    const existingTime = new Date(existing.updatedAt || existing.updated_at || 0).getTime();
+    const currentTime = new Date(rec.updatedAt || rec.updated_at || 0).getTime();
+    // Kalau timestamp gak ada di keduanya (0 === 0) atau currentTime lebih
+    // baru/sama, menangkan yang belakangan diproses — konsisten dengan
+    // upsert prevIndex di InputDailyTab.jsx (record terakhir yang menang).
+    if (currentTime >= existingTime) {
+      byKey.set(key, rec);
+    }
+  });
+  return Array.from(byKey.values());
+}
+
 // Nominal uang lembur = jumlah blok 30 menit (dibulatkan ke bawah) x tarif per 30 menit.
 export function calculateOvertimePay(overtimeMinutes, ratePer30Min) {
   return Math.floor((overtimeMinutes || 0) / 30) * ratePer30Min;
