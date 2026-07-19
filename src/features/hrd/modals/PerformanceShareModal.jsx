@@ -35,7 +35,16 @@ const PerformanceShareModal = () => {
         <PerformanceSharePDFDocument p={p} rangeLabel={rangeLabel} formatRupiah={formatRupiah} />
       ).toBlob();
 
-      const fileName = `laporan-kinerja-${p.employee.name}-${rangeLabel}.pdf`.replace(/\s+/g, '-');
+      // Sanitasi nama file — rangeLabel bisa mengandung karakter ILEGAL buat
+      // nama file/path, terutama "/" (dari "s/d") dan "," (dari format
+      // tanggal "Jum, 17 Jul 2026"). Kalau "/" lolos, Capacitor Filesystem
+      // membacanya sebagai path separator dan gagal nulis file (app crash
+      // saat share). Jadi buang semua karakter selain huruf/angka/spasi/-/_,
+      // baru whitespace diganti "-".
+      const fileName = `laporan-kinerja-${p.employee.name}-${rangeLabel}.pdf`
+        .replace(/[^a-zA-Z0-9\s\-_.]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-');
 
       if (Capacitor.isNativePlatform()) {
         const base64 = await new Promise((resolve, reject) => {
