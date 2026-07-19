@@ -484,11 +484,6 @@ const ReportsTab = () => {
             ) : (
               sortedEmployeePayroll.map(p => {
                 const hasKasbon = (p.totalKasbon || 0) > 0;
-                // netPay di sini sudah termasuk potongan kasbon (lihat definisi
-                // di atas: basicPay + totalAdditions - totalDeductions). Kalau
-                // kasbonnya lebih besar dari gaji bersih, itu berarti karyawan
-                // masih punya sisa tagihan ke perusahaan bulan ini.
-                const isOwed = p.netPay < 0;
                 const isKasbonExpanded = expandedKasbonEmpId === p.employeeId;
                 return (
                   <div key={p.employeeId} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors duration-300">
@@ -504,20 +499,13 @@ const ReportsTab = () => {
                           {formatRupiah(p.grossPay)}
                         </p>
                         {hasKasbon && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setExpandedKasbonEmpId(isKasbonExpanded ? null : p.employeeId)}
-                              className="text-[11px] font-semibold text-red-500 dark:text-red-400 mt-1 underline decoration-dotted underline-offset-2 hover:text-red-600 dark:hover:text-red-300"
-                            >
-                              Potongan kasbon: -{formatRupiah(p.totalKasbon)}
-                            </button>
-                            <p className={`text-[11px] font-bold mt-0.5 ${isOwed ? 'text-red-500 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
-                              {isOwed
-                                ? `Sisa Tagihan: ${formatRupiah(Math.abs(p.netPay))}`
-                                : `Diterima: ${formatRupiah(p.netPay)}`}
-                            </p>
-                          </>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedKasbonEmpId(isKasbonExpanded ? null : p.employeeId)}
+                            className="text-[11px] font-semibold text-red-500 dark:text-red-400 mt-1 underline decoration-dotted underline-offset-2 hover:text-red-600 dark:hover:text-red-300"
+                          >
+                            Potongan kasbon: -{formatRupiah(p.totalKasbon)}
+                          </button>
                         )}
                       </div>
                       <div className="p-4 flex justify-center">
