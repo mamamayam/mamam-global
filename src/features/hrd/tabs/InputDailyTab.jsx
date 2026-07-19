@@ -229,7 +229,16 @@ const InputDailyTab = () => {
         if (prevExisting) {
           next[prevIndex] = { ...prevExisting, ...baseFields, additions: recalculatedAdditions, employeeSnapshot };
         } else {
-          next.unshift({ id: `REC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, employeeId: empId, date: new Date(dateStr), dateStr, ...baseFields, additions: recalculatedAdditions, deductions: [], employeeSnapshot });
+          // ID DETERMINISTIK (bukan random) — supaya kalau 2 device
+          // sama-sama memproses attendanceLog yang sama untuk
+          // employeeId+dateStr yang sama sebelum sempat saling sync,
+          // keduanya menghasilkan `id` yang SAMA. Sync engine upsert by
+          // `id` (lihat syncKeys.js TRANSACTION_KEYS) jadi otomatis
+          // menyatu jadi 1 baris, bukan 2 record duplikat yang kehitung
+          // dobel di laporan (jam kerja, telat, dst). Konsisten dengan
+          // pola AUTO-LIBUR-BACKFILL-* di App.jsx yang sudah aman dari
+          // race yang sama.
+          next.unshift({ id: `REC-${empId}-${dateStr}`, employeeId: empId, date: new Date(dateStr), dateStr, ...baseFields, additions: recalculatedAdditions, deductions: [], employeeSnapshot });
         }
       });
       return changed ? next : prev;
@@ -281,7 +290,12 @@ const InputDailyTab = () => {
       // gak berubah lagi walau tarif karyawan diedit di kemudian hari.
       const employeeSnapshot = snapshotEmployeeForPayroll(emp);
       const finalAdditions = mergeAutoAdjustments(validAdditions, newRecordBase, employeeSnapshot);
-      return [{ id: `REC-${Date.now()}`, date: new Date(dailyDate), ...newRecordBase, additions: finalAdditions, deductions: validDeductions, employeeSnapshot }, ...prev];
+      // ID deterministik (employeeId+dateStr) — konsisten dengan watchdog
+      // auto-attendance di atas, supaya kalau race dengan device lain yang
+      // juga insert record baru untuk hari yang sama, sync engine upsert
+      // jadi 1 baris (bukan duplikat). Lihat komentar lengkap di watchdog
+      // useEffect di atas.
+      return [{ id: `REC-${dailyEmpId}-${dailyDate}`, date: new Date(dailyDate), ...newRecordBase, additions: finalAdditions, deductions: validDeductions, employeeSnapshot }, ...prev];
     });
     triggerAlert(hasAdjustments ? 'Perubahan berhasil diupdate!' : 'Data berhasil disimpan!');
   };
