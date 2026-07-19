@@ -16,6 +16,15 @@ const PayslipModal = () => {
   const basicPay = data.basicPay;
   const overtimePay = data.overtimePay || 0;
 
+  // Kasbon dipisah dari potongan lain — supaya "Total Potongan" di slip
+  // gak nyampur potongan operasional (mis. denda/pinjaman non-kasbon)
+  // dengan kasbon, dan supaya "Gaji Bersih" tetap merefleksikan hasil
+  // kerja bulan ini, bukan tercampur jadi angka minus kalau kasbonnya besar.
+  const totalKasbon = data.totalKasbon || 0;
+  const otherDeductions = (data.totalDeductions || 0) - totalKasbon;
+  const grossPay = basicPay + (data.totalAdditions || 0) - otherDeductions;
+  const isOwed = data.netPay < 0;
+
   // Header slip gaji (Upah per Jam & Bonus Full Time) HARUS pakai data
   // karyawan LIVE terkini — bukan data.employee (snapshot beku dari record
   // pertama periode ini). Beda dengan rincian tabel harian yang memang
@@ -188,12 +197,30 @@ const PayslipModal = () => {
               </div>
               <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-700 print:border-gray-300">
                 <span>Total Potongan</span>
-                <span className="font-bold text-accent-600 dark:text-accent-400 print:text-black">(-) {formatRupiah(data.totalDeductions)}</span>
+                <span className="font-bold text-accent-600 dark:text-accent-400 print:text-black">(-) {formatRupiah(otherDeductions)}</span>
               </div>
               <div className="flex justify-between py-3 mt-2 border-t-2 border-slate-800 dark:border-slate-100 print:border-black text-base font-black uppercase">
-                <span>TOTAL DITERIMA</span>
-                <span>{formatRupiah(data.netPay)}</span>
+                <span>Gaji Bersih</span>
+                <span>{formatRupiah(grossPay)}</span>
               </div>
+
+              {totalKasbon > 0 && (
+                <>
+                  <div className="flex justify-between py-2 mt-2 border-b border-slate-200 dark:border-slate-700 print:border-gray-300 text-red-500 dark:text-red-400 print:text-black">
+                    <span>Potongan Kasbon</span>
+                    <span className="font-bold">(-) {formatRupiah(totalKasbon)}</span>
+                  </div>
+                  <div className={`flex justify-between py-3 mt-2 border-t-2 border-slate-800 dark:border-slate-100 print:border-black text-base font-black uppercase ${isOwed ? 'text-red-500 dark:text-red-400 print:text-black' : ''}`}>
+                    <span>{isOwed ? 'Sisa Tagihan Kasbon' : 'Total Diterima'}</span>
+                    <span>{formatRupiah(Math.abs(data.netPay))}</span>
+                  </div>
+                  {isOwed && (
+                    <p className="text-xs text-red-500 dark:text-red-400 print:text-black mt-1">
+                      *Gaji bersih bulan ini belum menutupi kasbon karyawan. Sisa akan ditagihkan/dipotong pada periode berikutnya.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
