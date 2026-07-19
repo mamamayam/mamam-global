@@ -92,6 +92,11 @@ const ReportsTab = () => {
           totalOvertimeMinutes: 0,
           totalAdditions: 0,
           totalDeductions: 0,
+          // Kasbon dipisah dari potongan lain (lihat totalDeductions) supaya
+          // gaji bersih hasil kerja dan tagihan kasbon gak tercampur jadi satu
+          // angka net yang bisa minus. Kasbon itu piutang perusahaan, bukan
+          // pengurang upah — lihat grossPay/netPay di bawah.
+          totalKasbon: 0,
           netPay: 0,
           basicPay: 0,
           records: [],
@@ -143,12 +148,14 @@ const ReportsTab = () => {
             totalOvertimeMinutes: 0,
             totalAdditions: 0,
             totalDeductions: 0,
+            totalKasbon: 0,
             netPay: 0,
             basicPay: 0,
             records: [],
           };
         }
         perf[exp.employeeId].totalDeductions += exp.amount;
+        perf[exp.employeeId].totalKasbon += exp.amount;
 
         if (!perf[exp.employeeId].kasbonRecords) {
           perf[exp.employeeId].kasbonRecords = [];
@@ -170,6 +177,12 @@ const ReportsTab = () => {
       // komentar di sana) — TIDAK dihitung ulang di sini pakai tarif tunggal.
       data.netPay = data.basicPay + data.totalAdditions - data.totalDeductions;
 
+      // grossPay = gaji bersih HASIL KERJA bulan ini, sebelum dipotong
+      // kasbon — ini angka yang ditampilkan sebagai "Gaji Bersih" utama,
+      // dan yang jadi dasar Total Expenses Payroll (expense akuntansi yang
+      // sebenarnya, gak boleh berkurang gara-gara piutang kasbon).
+      data.grossPay = data.basicPay + data.totalAdditions - (data.totalDeductions - data.totalKasbon);
+
       // Dibawa serta buat buildPayslipRows() di Payslip — supaya baris
       // "Upah Jam Kerja" per hari di slip gaji juga resolve tarif per
       // record (bukan cuma total di tabel rekap ini).
@@ -179,11 +192,15 @@ const ReportsTab = () => {
     return Object.values(perf);
   }, [filteredRecordsForReport, employees, expenses, reportMonth]);
 
-  const totalPayrollExpense = employeePayroll.reduce((sum, p) => sum + p.netPay, 0);
+  // Total Expenses Payroll = jumlah gaji bersih (sebelum kasbon) semua
+  // karyawan. Kasbon TIDAK mengurangi angka ini karena kasbon adalah
+  // piutang perusahaan (aset), bukan biaya gaji.
+  const totalPayrollExpense = employeePayroll.reduce((sum, p) => sum + p.grossPay, 0);
+  const totalKasbonTertagih = employeePayroll.reduce((sum, p) => sum + (p.totalKasbon || 0), 0);
 
   const sortedEmployeePayroll = applySort(employeePayroll, payrollSortKey, {
     name: p => p.employee?.name || '',
-    netpay: p => p.netPay || 0,
+    netpay: p => p.grossPay || 0,
     hours: p => p.totalHours || 0,
   });
 
@@ -444,19 +461,44 @@ const ReportsTab = () => {
             {sortedEmployeePayroll.length === 0 ? (
               <EmptyState size="sm" icon={<PieChart className="w-8 h-8" />} title="Tidak ada data penggajian pada bulan ini." />
             ) : (
-              sortedEmployeePayroll.map(p => (
-                <div key={p.employeeId} className="grid grid-cols-3 items-center hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors duration-300">
-                  <div className="p-4 text-left min-w-0">
-                    <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{p.employee.name}</p>
+              sortedEmployeePayroll.map(p => {
+                const hasKasbon = (p.totalKasbon || 0) > 0;
+                // netPay di sini sudah termasuk potongan kasbon (lihat definisi
+                // di atas: basicPay + totalAdditions - totalDeductions). Kalau
+                // kasbonnya lebih besar dari gaji bersih, itu berarti karyawan
+                // masih punya sisa tagihan ke perusahaan bulan ini.
+                const isOwed = p.netPay < 0;
+                return (
+                  <div key={p.employeeId} className="grid grid-cols-3 items-center hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors duration-300">
+                    <div className="p-4 text-left min-w-0">
+                      <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{p.employee.name}</p>
+                    </div>
+                    <div className="p-4 text-center">
+                      {/* Gaji bersih HASIL KERJA — sebelum dipotong kasbon.
+                          Ini yang selalu jadi angka "Gaji Bersih" utama, dan
+                          gak akan pernah minus akibat kasbon. */}
+                      <p className="font-black text-slate-900 dark:text-slate-100 text-sm">
+                        {formatRupiah(p.grossPay)}
+                      </p>
+                      {hasKasbon && (
+                        <>
+                          <p className="text-[11px] font-semibold text-red-500 dark:text-red-400 mt-1">
+                            Potongan kasbon: -{formatRupiah(p.totalKasbon)}
+                          </p>
+                          <p className={`text-[11px] font-bold mt-0.5 ${isOwed ? 'text-red-500 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                            {isOwed
+                              ? `Sisa Tagihan: ${formatRupiah(Math.abs(p.netPay))}`
+                              : `Diterima: ${formatRupiah(p.netPay)}`}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <div className="p-4 flex justify-center">
+                      <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>Cetak Slip</Button>
+                    </div>
                   </div>
-                  <div className="p-4 text-center font-black text-slate-900 dark:text-slate-100 text-sm">
-                    {formatRupiah(p.netPay)}
-                  </div>
-                  <div className="p-4 flex justify-center">
-                    <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>Cetak Slip</Button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
@@ -464,9 +506,15 @@ const ReportsTab = () => {
             <div className="grid grid-cols-3 items-center bg-slate-900 dark:bg-slate-950 border-t border-slate-800">
               <div className="p-4 text-left">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Expenses Payroll</p>
+                {totalKasbonTertagih > 0 && (
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mt-1">Total Kasbon Tertagih</p>
+                )}
               </div>
-              <div className="p-4 text-center font-heading text-lg font-black text-white">
-                {formatRupiah(totalPayrollExpense)}
+              <div className="p-4 text-center">
+                <p className="font-heading text-lg font-black text-white">{formatRupiah(totalPayrollExpense)}</p>
+                {totalKasbonTertagih > 0 && (
+                  <p className="font-heading text-xs font-bold text-red-400 mt-1">-{formatRupiah(totalKasbonTertagih)}</p>
+                )}
               </div>
               <div className="p-4" />
             </div>
