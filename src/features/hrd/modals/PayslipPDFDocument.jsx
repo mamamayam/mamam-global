@@ -171,6 +171,13 @@ const PayslipPDFDocument = ({ data, liveEmployee, monthLabel, formatRupiah }) =>
   const overtimePay = data.overtimePay || 0;
   const totalHariKerja = countWorkDays(data.records);
 
+  // Kasbon dipisah dari potongan lain — konsisten dengan PayslipModal
+  // (tampilan layar), supaya PDF & layar selalu identik.
+  const totalKasbon = data.totalKasbon || 0;
+  const otherDeductions = (data.totalDeductions || 0) - totalKasbon;
+  const grossPay = basicPay + (data.totalAdditions || 0) - otherDeductions;
+  const isOwed = data.netPay < 0;
+
   // Fallback kalau suatu saat dipanggil tanpa prop liveEmployee — tetap
   // coba resolve data karyawan live, baru fallback terakhir ke snapshot.
   const emp = liveEmployee || (data.employees || []).find(e => e.id === data.employeeId) || data.employee;
@@ -310,12 +317,34 @@ const PayslipPDFDocument = ({ data, liveEmployee, monthLabel, formatRupiah }) =>
             )}
             <View style={S.summaryRow}>
               <Text>Total Potongan</Text>
-              <Text style={{ fontFamily: 'Helvetica-Bold', color: '#dc2626' }}>(-) {formatRupiah(data.totalDeductions)}</Text>
+              <Text style={{ fontFamily: 'Helvetica-Bold', color: '#dc2626' }}>(-) {formatRupiah(otherDeductions)}</Text>
             </View>
             <View style={S.summaryTotalRow}>
-              <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10 }}>TOTAL DITERIMA</Text>
-              <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10 }}>{formatRupiah(data.netPay)}</Text>
+              <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10 }}>GAJI BERSIH</Text>
+              <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10 }}>{formatRupiah(grossPay)}</Text>
             </View>
+
+            {totalKasbon > 0 && (
+              <>
+                <View style={[S.summaryRow, { marginTop: 2 }]}>
+                  <Text style={{ color: '#dc2626' }}>Potongan Kasbon</Text>
+                  <Text style={{ fontFamily: 'Helvetica-Bold', color: '#dc2626' }}>(-) {formatRupiah(totalKasbon)}</Text>
+                </View>
+                <View style={S.summaryTotalRow}>
+                  <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10, color: isOwed ? '#dc2626' : '#1a1a1a' }}>
+                    {isOwed ? 'SISA TAGIHAN KASBON' : 'TOTAL DITERIMA'}
+                  </Text>
+                  <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10, color: isOwed ? '#dc2626' : '#1a1a1a' }}>
+                    {formatRupiah(Math.abs(data.netPay))}
+                  </Text>
+                </View>
+                {isOwed && (
+                  <Text style={{ fontSize: 7, color: '#dc2626', marginTop: 2 }}>
+                    *Gaji bersih bulan ini belum menutupi kasbon karyawan. Sisa akan ditagihkan/dipotong pada periode berikutnya.
+                  </Text>
+                )}
+              </>
+            )}
           </View>
         </View>
 
