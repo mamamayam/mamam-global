@@ -1,7 +1,6 @@
 import React from 'react';
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import { buildPayslipRows, countWorkDays } from '../utils/payrollLogic';
-import { toLocalDateString } from '../../../utils/formatters';
 
 const S = StyleSheet.create({
   page: {
@@ -142,15 +141,6 @@ const S = StyleSheet.create({
     paddingVertical: 6,
     marginTop: 2,
     borderTop: '2px solid #1e293b',
-  },
-  // Baris rincian kecil di bawah "Potongan Kasbon" — satu baris per catatan
-  // kasbon (tanggal + note apa adanya), tanpa border supaya kelihatan sebagai
-  // sub-item, bukan baris total baru.
-  summaryDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 2,
-    paddingLeft: 8,
   },
 
   // TANDA TANGAN
@@ -340,18 +330,6 @@ const PayslipPDFDocument = ({ data, liveEmployee, monthLabel, formatRupiah }) =>
                   <Text style={{ color: '#dc2626' }}>Potongan Kasbon</Text>
                   <Text style={{ fontFamily: 'Helvetica-Bold', color: '#dc2626' }}>(-) {formatRupiah(totalKasbon)}</Text>
                 </View>
-
-                {/* Rincian per-item kasbon — note apa adanya dari tab
-                    Pengeluaran (mis. "Minus bulan sebelumnya"), tidak ada
-                    label yang di-hardcode di sini. */}
-                {(data.kasbonRecords || []).map(exp => (
-                  <View key={exp.id} style={S.summaryDetailRow}>
-                    <Text style={{ fontSize: 7, color: '#64748b' }}>
-                      {toLocalDateString(exp.date)} — {exp.note || 'Tanpa catatan'}
-                    </Text>
-                    <Text style={{ fontSize: 7, color: '#64748b' }}>-{formatRupiah(exp.amount)}</Text>
-                  </View>
-                ))}
 
                 <View style={S.summaryTotalRow}>
                   <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10, color: isOwed ? '#dc2626' : '#1a1a1a' }}>
