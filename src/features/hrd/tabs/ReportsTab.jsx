@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import {
   AUTO_ADJUSTMENT_CATEGORIES, summarizeAutoBonuses, resolveEmployeeForRecord,
-  WORK_START_MINUTES, timeStrToMinutes,
+  WORK_START_MINUTES, timeStrToMinutes, dedupeDailyRecords,
 } from '../utils/payrollLogic';
 
 // ============================================================================
@@ -77,7 +77,11 @@ const ReportsTab = () => {
   const [expandedKasbonEmpId, setExpandedKasbonEmpId] = useState(null);
 
   const filteredRecordsForReport = useMemo(() => {
-    return activeOnly(employeeDailyRecords).filter(r => toLocalMonthString(r.date) === reportMonth);
+    // Dedup DULU (sebelum filter bulan) — kalau ada record duplikat lintas
+    // bulan (jarang, tapi tetap dijaga), dedup per employeeId+dateStr harus
+    // jalan di seluruh dataset, bukan cuma di dalam 1 bulan.
+    return dedupeDailyRecords(activeOnly(employeeDailyRecords))
+      .filter(r => toLocalMonthString(r.date) === reportMonth);
   }, [employeeDailyRecords, reportMonth]);
 
   const employeePayroll = useMemo(() => {
@@ -255,7 +259,7 @@ const ReportsTab = () => {
   }, [perfActiveRange]);
 
   const perfFilteredRecords = useMemo(() => {
-    return activeOnly(employeeDailyRecords)
+    return dedupeDailyRecords(activeOnly(employeeDailyRecords))
       .filter(r => matchesPerfRange(r.dateStr))
       .filter(r => perfEmployeeFilter === 'all' || r.employeeId === perfEmployeeFilter);
   }, [employeeDailyRecords, matchesPerfRange, perfEmployeeFilter]);
@@ -394,6 +398,15 @@ const ReportsTab = () => {
       totalHariTelat: acc.totalHariTelat + p.hariTelat,
     }), { totalHours: 0, totalOvertimeMinutes: 0, totalNetPay: 0, totalHariTelat: 0 });
   }, [performanceWithIdleEmployees]);
+
+  // Total Jam Kerja / Total Lembur / Total Telat itu metrik performa
+  // INDIVIDU — menjumlahkannya lintas semua karyawan sekaligus ("Semua
+  // Karyawan") gak informatif (mis. "60,4 Jam" gabungan banyak orang
+  // kelihatan kayak 1 orang kerja 60 jam). Makanya 3 kartu itu ditampilkan
+  // 0 sampai user pilih 1 karyawan spesifik. Total gaji (Expenses Payroll)
+  // dikecualikan karena itu memang metrik AGREGAT perusahaan, relevan
+  // dilihat gabungan.
+  const isSingleEmployeeSelected = perfEmployeeFilter !== 'all';
 
   const sortedPerformance = applySort(performanceWithIdleEmployees, perfSortKey, {
     name: p => p.employee?.name || '',
@@ -609,18 +622,28 @@ const ReportsTab = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card variant="dark" padding="lg" className="flex flex-col justify-center">
             <p className="text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3" /> Total Jam Kerja</p>
-            <h3 className="font-heading text-xl font-black text-white">{performanceTotals.totalHours.toFixed(1).replace('.', ',')} Jam</h3>
+            <h3 className="font-heading text-xl font-black text-white">
+              {isSingleEmployeeSelected ? `${performanceTotals.totalHours.toFixed(1).replace('.', ',')} Jam` : '0 Jam'}
+            </h3>
           </Card>
           <Card padding="lg" className="flex flex-col justify-center">
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Total Lembur</p>
-            <h3 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100">{(performanceTotals.totalOvertimeMinutes / 60).toFixed(1).replace('.', ',')} Jam</h3>
+            <h3 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100">
+              {isSingleEmployeeSelected ? `${(performanceTotals.totalOvertimeMinutes / 60).toFixed(1).replace('.', ',')} Jam` : '0 Jam'}
+            </h3>
           </Card>
           <Card padding="lg" className="flex flex-col justify-center">
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 flex items-center gap-1"><AlarmClockOff className="w-3 h-3" /> Total Telat</p>
-            <h3 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100">{performanceTotals.totalHariTelat} Kali</h3>
+            <h3 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100">
+              {isSingleEmployeeSelected ? performanceTotals.totalHariTelat : 0} Kali
+            </h3>
           </Card>
           <Card padding="lg" className="flex flex-col justify-center">
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 flex items-center gap-1"><CalendarCheck className="w-3 h-3" /> Pendapatan Bersih</p>
+            {/* Total gaji SELALU ditampilkan (gak di-nol-in) walau belum pilih
+                karyawan spesifik — ini expense payroll perusahaan buat
+                periode aktif, bukan metrik performa 1 orang, jadi tetap
+                relevan dilihat gabungan semua karyawan. */}
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 flex items-center gap-1"><CalendarCheck className="w-3 h-3" /> Expenses Payroll</p>
             <h3 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100">{formatRupiah(performanceTotals.totalNetPay)}</h3>
           </Card>
         </div>
