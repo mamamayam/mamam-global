@@ -72,6 +72,9 @@ const ReportsTab = () => {
   const [reportMonth, setReportMonth] = useState(toLocalMonthString());
   const [payrollSortKey, setPayrollSortKey] = useState('name-asc');
   const [isPayrollSortOpen, setIsPayrollSortOpen] = useState(false);
+  // Employee yang rincian kasbonnya lagi dibuka (biar gak makan tempat kalau
+  // kasbonnya banyak item — user klik buat lihat detail per catatan).
+  const [expandedKasbonEmpId, setExpandedKasbonEmpId] = useState(null);
 
   const filteredRecordsForReport = useMemo(() => {
     return activeOnly(employeeDailyRecords).filter(r => toLocalMonthString(r.date) === reportMonth);
@@ -97,6 +100,10 @@ const ReportsTab = () => {
           // angka net yang bisa minus. Kasbon itu piutang perusahaan, bukan
           // pengurang upah — lihat grossPay/netPay di bawah.
           totalKasbon: 0,
+          // Rincian per-item kasbon (tanggal, nominal, note) — dipakai buat
+          // breakdown di UI supaya jelas asal-usul tiap potongan kasbon,
+          // termasuk catatan manual seperti "minus bulan sebelumnya".
+          kasbonRecords: [],
           netPay: 0,
           basicPay: 0,
           records: [],
@@ -149,6 +156,7 @@ const ReportsTab = () => {
             totalAdditions: 0,
             totalDeductions: 0,
             totalKasbon: 0,
+            kasbonRecords: [],
             netPay: 0,
             basicPay: 0,
             records: [],
@@ -156,10 +164,6 @@ const ReportsTab = () => {
         }
         perf[exp.employeeId].totalDeductions += exp.amount;
         perf[exp.employeeId].totalKasbon += exp.amount;
-
-        if (!perf[exp.employeeId].kasbonRecords) {
-          perf[exp.employeeId].kasbonRecords = [];
-        }
         perf[exp.employeeId].kasbonRecords.push(exp);
       }
     });
@@ -182,6 +186,10 @@ const ReportsTab = () => {
       // dan yang jadi dasar Total Expenses Payroll (expense akuntansi yang
       // sebenarnya, gak boleh berkurang gara-gara piutang kasbon).
       data.grossPay = data.basicPay + data.totalAdditions - (data.totalDeductions - data.totalKasbon);
+
+      // Urutkan rincian kasbon per tanggal (lama -> baru) supaya catatan
+      // seperti "minus bulan sebelumnya" kelihatan duluan di breakdown.
+      data.kasbonRecords.sort((a, b) => new Date(a.date) - new Date(b.date));
 
       // Dibawa serta buat buildPayslipRows() di Payslip — supaya baris
       // "Upah Jam Kerja" per hari di slip gaji juga resolve tarif per
@@ -468,34 +476,61 @@ const ReportsTab = () => {
                 // kasbonnya lebih besar dari gaji bersih, itu berarti karyawan
                 // masih punya sisa tagihan ke perusahaan bulan ini.
                 const isOwed = p.netPay < 0;
+                const isKasbonExpanded = expandedKasbonEmpId === p.employeeId;
                 return (
-                  <div key={p.employeeId} className="grid grid-cols-3 items-center hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors duration-300">
-                    <div className="p-4 text-left min-w-0">
-                      <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{p.employee.name}</p>
+                  <div key={p.employeeId} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors duration-300">
+                    <div className="grid grid-cols-3 items-center">
+                      <div className="p-4 text-left min-w-0">
+                        <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{p.employee.name}</p>
+                      </div>
+                      <div className="p-4 text-center">
+                        {/* Gaji bersih HASIL KERJA — sebelum dipotong kasbon.
+                            Ini yang selalu jadi angka "Gaji Bersih" utama, dan
+                            gak akan pernah minus akibat kasbon. */}
+                        <p className="font-black text-slate-900 dark:text-slate-100 text-sm">
+                          {formatRupiah(p.grossPay)}
+                        </p>
+                        {hasKasbon && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedKasbonEmpId(isKasbonExpanded ? null : p.employeeId)}
+                              className="text-[11px] font-semibold text-red-500 dark:text-red-400 mt-1 underline decoration-dotted underline-offset-2 hover:text-red-600 dark:hover:text-red-300"
+                            >
+                              Potongan kasbon: -{formatRupiah(p.totalKasbon)}
+                            </button>
+                            <p className={`text-[11px] font-bold mt-0.5 ${isOwed ? 'text-red-500 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                              {isOwed
+                                ? `Sisa Tagihan: ${formatRupiah(Math.abs(p.netPay))}`
+                                : `Diterima: ${formatRupiah(p.netPay)}`}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                      <div className="p-4 flex justify-center">
+                        <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>Cetak Slip</Button>
+                      </div>
                     </div>
-                    <div className="p-4 text-center">
-                      {/* Gaji bersih HASIL KERJA — sebelum dipotong kasbon.
-                          Ini yang selalu jadi angka "Gaji Bersih" utama, dan
-                          gak akan pernah minus akibat kasbon. */}
-                      <p className="font-black text-slate-900 dark:text-slate-100 text-sm">
-                        {formatRupiah(p.grossPay)}
-                      </p>
-                      {hasKasbon && (
-                        <>
-                          <p className="text-[11px] font-semibold text-red-500 dark:text-red-400 mt-1">
-                            Potongan kasbon: -{formatRupiah(p.totalKasbon)}
-                          </p>
-                          <p className={`text-[11px] font-bold mt-0.5 ${isOwed ? 'text-red-500 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
-                            {isOwed
-                              ? `Sisa Tagihan: ${formatRupiah(Math.abs(p.netPay))}`
-                              : `Diterima: ${formatRupiah(p.netPay)}`}
-                          </p>
-                        </>
-                      )}
-                    </div>
-                    <div className="p-4 flex justify-center">
-                      <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>Cetak Slip</Button>
-                    </div>
+
+                    {/* Rincian per-item kasbon — pakai note apa adanya (mis.
+                        "Minus bulan sebelumnya", "Kasbon dompet"), gak ada
+                        kategori/label yang di-hardcode di sini. Apapun yang
+                        dicatat di tab Pengeluaran otomatis muncul di sini. */}
+                    {hasKasbon && isKasbonExpanded && (
+                      <div className="px-4 pb-4">
+                        <div className="bg-red-50/60 dark:bg-red-500/5 border border-red-100 dark:border-red-500/20 rounded-2xl divide-y divide-red-100 dark:divide-red-500/10 overflow-hidden">
+                          {p.kasbonRecords.map(exp => (
+                            <div key={exp.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-700 dark:text-slate-300">{toLocalDateString(exp.date)}</p>
+                                <p className="text-slate-500 dark:text-slate-400 truncate">{exp.note || 'Tanpa catatan'}</p>
+                              </div>
+                              <p className="font-bold text-red-500 dark:text-red-400 shrink-0">-{formatRupiah(exp.amount)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })
