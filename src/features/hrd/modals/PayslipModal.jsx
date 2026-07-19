@@ -7,7 +7,6 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { pdf } from '@react-pdf/renderer';
 import PayslipPDFDocument from './PayslipPDFDocument';
 import { buildPayslipRows, countWorkDays } from '../utils/payrollLogic';
-import { toLocalDateString } from '../../../utils/formatters';
 
 const PayslipModal = () => {
   const { payslipModal, setPayslipModal, formatRupiah } = useAppContext();
@@ -211,21 +210,6 @@ const PayslipModal = () => {
                     <span>Potongan Kasbon</span>
                     <span className="font-bold">(-) {formatRupiah(totalKasbon)}</span>
                   </div>
-
-                  {/* Rincian per-item kasbon — pakai note apa adanya (mis.
-                      "Minus bulan sebelumnya"), tidak ada label yang di-hardcode
-                      di sini. Apapun yang dicatat di tab Pengeluaran otomatis
-                      muncul di slip. */}
-                  {(data.kasbonRecords || []).length > 0 && (
-                    <div className="pl-3 pb-1 space-y-1 text-xs text-slate-500 dark:text-slate-400 print:text-gray-600">
-                      {data.kasbonRecords.map(exp => (
-                        <div key={exp.id} className="flex justify-between gap-2">
-                          <span className="truncate">{toLocalDateString(exp.date)} — {exp.note || 'Tanpa catatan'}</span>
-                          <span className="shrink-0">-{formatRupiah(exp.amount)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
 
                   <div className={`flex justify-between py-3 mt-2 border-t-2 border-slate-800 dark:border-slate-100 print:border-black text-base font-black uppercase ${isOwed ? 'text-red-500 dark:text-red-400 print:text-black' : ''}`}>
                     <span>{isOwed ? 'Sisa Tagihan Kasbon' : 'Total Diterima'}</span>
