@@ -7,6 +7,7 @@ export default function Header({
     currentView,
     today,
     setIsSidebarOpen,
+    salesHistory,
 }) {
     return (
         <header className="bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-b border-slate-100/60 dark:border-slate-900 h-16 flex items-center justify-between px-4 z-20 shadow-[0_4px_20px_rgba(0,0,0,0.02)] dark:shadow-none shrink-0">
@@ -30,7 +31,7 @@ export default function Header({
                 <div className="hidden lg:flex items-center bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 px-4 py-2 rounded-full text-xs font-bold border border-slate-100 dark:border-slate-800 whitespace-nowrap">
                     {today}
                 </div>
-                <NotificationBell />
+                <NotificationBell salesHistory={salesHistory} />
             </div>
         </header>
     );
