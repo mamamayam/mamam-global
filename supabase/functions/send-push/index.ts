@@ -126,15 +126,33 @@ Deno.serve(async (req) => {
       .select("fcm_token");
 
     if (error) throw error;
+    const { title, body } = formatNotification(table, record);
+
+    // Tulis ke notification_log DULU (independen dari sukses/gagalnya FCM
+    // di bawah) — supaya bell icon di semua device tetap dapet notif ini
+    // lewat realtime Postgres Changes, walau device_tokens kosong / semua
+    // token invalid / FCM lagi down. Bell dan push notif FCM sekarang
+    // sumbernya sama-sama dari event ini, tapi gak saling blocking.
+    const recordId = String(record.id ?? record.payload?.id ?? "unknown");
+    const { error: logError } = await supabase.from("notification_log").insert({
+      table_name: table,
+      record_id: recordId,
+      title,
+      body,
+    });
+    if (logError) {
+      // Non-fatal — bell cuma gak keupdate buat event ini, push FCM
+      // tetap lanjut jalan seperti biasa di bawah.
+      console.error("[send-push] gagal insert notification_log:", logError.message);
+    }
+
     if (!tokens || tokens.length === 0) {
-      return new Response(JSON.stringify({ skipped: "belum ada device_tokens terdaftar" }), { status: 200 });
+      return new Response(JSON.stringify({ skipped: "belum ada device_tokens terdaftar", logged: !logError }), { status: 200 });
     }
 
     const serviceAccount = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT_JSON")!);
     const projectId = Deno.env.get("FCM_PROJECT_ID")!;
     const accessToken = await getAccessToken(serviceAccount);
-
-    const { title, body } = formatNotification(table, record);
 
     // PENTING: fetch() cuma reject kalau gagal di level jaringan. Response
     // 4xx/5xx dari FCM (token invalid/unregistered, project id/sender salah,

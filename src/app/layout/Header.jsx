@@ -7,6 +7,11 @@ export default function Header({
     currentView,
     today,
     setIsSidebarOpen,
+    // `salesHistory` masih diterima di sini (kalau ada pemanggil lama yang
+    // passing prop ini) tapi TIDAK dipakai lagi — NotificationBell sekarang
+    // baca notifikasi langsung dari tabel `notification_log` di Supabase
+    // (realtime), bukan turunan dari state salesHistory lokal. Lihat komen
+    // panjang di app/layout/NotificationBell.jsx soal alasan perubahannya.
     salesHistory,
 }) {
     return (
@@ -31,7 +36,7 @@ export default function Header({
                 <div className="hidden lg:flex items-center bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 px-4 py-2 rounded-full text-xs font-bold border border-slate-100 dark:border-slate-800 whitespace-nowrap">
                     {today}
                 </div>
-                <NotificationBell salesHistory={salesHistory} />
+                <NotificationBell />
             </div>
         </header>
     );

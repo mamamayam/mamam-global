@@ -1,27 +1,35 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Bell, BellOff } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import EmptyState from '../../components/ui/EmptyState';
+import { getSupabaseClient, getDeviceId, isSupabaseConfigured, withTimeout } from '../../storage/syncClient';
 
 /**
- * NotificationBell — icon lonceng di Header, nampilin riwayat transaksi
- * dalam bentuk kartu notifikasi (panel drop-down dari atas).
+ * NotificationBell — icon lonceng di Header, nampilin riwayat notifikasi
+ * transaksi dalam bentuk kartu (panel drop-down dari atas).
  *
- * PENTING: sumber datanya adalah `salesHistory` ASLI (state lokal, sama
- * yang dipake HistoryView/ReportsView) — BUKAN dari push notification
- * (FCM). Jadi bell ini tetap keisi & bisa diandalkan walaupun push
- * notification lagi bermasalah/belum kekirim — dua hal ini sengaja
- * dipisah. FCM (lihat storage/pushNotifications.js) tetap kepake buat
- * alert di system tray Android pas app di-background/ditutup; bell ini
- * cuma buat "riwayat aktivitas" pas app kebuka.
+ * SUMBER DATA: tabel `notification_log` di Supabase — SAMA PERSIS dengan
+ * yang dipakai edge function send-push buat kirim FCM (lihat
+ * supabase/functions/send-push/index.ts, insert ke notification_log
+ * dilakukan di request yang sama, sebelum kirim FCM). Jadi bell ini dan
+ * push notif system tray Android sekarang berasal dari 1 event yang sama.
  *
- * Baru nyakup sales dulu. Nanti expenses/incomes/absensi tinggal nambah
- * builder serupa di dalam useMemo di bawah terus digabung+sort bareng
- * sales — lihat komen "TODO: sumber lain" di bawah.
+ * SEBELUMNYA bell ini turunan dari state lokal `salesHistory` + hitung
+ * unread pakai `lastSeenAt` per-device di localStorage. Itu bikin badge
+ * gampang gak sinkron antar device (transaksi baru bisa nyampe lewat
+ * realtime dan muncul di HistoryView, tapi bell gak ikut nyala) karena
+ * "belum dibaca"-nya dihitung dari state yang beda-beda tiap device.
+ * Sekarang read-state (`read_by`) juga disimpan di baris yang sama di
+ * Supabase, jadi semua device baca dari 1 sumber kebenaran yang sama —
+ * bell nyala/nggak-nya konsisten di semua device begitu ada koneksi.
+ *
+ * Kalau Supabase belum dikonfigurasi (dev lokal tanpa .env), komponen ini
+ * fallback jadi no-op senyap — bell tetap tampil tapi selalu kosong,
+ * gak nge-block render Header sama sekali.
  */
 
 const MAX_ITEMS = 30;
-const LAST_SEEN_KEY = 'mamam_notif_last_seen';
+const PULL_TIMEOUT_MS = 10000;
 
 function formatRelativeTime(date) {
   const diffMs = Date.now() - new Date(date).getTime();
@@ -35,57 +43,108 @@ function formatRelativeTime(date) {
   return new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
 }
 
-function formatSaleNotification(sale) {
-  const total = Number(sale.total || 0).toLocaleString('id-ID');
-  const method = sale.paymentMethod || 'Tunai';
-  return {
-    id: sale.id,
-    kind: 'sale',
-    title: '🛒 Transaksi Baru',
-    body: `Rp${total} • ${method}${sale.orderType ? ' • ' + sale.orderType : ''}`,
-    date: sale.date,
-  };
-}
-
-export default function NotificationBell({ salesHistory = [] }) {
+export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]); // { id, title, body, created_at, read_by }
+  const deviceId = useRef(null);
+  const channelRef = useRef(null);
 
-  // Kapan terakhir kali bell dibuka (persisted, buat itung unread di
-  // antara sesi/reload). Kalau belum pernah ada (pemakaian pertama fitur
-  // ini), diset ke "sekarang" biar riwayat lama yang udah ada gak
-  // langsung nongol semua sebagai "belum dibaca".
-  const [lastSeenAt, setLastSeenAt] = useState(() => {
-    const stored = localStorage.getItem(LAST_SEEN_KEY);
-    if (stored) return new Date(stored);
-    const now = new Date();
-    localStorage.setItem(LAST_SEEN_KEY, now.toISOString());
-    return now;
-  });
-
-  // salesHistory selalu unshift item baru ke depan (lihat PaymentModal.jsx:
-  // `setSalesHistory([newOrder, ...salesHistory])`), jadi udah terurut
-  // terbaru dulu — tinggal slice, gak perlu sort ulang.
-  const notifications = useMemo(() => {
-    const items = salesHistory.slice(0, MAX_ITEMS).map(formatSaleNotification);
-
-    // TODO: sumber lain (expenses, incomes, absensi) — bikin builder
-    // serupa (formatExpenseNotification, dst), gabung ke `items`, terus
-    // sort bareng by `date` desc sebelum di-slice MAX_ITEMS.
-
-    return items;
-  }, [salesHistory]);
+  const isUnread = useCallback((n) => !Array.isArray(n.read_by) || !n.read_by.includes(deviceId.current), []);
 
   const unreadCount = useMemo(
-    () => notifications.filter((n) => new Date(n.date) > lastSeenAt).length,
-    [notifications, lastSeenAt]
+    () => notifications.filter(isUnread).length,
+    [notifications, isUnread]
   );
 
-  const handleOpen = () => {
+  // ── Pull awal + subscribe realtime ke notification_log ──────────────────
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    deviceId.current = getDeviceId();
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const supabase = await getSupabaseClient();
+        if (!supabase || cancelled) return;
+
+        const { data, error } = await withTimeout(
+          supabase
+            .from('notification_log')
+            .select('id, table_name, record_id, title, body, created_at, read_by')
+            .order('created_at', { ascending: false })
+            .limit(MAX_ITEMS),
+          PULL_TIMEOUT_MS, 'pull notification_log'
+        );
+        if (error) {
+          console.warn('[bell] gagal pull notification_log:', error.message);
+        } else if (!cancelled) {
+          setNotifications(data || []);
+        }
+
+        if (cancelled) return;
+
+        // Realtime: notif baru dari device manapun (termasuk device ini
+        // sendiri, biar tetap konsisten kalau ada 2 tab/instance app kebuka).
+        const channel = supabase
+          .channel(`mamam-notification-bell-${Math.random().toString(36).slice(2)}`)
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notification_log' }, (payload) => {
+            setNotifications((prev) => {
+              const next = [payload.new, ...prev.filter((n) => n.id !== payload.new.id)];
+              return next.slice(0, MAX_ITEMS);
+            });
+          })
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notification_log' }, (payload) => {
+            // Update read_by dari device lain (misal HP kasir sama-sama
+            // buka bell) — biar badge unread konsisten di semua device.
+            setNotifications((prev) => prev.map((n) => (n.id === payload.new.id ? payload.new : n)));
+          })
+          .subscribe();
+
+        channelRef.current = channel;
+      } catch (err) {
+        console.warn('[bell] setup gagal:', err.message);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (channelRef.current) {
+        getSupabaseClient().then((supabase) => supabase?.removeChannel(channelRef.current));
+        channelRef.current = null;
+      }
+    };
+  }, []);
+
+  // ── Tandai semua notif yang lagi keliatan sebagai "sudah dibaca" ────────
+  const handleOpen = async () => {
     setIsOpen(true);
-    if (unreadCount > 0) {
-      const now = new Date();
-      localStorage.setItem(LAST_SEEN_KEY, now.toISOString());
-      setLastSeenAt(now);
+    if (unreadCount === 0 || !deviceId.current) return;
+
+    const idsToMark = notifications.filter(isUnread).map((n) => n.id);
+    if (idsToMark.length === 0) return;
+
+    // Optimistic update lokal dulu biar badge langsung ilang di UI.
+    setNotifications((prev) =>
+      prev.map((n) =>
+        idsToMark.includes(n.id)
+          ? { ...n, read_by: [...(Array.isArray(n.read_by) ? n.read_by : []), deviceId.current] }
+          : n
+      )
+    );
+
+    try {
+      const supabase = await getSupabaseClient();
+      if (!supabase) return;
+      // Per-row update (bukan bulk) karena tiap row bisa punya read_by
+      // awal yang beda-beda — pakai array_append biar aman dari race
+      // kalau device lain nge-update read_by row yang sama nyaris bersamaan.
+      for (const id of idsToMark) {
+        await supabase.rpc('mark_notification_read', { notif_id: id, device: deviceId.current });
+      }
+    } catch (err) {
+      console.warn('[bell] gagal tandai notif terbaca:', err.message);
+      // Non-fatal — badge lokal udah kehapus, worst case device lain
+      // masih lihat ini sebagai unread, gak ada data yang hilang.
     }
   };
 
@@ -129,7 +188,7 @@ export default function NotificationBell({ salesHistory = [] }) {
                   <div className="flex items-start justify-between gap-3">
                     <p className="font-bold text-sm text-slate-900 dark:text-slate-50">{n.title}</p>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap shrink-0 mt-0.5">
-                      {formatRelativeTime(n.date)}
+                      {formatRelativeTime(n.created_at)}
                     </span>
                   </div>
                   {n.body && (
