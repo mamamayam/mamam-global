@@ -1199,6 +1199,7 @@ export default function App() {
             currentShift={currentShift}
             setIsSidebarOpen={setIsSidebarOpen}
             today={today}
+            salesHistory={salesHistory}
           />
         }
         content={
