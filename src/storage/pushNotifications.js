@@ -15,6 +15,7 @@
 import { Capacitor } from '@capacitor/core';
 import { getSupabaseClient } from './syncClient';
 import { getDeviceId } from './syncClient';
+import { useNotificationStore } from '../store/useNotificationStore';
 
 let _registered = false;
 
@@ -46,6 +47,19 @@ export async function registerPushNotifications() {
     // 2. Register ke FCM — hasil token-nya masuk lewat event listener 'registration'
     await PushNotifications.register();
 
+    // 2b. local-notifications punya permission model sendiri, terpisah dari
+    // push-notifications. Wajib diminta di awal juga, kalau enggak, schedule()
+    // di listener 'pushNotificationReceived' bakal gagal diam-diam.
+    try {
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      const localPerm = await LocalNotifications.checkPermissions();
+      if (localPerm.display === 'prompt') {
+        await LocalNotifications.requestPermissions();
+      }
+    } catch (err) {
+      console.error('[push] gagal minta izin local-notifications:', err);
+    }
+
     PushNotifications.addListener('registration', async (token) => {
       console.log('[push] FCM token diterima, menyimpan ke Supabase...');
       await saveTokenToSupabase(token.value);
@@ -60,6 +74,38 @@ export async function registerPushNotifications() {
     PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
       console.log('[push] user tap notif:', action.notification);
       // contoh: window.location.hash = '#/dompet';
+    });
+
+    // 4. PENTING: pas app lagi foreground (lagi dibuka), Android TIDAK
+    // otomatis nampilin notif ke tray — cuma fire event ini ke dalam app.
+    // Tanpa listener ini, notif dari send-push bakal "ilang" kalau kasir
+    // lagi buka app pas transaksi masuk. Kita tampilin manual pakai
+    // local-notifications biar behaviour-nya sama kayak pas app di-background.
+    PushNotifications.addListener('pushNotificationReceived', async (notification) => {
+      console.log('[push] notif diterima saat app foreground:', notification);
+
+      // Double-confirm di dalam UI app — independen dari apakah local
+      // notification berhasil tampil di system tray atau enggak. Ini yang
+      // dibaca bell icon di Header.
+      useNotificationStore.getState().addNotification({
+        title: notification.title,
+        body: notification.body,
+      });
+
+      try {
+        const { LocalNotifications } = await import('@capacitor/local-notifications');
+        await LocalNotifications.schedule({
+          notifications: [
+            {
+              id: Date.now() % 2147483647,
+              title: notification.title || 'Mamam Global',
+              body: notification.body || '',
+            },
+          ],
+        });
+      } catch (err) {
+        console.error('[push] gagal nampilin local notification:', err);
+      }
     });
 
     _registered = true;

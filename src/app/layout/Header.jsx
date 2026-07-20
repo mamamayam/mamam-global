@@ -1,5 +1,6 @@
 import React from "react";
 import { MenuIcon, Clock } from "lucide-react";
+import NotificationBell from "./NotificationBell";
 
 export default function Header({
     currentShift,
@@ -29,6 +30,7 @@ export default function Header({
                 <div className="hidden lg:flex items-center bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 px-4 py-2 rounded-full text-xs font-bold border border-slate-100 dark:border-slate-800 whitespace-nowrap">
                     {today}
                 </div>
+                <NotificationBell />
             </div>
         </header>
     );

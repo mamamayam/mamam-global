@@ -238,3 +238,115 @@ export function getBalanceSummary(salesHistory, expenses, employeeDailyRecords, 
     ...hasil,
   };
 }
+
+/**
+ * Versi RINCI dari splitExpenses/getTotalBiayaGaji — dipakai khusus untuk
+ * tab "Rincian" (bukan dashboard ringkas BalanceTab). Mengembalikan grup
+ * per kategori LENGKAP dengan daftar transaksi mentah di dalamnya, supaya
+ * UI bisa expand tiap grup untuk lihat satu-satu.
+ *
+ * Sengaja dipisah dari getBalanceSummary supaya dashboard utama tidak perlu
+ * memproses/menyimpan daftar transaksi mentah kalau cuma butuh subtotal.
+ */
+export function getBalanceDetail(salesHistory, expenses, employeeDailyRecords, employees, period) {
+  const periodExpenses = activeOnly(expenses)
+    .filter(exp => toLocalMonthString(exp.date) === period);
+
+  // ── Belanja Bahan Baku: grup per kategori (hanya ada 1 kategori,
+  //    "Belanja", tapi tetap dibentuk sebagai grup untuk konsistensi
+  //    bentuk data dengan biayaOperasionalGroups) ──────────────────────
+  const bahanBakuTransactions = periodExpenses
+    .filter(exp => exp.category === BAHAN_BAKU_CATEGORY)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const belanjaBahanBakuGroups = bahanBakuTransactions.length > 0
+    ? [{
+        category: BAHAN_BAKU_CATEGORY,
+        total: bahanBakuTransactions.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
+        transactions: bahanBakuTransactions,
+      }]
+    : [];
+
+  // ── Biaya Operasional: grup per kategori (semua kategori expense
+  //    selain "Belanja" dan "Kasbon Karyawan") ─────────────────────────
+  const operasionalByCategoryMap = {};
+  periodExpenses.forEach(exp => {
+    if (exp.category === BAHAN_BAKU_CATEGORY || exp.category === KASBON_CATEGORY) return;
+    if (!operasionalByCategoryMap[exp.category]) operasionalByCategoryMap[exp.category] = [];
+    operasionalByCategoryMap[exp.category].push(exp);
+  });
+
+  const biayaOperasionalGroups = Object.entries(operasionalByCategoryMap)
+    .map(([category, transactions]) => ({
+      category,
+      total: transactions.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
+      transactions: transactions.sort((a, b) => new Date(a.date) - new Date(b.date)),
+    }))
+    .sort((a, b) => b.total - a.total); // kategori dengan biaya terbesar duluan
+
+  // ── Biaya Gaji: grup per karyawan ────────────────────────────────────
+  const periodRecords = activeOnly(employeeDailyRecords)
+    .filter(rec => toLocalMonthString(rec.date) === period);
+
+  const perEmployee = {}; // employeeId -> { basicPay, totalAdditions, totalDeductions, totalKasbon, records }
+  const ensure = (employeeId) => {
+    if (!perEmployee[employeeId]) {
+      perEmployee[employeeId] = { basicPay: 0, totalAdditions: 0, totalDeductions: 0, totalKasbon: 0, records: [] };
+    }
+    return perEmployee[employeeId];
+  };
+
+  periodRecords.forEach(rec => {
+    const data = ensure(rec.employeeId);
+    data.records.push(rec);
+
+    const recEmp = resolveEmployeeForRecord(rec, employees);
+    data.basicPay += (rec.hoursWorked || 0) * (recEmp?.hourlyRate || 0);
+    data.totalAdditions += (rec.additions || [])
+      .filter(a => !AUTO_ADJUSTMENT_CATEGORIES.includes(a.category))
+      .reduce((sum, a) => sum + a.amount, 0);
+    data.totalDeductions += (rec.deductions || []).reduce((sum, d) => sum + d.amount, 0);
+  });
+
+  activeOnly(expenses || []).forEach(exp => {
+    if (
+      exp.employeeId &&
+      toLocalMonthString(exp.date) === period &&
+      exp.category === KASBON_CATEGORY
+    ) {
+      const data = ensure(exp.employeeId);
+      data.totalKasbon += Number(exp.amount) || 0;
+      data.totalDeductions += Number(exp.amount) || 0;
+    }
+  });
+
+  const biayaGajiGroups = Object.entries(perEmployee)
+    .map(([employeeId, data]) => {
+      const emp = employees.find(e => e.id === employeeId);
+      const { fullTimeBonusTotal, overtimePayTotal } = summarizeAutoBonuses(data.records, employees);
+      const upahKotor = data.basicPay + data.totalAdditions + fullTimeBonusTotal + overtimePayTotal;
+      const potonganNonKasbon = data.totalDeductions - data.totalKasbon;
+      const total = upahKotor - potonganNonKasbon;
+
+      return {
+        employeeId,
+        employeeName: emp?.name || 'Karyawan (tidak ditemukan)',
+        total,
+        basicPay: data.basicPay,
+        fullTimeBonusTotal,
+        overtimePayTotal,
+        totalAdditions: data.totalAdditions,
+        totalKasbon: data.totalKasbon, // ditampilkan sebagai info, tidak mengurangi total
+        hariKerja: data.records.length,
+        records: data.records.sort((a, b) => new Date(a.date) - new Date(b.date)),
+      };
+    })
+    .sort((a, b) => b.total - a.total); // karyawan dengan biaya terbesar duluan
+
+  return {
+    period,
+    belanjaBahanBakuGroups,
+    biayaOperasionalGroups,
+    biayaGajiGroups,
+  };
+}
