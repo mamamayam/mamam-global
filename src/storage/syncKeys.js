@@ -12,7 +12,7 @@ export const ALL_KEYS = [
   'currentShift', 'shiftHistory', 'customers', 'vouchers', 'claimsHistory',
   'storeSettings', 'rawMaterials', 'semiFinished', 'categories',
   'employees', 'employeeDailyRecords', 'additionCategories', 'deductionCategories',
-  'attendanceLog', 'cashTransfers',
+  'attendanceLog', 'cashTransfers', 'openingBalances',
 ];
 
 // Key transaksi: array of objects dengan field `id`.
@@ -22,7 +22,7 @@ export const ALL_KEYS = [
 export const TRANSACTION_KEYS = [
   'salesHistory', 'expenses', 'incomes', 'shiftHistory',
   'employeeDailyRecords', 'claimsHistory', 'savedBills',
-  'attendanceLog', 'customers', 'cashTransfers',
+  'attendanceLog', 'customers', 'cashTransfers', 'openingBalances',
 ];
 
 // Key konfigurasi: disimpan sebagai satu blob JSON per key di tabel `app_config`.

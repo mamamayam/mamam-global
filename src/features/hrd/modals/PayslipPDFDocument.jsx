@@ -177,6 +177,7 @@ const PayslipPDFDocument = ({ data, liveEmployee, monthLabel, formatRupiah }) =>
   const otherDeductions = (data.totalDeductions || 0) - totalKasbon;
   const grossPay = basicPay + (data.totalAdditions || 0) - otherDeductions;
   const isOwed = data.netPay < 0;
+  const openingBalanceAmount = data.openingBalance?.amount || 0;
 
   // Fallback kalau suatu saat dipanggil tanpa prop liveEmployee — tetap
   // coba resolve data karyawan live, baru fallback terakhir ke snapshot.
@@ -325,15 +326,28 @@ const PayslipPDFDocument = ({ data, liveEmployee, monthLabel, formatRupiah }) =>
             </View>
 
             {totalKasbon > 0 && (
-              <>
-                <View style={[S.summaryRow, { marginTop: 2 }]}>
-                  <Text style={{ color: '#dc2626' }}>Potongan Kasbon</Text>
-                  <Text style={{ fontFamily: 'Helvetica-Bold', color: '#dc2626' }}>(-) {formatRupiah(totalKasbon)}</Text>
-                </View>
+              <View style={[S.summaryRow, { marginTop: 2 }]}>
+                <Text style={{ color: '#dc2626' }}>Potongan Kasbon</Text>
+                <Text style={{ fontFamily: 'Helvetica-Bold', color: '#dc2626' }}>(-) {formatRupiah(totalKasbon)}</Text>
+              </View>
+            )}
 
+            {openingBalanceAmount !== 0 && (
+              <View style={[S.summaryRow, { marginTop: 2 }]}>
+                <Text style={{ color: openingBalanceAmount > 0 ? '#dc2626' : '#059669' }}>
+                  {openingBalanceAmount > 0 ? 'Sisa Bulan Lalu (Kasbon)' : 'Sisa Bulan Lalu (Kurang Bayar)'}
+                </Text>
+                <Text style={{ fontFamily: 'Helvetica-Bold', color: openingBalanceAmount > 0 ? '#dc2626' : '#059669' }}>
+                  {openingBalanceAmount > 0 ? '(-)' : '(+)'} {formatRupiah(Math.abs(openingBalanceAmount))}
+                </Text>
+              </View>
+            )}
+
+            {(totalKasbon > 0 || openingBalanceAmount !== 0) && (
+              <>
                 <View style={S.summaryTotalRow}>
                   <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10, color: isOwed ? '#dc2626' : '#1a1a1a' }}>
-                    {isOwed ? 'SISA TAGIHAN KASBON' : 'TOTAL DITERIMA'}
+                    {isOwed ? 'SISA TAGIHAN' : 'TOTAL DITERIMA'}
                   </Text>
                   <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10, color: isOwed ? '#dc2626' : '#1a1a1a' }}>
                     {formatRupiah(Math.abs(data.netPay))}
@@ -341,7 +355,7 @@ const PayslipPDFDocument = ({ data, liveEmployee, monthLabel, formatRupiah }) =>
                 </View>
                 {isOwed && (
                   <Text style={{ fontSize: 7, color: '#dc2626', marginTop: 2 }}>
-                    *Gaji bersih bulan ini belum menutupi kasbon karyawan. Sisa akan ditagihkan/dipotong pada periode berikutnya.
+                    *Gaji bersih bulan ini belum menutupi kasbon/sisa karyawan. Sisa akan ditagihkan/dipotong pada periode berikutnya.
                   </Text>
                 )}
               </>

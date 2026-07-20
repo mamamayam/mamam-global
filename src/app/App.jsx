@@ -197,6 +197,13 @@ export default function App() {
   const [attendanceLog, setAttendanceLog, l24, setAttendanceLogRemote] = usePersistState('attendanceLog', [], { syncMode: 'transaction', syncReadyPromise });
   const [additionCategories, setAdditionCategories, l20, setAdditionCategoriesRemote] = usePersistState('additionCategories', ['Ongkir', 'Lembur', 'Bonus', 'Potongin Ayam'], { syncMode: 'config', syncReadyPromise });
   const [deductionCategories, setDeductionCategories, l21, setDeductionCategoriesRemote] = usePersistState('deductionCategories', ['Kasbon', 'Denda', 'Ganti Rugi'], { syncMode: 'config', syncReadyPromise });
+  // Saldo awal bulan per karyawan ("sisa kasbon/gaji bulan kemarin") — satu
+  // record per (employeeId, month), diinput manual di Rekap Penggajian.
+  // syncMode 'transaction' (bukan 'config') karena ini array-of-record
+  // dengan `id`, konsisten dengan employeeDailyRecords/expenses — supaya
+  // upsert per-baris & aman dari race condition antar device (lihat
+  // catatan id deterministik di payrollLogic.js).
+  const [openingBalances, setOpeningBalances, l26, setOpeningBalancesRemote] = usePersistState('openingBalances', [], { syncMode: 'transaction', syncReadyPromise });
 
   // --- SETTINGS ---
   const [storeSettings, setStoreSettings, l22, setStoreSettingsRemote] = usePersistState('storeSettings', {
@@ -255,6 +262,7 @@ export default function App() {
       additionCategories: setAdditionCategoriesRemote,
       deductionCategories: setDeductionCategoriesRemote,
       storeSettings: setStoreSettingsRemote,
+      openingBalances: setOpeningBalancesRemote,
     };
   });
 
@@ -937,6 +945,7 @@ export default function App() {
     deductionCategories, setDeductionCategories,
     payslipModal, setPayslipModal,
     perfShareModal, setPerfShareModal,
+    openingBalances, setOpeningBalances,
 
     // Inventory / HPP / Materials
     availableMaterials,

@@ -24,6 +24,10 @@ const PayslipModal = () => {
   const otherDeductions = (data.totalDeductions || 0) - totalKasbon;
   const grossPay = basicPay + (data.totalAdditions || 0) - otherDeductions;
   const isOwed = data.netPay < 0;
+  // Saldo awal bulan ("sisa bulan kemarin") — bertanda: positif = karyawan
+  // berhutang (ikut mengurangi netPay), negatif = perusahaan berhutang ke
+  // karyawan (ikut menambah netPay). Lihat payrollLogic.js openingBalanceId.
+  const openingBalanceAmount = data.openingBalance?.amount || 0;
 
   // Header slip gaji (Upah per Jam & Bonus Full Time) HARUS pakai data
   // karyawan LIVE terkini — bukan data.employee (snapshot beku dari record
@@ -205,19 +209,28 @@ const PayslipModal = () => {
               </div>
 
               {totalKasbon > 0 && (
-                <>
-                  <div className="flex justify-between py-2 mt-2 border-b border-slate-200 dark:border-slate-700 print:border-gray-300 text-red-500 dark:text-red-400 print:text-black">
-                    <span>Potongan Kasbon</span>
-                    <span className="font-bold">(-) {formatRupiah(totalKasbon)}</span>
-                  </div>
+                <div className="flex justify-between py-2 mt-2 border-b border-slate-200 dark:border-slate-700 print:border-gray-300 text-red-500 dark:text-red-400 print:text-black">
+                  <span>Potongan Kasbon</span>
+                  <span className="font-bold">(-) {formatRupiah(totalKasbon)}</span>
+                </div>
+              )}
 
+              {openingBalanceAmount !== 0 && (
+                <div className={`flex justify-between py-2 mt-2 border-b border-slate-200 dark:border-slate-700 print:border-gray-300 print:text-black ${openingBalanceAmount > 0 ? 'text-red-500 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                  <span>{openingBalanceAmount > 0 ? 'Sisa Bulan Lalu (Kasbon)' : 'Sisa Bulan Lalu (Kurang Bayar)'}</span>
+                  <span className="font-bold">{openingBalanceAmount > 0 ? '(-)' : '(+)'} {formatRupiah(Math.abs(openingBalanceAmount))}</span>
+                </div>
+              )}
+
+              {(totalKasbon > 0 || openingBalanceAmount !== 0) && (
+                <>
                   <div className={`flex justify-between py-3 mt-2 border-t-2 border-slate-800 dark:border-slate-100 print:border-black text-base font-black uppercase ${isOwed ? 'text-red-500 dark:text-red-400 print:text-black' : ''}`}>
-                    <span>{isOwed ? 'Sisa Tagihan Kasbon' : 'Total Diterima'}</span>
+                    <span>{isOwed ? 'Sisa Tagihan' : 'Total Diterima'}</span>
                     <span>{formatRupiah(Math.abs(data.netPay))}</span>
                   </div>
                   {isOwed && (
                     <p className="text-xs text-red-500 dark:text-red-400 print:text-black mt-1">
-                      *Gaji bersih bulan ini belum menutupi kasbon karyawan. Sisa akan ditagihkan/dipotong pada periode berikutnya.
+                      *Gaji bersih bulan ini belum menutupi kasbon/sisa karyawan. Sisa akan ditagihkan/dipotong pada periode berikutnya.
                     </p>
                   )}
                 </>

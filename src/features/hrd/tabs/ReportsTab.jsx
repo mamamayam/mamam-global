@@ -1,16 +1,17 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useAppContext } from '../../../context/AppContext';
 import { toLocalDateString, toLocalMonthString, getWeekRange } from '../../../utils/formatters';
-import { Card, Button, Input, Select, EmptyState, SortModal, SegmentedControl } from '../../../components/ui';
+import { Card, Button, Input, Select, EmptyState, SortModal, SegmentedControl, Modal, Textarea } from '../../../components/ui';
 import { applySort } from '../../../utils/sortUtils';
 import { activeOnly } from '../../../utils/softDelete';
 import {
   PieChart, Printer, ArrowUpDown, Activity, ChevronDown,
-  TrendingUp, Clock, CalendarCheck, AlarmClockOff, Share2,
+  TrendingUp, Clock, CalendarCheck, AlarmClockOff, Share2, Wallet,
 } from 'lucide-react';
 import {
   AUTO_ADJUSTMENT_CATEGORIES, summarizeAutoBonuses, resolveEmployeeForRecord,
   WORK_START_MINUTES, timeStrToMinutes, dedupeDailyRecords,
+  getOpeningBalance, setOpeningBalance,
 } from '../utils/payrollLogic';
 
 // ============================================================================
@@ -64,7 +65,10 @@ const SectionHeader = ({ step, icon, title, action }) => (
 );
 
 const ReportsTab = () => {
-  const { employees, employeeDailyRecords, expenses, setPayslipModal, setPerfShareModal, formatRupiah } = useAppContext();
+  const {
+    employees, employeeDailyRecords, expenses, setPayslipModal, setPerfShareModal, formatRupiah,
+    openingBalances, setOpeningBalances,
+  } = useAppContext();
 
   // ==========================================================================
   // SECTION 1 — Rekap Penggajian (ringkas, per bulan)
@@ -75,6 +79,11 @@ const ReportsTab = () => {
   // Employee yang rincian kasbonnya lagi dibuka (biar gak makan tempat kalau
   // kasbonnya banyak item — user klik buat lihat detail per catatan).
   const [expandedKasbonEmpId, setExpandedKasbonEmpId] = useState(null);
+  // Modal "Set Saldo Awal Bulan" — { isOpen, employeeId, employeeName }
+  const [openingBalanceModal, setOpeningBalanceModal] = useState({ isOpen: false, employeeId: null, employeeName: '' });
+  const [openingBalanceDirection, setOpeningBalanceDirection] = useState('owed_by_employee'); // 'owed_by_employee' | 'owed_to_employee'
+  const [openingBalanceAmountInput, setOpeningBalanceAmountInput] = useState('');
+  const [openingBalanceNoteInput, setOpeningBalanceNoteInput] = useState('');
 
   const filteredRecordsForReport = useMemo(() => {
     // Dedup DULU (sebelum filter bulan) — kalau ada record duplikat lintas
@@ -172,6 +181,33 @@ const ReportsTab = () => {
       }
     });
 
+    // Saldo awal bulan ("sisa bulan kemarin") — universal, bisa POSITIF
+    // (karyawan berhutang) atau NEGATIF (perusahaan berhutang ke karyawan).
+    // Beda dari kasbon: ini bukan transaksi baru di bulan ini, jadi TIDAK
+    // masuk totalDeductions/totalKasbon (yang basisnya expense tercatat) —
+    // ditambahkan langsung ke netPay di bawah, dan ditampilkan terpisah.
+    (activeOnly(openingBalances || [])).forEach(bal => {
+      if (bal.month !== reportMonth || !bal.employeeId) return;
+      if (!perf[bal.employeeId]) {
+        const emp = employees.find(e => e.id === bal.employeeId);
+        if (!emp) return; // karyawan sudah dihapus permanen — skip
+        perf[bal.employeeId] = {
+          employeeId: bal.employeeId,
+          employee: emp,
+          totalHours: 0,
+          totalOvertimeMinutes: 0,
+          totalAdditions: 0,
+          totalDeductions: 0,
+          totalKasbon: 0,
+          kasbonRecords: [],
+          netPay: 0,
+          basicPay: 0,
+          records: [],
+        };
+      }
+      perf[bal.employeeId].openingBalance = bal;
+    });
+
     Object.values(perf).forEach(data => {
       const { fullTimeBonusTotal, overtimePayTotal, overtimeRate, overtimeByDay } =
         summarizeAutoBonuses(data.records, employees);
@@ -181,15 +217,17 @@ const ReportsTab = () => {
       data.overtimeByDay = overtimeByDay;
       data.totalAdditions += fullTimeBonusTotal + overtimePayTotal;
 
-      // data.basicPay sudah diakumulasi per-record di loop atas (lihat
-      // komentar di sana) — TIDAK dihitung ulang di sini pakai tarif tunggal.
-      data.netPay = data.basicPay + data.totalAdditions - data.totalDeductions;
-
       // grossPay = gaji bersih HASIL KERJA bulan ini, sebelum dipotong
-      // kasbon — ini angka yang ditampilkan sebagai "Gaji Bersih" utama,
-      // dan yang jadi dasar Total Expenses Payroll (expense akuntansi yang
-      // sebenarnya, gak boleh berkurang gara-gara piutang kasbon).
+      // kasbon MAUPUN saldo awal — ini angka yang ditampilkan sebagai "Gaji
+      // Bersih" utama, dan yang jadi dasar Total Expenses Payroll (expense
+      // akuntansi yang sebenarnya, gak boleh berkurang gara-gara piutang).
       data.grossPay = data.basicPay + data.totalAdditions - (data.totalDeductions - data.totalKasbon);
+
+      // netPay = gaji bersih dikurangi kasbon bulan ini DAN saldo awal.
+      // openingBalance.amount positif (karyawan berhutang) ikut MENGURANGI
+      // netPay; negatif (perusahaan berhutang) ikut MENAMBAH netPay.
+      const openingAmount = data.openingBalance?.amount || 0;
+      data.netPay = data.basicPay + data.totalAdditions - data.totalDeductions - openingAmount;
 
       // Urutkan rincian kasbon per tanggal (lama -> baru) supaya catatan
       // seperti "minus bulan sebelumnya" kelihatan duluan di breakdown.
@@ -202,13 +240,17 @@ const ReportsTab = () => {
     });
 
     return Object.values(perf);
-  }, [filteredRecordsForReport, employees, expenses, reportMonth]);
+  }, [filteredRecordsForReport, employees, expenses, reportMonth, openingBalances]);
 
   // Total Expenses Payroll = jumlah gaji bersih (sebelum kasbon) semua
   // karyawan. Kasbon TIDAK mengurangi angka ini karena kasbon adalah
   // piutang perusahaan (aset), bukan biaya gaji.
   const totalPayrollExpense = employeePayroll.reduce((sum, p) => sum + p.grossPay, 0);
   const totalKasbonTertagih = employeePayroll.reduce((sum, p) => sum + (p.totalKasbon || 0), 0);
+  // Bertanda: positif = total karyawan berhutang, negatif = total
+  // perusahaan berhutang ke karyawan (bisa saling menutup, sengaja gak
+  // di-Math.abs supaya kelihatan arah bersihnya).
+  const totalOpeningBalance = employeePayroll.reduce((sum, p) => sum + (p.openingBalance?.amount || 0), 0);
 
   const sortedEmployeePayroll = applySort(employeePayroll, payrollSortKey, {
     name: p => p.employee?.name || '',
@@ -222,6 +264,37 @@ const ReportsTab = () => {
     { key: 'netpay-desc', label: 'Gaji Bersih Terbesar' },
     { key: 'hours-desc', label: 'Total Jam Terbanyak' },
   ];
+
+  // Buka modal "Set Saldo Awal Bulan" — prefill dari record existing (kalau
+  // ada) supaya edit ulang gak perlu mulai dari nol.
+  const openOpeningBalanceModal = (p) => {
+    const existing = getOpeningBalance(openingBalances, p.employeeId, reportMonth);
+    setOpeningBalanceDirection(existing && existing.amount < 0 ? 'owed_to_employee' : 'owed_by_employee');
+    setOpeningBalanceAmountInput(existing ? String(Math.abs(existing.amount)) : '');
+    setOpeningBalanceNoteInput(existing?.note || '');
+    setOpeningBalanceModal({ isOpen: true, employeeId: p.employeeId, employeeName: p.employee?.name || '' });
+  };
+
+  const closeOpeningBalanceModal = () => {
+    setOpeningBalanceModal({ isOpen: false, employeeId: null, employeeName: '' });
+    setOpeningBalanceAmountInput('');
+    setOpeningBalanceNoteInput('');
+  };
+
+  const handleSaveOpeningBalance = () => {
+    const rawAmount = Number(openingBalanceAmountInput) || 0;
+    // Arah nentuin tanda: karyawan berhutang = POSITIF, perusahaan
+    // berhutang ke karyawan = NEGATIF. Lihat definisi tanda di
+    // payrollLogic.js (openingBalanceId/setOpeningBalance).
+    const signedAmount = openingBalanceDirection === 'owed_to_employee' ? -Math.abs(rawAmount) : Math.abs(rawAmount);
+    setOpeningBalance(setOpeningBalances, openingBalanceModal.employeeId, reportMonth, signedAmount, openingBalanceNoteInput.trim());
+    closeOpeningBalanceModal();
+  };
+
+  const handleClearOpeningBalance = () => {
+    setOpeningBalance(setOpeningBalances, openingBalanceModal.employeeId, reportMonth, 0, '');
+    closeOpeningBalanceModal();
+  };
 
   // ==========================================================================
   // SECTION 2 — Rekap Kinerja Karyawan (periode fleksibel, independen dari
@@ -485,6 +558,8 @@ const ReportsTab = () => {
               sortedEmployeePayroll.map(p => {
                 const hasKasbon = (p.totalKasbon || 0) > 0;
                 const isKasbonExpanded = expandedKasbonEmpId === p.employeeId;
+                const openingAmount = p.openingBalance?.amount || 0;
+                const hasOpeningBalance = openingAmount !== 0;
                 return (
                   <div key={p.employeeId} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors duration-300">
                     <div className="grid grid-cols-3 items-center">
@@ -507,9 +582,27 @@ const ReportsTab = () => {
                             Potongan kasbon: -{formatRupiah(p.totalKasbon)}
                           </button>
                         )}
+                        {hasOpeningBalance && (
+                          <p className={`text-[11px] font-semibold mt-1 ${openingAmount > 0 ? 'text-red-500 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                            {openingAmount > 0
+                              ? `Sisa bulan lalu: -${formatRupiah(openingAmount)}`
+                              : `Sisa ke karyawan: +${formatRupiah(Math.abs(openingAmount))}`}
+                          </p>
+                        )}
                       </div>
-                      <div className="p-4 flex justify-center">
+                      <div className="p-4 flex flex-col items-center gap-1.5">
                         <Button variant="ghost" size="sm" icon={<Printer className="w-3 h-3" />} onClick={() => setPayslipModal({ isOpen: true, data: p, month: reportMonth })}>Cetak Slip</Button>
+                        <button
+                          type="button"
+                          onClick={() => openOpeningBalanceModal(p)}
+                          className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors duration-300 ${
+                            hasOpeningBalance
+                              ? 'text-accent-600 dark:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10'
+                              : 'text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <Wallet className="w-3 h-3" /> {hasOpeningBalance ? 'Edit Saldo Awal' : 'Saldo Awal'}
+                        </button>
                       </div>
                     </div>
 
@@ -545,17 +638,84 @@ const ReportsTab = () => {
                 {totalKasbonTertagih > 0 && (
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mt-1">Total Kasbon Tertagih</p>
                 )}
+                {totalOpeningBalance !== 0 && (
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mt-1">
+                    {totalOpeningBalance > 0 ? 'Total Sisa Bulan Lalu' : 'Total Hutang ke Karyawan'}
+                  </p>
+                )}
               </div>
               <div className="p-4 text-center">
                 <p className="font-heading text-lg font-black text-white">{formatRupiah(totalPayrollExpense)}</p>
                 {totalKasbonTertagih > 0 && (
                   <p className="font-heading text-xs font-bold text-red-400 mt-1">-{formatRupiah(totalKasbonTertagih)}</p>
                 )}
+                {totalOpeningBalance !== 0 && (
+                  <p className={`font-heading text-xs font-bold mt-1 ${totalOpeningBalance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {totalOpeningBalance > 0 ? '-' : '+'}{formatRupiah(Math.abs(totalOpeningBalance))}
+                  </p>
+                )}
               </div>
               <div className="p-4" />
             </div>
           )}
         </Card>
+
+        {/* Modal "Set Saldo Awal Bulan" — universal: bisa karyawan berhutang
+            (kasbon nyisa) atau perusahaan berhutang ke karyawan (gaji nyisa
+            kurang bayar). Diikat ke reportMonth aktif, jadi laporan bulan
+            lain gak ikut berubah kalau ini diedit lagi nanti. */}
+        <Modal
+          isOpen={openingBalanceModal.isOpen}
+          onClose={closeOpeningBalanceModal}
+          title={`Saldo Awal — ${openingBalanceModal.employeeName}`}
+          size="sm"
+        >
+          <div className="p-5 space-y-4">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Apakah <span className="font-bold">{openingBalanceModal.employeeName}</span> punya sisa dari bulan sebelumnya untuk periode <span className="font-bold">{reportMonth}</span>?
+            </p>
+
+            <SegmentedControl
+              options={[
+                { value: 'owed_by_employee', label: 'Karyawan Berhutang', tone: 'orange' },
+                { value: 'owed_to_employee', label: 'Kita Berhutang', tone: 'orange' },
+              ]}
+              value={openingBalanceDirection}
+              onChange={setOpeningBalanceDirection}
+              size="sm"
+            />
+
+            <Input
+              type="number"
+              label="Nominal (Rp)"
+              variant="muted"
+              icon={<span className="font-bold">Rp</span>}
+              value={openingBalanceAmountInput}
+              onChange={e => setOpeningBalanceAmountInput(e.target.value)}
+              placeholder="0"
+            />
+
+            <Textarea
+              label="Catatan (opsional)"
+              variant="muted"
+              value={openingBalanceNoteInput}
+              onChange={e => setOpeningBalanceNoteInput(e.target.value)}
+              placeholder="Mis. Kasbon Juni belum lunas"
+              rows={2}
+            />
+
+            <div className="flex gap-2 pt-2">
+              {getOpeningBalance(openingBalances, openingBalanceModal.employeeId, reportMonth) && (
+                <Button variant="ghost-danger" onClick={handleClearOpeningBalance} className="flex-1">
+                  Hapus
+                </Button>
+              )}
+              <Button variant="primary" onClick={handleSaveOpeningBalance} className="flex-1">
+                Simpan
+              </Button>
+            </div>
+          </div>
+        </Modal>
 
         <SortModal isOpen={isPayrollSortOpen} onClose={() => setIsPayrollSortOpen(false)} value={payrollSortKey} onChange={setPayrollSortKey} options={payrollSortOptions} />
       </div>

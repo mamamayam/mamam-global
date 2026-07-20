@@ -507,57 +507,65 @@ const InputDailyTab = () => {
                 <Alert type="callout" variant="info">Mengedit rincian pada <strong>{dailyDate}</strong>.</Alert>
               )}
 
-              <SegmentedControl
-                options={[{ value: 'addition', label: 'Penghasilan (+)', tone: 'green' }, { value: 'deduction', label: 'Potongan (-)', tone: 'red' }]}
-                value={adjType}
-                onChange={(val) => { setAdjType(val); setAdjCategory(''); }}
-              />
-              <div>
-                <label className="flex justify-between text-xs font-bold text-slate-500 mb-1.5">
-                  Kategori
-                  <Button type="button" size="xs" variant="secondary" onClick={() => setCatModalType(adjType)} icon={<Settings2 className="w-3 h-3" />}>Kelola</Button>
-                </label>
-                <Select variant="muted" value={adjCategory} onChange={e => setAdjCategory(e.target.value)}>
-                  <option value="">Pilih Kategori</option>
-                  {adjType === 'addition'
-                    ? [...new Set(additionCategories)].filter(c => !c.toLowerCase().includes(LEMBUR_CATEGORY_KEYWORD)).map(c => <option key={c} value={c}>{c}</option>)
-                    : [...new Set(deductionCategories)].filter(c => !c.toLowerCase().includes(KASBON_CATEGORY_KEYWORD)).map(c => <option key={c} value={c}>{c}</option>)
-                  }
-                </Select>
-              </div>
-              <Input type="number" label="Nominal" variant="muted" icon={<span>Rp</span>} value={adjAmount} onChange={e => setAdjAmount(e.target.value)} />
-              <Input label="Catatan" variant="muted" value={adjNote} onChange={e => setAdjNote(e.target.value)} />
-              {adjType === 'deduction' && (
-                <div>
-                  <label className="text-xs font-bold text-slate-500 mb-1.5 block">Metode Pembayaran</label>
-                  <SegmentedControl options={[{ value: 'Tunai', label: 'Tunai' }, { value: 'Non-Tunai', label: 'Non-Tunai' }]} value={adjPaymentMethod} onChange={setAdjPaymentMethod} />
-                </div>
-              )}
-              <Button variant={adjType === 'addition' ? 'success' : 'danger'} size="full" icon={<Plus className="w-4 h-4" />} onClick={handleAddAdjustment}>
-                {adjType === 'addition' ? 'Tambah Penghasilan' : 'Tambah Potongan'}
-              </Button>
-
-              <div className="pt-3 border-t border-slate-100">
-                <p className="text-xs font-bold text-slate-500 mb-2">Rincian Transaksi</p>
-                {adjustmentRows.length === 0
-                  ? <p className="text-xs text-slate-400 text-center py-3">Belum ada tambahan/potongan.</p>
-                  : <div className="space-y-2">{adjustmentRows.map(item => <AdjRow key={item.id} item={item} onRemove={handleRemoveAdjustment} formatRupiah={formatRupiah} />)}</div>
-                }
-              </div>
-
-              {adjustmentRows.length > 0 && (
-                <div className="space-y-1 pt-3 border-t border-slate-100 text-xs">
-                  <div className="flex justify-between text-slate-500"><span>Total Tambahan</span><span className="font-bold text-emerald-700 dark:text-emerald-400">+{formatRupiah(totalAdditions)}</span></div>
-                  <div className="flex justify-between text-slate-500"><span>Total Potongan</span><span className="font-bold text-red-700">-{formatRupiah(totalDeductions)}</span></div>
-                  <div className="flex justify-between font-bold text-slate-800 pt-1.5 border-t border-slate-100"><span>Net</span><span>{netAdjustment >= 0 ? '+' : ''}{formatRupiah(netAdjustment)}</span></div>
-                </div>
+              {!dailyEmpId && (
+                <p className="text-xs text-slate-400 text-center py-6">Pilih karyawan dulu buat mulai input tambahan/potongan & simpan data harian.</p>
               )}
 
-              {hasUnsavedAdjustments && <Alert type="callout" variant="warning">Ada perubahan yang belum disimpan.</Alert>}
+              {dailyEmpId && (
+                <>
+                  <SegmentedControl
+                    options={[{ value: 'addition', label: 'Penghasilan (+)', tone: 'green' }, { value: 'deduction', label: 'Potongan (-)', tone: 'red' }]}
+                    value={adjType}
+                    onChange={(val) => { setAdjType(val); setAdjCategory(''); }}
+                  />
+                  <div>
+                    <label className="flex justify-between text-xs font-bold text-slate-500 mb-1.5">
+                      Kategori
+                      <Button type="button" size="xs" variant="secondary" onClick={() => setCatModalType(adjType)} icon={<Settings2 className="w-3 h-3" />}>Kelola</Button>
+                    </label>
+                    <Select variant="muted" value={adjCategory} onChange={e => setAdjCategory(e.target.value)}>
+                      <option value="">Pilih Kategori</option>
+                      {adjType === 'addition'
+                        ? [...new Set(additionCategories)].filter(c => !c.toLowerCase().includes(LEMBUR_CATEGORY_KEYWORD)).map(c => <option key={c} value={c}>{c}</option>)
+                        : [...new Set(deductionCategories)].filter(c => !c.toLowerCase().includes(KASBON_CATEGORY_KEYWORD)).map(c => <option key={c} value={c}>{c}</option>)
+                      }
+                    </Select>
+                  </div>
+                  <Input type="number" label="Nominal" variant="muted" icon={<span>Rp</span>} value={adjAmount} onChange={e => setAdjAmount(e.target.value)} />
+                  <Input label="Catatan" variant="muted" value={adjNote} onChange={e => setAdjNote(e.target.value)} />
+                  {adjType === 'deduction' && (
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 mb-1.5 block">Metode Pembayaran</label>
+                      <SegmentedControl options={[{ value: 'Tunai', label: 'Tunai' }, { value: 'Non-Tunai', label: 'Non-Tunai' }]} value={adjPaymentMethod} onChange={setAdjPaymentMethod} />
+                    </div>
+                  )}
+                  <Button variant={adjType === 'addition' ? 'success' : 'danger'} size="full" icon={<Plus className="w-4 h-4" />} onClick={handleAddAdjustment}>
+                    {adjType === 'addition' ? 'Tambah Penghasilan' : 'Tambah Potongan'}
+                  </Button>
 
-              <Button variant="primary" size="full" icon={<Save className="w-4 h-4" />} onClick={handleSaveDailyRecord}>
-                {hasAdjustments ? 'Simpan Perubahan (Update)' : 'Simpan Data'}
-              </Button>
+                  <div className="pt-3 border-t border-slate-100">
+                    <p className="text-xs font-bold text-slate-500 mb-2">Rincian Transaksi</p>
+                    {adjustmentRows.length === 0
+                      ? <p className="text-xs text-slate-400 text-center py-3">Belum ada tambahan/potongan.</p>
+                      : <div className="space-y-2">{adjustmentRows.map(item => <AdjRow key={item.id} item={item} onRemove={handleRemoveAdjustment} formatRupiah={formatRupiah} />)}</div>
+                    }
+                  </div>
+
+                  {adjustmentRows.length > 0 && (
+                    <div className="space-y-1 pt-3 border-t border-slate-100 text-xs">
+                      <div className="flex justify-between text-slate-500"><span>Total Tambahan</span><span className="font-bold text-emerald-700 dark:text-emerald-400">+{formatRupiah(totalAdditions)}</span></div>
+                      <div className="flex justify-between text-slate-500"><span>Total Potongan</span><span className="font-bold text-red-700">-{formatRupiah(totalDeductions)}</span></div>
+                      <div className="flex justify-between font-bold text-slate-800 pt-1.5 border-t border-slate-100"><span>Net</span><span>{netAdjustment >= 0 ? '+' : ''}{formatRupiah(netAdjustment)}</span></div>
+                    </div>
+                  )}
+
+                  {hasUnsavedAdjustments && <Alert type="callout" variant="warning">Ada perubahan yang belum disimpan.</Alert>}
+
+                  <Button variant="primary" size="full" icon={<Save className="w-4 h-4" />} onClick={handleSaveDailyRecord}>
+                    {hasAdjustments ? 'Simpan Perubahan (Update)' : 'Simpan Data'}
+                  </Button>
+                </>
+              )}
             </div>
           </Card>
         </div>

@@ -536,3 +536,74 @@ export function buildPayslipRows(data) {
 
   return rows;
 }
+
+/* ═══════════════════════════════════════════════════════════════ */
+/*  SALDO AWAL BULAN (Opening Balance)                              */
+/*                                                                   */
+/*  "Apakah karyawan ada sisa bulan kemarin?" — diinput manual per   */
+/*  bulan per karyawan di Rekap Penggajian. UNIVERSAL: satu angka    */
+/*  bertanda, bukan 2 field terpisah:                                */
+/*    - POSITIF = karyawan berhutang ke perusahaan (kasbon nyisa)    */
+/*    - NEGATIF = perusahaan berhutang ke karyawan (gaji nyisa       */
+/*      kurang bayar bulan lalu, dsb)                                */
+/*  BUKAN carry-over otomatis — dicek & diisi manual tiap bulan oleh */
+/*  admin, supaya angkanya selalu sesuai kesepakatan aktual, dan     */
+/*  laporan bulan yang sudah lewat gak ikut berubah kalau bulan      */
+/*  berikutnya diisi ulang (1 record per employeeId+month, bukan 1   */
+/*  field polos per karyawan).                                       */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/** ID deterministik per (employeeId, month) — id ganda otomatis nyatu lewat
+ * upsert sync engine, aman dari race condition kalau diedit dari 2 device
+ * hampir bersamaan (lihat catatan yang sama di InputDailyTab.jsx). */
+export function openingBalanceId(employeeId, month) {
+  return `OPBAL-${employeeId}-${month}`;
+}
+
+/**
+ * Cari record saldo awal aktif untuk 1 karyawan di 1 bulan tertentu.
+ * @param {Array} openingBalances - state openingBalances (array of record)
+ * @param {string} employeeId
+ * @param {string} month - format "YYYY-MM"
+ * @returns {object|null}
+ */
+export function getOpeningBalance(openingBalances, employeeId, month) {
+  return (openingBalances || []).find(
+    b => !b.deletedAt && b.employeeId === employeeId && b.month === month
+  ) || null;
+}
+
+/**
+ * Upsert saldo awal 1 karyawan untuk 1 bulan. amount = 0 akan MENGHAPUS
+ * record (soft-delete) — supaya karyawan yang gak punya sisa gak numpuk
+ * record kosong percuma di database.
+ * @param {Function} setOpeningBalances - setter dari usePersistState
+ * @param {string} employeeId
+ * @param {string} month - format "YYYY-MM"
+ * @param {number} amount - bertanda: positif = karyawan berhutang, negatif = perusahaan berhutang
+ * @param {string} note - keterangan opsional (mis. "Kasbon Juni belum lunas")
+ */
+export function setOpeningBalance(setOpeningBalances, employeeId, month, amount, note = '') {
+  const id = openingBalanceId(employeeId, month);
+  setOpeningBalances(prev => {
+    const idx = prev.findIndex(b => b.id === id);
+    if (Number(amount) === 0) {
+      // Soft-delete kalau di-nol-kan, konsisten dengan pola activeOnly() di
+      // seluruh app — bukan splice fisik supaya histori edit tetap terlacak.
+      if (idx < 0) return prev;
+      const next = [...prev];
+      next[idx] = { ...next[idx], deletedAt: new Date().toISOString() };
+      return next;
+    }
+    const record = {
+      id, employeeId, month,
+      amount: Number(amount),
+      note: note || '',
+      deletedAt: null,
+    };
+    if (idx < 0) return [record, ...prev];
+    const next = [...prev];
+    next[idx] = { ...next[idx], ...record };
+    return next;
+  });
+}
