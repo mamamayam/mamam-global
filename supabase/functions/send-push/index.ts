@@ -22,19 +22,28 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 // ── Helper: format pesan notif dari record transaksi ─────────────────────
 function formatNotification(table: string, record: Record<string, any>) {
+  // PENTING: skema salesHistory/expenses cuma punya kolom
+  // (id, payload jsonb, updated_at, updated_by) — data transaksi asli
+  // (total, paymentMethod, dst) ada DI DALAM kolom `payload`, bukan
+  // top-level row. Trigger/webhook Postgres ngirim row apa adanya, jadi
+  // record.total dulu selalu undefined -> notif kebentuk tapi isinya
+  // "Rp0 • Tunai" terus. Fallback ke `record` sendiri kalau suatu saat
+  // ada tabel lain yang emang flat (bukan pola payload-jsonb).
+  const data = record.payload && typeof record.payload === "object" ? record.payload : record;
+
   if (table === "salesHistory") {
-    const total = Number(record.total || 0).toLocaleString("id-ID");
-    const method = record.paymentMethod || "Tunai";
+    const total = Number(data.total || 0).toLocaleString("id-ID");
+    const method = data.paymentMethod || "Tunai";
     return {
       title: "🛒 Transaksi Baru",
-      body: `Rp${total} • ${method}${record.orderType ? " • " + record.orderType : ""}`,
+      body: `Rp${total} • ${method}${data.orderType ? " • " + data.orderType : ""}`,
     };
   }
   if (table === "expenses") {
-    const amount = Number(record.amount || 0).toLocaleString("id-ID");
+    const amount = Number(data.amount || 0).toLocaleString("id-ID");
     return {
       title: "💸 Pengeluaran Baru",
-      body: `Rp${amount}${record.category ? " • " + record.category : ""}${record.description ? " — " + record.description : ""}`,
+      body: `Rp${amount}${data.category ? " • " + data.category : ""}${data.description ? " — " + data.description : ""}`,
     };
   }
   // fallback generik kalau nanti nambah tabel lain
@@ -127,9 +136,15 @@ Deno.serve(async (req) => {
 
     const { title, body } = formatNotification(table, record);
 
+    // PENTING: fetch() cuma reject kalau gagal di level jaringan. Response
+    // 4xx/5xx dari FCM (token invalid/unregistered, project id/sender salah,
+    // format token salah) tetap "fulfilled" di allSettled kalau gak dicek
+    // manual — makanya sebelumnya log selalu nunjukkin "sent: N" walau FCM
+    // nolak semua token-nya. Sekarang tiap request ngecek resp.ok sendiri
+    // dan throw kalau gagal, biar allSettled beneran nandain "rejected".
     const results = await Promise.allSettled(
-      tokens.map((t) =>
-        fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+      tokens.map(async (t) => {
+        const resp = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -142,14 +157,37 @@ Deno.serve(async (req) => {
               android: { priority: "high" },
             },
           }),
-        })
-      )
+        });
+
+        const data = await resp.json().catch(() => null);
+
+        if (!resp.ok) {
+          const status = data?.error?.status;
+          // Token invalid/uninstall/expired — bersihin biar gak nyoba² lagi
+          // tiap ada transaksi baru dan bikin log penuh error yang sama.
+          if (status === "NOT_FOUND" || status === "INVALID_ARGUMENT" || status === "UNREGISTERED") {
+            await supabase.from("device_tokens").delete().eq("fcm_token", t.fcm_token);
+          }
+          throw new Error(`FCM ${resp.status} (${status ?? "?"}): ${data?.error?.message ?? "no body"}`);
+        }
+
+        return data;
+      })
     );
 
-    const failed = results.filter((r) => r.status === "rejected").length;
+    const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed.length > 0) {
+      // Nongol di Edge Function Logs — ini yang harus dicek kalau notif
+      // masih gak nyampe walau "sent" > 0.
+      console.error("[send-push] ada token gagal kirim:", failed.map((r) => String(r.reason)));
+    }
 
     return new Response(
-      JSON.stringify({ sent: tokens.length - failed, failed }),
+      JSON.stringify({
+        sent: results.length - failed.length,
+        failed: failed.length,
+        errors: failed.map((r) => String(r.reason)),
+      }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {
