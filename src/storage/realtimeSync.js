@@ -126,6 +126,10 @@ export async function pushTransactionUpsert(tableKey, item, readyPromise, onFail
     }
     localStorage.setItem('mamam_last_supabase_sync', new Date().toISOString());
     window.dispatchEvent(new CustomEvent('mamam_sync_updated'));
+    // Cegah runAutoSync berikutnya (startup/reconnect/interval) nge-diff-in
+    // record ini lagi sebagai "belum sync" dan upsert ulang -> lihat komen
+    // panjang di syncSnapshotAfterInstantUpsert soal kasus notif dobel/triple.
+    syncSnapshotAfterInstantUpsert(tableKey, item);
     return true;
   } catch (err) {
     console.warn(`[sync] error/timeout push ${tableKey}/${item.id}:`, err.message);
@@ -155,6 +159,7 @@ export async function pushTransactionDelete(tableKey, id, readyPromise) {
       console.warn(`[sync] gagal hapus ${tableKey}/${id}:`, error.message);
       return false;
     }
+    syncSnapshotAfterInstantDelete(tableKey, id);
     return true;
   } catch (err) {
     console.warn(`[sync] error/timeout delete ${tableKey}:`, err.message);
@@ -317,6 +322,55 @@ function saveAutoSyncSnapshot(snapshot) {
     localStorage.setItem(AUTO_SYNC_SNAPSHOT_KEY, JSON.stringify(snapshot));
   } catch (err) {
     console.warn('[sync] gagal simpan snapshot auto-sync:', err.message);
+  }
+}
+
+// FIX DOBEL PUSH/NOTIF: push instan (pushTransactionUpsert/Delete, dipanggil
+// dari usePersistState tiap state berubah) sebelumnya TIDAK PERNAH nyentuh
+// snapshot auto-sync -- snapshot itu cuma di-update oleh runAutoSync() sendiri.
+//
+// Akibatnya: kalau runAutoSync (startup catch-up / reconnect / interval 10
+// menit) kebetulan jalan gak lama setelah push instan sukses, dia diffArrays()
+// pakai snapshot LAMA yang belum tau soal record barusan -> record itu masih
+// keliatan "belum sync" -> di-upsert LAGI walau isinya sama persis.
+//
+// Tiap upsert yang nyampe Supabase = 1 row event baru buat webhook
+// notify_new_transaction, jadi 1 transaksi bisa nge-trigger 2-3x kirim FCM
+// beruntun (persis kasus notif dobel/triple di HP walau device_tokens cuma 1).
+//
+// Fix-nya: begitu push instan sukses, langsung sinkronkan entry itu ke
+// snapshot juga -- biar runAutoSync berikutnya lihat record ini SUDAH sama
+// dengan versi ter-push, dan gak nge-diff-in dia lagi sebagai "baru".
+function syncSnapshotAfterInstantUpsert(tableKey, item) {
+  try {
+    const snapshot = loadAutoSyncSnapshot();
+    const current = Array.isArray(snapshot[tableKey]) ? snapshot[tableKey] : [];
+    const idx = current.findIndex((it) => String(it.id) === String(item.id));
+    if (idx >= 0) {
+      current[idx] = item;
+    } else {
+      current.push(item);
+    }
+    snapshot[tableKey] = current;
+    saveAutoSyncSnapshot(snapshot);
+  } catch (err) {
+    // Non-fatal -- worst case runAutoSync berikutnya re-diff record ini
+    // (balik ke behaviour lama), jadi aman untuk fail-silent di sini.
+    console.warn('[sync] gagal update snapshot setelah push instan:', err.message);
+  }
+}
+
+function syncSnapshotAfterInstantDelete(tableKey, id) {
+  try {
+    const snapshot = loadAutoSyncSnapshot();
+    const current = Array.isArray(snapshot[tableKey]) ? snapshot[tableKey] : [];
+    const filtered = current.filter((it) => String(it.id) !== String(id));
+    if (filtered.length !== current.length) {
+      snapshot[tableKey] = filtered;
+      saveAutoSyncSnapshot(snapshot);
+    }
+  } catch (err) {
+    console.warn('[sync] gagal update snapshot setelah delete instan:', err.message);
   }
 }
 
