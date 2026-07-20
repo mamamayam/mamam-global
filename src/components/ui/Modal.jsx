@@ -12,9 +12,9 @@ import { X } from 'lucide-react';
  *   size          'xs' | 'sm' | 'md' | 'lg'  — lebar dialog (default: 'sm')
  *   zLevel        'modal' | 'top' | 'pin'  — level tumpukan (default: 'modal')
  *   sheet         boolean              — gunakan bottom sheet style (mobile-friendly)
- *   side          'right'              — panel slide dari sisi kanan, full-height
+ *   side          'right' | 'top'      — panel slide dari kanan (full-height) atau dari atas (dropdown, di bawah header)
  *   closeOnBackdrop boolean            — close saat klik backdrop (default: true)
- *   maxHeight     boolean              — batasi tinggi + scroll inner (default: false, gak dipakai kalau side='right' karena sudah full-height)
+ *   maxHeight     boolean              — batasi tinggi + scroll inner (default: false, gak dipakai kalau side dipakai karena udah diatur sendiri per-variant)
  *   className     string               — class tambahan untuk container dialog
  *
  * Z-index:
@@ -34,6 +34,11 @@ import { X } from 'lucide-react';
  *
  *   // Panel slide dari kanan
  *   <Modal isOpen={isOpen} onClose={onClose} side="right" size="md">
+ *     ...
+ *   </Modal>
+ *
+ *   // Panel drop-down dari atas (bell notifikasi, dll)
+ *   <Modal isOpen={isOpen} onClose={onClose} side="top">
  *     ...
  *   </Modal>
  */
@@ -64,18 +69,18 @@ export default function Modal({
   maxHeight = false,
   className = '',
 }) {
-  // State transisi buat drawer side='right' — proyek ini gak install plugin
-  // `tailwindcss-animate`/`tw-animate-css` (Tailwind v4 gak nyediain
+  // State transisi buat variant `side` (right/top) — proyek ini gak install
+  // plugin `tailwindcss-animate`/`tw-animate-css` (Tailwind v4 gak nyediain
   // animate-in/slide-in-from-* built-in), jadi slide beneran digerakkan
-  // manual: render dulu dalam posisi translate-x-full (di luar layar),
-  // abis mount toggle ke translate-x-0 biar transition-transform jalan.
-  // Hooks WAJIB selalu jalan tiap render (rules of hooks) makanya ditaro
-  // sebelum early return `if (!isOpen)` — untuk caller lain yang gak pernah
-  // pakai prop `side`, effect di bawah langsung no-op, gak ada efek samping.
+  // manual: render dulu dalam posisi translate penuh (di luar layar), abis
+  // mount toggle ke translate-0 biar transition-transform jalan. Hooks WAJIB
+  // selalu jalan tiap render (rules of hooks) makanya ditaro sebelum early
+  // return `if (!isOpen)` — untuk caller lain yang gak pernah pakai prop
+  // `side`, effect di bawah langsung no-op, gak ada efek samping.
   const [entered, setEntered] = useState(false);
 
   useEffect(() => {
-    if (side !== 'right') return;
+    if (!side) return;
     if (!isOpen) { setEntered(false); return; }
     setEntered(false);
     const id = setTimeout(() => setEntered(true), 10);
@@ -121,6 +126,46 @@ export default function Modal({
           )}
 
           {/* Konten — selalu scrollable karena panel udah full-height */}
+          <div className="overflow-y-auto flex-1">
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Top drawer variant (drop-down dari atas, di bawah header) ────────────
+  if (side === 'top') {
+    return (
+      <div
+        className={`fixed inset-0 ${zClass} flex flex-col bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${entered ? 'opacity-100' : 'opacity-0'}`}
+        onClick={handleBackdrop}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          className={`
+            bg-white dark:bg-slate-900 w-full max-h-[75dvh] shadow-2xl rounded-b-3xl
+            flex flex-col transition-transform duration-300 ease-out
+            ${entered ? 'translate-y-0' : '-translate-y-full'}
+            ${className}
+          `}
+        >
+          {/* Header opsional */}
+          {title && (
+            <div className="flex items-center justify-between gap-3 p-5 pb-3 shrink-0 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg min-w-0 truncate">{title}</h3>
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 dark:text-slate-500 hover:bg-accent-100 dark:hover:bg-accent-500/20 hover:text-accent-600 dark:hover:text-accent-400 active:scale-95 transition-all duration-300 shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Konten — selalu scrollable, panel dibatasi max-h */}
           <div className="overflow-y-auto flex-1">
             {children}
           </div>
