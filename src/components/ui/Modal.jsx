@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 /**
@@ -11,8 +12,9 @@ import { X } from 'lucide-react';
  *   size          'xs' | 'sm' | 'md' | 'lg'  — lebar dialog (default: 'sm')
  *   zLevel        'modal' | 'top' | 'pin'  — level tumpukan (default: 'modal')
  *   sheet         boolean              — gunakan bottom sheet style (mobile-friendly)
+ *   side          'right'              — panel slide dari sisi kanan, full-height
  *   closeOnBackdrop boolean            — close saat klik backdrop (default: true)
- *   maxHeight     boolean              — batasi tinggi + scroll inner (default: false)
+ *   maxHeight     boolean              — batasi tinggi + scroll inner (default: false, gak dipakai kalau side='right' karena sudah full-height)
  *   className     string               — class tambahan untuk container dialog
  *
  * Z-index:
@@ -27,6 +29,11 @@ import { X } from 'lucide-react';
  *
  *   // Bottom sheet
  *   <Modal isOpen={isOpen} onClose={onClose} sheet size="md">
+ *     ...
+ *   </Modal>
+ *
+ *   // Panel slide dari kanan
+ *   <Modal isOpen={isOpen} onClose={onClose} side="right" size="md">
  *     ...
  *   </Modal>
  */
@@ -52,16 +59,75 @@ export default function Modal({
   size = 'sm',
   zLevel = 'modal',
   sheet = false,
+  side,
   closeOnBackdrop = true,
   maxHeight = false,
   className = '',
 }) {
+  // State transisi buat drawer side='right' — proyek ini gak install plugin
+  // `tailwindcss-animate`/`tw-animate-css` (Tailwind v4 gak nyediain
+  // animate-in/slide-in-from-* built-in), jadi slide beneran digerakkan
+  // manual: render dulu dalam posisi translate-x-full (di luar layar),
+  // abis mount toggle ke translate-x-0 biar transition-transform jalan.
+  // Hooks WAJIB selalu jalan tiap render (rules of hooks) makanya ditaro
+  // sebelum early return `if (!isOpen)` — untuk caller lain yang gak pernah
+  // pakai prop `side`, effect di bawah langsung no-op, gak ada efek samping.
+  const [entered, setEntered] = useState(false);
+
+  useEffect(() => {
+    if (side !== 'right') return;
+    if (!isOpen) { setEntered(false); return; }
+    setEntered(false);
+    const id = setTimeout(() => setEntered(true), 10);
+    return () => clearTimeout(id);
+  }, [isOpen, side]);
+
   if (!isOpen) return null;
 
   const zClass = Z_LEVELS[zLevel] ?? Z_LEVELS.modal;
   const sizeClass = SIZES[size] ?? SIZES.sm;
 
   const handleBackdrop = () => { if (closeOnBackdrop && onClose) onClose(); };
+
+  // ── Side drawer variant (slide dari kanan, full-height) ──────────────────
+  if (side === 'right') {
+    return (
+      <div
+        className={`fixed inset-0 ${zClass} flex justify-end bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${entered ? 'opacity-100' : 'opacity-0'}`}
+        onClick={handleBackdrop}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          className={`
+            bg-white dark:bg-slate-900 h-full w-full ${sizeClass} shadow-2xl
+            flex flex-col transition-transform duration-300 ease-out
+            ${entered ? 'translate-x-0' : 'translate-x-full'}
+            ${className}
+          `}
+        >
+          {/* Header opsional */}
+          {title && (
+            <div className="flex items-center justify-between gap-3 p-5 pb-3 shrink-0 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg min-w-0 truncate">{title}</h3>
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 dark:text-slate-500 hover:bg-accent-100 dark:hover:bg-accent-500/20 hover:text-accent-600 dark:hover:text-accent-400 active:scale-95 transition-all duration-300 shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Konten — selalu scrollable karena panel udah full-height */}
+          <div className="overflow-y-auto flex-1">
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Bottom sheet variant ─────────────────────────────────────────────────
   if (sheet) {

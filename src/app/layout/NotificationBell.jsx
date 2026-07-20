@@ -63,9 +63,8 @@ export default function NotificationBell() {
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
         title="Notifikasi"
-        sheet
+        side="right"
         size="md"
-        maxHeight
       >
         <div className="px-5 pb-5 pt-1">
           {notifications.length === 0 ? (
