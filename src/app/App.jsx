@@ -15,6 +15,7 @@ import BottomNav from '../app/layout/BottomNav';
 import ReceiptModal from '../features/pos/ReceiptModal';
 import { toLocalDateString } from '../utils/formatters';
 import { activeOnly } from '../utils/softDelete';
+import { registerPushNotifications } from '../storage/pushNotifications';
 import {
   getEmployeeStatus, computeAttendanceFromLogs,
   snapshotEmployeeForPayroll, mergeAutoAdjustments,
@@ -374,6 +375,12 @@ export default function App() {
       clearTimeout(timeoutId);
       cleanupRef.current?.();
     };
+  }, [allDataLoaded]);
+
+  useEffect(() => {
+    if (allDataLoaded) {
+      registerPushNotifications();
+    }
   }, [allDataLoaded]);
 
   // ── Toast koneksi: reaksi ke transisi online/offline ────────────────────
