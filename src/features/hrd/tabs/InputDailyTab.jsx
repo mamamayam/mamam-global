@@ -15,7 +15,7 @@ import {
   getEmployeeStatus, calculateRegularMinutes, timeStrToMinutes, getOvertimeRate, calculateOvertimePay,
   AUTO_ADJUSTMENT_CATEGORIES, mergeAutoAdjustments,
   snapshotEmployeeForPayroll, resolveEmployeeForRecord,
-  computeAttendanceFromLogs,
+  computeAttendanceFromLogs, calculateBolongMinutes,
 } from '../utils/payrollLogic';
 
 const StatField = ({ label, value, highlight }) => (
@@ -352,7 +352,23 @@ const InputDailyTab = () => {
       const cIn = editClockIn;
       const cOut = editClockOut;
       let cHours = 0, cOvertime = 0;
-      const cBolong = editingRecord.bolongMinutes || 0; 
+
+      // [FIX] bolongMinutes HARUS dihitung ulang dari attendanceLog mentah
+      // hari itu (pakai fallback jam keluar yang BARU diinput admin),
+      // bukan dipertahankan dari nilai lama editingRecord.bolongMinutes.
+      // Sebelumnya kalau admin koreksi clockIn/clockOut manual (mis. buat
+      // memperbaiki jam pulang yang salah tercatat auto-close-dari-bolong),
+      // bolongMinutes yang dipakai buat ngurangin rawHours tetap angka LAMA
+      // yang sudah gak relevan sama rentang jam yang baru — hasil
+      // hoursWorked/uang lembur bisa keliru padahal koreksinya sendiri
+      // sudah benar. calculateBolongMinutes ini SATU fungsi yang sama
+      // dipakai computeAttendanceFromLogs, jadi hasilnya konsisten dengan
+      // cara sistem menghitung bolong di jalur otomatis.
+      const empLogsToday = activeOnly(attendanceLog ?? [])
+        .filter(r => r.employeeId === editingRecord.employeeId && r.dateStr === editingRecord.dateStr)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+      const bolongFallbackEnd = cOut ? new Date(`${editingRecord.dateStr}T${cOut}:00`) : new Date();
+      const cBolong = calculateBolongMinutes(empLogsToday, bolongFallbackEnd);
 
       if (cIn && cOut) {
         const inMins = timeStrToMinutes(cIn);
@@ -753,7 +769,7 @@ const InputDailyTab = () => {
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="grid grid-cols-2 gap-3 pb-4 border-b border-slate-100">
+              <div className="grid grid-cols-2 gap-3 pb-1 border-b border-slate-100">
                 <Input 
                   type="time" 
                   label="Jam Masuk" 
@@ -769,6 +785,20 @@ const InputDailyTab = () => {
                   onChange={e => setEditClockOut(e.target.value)} 
                 />
               </div>
+              {editingRecord.bolongMinutes > 0 && (
+                // [+] Hint kondisional: cuma muncul kalau record ini punya durasi
+                // bolong tercatat (bolongMinutes > 0). Mengedit Jam Masuk/Keluar
+                // di sini SAJA gak cukup kalau karyawan sebenarnya balik kerja
+                // setelah bolong — bolongMinutes dihitung ulang dari
+                // attendanceLog mentah (lihat handleSaveEdit), dan tanpa record
+                // 'masuk_lagi' yang cocok, seluruh rentang dari mulai bolong
+                // sampai Jam Keluar baru tetap dianggap bolong utuh, bukan jam
+                // kerja.
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mb-3">
+                  ⚠️ Karyawan ini punya jam bolong tercatat. Ubah Jam Masuk/Keluar di sini akan menghitung ulang durasi bolongnya secara otomatis.
+                  Kalau karyawan sebenarnya <span className="font-semibold">sudah balik kerja</span> setelah bolong, tambahkan juga record "Masuk Lagi" di jam yang sesuai lewat menu Absensi Karyawan — kalau tidak, seluruh rentang sejak mulai bolong sampai Jam Keluar akan tetap dihitung sebagai bolong, bukan jam kerja.
+                </p>
+              )}
 
               <SegmentedControl options={[{ value: 'addition', label: 'Penghasilan (+)', tone: 'green' }, { value: 'deduction', label: 'Potongan (-)', tone: 'red' }]} value={editAdjType} onChange={(val) => { setEditAdjType(val); setEditAdjCategory(''); }} />
               <div>

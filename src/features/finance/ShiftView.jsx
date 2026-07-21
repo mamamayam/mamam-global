@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown, AlertTriangle, Users } from 'lucide-react';
+import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown, AlertTriangle, Users, Wallet } from 'lucide-react';
 import { isNativePlatform, printShiftNativeBluetooth } from '../../library/printer';
 import { toPng, toBlob } from 'html-to-image';
 import { generateUUID, toLocalMonthString, toLocalDateString } from '../../utils/formatters';
@@ -9,7 +9,7 @@ import { pushTransactionDelete, pushLiveState } from '../../storage/realtimeSync
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
 import { getActiveCouriers } from '../hrd/utils/payrollLogic';
-import { computeAllCourierBalances, isCourierHolder, CASH_TRANSFER_TYPE_WRITEOFF, isWriteoffTransfer } from '../../utils/cashHolders';
+import { computeAllCourierBalances, isCourierHolder, CASH_TRANSFER_TYPE_WRITEOFF, isWriteoffTransfer, CASH_TRANSFER_TYPE_REIMBURSE } from '../../utils/cashHolders';
 
 // Import komponen UI Design System
 import { 
@@ -69,6 +69,19 @@ const ShiftView = () => {
   const [writeoffTarget, setWriteoffTarget] = useState(null); // { employeeId, employeeName } | null
   const [writeoffInput, setWriteoffInput] = useState('');
   const [isWriteoffSubmitting, setIsWriteoffSubmitting] = useState(false); // anti double-submit
+
+  // State utk Modal Ganti Uang (reimburse) — kebalikan dari Setor: dipakai
+  // saat saldo kurir NEGATIF (kurir nombokin belanja pakai duit pribadi
+  // karena saldo COD-nya gak cukup). Kasir ganti uang kurir dari laci
+  // -> saldo kurir naik balik ke 0 (atau mendekati), DAN Saldo Dompet
+  // TURUN sejumlah yang diganti (uang beneran keluar dari laci fisik).
+  // Dicatat sebagai cashTransfers dgn type: 'reimburse', amount NEGATIF
+  // (kebalikan tanda dari deposit/writeoff) supaya computeCourierBalance
+  // otomatis benar tanpa perlu cabang logic baru (lihat catatan di
+  // utils/cashHolders.js).
+  const [reimburseTarget, setReimburseTarget] = useState(null); // { employeeId, employeeName } | null
+  const [reimburseInput, setReimburseInput] = useState('');
+  const [isReimburseSubmitting, setIsReimburseSubmitting] = useState(false); // anti double-submit
 
   const handleShareImage = async () => {
     const reportElement = document.getElementById('xreading-content');
@@ -132,6 +145,14 @@ const ShiftView = () => {
   // tanpa perlu tracking transaksi setoran secara terpisah.
   // Logic hitungnya sama persis dgn yang dulu dipakai di halaman Setoran
   // Kurir (lihat utils/cashHolders.js).
+  //
+  // SENGAJA TIDAK di-clamp ke 0 per kurir. Kalau kurir belanja pakai uang
+  // pribadinya sendiri (nombokin) karena saldo COD dia gak cukup, balance
+  // dia di computeCourierBalance jadi NEGATIF — itu artinya bisnis
+  // BERUTANG ke kurir, bukan "dianggap nol". Kalau di-clamp ke 0 di sini,
+  // expectedCash di bawah jadi under-count: kas bisnis kelihatan lebih
+  // sedikit dari yang seharusnya, padahal sebagian pengeluaran sudah
+  // ditalangi kurir dari kantongnya sendiri (bukan dari kas fisik toko).
   const couriers = useMemo(() => getActiveCouriers(employees), [employees]);
   const courierBalances = useMemo(() => computeAllCourierBalances(couriers, {
     expenses: activeOnly(expenses),
@@ -139,7 +160,7 @@ const ShiftView = () => {
     cashTransfers: activeOnly(cashTransfers || []),
   }), [couriers, expenses, salesHistory, cashTransfers]);
   const totalHeldByCouriers = useMemo(
-    () => courierBalances.reduce((sum, b) => sum + Math.max(b.balance, 0), 0),
+    () => courierBalances.reduce((sum, b) => sum + b.balance, 0),
     [courierBalances]
   );
 
@@ -266,6 +287,74 @@ const ShiftView = () => {
     setIsWriteoffSubmitting(false);
     setWriteoffTarget(null);
     setWriteoffInput('');
+  };
+
+  // Tombol "Ganti Uang" — buka popup Reimburse, buat kurir yang saldonya
+  // NEGATIF (nombokin belanja bisnis pakai duit pribadi). Beda dari
+  // handleOpenDeposit/handleOpenWriteoff: di sini liveBalance yang relevan
+  // justru saldo negatifnya (jumlah yang harus diganti kasir), BUKAN
+  // di-clamp ke 0 — kalau di-clamp, gak akan pernah ada nominal yang valid
+  // buat diganti.
+  const handleOpenReimburse = (balanceEntry) => {
+    setReimburseTarget({ employeeId: balanceEntry.employeeId, employeeName: balanceEntry.employeeName });
+    setReimburseInput('');
+  };
+
+  const handleConfirmReimburse = () => {
+    if (!reimburseTarget || isReimburseSubmitting) return;
+
+    // Re-fetch balance TERKINI (pola sama kayak deposit/writeoff, hole #4).
+    // Saldo yang relevan di sini adalah UTANG bisnis ke kurir, yaitu nilai
+    // absolut dari balance negatif. Kalau ternyata balance udah gak lagi
+    // negatif (misal ada transaksi lain masuk selagi modal terbuka), utang
+    // dianggap 0 — gak ada yang perlu diganti.
+    const liveEntry = courierBalances.find(b => b.employeeId === reimburseTarget.employeeId);
+    const liveDebt = liveEntry && liveEntry.balance < 0 ? Math.abs(liveEntry.balance) : 0;
+
+    const amount = Number(reimburseInput);
+
+    if (!reimburseInput || !Number.isFinite(amount) || amount <= 0) {
+      triggerAlert('Nominal yang diganti harus lebih dari Rp 0.');
+      return;
+    }
+    if (amount > liveDebt) {
+      triggerAlert(`Nominal melebihi utang ke ${reimburseTarget.employeeName} saat ini (${formatRupiah(liveDebt)}).`);
+      return;
+    }
+
+    setIsReimburseSubmitting(true);
+    const isFull = amount === liveDebt;
+    const sisaUtangSetelahGanti = liveDebt - amount;
+
+    // type: 'reimburse', amount NEGATIF — lihat catatan lengkap di
+    // utils/cashHolders.js soal kenapa tandanya dibalik: biar formula
+    // `deposited = sum(amount)` di computeCourierBalance otomatis
+    // MENAMBAH saldo kurir (menutup defisitnya) tanpa cabang logic baru,
+    // dan efeknya ke expectedCash (Saldo Dompet turun karena kasir
+    // beneran ngeluarin uang tunai) juga otomatis benar lewat
+    // totalHeldByCouriers, tanpa perlu variabel koreksi terpisah seperti
+    // totalWrittenOff.
+    const newTransfer = {
+      id: generateUUID(),
+      employeeId: reimburseTarget.employeeId,
+      employeeName: reimburseTarget.employeeName,
+      amount: -amount,
+      type: CASH_TRANSFER_TYPE_REIMBURSE,
+      note: isFull
+        ? 'Ganti uang kurir (reimburse, lunas)'
+        : `Ganti uang kurir sebagian (reimburse, sisa utang ${formatRupiah(sisaUtangSetelahGanti)})`,
+      date: new Date(),
+    };
+    setCashTransfers([newTransfer, ...cashTransfers]);
+    triggerAlert(
+      isFull
+        ? `Utang ke ${reimburseTarget.employeeName} sebesar ${formatRupiah(amount)} sudah diganti (lunas).`
+        : `${formatRupiah(amount)} sudah diganti ke ${reimburseTarget.employeeName}. Sisa utang: ${formatRupiah(sisaUtangSetelahGanti)}.`
+    );
+
+    setIsReimburseSubmitting(false);
+    setReimburseTarget(null);
+    setReimburseInput('');
   };
 
   // Tutup Saldo Lama — nolin saldo kurir yang kebawa dari SEBELUM hari ini
@@ -892,37 +981,62 @@ const ShiftView = () => {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Saldo di Kurir</span>
-                  <span className={`text-sm font-bold ${totalHeldByCouriers > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                  <span className={`text-sm font-bold ${totalHeldByCouriers < 0 ? 'text-accent-600 dark:text-accent-400' : totalHeldByCouriers > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>
                     {formatRupiah(totalHeldByCouriers)}
                   </span>
                 </div>
-                {couriers.length > 0 && totalHeldByCouriers > 0 && (
+                {/* Gate pakai !== 0 (bukan > 0) — kurir dengan saldo NEGATIF
+                    (nombokin belanja pakai duit pribadi) tetap harus muncul
+                    di sini, karena itu artinya bisnis berutang ke kurir dan
+                    owner perlu tahu supaya bisa ganti uangnya. */}
+                {couriers.length > 0 && totalHeldByCouriers !== 0 && (
                   <div className="pl-2 space-y-1 pt-1">
-                    {courierBalances.filter(b => b.balance > 0).map(b => (
-                      <div key={b.employeeId} className="flex justify-between items-center gap-2">
-                        <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">— {b.employeeName}</span>
-                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">{formatRupiah(b.balance)}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenDeposit(b)}
-                          className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 rounded-lg px-1.5 py-0.5 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 active:scale-95 transition-all duration-200 shrink-0"
-                        >
-                          Setor
-                        </button>
-                        {/* Hapus Setoran (write-off) — khusus Admin. Beda dari
-                            Setor: nurunin saldo kurir TAPI gak nambah Saldo
-                            Dompet (lihat handleConfirmWriteoff & totalWrittenOff). */}
-                        {isAdminMode && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenWriteoff(b)}
-                            className="text-[10px] font-bold text-accent-600 dark:text-accent-400 border border-accent-200 dark:border-accent-500/30 rounded-lg px-1.5 py-0.5 hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-95 transition-all duration-200 shrink-0"
-                          >
-                            Hapus
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                    {courierBalances.filter(b => b.balance !== 0).map(b => {
+                      const isNegative = b.balance < 0;
+                      return (
+                        <div key={b.employeeId} className="flex justify-between items-center gap-2">
+                          <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">— {b.employeeName}</span>
+                          <span className={`text-[11px] font-semibold shrink-0 ${isNegative ? 'text-accent-500 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                            {isNegative ? `Toko berutang ${formatRupiah(Math.abs(b.balance))}` : formatRupiah(b.balance)}
+                          </span>
+                          {/* Setor & Hapus cuma masuk akal buat saldo POSITIF
+                              (ada cash beneran di tangan kurir). Saldo NEGATIF
+                              dapat tombol "Ganti Uang" (reimburse) sebagai
+                              gantinya — kasir bayar utang bisnis ke kurir. */}
+                          {!isNegative ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDeposit(b)}
+                                className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 rounded-lg px-1.5 py-0.5 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 active:scale-95 transition-all duration-200 shrink-0"
+                              >
+                                Setor
+                              </button>
+                              {/* Hapus Setoran (write-off) — khusus Admin. Beda dari
+                                  Setor: nurunin saldo kurir TAPI gak nambah Saldo
+                                  Dompet (lihat handleConfirmWriteoff & totalWrittenOff). */}
+                              {isAdminMode && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenWriteoff(b)}
+                                  className="text-[10px] font-bold text-accent-600 dark:text-accent-400 border border-accent-200 dark:border-accent-500/30 rounded-lg px-1.5 py-0.5 hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-95 transition-all duration-200 shrink-0"
+                                >
+                                  Hapus
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenReimburse(b)}
+                              className="text-[10px] font-bold text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-500/30 rounded-lg px-1.5 py-0.5 hover:bg-sky-50 dark:hover:bg-sky-500/10 active:scale-95 transition-all duration-200 shrink-0"
+                            >
+                              Ganti Uang
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1534,6 +1648,97 @@ const ShiftView = () => {
                   disabled={!isValidAmount || isWriteoffSubmitting}
                 >
                   {isWriteoffSubmitting ? 'Memproses...' : 'Hapus'}
+                </Button>
+              </div>
+            </>
+          );
+        })()}
+      </Modal>
+
+      {/* =========================================================================
+          MODAL GANTI UANG (Reimburse) — Kasir bayar utang bisnis ke kurir
+          yang saldonya NEGATIF (nombokin belanja pakai duit pribadi).
+          Kebalikan dari Setor: uang keluar dari Dompet -> tangan kurir.
+          Lihat handleConfirmReimburse & catatan tanda amount di
+          utils/cashHolders.js.
+          ========================================================================= */}
+      <Modal
+        isOpen={!!reimburseTarget}
+        onClose={() => { setReimburseTarget(null); setReimburseInput(''); }}
+        title="Ganti Uang Kurir"
+      >
+        {reimburseTarget && (() => {
+          const liveEntry = courierBalances.find(b => b.employeeId === reimburseTarget.employeeId);
+          const liveDebt = liveEntry && liveEntry.balance < 0 ? Math.abs(liveEntry.balance) : 0;
+          const amount = Number(reimburseInput);
+          const isValidAmount = reimburseInput !== '' && Number.isFinite(amount) && amount > 0 && amount <= liveDebt;
+          const sisaPreview = reimburseInput !== '' && Number.isFinite(amount) ? liveDebt - amount : liveDebt;
+
+          return (
+            <>
+              <div className="p-4 md:p-6 space-y-4">
+                <div className="flex gap-2 items-start bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 rounded-xl p-3">
+                  <Wallet className="w-4 h-4 text-sky-500 dark:text-sky-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-sky-700 dark:text-sky-300">
+                    {reimburseTarget.employeeName} nombokin belanja bisnis pakai duit pribadi. Nominal ini keluar dari Dompet — <b>menurunkan</b> Saldo Akhir Dompet, kebalikan dari Setor.
+                  </p>
+                </div>
+
+                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                  <span className="text-sm text-slate-500 dark:text-slate-400">Utang ke {reimburseTarget.employeeName} saat ini</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{formatRupiah(liveDebt)}</span>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Nominal yang Diganti</span>
+                    <button
+                      type="button"
+                      onClick={() => setReimburseInput(String(liveDebt))}
+                      disabled={liveDebt <= 0}
+                      className="text-[11px] font-bold text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-500/30 rounded-lg px-2 py-0.5 hover:bg-sky-50 dark:hover:bg-sky-500/10 active:scale-95 transition-all duration-200 disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      Ganti Semua
+                    </button>
+                  </div>
+                  <Input
+                    type="number"
+                    icon={<span className="font-bold">Rp</span>}
+                    value={reimburseInput}
+                    onChange={e => setReimburseInput(e.target.value)}
+                    placeholder="0"
+                    className="text-lg font-bold py-3"
+                  />
+                  {reimburseInput !== '' && amount > liveDebt && (
+                    <p className="text-xs text-accent-500 dark:text-accent-400 mt-1">
+                      Nominal melebihi utang yang tercatat ({formatRupiah(liveDebt)}).
+                    </p>
+                  )}
+                </div>
+
+                {reimburseInput !== '' && isValidAmount && (
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Sisa utang setelah diganti:</p>
+                    <p className="font-black text-lg text-slate-800 dark:text-slate-100">{formatRupiah(sisaPreview)}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 md:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => { setReimburseTarget(null); setReimburseInput(''); }}
+                >
+                  Batal
+                </Button>
+                <Button
+                  variant="primary"
+                  className="flex-1"
+                  onClick={handleConfirmReimburse}
+                  disabled={!isValidAmount || isReimburseSubmitting}
+                >
+                  {isReimburseSubmitting ? 'Memproses...' : 'Ganti Uang'}
                 </Button>
               </div>
             </>

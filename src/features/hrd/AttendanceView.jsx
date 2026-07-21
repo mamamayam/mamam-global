@@ -14,7 +14,7 @@ import {
 } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
-import { OVERTIME_THRESHOLD_MINUTES, WORK_END_MINUTES } from './utils/payrollLogic';
+import { OVERTIME_THRESHOLD_MINUTES, WORK_END_MINUTES, calculateBolongMinutes } from './utils/payrollLogic';
 
 const AUTO_CLOSE_HOUR = 21; // Sistem mendeteksi kelalaian jika sudah lewat jam 21:00
 // Jam pulang otomatis yang akan dicatat — diturunkan dari WORK_END_MINUTES
@@ -169,13 +169,34 @@ export default function Attendance() {
           deletedAt: null,
         })),
         ...toAutoCloseBolong.map(emp => {
-          const bolongRec = getLastRecord(emp.id);
+          // [FIX] Jam pulang otomatis buat karyawan yang lupa "Masuk Lagi"
+          // setelah bolong HARUS tetap outletCloseDate (jam tutup outlet),
+          // SAMA seperti toAutoCloseMasuk di atas — BUKAN jam mulai bolong
+          // itu sendiri.
+          //
+          // Sebelumnya dipakai `date: bolongRec.date`, yang secara tidak
+          // sengaja bikin log 'keluar' PERSIS bertepatan waktu dengan log
+          // 'bolong' pasangannya. Efeknya di calculateBolongMinutes/
+          // computeAttendanceFromLogs (payrollLogic.js): gap bolong dihitung
+          // dari bolong ke keluar = 0 menit (karena timestamp-nya sama),
+          // DAN seluruh sisa jam kerja setelah titik bolong itu (yang
+          // seharusnya masih dihitung sampai jam tutup) ikut lenyap dari
+          // hoursWorked — karyawan yang harusnya kerja sampai sore cuma
+          // kebayar sampai jam dia mulai istirahat. Ini akar dari keluhan
+          // "jam bolong gak dihitung" / jam kerja hilang.
+          //
+          // isFromBolong tetap dipertahankan (bukan cuma kosmetik) — dipakai
+          // buat notice "Absen Pulang Otomatis" di UI supaya admin tahu
+          // kasus ini butuh perhatian ekstra (karyawan lupa balik dari
+          // bolong, BUKAN auto-close normal), dan tetap disarankan untuk
+          // dikoreksi manual kalau jam pulang sebenarnya beda dari jam
+          // tutup outlet.
           return {
             id: `AUTO-KELUAR-BOLONG-${emp.id}-${todayStr}`,
             employeeId: emp.id,
             employeeName: emp.name,
             type: 'keluar',
-            date: bolongRec.date,
+            date: outletCloseDate.toISOString(),
             dateStr: todayStr,
             isAutoClose: true,
             isFromBolong: true,
@@ -235,17 +256,34 @@ export default function Attendance() {
     const bolongRecords = records.filter(r => r.type === 'bolong');
     const masukLagiRecords = records.filter(r => r.type === 'masuk_lagi');
 
+    // bolong/masukLagi (sesi TERAKHIR) tetap dipakai buat label "Bolong
+    // HH:MM - HH:MM" di teks status (baris di bawah JSX render) — itu
+    // memang cuma nunjukin sesi bolong yang lagi/terakhir berjalan hari
+    // itu, bukan total.
     const bolong = bolongRecords[bolongRecords.length - 1];
     const masukLagi = masukLagiRecords[masukLagiRecords.length - 1];
     const keluarRecord = records.find(r => r.type === 'keluar');
     const liburRecord = records.find(r => r.type === 'libur');
 
+    // [FIX] Durasi yang ditampilkan HARUS total dari SEMUA sesi bolong hari
+    // itu, bukan cuma sesi terakhir — sebelumnya kalau karyawan bolong 2x
+    // (mis. istirahat siang + istirahat sore), sesi pertama hilang total
+    // dari tampilan status, padahal payroll (payrollLogic.js) sudah benar
+    // mengakumulasi semuanya. Pakai calculateBolongMinutes yang sama biar
+    // satu sumber kebenaran dgn hoursWorked/bolongMinutes di rekap gaji,
+    // bukan implementasi kedua yang bisa ketinggalan sinkron.
+    // fallbackEndDate: kalau ada keluarRecord pakai jam itu (sesi bolong
+    // terakhir yang belum sempat masuk_lagi dianggap berhenti pas pulang),
+    // kalau belum ada keluar sama sekali pakai waktu SEKARANG (sesi bolong
+    // yang masih berjalan live).
+    const totalBolongMinutes = calculateBolongMinutes(records, keluarRecord ? new Date(keluarRecord.date) : new Date());
+
     let durasiBolongText = '';
-    if (bolong && masukLagi && new Date(masukLagi.date) > new Date(bolong.date)) {
-      const diffMins = Math.round((new Date(masukLagi.date) - new Date(bolong.date)) / 60000);
+    if (totalBolongMinutes > 0) {
+      const diffMins = Math.round(totalBolongMinutes);
       const h = Math.floor(diffMins / 60);
       const m = diffMins % 60;
-      durasiBolongText = `(${h}j ${m}m)`;
+      durasiBolongText = bolongRecords.length > 1 ? `(total ${h}j ${m}m)` : `(${h}j ${m}m)`;
     }
 
     let isLembur = false;
@@ -278,13 +316,20 @@ export default function Attendance() {
   // render berikutnya.
   const handleQuickConfirmLibur = (employeeId, employeeName) => {
     triggerConfirm(`Yakin ${employeeName} libur hari ini?`, () => {
+      const liburDateStr = toLocalDateString();
+      // [FIX] ID deterministik (employeeId+dateStr, TANPA Date.now()) —
+      // beda dari MANUAL-${type} di handleAddManualRecord yang butuh
+      // timeKey (karena bolong/masuk_lagi boleh berkali-kali sehari),
+      // 'libur' secara bisnis maksimal 1x per employeeId per hari, jadi ID
+      // tanpa komponen waktu ini yang benar: klik dobel/retry jaringan
+      // upsert ke record yang sama, bukan bikin 2 log 'libur' terpisah.
       setAttendanceLog(prev => [...prev, {
-        id: `MANUAL-LIBUR-${employeeId}-${Date.now()}`,
+        id: `MANUAL-LIBUR-${employeeId}-${liburDateStr}`,
         employeeId,
         employeeName,
         type: 'libur',
         date: new Date().toISOString(),
-        dateStr: toLocalDateString(),
+        dateStr: liburDateStr,
         isManual: true,
         deletedAt: null,
       }]);
@@ -407,13 +452,29 @@ export default function Attendance() {
     if (!editTime || !editEmployeeId) return;
     const [h, m] = editTime.split(':').map(Number);
     const date = new Date(); date.setHours(h, m, 0, 0);
+    const manualDateStr = toLocalDateString();
+    // [FIX] ID deterministik (employeeId+type+dateStr+JAM:MENIT yang
+    // diinput admin) — sebelumnya pakai Date.now() (submit-time), yang
+    // artinya klik dobel/retry jaringan buat input MANUAL YANG SAMA PERSIS
+    // (karyawan sama, tipe sama, jam sama) menghasilkan 2 record log
+    // terpisah alih-alih menyatu lewat upsert, konsisten dengan pola ID
+    // deterministik yang sudah dipakai di seluruh module ini (lihat
+    // REC-${empId}-${dateStr} di InputDailyTab.jsx, AUTO-KELUAR-* di atas).
+    //
+    // Waktu (h:m) SENGAJA ikut jadi bagian ID, bukan cuma employeeId+type+
+    // dateStr — beda dari record harian (employeeDailyRecords) yang
+    // maksimal 1 per employeeId+dateStr, log absensi (attendanceLog) BOLEH
+    // berkali-kali untuk employeeId+type+dateStr yang sama dalam 1 hari
+    // (mis. 2x 'bolong' buat istirahat siang & sore) — kalau waktu gak ikut
+    // dalam ID, sesi kedua akan menimpa sesi pertama yang jamnya beda.
+    const timeKey = `${String(h).padStart(2, '0')}${String(m).padStart(2, '0')}`;
     setAttendanceLog(prev => [...prev, {
-      id: `MANUAL-${editEmployeeId}-${editType}-${Date.now()}`,
+      id: `MANUAL-${editEmployeeId}-${editType}-${manualDateStr}-${timeKey}`,
       employeeId: editEmployeeId,
       employeeName: editEmployeeName,
       type: editType,
       date: date.toISOString(),
-      dateStr: toLocalDateString(),
+      dateStr: manualDateStr,
       isManual: true,
       deletedAt: null,
     }]);
@@ -464,7 +525,9 @@ export default function Attendance() {
               <p className="text-xs text-red-600 dark:text-red-500 mt-0.5 mb-2">
                 Karyawan berikut tidak absen pulang sampai jam {AUTO_CLOSE_HOUR}:00, sehingga jam pulang dicatat otomatis
                 pukul <span className="font-semibold">{OUTLET_CLOSE_HOUR}:00</span> (jam tutup outlet). Admin bisa melakukan pengeditan secara manual jika diperlukan.
-                Yang bertanda <span className="font-semibold italic">(jam bolong)</span> — pulang dicatat saat mereka keluar bolong karena tidak absen balik.
+                Yang bertanda <span className="font-semibold italic">(jam bolong)</span> — sempat mulai istirahat (bolong) tapi lupa absen "Masuk Lagi"; seluruh
+                waktu sejak mereka mulai bolong sampai jam {OUTLET_CLOSE_HOUR}:00 ikut terhitung sebagai <span className="font-semibold">durasi bolong</span>, BUKAN jam kerja.
+                Kalau karyawan itu sebenarnya balik kerja sebelum tutup, <span className="font-semibold">wajib dikoreksi manual</span> lewat tombol Edit di tabel bawah supaya jam kerja & lemburnya benar.
                 {/* [+] Keterangan Teks Tambahan */}
                 <br />Yang bertanda <span className="font-semibold italic">(libur)</span> — otomatis diliburkan karena tidak memiliki catatan absensi sama sekali hari ini.
               </p>
@@ -583,7 +646,17 @@ export default function Attendance() {
                       <Badge variant="neutral" dot>Libur</Badge>
                     ) : lastRecord?.type === 'bolong' ? (
                       <Badge variant="warning" dot>Jam Bolong</Badge>
-                    ) : lastRecord?.type === 'masuk' ? (
+                    ) : lastRecord?.type === 'masuk' || lastRecord?.type === 'masuk_lagi' ? (
+                      // [FIX] 'masuk_lagi' sebelumnya gak ke-cover cabang manapun
+                      // di switch ini, jadi jatuh ke fallback "Belum Absen" +
+                      // tombol quick-confirm Libur — padahal karyawan ini justru
+                      // SEDANG KERJA (baru balik dari bolong). Kalau admin gak
+                      // sadar dan klik "Libur" karena percaya badge-nya, seluruh
+                      // hari itu tertimpa jadi Libur (hasLibur dicek duluan di
+                      // computeAttendanceFromLogs), menghapus semua jam kerja &
+                      // lembur yang sudah tercatat. Badge "Masuk" dipakai lagi di
+                      // sini (bukan badge baru) karena secara status kehadiran
+                      // keduanya sama: karyawan aktif, belum pulang.
                       <Badge variant="success" dot>Masuk</Badge>
                     ) : (
                       <>

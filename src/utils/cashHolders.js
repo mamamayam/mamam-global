@@ -38,21 +38,38 @@
 //
 // Field `type` pada record cashTransfers (opsional, default 'deposit' utk
 // data lama yang belum punya field ini):
-//   'deposit'  -> setoran normal, uang BENERAN pindah ke laci kasir.
-//                 Menurunkan saldo kurir DAN menaikkan Saldo Akhir Dompet
-//                 (lihat expectedCash di ShiftView.jsx).
-//   'writeoff' -> kerugian/uang hilang (kurir kehilangan uang, dsb).
-//                 Menurunkan saldo kurir SAMA seperti deposit (dari sisi
-//                 computeCourierBalance di bawah, keduanya identik — cuma
-//                 pengurang), TAPI TIDAK menaikkan Saldo Akhir Dompet,
-//                 karena duitnya emang hilang, bukan pindah ke laci.
-//                 ShiftView.jsx yang membedakan efeknya ke expectedCash.
+//   'deposit'   -> setoran normal, uang BENERAN pindah ke laci kasir.
+//                  Menurunkan saldo kurir DAN menaikkan Saldo Akhir Dompet
+//                  (lihat expectedCash di ShiftView.jsx).
+//   'writeoff'  -> kerugian/uang hilang (kurir kehilangan uang, dsb).
+//                  Menurunkan saldo kurir SAMA seperti deposit (dari sisi
+//                  computeCourierBalance di bawah, keduanya identik — cuma
+//                  pengurang), TAPI TIDAK menaikkan Saldo Akhir Dompet,
+//                  karena duitnya emang hilang, bukan pindah ke laci.
+//                  ShiftView.jsx yang membedakan efeknya ke expectedCash.
+//   'reimburse' -> kebalikan dari deposit/writeoff. Dipakai kalau saldo
+//                  kurir NEGATIF (kurir nombokin belanja bisnis pakai duit
+//                  pribadinya karena saldo COD dia gak cukup) — kasir
+//                  ganti uang kurir dari laci. `amount` pada record jenis
+//                  ini SENGAJA disimpan NEGATIF (kebalikan tanda dari
+//                  deposit/writeoff yang selalu positif), supaya formula
+//                  `deposited = sum(amount)` di computeCourierBalance
+//                  otomatis MENAMBAH saldo kurir tanpa perlu cabang logic
+//                  terpisah. Efek ke Saldo Dompet juga otomatis: saldo
+//                  kurir naik -> totalHeldByCouriers naik -> expectedCash
+//                  turun sejumlah yang diganti (uang beneran keluar dari
+//                  laci fisik ke tangan kurir).
 
 export const CASH_TRANSFER_TYPE_DEPOSIT = 'deposit';
 export const CASH_TRANSFER_TYPE_WRITEOFF = 'writeoff';
+export const CASH_TRANSFER_TYPE_REIMBURSE = 'reimburse';
 
 export function isWriteoffTransfer(transfer) {
   return transfer?.type === CASH_TRANSFER_TYPE_WRITEOFF;
+}
+
+export function isReimburseTransfer(transfer) {
+  return transfer?.type === CASH_TRANSFER_TYPE_REIMBURSE;
 }
 
 export const CASH_HOLDER_KASIR = { type: 'kasir' };

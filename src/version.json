@@ -1,5 +1,5 @@
 {
-  "version": "3.7.0",
-  "updatedAt": "2026-07-15",
-  "note": "notifikasi fixed, delay on proses attempt 1"
+  "version": "3.7.2",
+  "updatedAt": "2026-07-21",
+  "note": "pasang saldo kurir minus di shiftview"
 }
