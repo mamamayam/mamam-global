@@ -152,6 +152,7 @@ export default function App() {
   const [syncStep, setSyncStep] = useState('Menghubungkan ke server...');
 
   const cleanupRef = useRef(null);
+  const reconnectRef = useRef(null);
 
   const syncGateRef = useRef(null);
   if (!syncGateRef.current) {
@@ -306,7 +307,7 @@ export default function App() {
       // syncStatus sudah 'syncing' dari initial state — tidak perlu set ulang
       setSyncStep('Mengambil data dari server...');
 
-      const { unsubscribe, syncReadyPromise: enginePromise } = initRealtimeSync({
+      const { unsubscribe, reconnect, syncReadyPromise: enginePromise } = initRealtimeSync({
         // Dipanggil saat initial pull SELESAI untuk satu tableKey (transaksi)
         // atau saat realtime event datang dari device lain.
         // `fullArray` = array penuh hasil merge (initial pull); `item` = satu record (realtime)
@@ -367,8 +368,10 @@ export default function App() {
         setSyncStep('');
       });
 
-      // Simpan unsubscribe ke ref agar bisa dipanggil saat cleanup
+      // Simpan unsubscribe & reconnect ke ref agar bisa dipanggil dari luar
+      // effect ini (cleanup & listener resume di effect terpisah di bawah).
       cleanupRef.current = unsubscribe;
+      reconnectRef.current = reconnect;
     })();
     return () => {
       cancelled = true;
@@ -588,15 +591,22 @@ export default function App() {
     };
 
     const handleVisibility = () => {
-      if (document.visibilityState === 'hidden') flush('visibility-hidden');
-      else if (document.visibilityState === 'visible') flush('visibility-visible');
+      if (document.visibilityState === 'hidden') {
+        flush('visibility-hidden');
+      } else if (document.visibilityState === 'visible') {
+        flush('visibility-visible');
+        reconnectRef.current?.(); // lihat komen di storage/realtimeSync.js soal kenapa ini ada
+      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
     let pauseHandle, resumeHandle;
     (async () => {
       pauseHandle = await CapacitorApp.addListener('pause', () => flush('capacitor-pause'));
-      resumeHandle = await CapacitorApp.addListener('resume', () => flush('capacitor-resume'));
+      resumeHandle = await CapacitorApp.addListener('resume', () => {
+        flush('capacitor-resume');
+        reconnectRef.current?.();
+      });
     })();
 
     return () => {

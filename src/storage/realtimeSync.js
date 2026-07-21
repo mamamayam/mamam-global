@@ -614,11 +614,140 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
 
   if (!isSupabaseConfigured()) {
     _resolveReady();
-    return { unsubscribe: () => { }, syncReadyPromise };
+    return { unsubscribe: () => { }, syncReadyPromise, reconnect: () => {} };
   }
 
   let channel = null;
   let cancelled = false;
+  let reconnectTimer = null;
+  let reconnectAttempt = 0;
+
+  // FIX "TRANSAKSI GAK MASUK KALAU HP DIDIEMIN": WebView Android (beda dari
+  // tab browser desktop) sering nge-suspend/throttle JS timer & koneksi
+  // network begitu app idle lama tanpa interaksi apapun (gak pindah tab,
+  // gak keluar-masuk) — ini "Doze"/background-throttling bawaan Android,
+  // di luar kendali kode kita. WebSocket realtime Supabase bisa putus diam²
+  // di kondisi itu, dan SEBELUM FIX INI gak ada apapun yang mendeteksi /
+  // menyambung ulang — channel.subscribe() sebelumnya cuma log kalau status
+  // 'SUBSCRIBED', status error/timeout/closed dibiarin begitu aja. Makanya
+  // transaksi dari device lain "kadang gak masuk sama sekali" sampai user
+  // manual keluar-masuk app (yang kebetulan bikin initRealtimeSync jalan
+  // ulang dari awal lewat App.jsx remount, jadi "keliatan kefix" tapi
+  // sebenernya cuma numpang restart paksa).
+  //
+  // Fix: pantau status tiap subscribe(), dan kalau statusnya
+  // CHANNEL_ERROR / TIMED_OUT / CLOSED, otomatis bikin channel baru lagi
+  // (dengan backoff, biar gak spam reconnect kalau emang lagi offline
+  // total). `reconnect()` juga di-export biar App.jsx bisa manggil manual
+  // pas app resume dari background — jaring pengaman kedua, karena momen
+  // "app baru dibangunkan lagi dari idle" itu momen paling rawan channel
+  // lama udah basi tapi library-nya sendiri belum sempat sadar/lapor.
+  function scheduleReconnect(supabase) {
+    if (cancelled) return;
+    clearTimeout(reconnectTimer);
+    reconnectAttempt++;
+    // Backoff: 2s, 4s, 8s, ... dibatasi maksimal 30s biar gak nunggu kelamaan
+    // kalau kondisinya cuma throttle sesaat, tapi juga gak spam kalau emang
+    // beneran offline lama.
+    const delay = Math.min(30000, 2000 * 2 ** (reconnectAttempt - 1));
+    reconnectTimer = setTimeout(() => {
+      if (cancelled) return;
+      console.warn(`[sync] realtime channel putus, reconnect percobaan ke-${reconnectAttempt}...`);
+      subscribeChannel(supabase);
+    }, delay);
+  }
+
+  function subscribeChannel(supabase) {
+    if (cancelled) return;
+    // Bersihin channel lama dulu (kalau ada) sebelum bikin yang baru, biar
+    // gak numpuk koneksi zombie.
+    if (channel) {
+      try { supabase.removeChannel(channel); } catch (_) { /* no-op */ }
+    }
+
+    channel = supabase.channel(`mamam-realtime-sync-${Math.random().toString(36).slice(2)}`);
+
+    for (const tableKey of TRANSACTION_KEYS) {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table: tableKey }, (payload) => {
+        const updatedBy = payload.new?.updated_by ?? payload.old?.updated_by;
+        if (updatedBy === deviceId) return;
+
+        if (payload.eventType === 'DELETE') {
+          // Realtime DELETE di Supabase cuma kejadian lewat purge (lihat
+          // pushTransactionDelete) — jadi ini aman dianggap "purge dari
+          // device lain", bukan hapus instan dari aksi user.
+          const id = payload.old?.id;
+          if (id) onTransactionDelete?.(tableKey, id);
+        } else {
+          const item = payload.new?.payload;
+          if (item) onTransactionUpsert?.(tableKey, item);
+        }
+      });
+    }
+
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, async (payload) => {
+      const updatedBy = payload.new?.updated_by ?? payload.old?.updated_by;
+      if (updatedBy === deviceId) return;
+      if (payload.eventType === 'DELETE') return;
+
+      const key = payload.new?.key;
+      const remoteValue = payload.new?.value;
+      if (!key || !APP_CONFIG_KEYS.includes(key)) return;
+
+      // Merge di sini (bukan di App.jsx) supaya satu-satunya tempat yang
+      // nentuin "gimana cara gabung data" ya cuma mergeValue() ini.
+      const local = await loadData(key, undefined);
+      const merged = mergeValue(local, remoteValue);
+      await saveData(key, merged);
+      onConfigUpdate?.(key, merged);
+    });
+
+    channel.subscribe((status) => {
+      if (cancelled) return;
+      if (status === 'SUBSCRIBED') {
+        console.log('[sync] realtime aktif ✅');
+        reconnectAttempt = 0; // reset backoff begitu beneran konek lagi
+        clearTimeout(reconnectTimer);
+        // Begitu channel nyambung lagi (baik pertama kali maupun setelah
+        // putus), tarik data terbaru sekali — jaring pengaman buat event
+        // yang mungkin ke-miss selama channel lama putus (realtime cuma
+        // ngirim event yang kejadian SELAGI subscribed, gak ada replay
+        // buffer bawaan di sini).
+        catchUpAfterReconnect(supabase);
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.warn(`[sync] realtime channel status: ${status}`);
+        scheduleReconnect(supabase);
+      }
+    });
+  }
+
+  // Re-pull semua TRANSACTION_KEYS + config (sama seperti initial pull),
+  // dipakai setelah reconnect supaya perubahan yang kejadian SELAMA channel
+  // putus (gak ke-broadcast karena emang gak ada yang dengerin saat itu)
+  // tetap ketangkep, bukan cuma perubahan setelah reconnect doang.
+  async function catchUpAfterReconnect(supabase) {
+    try {
+      for (const tableKey of TRANSACTION_KEYS) {
+        if (cancelled) return;
+        const { data: rows, error } = await withTimeout(
+          supabase.from(tableKey).select('id, payload, updated_at, updated_by'),
+          PUSH_TIMEOUT_MS, `catchup pull ${tableKey}`
+        );
+        if (error) { console.warn(`[sync] catchup pull ${tableKey} gagal:`, error.message); continue; }
+
+        const local = await loadData(tableKey, []);
+        const remoteItems = (rows || []).map(r => r.payload);
+        const merged = mergeValue(Array.isArray(local) ? local : [], remoteItems);
+
+        if (JSON.stringify(local) !== JSON.stringify(merged)) {
+          await saveData(tableKey, merged);
+          onTransactionUpsert?.(tableKey, null, merged);
+        }
+      }
+    } catch (err) {
+      console.warn('[sync] catchup after reconnect error:', err.message);
+    }
+  }
 
   (async () => {
     let supabase;
@@ -685,54 +814,29 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
 
     if (cancelled) return;
 
-    // 3. Realtime subscription
-    channel = supabase.channel(`mamam-realtime-sync-${Math.random().toString(36).slice(2)}`);
-
-    for (const tableKey of TRANSACTION_KEYS) {
-      channel.on('postgres_changes', { event: '*', schema: 'public', table: tableKey }, (payload) => {
-        const updatedBy = payload.new?.updated_by ?? payload.old?.updated_by;
-        if (updatedBy === deviceId) return;
-
-        if (payload.eventType === 'DELETE') {
-          // Realtime DELETE di Supabase cuma kejadian lewat purge (lihat
-          // pushTransactionDelete) — jadi ini aman dianggap "purge dari
-          // device lain", bukan hapus instan dari aksi user.
-          const id = payload.old?.id;
-          if (id) onTransactionDelete?.(tableKey, id);
-        } else {
-          const item = payload.new?.payload;
-          if (item) onTransactionUpsert?.(tableKey, item);
-        }
-      });
-    }
-
-    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, async (payload) => {
-      const updatedBy = payload.new?.updated_by ?? payload.old?.updated_by;
-      if (updatedBy === deviceId) return;
-      if (payload.eventType === 'DELETE') return;
-
-      const key = payload.new?.key;
-      const remoteValue = payload.new?.value;
-      if (!key || !APP_CONFIG_KEYS.includes(key)) return;
-
-      // Merge di sini (bukan di App.jsx) supaya satu-satunya tempat yang
-      // nentuin "gimana cara gabung data" ya cuma mergeValue() ini.
-      const local = await loadData(key, undefined);
-      const merged = mergeValue(local, remoteValue);
-      await saveData(key, merged);
-      onConfigUpdate?.(key, merged);
-    });
-
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') console.log('[sync] realtime aktif ✅');
-    });
+    // 3. Realtime subscription (+ auto-reconnect kalau putus, lihat komen di atas)
+    subscribeChannel(supabase);
   })();
 
   return {
     unsubscribe: () => {
       cancelled = true;
+      clearTimeout(reconnectTimer);
       if (channel) {
         getSupabaseClient().then(supabase => supabase?.removeChannel(channel));
+      }
+    },
+    // Dipanggil App.jsx pas app resume dari background — jaring pengaman
+    // manual selain auto-reconnect di atas. Aman dipanggil kapan aja,
+    // termasuk kalau channel sebenernya masih hidup (subscribeChannel bikin
+    // channel baru & buang yang lama, gak numpuk).
+    reconnect: async () => {
+      if (cancelled) return;
+      try {
+        const supabase = await getSupabaseClient();
+        if (supabase && !cancelled) subscribeChannel(supabase);
+      } catch (err) {
+        console.warn('[sync] manual reconnect gagal:', err.message);
       }
     },
     syncReadyPromise,
