@@ -217,28 +217,25 @@ export default function App() {
   const [theme, setTheme, l23] = usePersistState('theme', 'light');
   const [colorTheme, setColorThemeState] = usePersistState('colorTheme', 'orange');
 
-  // ─── Status bar menyatu warna app ───────────────────────────────────────
-  // overlaysWebView(true): webview digambar di BELAKANG status bar, supaya
-  // konten (termasuk Header) kelihatan sampai ke ujung layar paling atas —
-  // ini yang bikin app kerasa "fullscreen". StatusBar.setBackgroundColor
-  // dikasih warna SOLID (bukan transparan #00000000 seperti percobaan
-  // pertama) yang sama persis dengan warna dasar app (#ffffff light /
-  // #020617 dark = Tailwind slate-950) — jadi status bar keliatan nyatu,
-  // bukan nembus ke background window Android yang beda warna.
-  // CATATAN PENTING: ini cuma keliatan benar-benar nyatu kalau Header lo
-  // SOLID di area paling atas (bukan transparan/blur seperti bg-white/95).
-  // Kalau Header masih pakai opacity <100%, area status bar akan tetap
-  // kelihatan beda dari Header karena Header sendiri gak solid warnanya.
-  // Ikut `theme` supaya ikon jam/baterai (Style.Dark = gelap, Style.Light
-  // = terang) selalu kontras jelas terhadap warna status bar.
+  // ─── Status bar warna solid ─────────────────────────────────────────────
+  // Pendekatan solid (bukan overlay transparan): status bar dikasih warna
+  // background SAMA PERSIS dengan warna Header (#ffffff light / #020617
+  // dark = Tailwind slate-950). overlaysWebView di-set false supaya webview
+  // tetap didorong ke bawah status bar seperti biasa — jadi gak perlu
+  // urusan header transparan/blur "nembus" ke background window Android
+  // yang beda warna (itu penyebab status bar keliatan belang & ikon
+  // jam/baterai samar di percobaan overlay transparan sebelumnya).
   // Cuma jalan di native (Android/iOS); di browser biasa plugin ini no-op
   // tapi dibungkus try/catch + cek platform biar aman.
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     (async () => {
       try {
-        await StatusBar.setOverlaysWebView({ overlay: true });
+        await StatusBar.setOverlaysWebView({ overlay: false });
         await StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#020617' : '#ffffff' });
+        // Style.Dark = ikon jam/baterai gelap (dipakai saat background status
+        // bar terang / light mode). Style.Light = ikon terang (dipakai saat
+        // background status bar gelap / dark mode).
         await StatusBar.setStyle({ style: theme === 'dark' ? Style.Light : Style.Dark });
       } catch (err) {
         console.warn('StatusBar setup gagal (mungkin platform tidak didukung):', err);
