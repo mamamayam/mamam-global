@@ -12,10 +12,12 @@ import { useBulkSelect } from '../../../hook/useBulkSelect';
 import { getActiveCouriers } from '../../hrd/utils/payrollLogic';
 import {
   computeAllCourierBalances,
+  getCourierBalanceTargets,
   isCourierHolder,
   CASH_TRANSFER_TYPE_WRITEOFF,
   isWriteoffTransfer,
-  CASH_TRANSFER_TYPE_REIMBURSE
+  CASH_TRANSFER_TYPE_REIMBURSE,
+  isReimburseTransfer
 } from '../../../utils/cashHolders';
 
 // Opsi sorting utk Riwayat Shift — dipakai oleh <SortModal> di ShiftView.jsx.
@@ -89,6 +91,14 @@ export function useShiftLogic() {
   const [reimburseInput, setReimburseInput] = useState('');
   const [isReimburseSubmitting, setIsReimburseSubmitting] = useState(false); // anti double-submit
 
+  // State utk Modal Edit Baris Setoran Kurir (koreksi nominal/catatan kalau
+  // salah input — Admin. Sebelumnya baris cashTransfers cuma bisa dihapus
+  // total (handleDeleteCourierTransfer), gak ada cara koreksi nominal tanpa
+  // hapus+catat ulang dari nol).
+  const [editingTransfer, setEditingTransfer] = useState(null); // cashTransfers record | null
+  const [editTransferAmountInput, setEditTransferAmountInput] = useState('');
+  const [editTransferNoteInput, setEditTransferNoteInput] = useState('');
+
   const handleShareImage = async () => {
     const reportElement = document.getElementById('xreading-content');
     if (!reportElement) {
@@ -158,7 +168,15 @@ export function useShiftLogic() {
   // expectedCash di bawah jadi under-count: kas bisnis kelihatan lebih
   // sedikit dari yang seharusnya, padahal sebagian pengeluaran sudah
   // ditalangi kurir dari kantongnya sendiri (bukan dari kas fisik toko).
-  const couriers = useMemo(() => getActiveCouriers(employees), [employees]);
+  const activeCouriers = useMemo(() => getActiveCouriers(employees), [employees]);
+  // Gabungan kurir aktif + kurir yang udah resign/ganti role tapi masih
+  // punya jejak saldo di ledger — lihat catatan panjang di
+  // getCourierBalanceTargets() (utils/cashHolders.js) soal kenapa ini perlu.
+  const couriers = useMemo(() => getCourierBalanceTargets(activeCouriers, {
+    expenses: activeOnly(expenses),
+    salesHistory: activeOnly(salesHistory),
+    cashTransfers: activeOnly(cashTransfers || []),
+  }), [activeCouriers, expenses, salesHistory, cashTransfers]);
   const courierBalances = useMemo(() => computeAllCourierBalances(couriers, {
     expenses: activeOnly(expenses),
     salesHistory: activeOnly(salesHistory),
@@ -380,7 +398,13 @@ export function useShiftLogic() {
     const priorSales = activeOnly(salesHistory).filter(s => new Date(s.date) < startOfToday);
     const priorTransfers = activeOnly(cashTransfers || []).filter(t => new Date(t.date) < startOfToday);
 
-    const staleBalances = computeAllCourierBalances(couriers, {
+    // SENGAJA pakai activeCouriers (bukan `couriers` yang sudah digabung
+    // dengan kurir non-aktif) — auto-close ini mengasumsikan uangnya udah
+    // beneran disetor fisik tapi lupa dicatat, asumsi yang gak valid buat
+    // kurir yang udah resign (gak ada lagi yang bisa "lupa nyetor"). Saldo
+    // kurir non-aktif harus diselesaikan manual lewat Setor/Hapus/Ganti
+    // Uang di Riwayat, biar ada jejak keputusan yang jelas.
+    const staleBalances = computeAllCourierBalances(activeCouriers, {
       expenses: priorExpenses,
       salesHistory: priorSales,
       cashTransfers: priorTransfers,
@@ -645,6 +669,40 @@ export function useShiftLogic() {
     });
   };
 
+  // Koreksi 1 baris riwayat setoran kurir TANPA hapus-lalu-catat-ulang —
+  // dipakai kalau kasir/admin salah ketik nominal atau mau perjelas catatan.
+  // Nominal yang diketik di form SELALU angka positif (biar gak
+  // membingungkan admin yang koreksi); tandanya baru disesuaikan lagi pas
+  // disimpan, khusus utk baris 'reimburse' yang secara data disimpan
+  // negatif (lihat catatan tanda di utils/cashHolders.js).
+  const handleOpenEditCourierTransfer = (transfer) => {
+    setEditingTransfer(transfer);
+    setEditTransferAmountInput(String(Math.abs(transfer.amount || 0)));
+    setEditTransferNoteInput(transfer.note || '');
+  };
+
+  const handleSaveCourierTransferEdit = () => {
+    if (!editingTransfer) return;
+    const rawAmount = Number(editTransferAmountInput);
+    if (!editTransferAmountInput || !Number.isFinite(rawAmount) || rawAmount <= 0) {
+      return triggerAlert('Nominal harus lebih dari Rp 0.');
+    }
+
+    const signedAmount = isReimburseTransfer(editingTransfer) ? -rawAmount : rawAmount;
+
+    triggerConfirm('Simpan koreksi baris setoran ini? Saldo kurir terkait akan otomatis kehitung ulang.', () => {
+      setCashTransfers(cashTransfers.map(t => t.id === editingTransfer.id ? {
+        ...t,
+        amount: signedAmount,
+        note: editTransferNoteInput,
+      } : t));
+      triggerAlert('Baris setoran berhasil dikoreksi.');
+      setEditingTransfer(null);
+      setEditTransferAmountInput('');
+      setEditTransferNoteInput('');
+    });
+  };
+
   const handleRestoreShift = (id) => {
     setShiftHistory(shiftHistory.map(shift => shift.id === id ? restoreItem(shift) : shift));
     triggerAlert('Data berhasil dikembalikan.');
@@ -800,5 +858,11 @@ export function useShiftLogic() {
     handleDeleteShift, handleRestoreShift, handlePermanentDeleteShift,
     handleBulkSoftDeleteShift, handleBulkPermanentDeleteShift,
     handleDeleteCourierTransfer,
+
+    // Edit baris Riwayat Setoran Kurir (khusus Admin)
+    editingTransfer, setEditingTransfer,
+    editTransferAmountInput, setEditTransferAmountInput,
+    editTransferNoteInput, setEditTransferNoteInput,
+    handleOpenEditCourierTransfer, handleSaveCourierTransferEdit,
   };
 }

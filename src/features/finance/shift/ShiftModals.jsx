@@ -1,13 +1,15 @@
 import { FileText, AlertTriangle, Wallet } from 'lucide-react';
 import { Button, Input, Modal } from '../../../components/ui';
 
-// 5 modal seputar Shift/Dompet, dipisah dari ShiftView.jsx biar file
+// 6 modal seputar Shift/Dompet, dipisah dari ShiftView.jsx biar file
 // orchestrator-nya gak kebanjiran JSX modal:
 //   1. Koreksi Saldo Awal Dompet Aktif (khusus Admin)
 //   2. Edit Laporan Shift yang sudah ditutup (khusus Admin)
 //   3. Setor ke Dompet (kurir -> dompet, penuh/sebagian)
 //   4. Hapus Setoran / Write-off saldo kurir (khusus Admin)
 //   5. Ganti Uang / Reimburse kurir yang nombokin (saldo negatif)
+//   6. Edit Baris Setoran Kurir — koreksi nominal/catatan 1 baris riwayat
+//      cashTransfers tanpa perlu hapus+catat ulang dari nol (khusus Admin)
 //
 // Semua props di bawah datang langsung dari useShiftLogic() di ShiftView.jsx
 // (di-spread apa adanya) — nama & perilaku PERSIS sama dengan versi lama,
@@ -56,6 +58,15 @@ export default function ShiftModals({
   setReimburseInput,
   handleConfirmReimburse,
   isReimburseSubmitting,
+
+  // Modal 6: Edit Baris Setoran Kurir
+  editingTransfer,
+  setEditingTransfer,
+  editTransferAmountInput,
+  setEditTransferAmountInput,
+  editTransferNoteInput,
+  setEditTransferNoteInput,
+  handleSaveCourierTransferEdit,
 }) {
   return (
     <>
@@ -464,6 +475,77 @@ export default function ShiftModals({
                   disabled={!isValidAmount || isReimburseSubmitting}
                 >
                   {isReimburseSubmitting ? 'Memproses...' : 'Ganti Uang'}
+                </Button>
+              </div>
+            </>
+          );
+        })()}
+      </Modal>
+
+      {/* =========================================================================
+          MODAL EDIT BARIS SETORAN KURIR (khusus Admin)
+          Koreksi cepat kalau nominal/catatan di 1 baris cashTransfers salah
+          input — TIDAK mengubah tipe transaksinya (deposit/writeoff/
+          reimburse tetap sama), cuma nominal & catatan. Utk baris
+          'reimburse' yang di data disimpan negatif, form tetap minta angka
+          POSITIF (biar gak membingungkan), tandanya dipasang ulang otomatis
+          saat disimpan — lihat handleSaveCourierTransferEdit.
+          ========================================================================= */}
+      <Modal
+        isOpen={!!editingTransfer}
+        onClose={() => { setEditingTransfer(null); setEditTransferAmountInput(''); setEditTransferNoteInput(''); }}
+        title="Edit Baris Setoran"
+      >
+        {editingTransfer && (() => {
+          const amount = Number(editTransferAmountInput);
+          const isValidAmount = editTransferAmountInput !== '' && Number.isFinite(amount) && amount > 0;
+
+          return (
+            <>
+              <div className="p-4 md:p-6 space-y-4">
+                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                  <span className="text-sm text-slate-500 dark:text-slate-400">Kurir</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{editingTransfer.employeeName}</span>
+                </div>
+
+                <div>
+                  <Input
+                    type="number"
+                    label="Nominal"
+                    icon={<span className="font-bold">Rp</span>}
+                    value={editTransferAmountInput}
+                    onChange={e => setEditTransferAmountInput(e.target.value)}
+                    placeholder="0"
+                    className="text-lg font-bold py-3"
+                  />
+                </div>
+
+                <div>
+                  <Input
+                    type="text"
+                    label="Catatan"
+                    value={editTransferNoteInput}
+                    onChange={e => setEditTransferNoteInput(e.target.value)}
+                    placeholder="Catatan setoran (opsional)"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 md:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => { setEditingTransfer(null); setEditTransferAmountInput(''); setEditTransferNoteInput(''); }}
+                >
+                  Batal
+                </Button>
+                <Button
+                  variant="primary"
+                  className="flex-1"
+                  onClick={handleSaveCourierTransferEdit}
+                  disabled={!isValidAmount}
+                >
+                  Simpan Koreksi
                 </Button>
               </div>
             </>

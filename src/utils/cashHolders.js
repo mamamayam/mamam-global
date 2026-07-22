@@ -123,14 +123,82 @@ export function computeCourierBalance(employeeId, { expenses = [], salesHistory 
 
 /**
  * Hitung saldo semua kurir sekaligus (dipakai buat dashboard ringkasan).
- * Mengembalikan array [{ employeeId, employeeName, balance }], hanya
- * kurir yang punya aktivitas kas (cashIn/cashOut/deposit != 0) ATAU
+ * Mengembalikan array [{ employeeId, employeeName, isActive, balance }],
+ * hanya kurir yang punya aktivitas kas (cashIn/cashOut/deposit != 0) ATAU
  * yang saat ini masih berstatus kurir aktif (dari daftar `couriers`).
+ *
+ * `couriers` idealnya array hasil `getCourierBalanceTargets()` di bawah
+ * (sudah termasuk kurir non-aktif yang masih ada saldo nyangkut), TAPI
+ * tetap backward-compatible kalau cuma di-pass array employee biasa
+ * ({ id, name }) — `isActive` default true kalau field-nya gak ada.
  */
 export function computeAllCourierBalances(couriers, { expenses = [], salesHistory = [], cashTransfers = [] } = {}) {
   return (couriers || []).map(emp => ({
     employeeId: emp.id,
     employeeName: emp.name,
+    isActive: emp.isActive !== false,
     balance: computeCourierBalance(emp.id, { expenses, salesHistory, cashTransfers }),
   }));
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * KENAPA FUNGSI INI ADA — kasus "saldo kurir nyangkut, gak bisa diapa-apain"
+ * ═══════════════════════════════════════════════════════════════════════
+ * `getActiveCouriers()` (di payrollLogic.js) cuma mengembalikan karyawan
+ * yang SAAT INI role-nya 'kurir' & status-nya bukan 'resign'. Itu cocok
+ * dipakai buat dropdown "pilih kurir" saat mencatat transaksi BARU (gak
+ * boleh nempelin cash ke orang yang udah resign).
+ *
+ * TAPI kalau list yang sama juga dipakai buat MENGHITUNG & MENAMPILKAN
+ * saldo kurir (ShiftView), begitu status seorang kurir diubah jadi
+ * 'resign' (atau role-nya diganti), dia LANGSUNG hilang dari daftar —
+ * padahal saldo cash dia di salesHistory/expenses/cashTransfers TETAP
+ * ada & TIDAK ikut nol. Akibatnya: uang itu masih "nyangkut" di data,
+ * tapi tombol Setor/Hapus/Ganti Uang buat nyelesaiinnya juga ikut hilang
+ * (gak pernah dirender sama sekali) — dan totalHeldByCouriers jadi
+ * under-count, bikin Saldo Akhir Dompet di shiftStats keliatan LEBIH
+ * BESAR dari kas fisik yang sebenarnya ada.
+ *
+ * Fungsi ini menggabungkan kurir aktif dengan SEMUA employeeId yang
+ * pernah tercatat sebagai cashHolder kurir di ledger manapun (expense,
+ * salesHistory, cashTransfers) — supaya baris saldo kurir yang sudah
+ * resign/ganti role TETAP muncul & tetap bisa di-Setor/Hapus/Ganti Uang
+ * sampai benar-benar tuntas, bukan cuma menghilang begitu saja.
+ *
+ * Dipakai KHUSUS untuk menghitung/menampilkan saldo (ShiftView) — BUKAN
+ * untuk dropdown pilih kurir di transaksi baru (ExpenseView/PaymentModal
+ * tetap pakai getActiveCouriers() apa adanya).
+ */
+export function getCourierBalanceTargets(activeCouriers, { expenses = [], salesHistory = [], cashTransfers = [] } = {}) {
+  const byId = new Map();
+
+  (activeCouriers || []).forEach(emp => {
+    byId.set(emp.id, { id: emp.id, name: emp.name, isActive: true });
+  });
+
+  const addFromCashHolderRecord = (record) => {
+    if (!isCourierHolder(record)) return;
+    const holder = getCashHolder(record);
+    if (!holder.employeeId || byId.has(holder.employeeId)) return;
+    byId.set(holder.employeeId, {
+      id: holder.employeeId,
+      name: holder.employeeName || 'Kurir (non-aktif)',
+      isActive: false,
+    });
+  };
+
+  (expenses || []).forEach(addFromCashHolderRecord);
+  (salesHistory || []).forEach(addFromCashHolderRecord);
+
+  (cashTransfers || []).forEach(t => {
+    if (!t.employeeId || byId.has(t.employeeId)) return;
+    byId.set(t.employeeId, {
+      id: t.employeeId,
+      name: t.employeeName || 'Kurir (non-aktif)',
+      isActive: false,
+    });
+  });
+
+  return Array.from(byId.values());
 }

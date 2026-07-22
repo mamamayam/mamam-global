@@ -71,6 +71,11 @@ const ShiftView = () => {
     handleDeleteShift, handleRestoreShift, handlePermanentDeleteShift,
     handleBulkSoftDeleteShift, handleBulkPermanentDeleteShift,
     handleDeleteCourierTransfer,
+
+    editingTransfer, setEditingTransfer,
+    editTransferAmountInput, setEditTransferAmountInput,
+    editTransferNoteInput, setEditTransferNoteInput,
+    handleOpenEditCourierTransfer, handleSaveCourierTransferEdit,
   } = useShiftLogic();
 
   if (showXReading && closedShiftData) {
@@ -317,7 +322,12 @@ const ShiftView = () => {
                       const isNegative = b.balance < 0;
                       return (
                         <div key={b.employeeId} className="flex justify-between items-center gap-2">
-                          <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">— {b.employeeName}</span>
+                          <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">
+                            — {b.employeeName}
+                            {!b.isActive && (
+                              <span className="ml-1 text-amber-500 dark:text-amber-400 font-semibold">(Resign)</span>
+                            )}
+                          </span>
                           <span className={`text-[11px] font-semibold shrink-0 ${isNegative ? 'text-accent-500 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400'}`}>
                             {isNegative ? `Toko berutang ${formatRupiah(Math.abs(b.balance))}` : formatRupiah(b.balance)}
                           </span>
@@ -634,6 +644,9 @@ const ShiftView = () => {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="font-black text-emerald-600 dark:text-emerald-400">{formatRupiah(t.amount)}</span>
+                          <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris setoran ini">
+                            <Edit className="w-3.5 h-3.5" />
+                          </IconButton>
                           <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris setoran ini">
                             <Trash2 className="w-3.5 h-3.5" />
                           </IconButton>
@@ -691,6 +704,13 @@ const ShiftView = () => {
         setReimburseInput={setReimburseInput}
         handleConfirmReimburse={handleConfirmReimburse}
         isReimburseSubmitting={isReimburseSubmitting}
+        editingTransfer={editingTransfer}
+        setEditingTransfer={setEditingTransfer}
+        editTransferAmountInput={editTransferAmountInput}
+        setEditTransferAmountInput={setEditTransferAmountInput}
+        editTransferNoteInput={editTransferNoteInput}
+        setEditTransferNoteInput={setEditTransferNoteInput}
+        handleSaveCourierTransferEdit={handleSaveCourierTransferEdit}
       />
     </div>
   );

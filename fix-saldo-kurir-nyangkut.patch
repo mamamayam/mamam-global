@@ -1,0 +1,379 @@
+diff --git a/src/features/finance/shift/ShiftModals.jsx b/src/features/finance/shift/ShiftModals.jsx
+index d7bbf8f..2fb18d5 100644
+--- a/src/features/finance/shift/ShiftModals.jsx
++++ b/src/features/finance/shift/ShiftModals.jsx
+@@ -1,13 +1,15 @@
+ import { FileText, AlertTriangle, Wallet } from 'lucide-react';
+ import { Button, Input, Modal } from '../../../components/ui';
+ 
+-// 5 modal seputar Shift/Dompet, dipisah dari ShiftView.jsx biar file
++// 6 modal seputar Shift/Dompet, dipisah dari ShiftView.jsx biar file
+ // orchestrator-nya gak kebanjiran JSX modal:
+ //   1. Koreksi Saldo Awal Dompet Aktif (khusus Admin)
+ //   2. Edit Laporan Shift yang sudah ditutup (khusus Admin)
+ //   3. Setor ke Dompet (kurir -> dompet, penuh/sebagian)
+ //   4. Hapus Setoran / Write-off saldo kurir (khusus Admin)
+ //   5. Ganti Uang / Reimburse kurir yang nombokin (saldo negatif)
++//   6. Edit Baris Setoran Kurir — koreksi nominal/catatan 1 baris riwayat
++//      cashTransfers tanpa perlu hapus+catat ulang dari nol (khusus Admin)
+ //
+ // Semua props di bawah datang langsung dari useShiftLogic() di ShiftView.jsx
+ // (di-spread apa adanya) — nama & perilaku PERSIS sama dengan versi lama,
+@@ -56,6 +58,15 @@ export default function ShiftModals({
+   setReimburseInput,
+   handleConfirmReimburse,
+   isReimburseSubmitting,
++
++  // Modal 6: Edit Baris Setoran Kurir
++  editingTransfer,
++  setEditingTransfer,
++  editTransferAmountInput,
++  setEditTransferAmountInput,
++  editTransferNoteInput,
++  setEditTransferNoteInput,
++  handleSaveCourierTransferEdit,
+ }) {
+   return (
+     <>
+@@ -470,6 +481,77 @@ export default function ShiftModals({
+           );
+         })()}
+       </Modal>
++
++      {/* =========================================================================
++          MODAL EDIT BARIS SETORAN KURIR (khusus Admin)
++          Koreksi cepat kalau nominal/catatan di 1 baris cashTransfers salah
++          input — TIDAK mengubah tipe transaksinya (deposit/writeoff/
++          reimburse tetap sama), cuma nominal & catatan. Utk baris
++          'reimburse' yang di data disimpan negatif, form tetap minta angka
++          POSITIF (biar gak membingungkan), tandanya dipasang ulang otomatis
++          saat disimpan — lihat handleSaveCourierTransferEdit.
++          ========================================================================= */}
++      <Modal
++        isOpen={!!editingTransfer}
++        onClose={() => { setEditingTransfer(null); setEditTransferAmountInput(''); setEditTransferNoteInput(''); }}
++        title="Edit Baris Setoran"
++      >
++        {editingTransfer && (() => {
++          const amount = Number(editTransferAmountInput);
++          const isValidAmount = editTransferAmountInput !== '' && Number.isFinite(amount) && amount > 0;
++
++          return (
++            <>
++              <div className="p-4 md:p-6 space-y-4">
++                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
++                  <span className="text-sm text-slate-500 dark:text-slate-400">Kurir</span>
++                  <span className="font-bold text-slate-800 dark:text-slate-100">{editingTransfer.employeeName}</span>
++                </div>
++
++                <div>
++                  <Input
++                    type="number"
++                    label="Nominal"
++                    icon={<span className="font-bold">Rp</span>}
++                    value={editTransferAmountInput}
++                    onChange={e => setEditTransferAmountInput(e.target.value)}
++                    placeholder="0"
++                    className="text-lg font-bold py-3"
++                  />
++                </div>
++
++                <div>
++                  <Input
++                    type="text"
++                    label="Catatan"
++                    value={editTransferNoteInput}
++                    onChange={e => setEditTransferNoteInput(e.target.value)}
++                    placeholder="Catatan setoran (opsional)"
++                  />
++                </div>
++              </div>
++
++              <div className="p-4 md:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex gap-3">
++                <Button
++                  variant="secondary"
++                  className="flex-1"
++                  onClick={() => { setEditingTransfer(null); setEditTransferAmountInput(''); setEditTransferNoteInput(''); }}
++                >
++                  Batal
++                </Button>
++                <Button
++                  variant="primary"
++                  className="flex-1"
++                  onClick={handleSaveCourierTransferEdit}
++                  disabled={!isValidAmount}
++                >
++                  Simpan Koreksi
++                </Button>
++              </div>
++            </>
++          );
++        })()}
++      </Modal>
+     </>
+   );
+ }
+\ No newline at end of file
+diff --git a/src/features/finance/shift/ShiftView.jsx b/src/features/finance/shift/ShiftView.jsx
+index 0c730d3..d9dbf42 100644
+--- a/src/features/finance/shift/ShiftView.jsx
++++ b/src/features/finance/shift/ShiftView.jsx
+@@ -71,6 +71,11 @@ const ShiftView = () => {
+     handleDeleteShift, handleRestoreShift, handlePermanentDeleteShift,
+     handleBulkSoftDeleteShift, handleBulkPermanentDeleteShift,
+     handleDeleteCourierTransfer,
++
++    editingTransfer, setEditingTransfer,
++    editTransferAmountInput, setEditTransferAmountInput,
++    editTransferNoteInput, setEditTransferNoteInput,
++    handleOpenEditCourierTransfer, handleSaveCourierTransferEdit,
+   } = useShiftLogic();
+ 
+   if (showXReading && closedShiftData) {
+@@ -317,7 +322,12 @@ const ShiftView = () => {
+                       const isNegative = b.balance < 0;
+                       return (
+                         <div key={b.employeeId} className="flex justify-between items-center gap-2">
+-                          <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">— {b.employeeName}</span>
++                          <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">
++                            — {b.employeeName}
++                            {!b.isActive && (
++                              <span className="ml-1 text-amber-500 dark:text-amber-400 font-semibold">(Resign)</span>
++                            )}
++                          </span>
+                           <span className={`text-[11px] font-semibold shrink-0 ${isNegative ? 'text-accent-500 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                             {isNegative ? `Toko berutang ${formatRupiah(Math.abs(b.balance))}` : formatRupiah(b.balance)}
+                           </span>
+@@ -634,6 +644,9 @@ const ShiftView = () => {
+                         </div>
+                         <div className="flex items-center gap-2 shrink-0">
+                           <span className="font-black text-emerald-600 dark:text-emerald-400">{formatRupiah(t.amount)}</span>
++                          <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris setoran ini">
++                            <Edit className="w-3.5 h-3.5" />
++                          </IconButton>
+                           <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris setoran ini">
+                             <Trash2 className="w-3.5 h-3.5" />
+                           </IconButton>
+@@ -691,6 +704,13 @@ const ShiftView = () => {
+         setReimburseInput={setReimburseInput}
+         handleConfirmReimburse={handleConfirmReimburse}
+         isReimburseSubmitting={isReimburseSubmitting}
++        editingTransfer={editingTransfer}
++        setEditingTransfer={setEditingTransfer}
++        editTransferAmountInput={editTransferAmountInput}
++        setEditTransferAmountInput={setEditTransferAmountInput}
++        editTransferNoteInput={editTransferNoteInput}
++        setEditTransferNoteInput={setEditTransferNoteInput}
++        handleSaveCourierTransferEdit={handleSaveCourierTransferEdit}
+       />
+     </div>
+   );
+diff --git a/src/features/finance/shift/useShiftLogic.js b/src/features/finance/shift/useShiftLogic.js
+index d09a0d2..92ac458 100644
+--- a/src/features/finance/shift/useShiftLogic.js
++++ b/src/features/finance/shift/useShiftLogic.js
+@@ -12,10 +12,12 @@ import { useBulkSelect } from '../../../hook/useBulkSelect';
+ import { getActiveCouriers } from '../../hrd/utils/payrollLogic';
+ import {
+   computeAllCourierBalances,
++  getCourierBalanceTargets,
+   isCourierHolder,
+   CASH_TRANSFER_TYPE_WRITEOFF,
+   isWriteoffTransfer,
+-  CASH_TRANSFER_TYPE_REIMBURSE
++  CASH_TRANSFER_TYPE_REIMBURSE,
++  isReimburseTransfer
+ } from '../../../utils/cashHolders';
+ 
+ // Opsi sorting utk Riwayat Shift — dipakai oleh <SortModal> di ShiftView.jsx.
+@@ -89,6 +91,14 @@ export function useShiftLogic() {
+   const [reimburseInput, setReimburseInput] = useState('');
+   const [isReimburseSubmitting, setIsReimburseSubmitting] = useState(false); // anti double-submit
+ 
++  // State utk Modal Edit Baris Setoran Kurir (koreksi nominal/catatan kalau
++  // salah input — Admin. Sebelumnya baris cashTransfers cuma bisa dihapus
++  // total (handleDeleteCourierTransfer), gak ada cara koreksi nominal tanpa
++  // hapus+catat ulang dari nol).
++  const [editingTransfer, setEditingTransfer] = useState(null); // cashTransfers record | null
++  const [editTransferAmountInput, setEditTransferAmountInput] = useState('');
++  const [editTransferNoteInput, setEditTransferNoteInput] = useState('');
++
+   const handleShareImage = async () => {
+     const reportElement = document.getElementById('xreading-content');
+     if (!reportElement) {
+@@ -158,7 +168,15 @@ export function useShiftLogic() {
+   // expectedCash di bawah jadi under-count: kas bisnis kelihatan lebih
+   // sedikit dari yang seharusnya, padahal sebagian pengeluaran sudah
+   // ditalangi kurir dari kantongnya sendiri (bukan dari kas fisik toko).
+-  const couriers = useMemo(() => getActiveCouriers(employees), [employees]);
++  const activeCouriers = useMemo(() => getActiveCouriers(employees), [employees]);
++  // Gabungan kurir aktif + kurir yang udah resign/ganti role tapi masih
++  // punya jejak saldo di ledger — lihat catatan panjang di
++  // getCourierBalanceTargets() (utils/cashHolders.js) soal kenapa ini perlu.
++  const couriers = useMemo(() => getCourierBalanceTargets(activeCouriers, {
++    expenses: activeOnly(expenses),
++    salesHistory: activeOnly(salesHistory),
++    cashTransfers: activeOnly(cashTransfers || []),
++  }), [activeCouriers, expenses, salesHistory, cashTransfers]);
+   const courierBalances = useMemo(() => computeAllCourierBalances(couriers, {
+     expenses: activeOnly(expenses),
+     salesHistory: activeOnly(salesHistory),
+@@ -380,7 +398,13 @@ export function useShiftLogic() {
+     const priorSales = activeOnly(salesHistory).filter(s => new Date(s.date) < startOfToday);
+     const priorTransfers = activeOnly(cashTransfers || []).filter(t => new Date(t.date) < startOfToday);
+ 
+-    const staleBalances = computeAllCourierBalances(couriers, {
++    // SENGAJA pakai activeCouriers (bukan `couriers` yang sudah digabung
++    // dengan kurir non-aktif) — auto-close ini mengasumsikan uangnya udah
++    // beneran disetor fisik tapi lupa dicatat, asumsi yang gak valid buat
++    // kurir yang udah resign (gak ada lagi yang bisa "lupa nyetor"). Saldo
++    // kurir non-aktif harus diselesaikan manual lewat Setor/Hapus/Ganti
++    // Uang di Riwayat, biar ada jejak keputusan yang jelas.
++    const staleBalances = computeAllCourierBalances(activeCouriers, {
+       expenses: priorExpenses,
+       salesHistory: priorSales,
+       cashTransfers: priorTransfers,
+@@ -645,6 +669,40 @@ export function useShiftLogic() {
+     });
+   };
+ 
++  // Koreksi 1 baris riwayat setoran kurir TANPA hapus-lalu-catat-ulang —
++  // dipakai kalau kasir/admin salah ketik nominal atau mau perjelas catatan.
++  // Nominal yang diketik di form SELALU angka positif (biar gak
++  // membingungkan admin yang koreksi); tandanya baru disesuaikan lagi pas
++  // disimpan, khusus utk baris 'reimburse' yang secara data disimpan
++  // negatif (lihat catatan tanda di utils/cashHolders.js).
++  const handleOpenEditCourierTransfer = (transfer) => {
++    setEditingTransfer(transfer);
++    setEditTransferAmountInput(String(Math.abs(transfer.amount || 0)));
++    setEditTransferNoteInput(transfer.note || '');
++  };
++
++  const handleSaveCourierTransferEdit = () => {
++    if (!editingTransfer) return;
++    const rawAmount = Number(editTransferAmountInput);
++    if (!editTransferAmountInput || !Number.isFinite(rawAmount) || rawAmount <= 0) {
++      return triggerAlert('Nominal harus lebih dari Rp 0.');
++    }
++
++    const signedAmount = isReimburseTransfer(editingTransfer) ? -rawAmount : rawAmount;
++
++    triggerConfirm('Simpan koreksi baris setoran ini? Saldo kurir terkait akan otomatis kehitung ulang.', () => {
++      setCashTransfers(cashTransfers.map(t => t.id === editingTransfer.id ? {
++        ...t,
++        amount: signedAmount,
++        note: editTransferNoteInput,
++      } : t));
++      triggerAlert('Baris setoran berhasil dikoreksi.');
++      setEditingTransfer(null);
++      setEditTransferAmountInput('');
++      setEditTransferNoteInput('');
++    });
++  };
++
+   const handleRestoreShift = (id) => {
+     setShiftHistory(shiftHistory.map(shift => shift.id === id ? restoreItem(shift) : shift));
+     triggerAlert('Data berhasil dikembalikan.');
+@@ -800,5 +858,11 @@ export function useShiftLogic() {
+     handleDeleteShift, handleRestoreShift, handlePermanentDeleteShift,
+     handleBulkSoftDeleteShift, handleBulkPermanentDeleteShift,
+     handleDeleteCourierTransfer,
++
++    // Edit baris Riwayat Setoran Kurir (khusus Admin)
++    editingTransfer, setEditingTransfer,
++    editTransferAmountInput, setEditTransferAmountInput,
++    editTransferNoteInput, setEditTransferNoteInput,
++    handleOpenEditCourierTransfer, handleSaveCourierTransferEdit,
+   };
+ }
+\ No newline at end of file
+diff --git a/src/utils/cashHolders.js b/src/utils/cashHolders.js
+index 35dc122..e670d7e 100644
+--- a/src/utils/cashHolders.js
++++ b/src/utils/cashHolders.js
+@@ -123,14 +123,82 @@ export function computeCourierBalance(employeeId, { expenses = [], salesHistory
+ 
+ /**
+  * Hitung saldo semua kurir sekaligus (dipakai buat dashboard ringkasan).
+- * Mengembalikan array [{ employeeId, employeeName, balance }], hanya
+- * kurir yang punya aktivitas kas (cashIn/cashOut/deposit != 0) ATAU
++ * Mengembalikan array [{ employeeId, employeeName, isActive, balance }],
++ * hanya kurir yang punya aktivitas kas (cashIn/cashOut/deposit != 0) ATAU
+  * yang saat ini masih berstatus kurir aktif (dari daftar `couriers`).
++ *
++ * `couriers` idealnya array hasil `getCourierBalanceTargets()` di bawah
++ * (sudah termasuk kurir non-aktif yang masih ada saldo nyangkut), TAPI
++ * tetap backward-compatible kalau cuma di-pass array employee biasa
++ * ({ id, name }) — `isActive` default true kalau field-nya gak ada.
+  */
+ export function computeAllCourierBalances(couriers, { expenses = [], salesHistory = [], cashTransfers = [] } = {}) {
+   return (couriers || []).map(emp => ({
+     employeeId: emp.id,
+     employeeName: emp.name,
++    isActive: emp.isActive !== false,
+     balance: computeCourierBalance(emp.id, { expenses, salesHistory, cashTransfers }),
+   }));
++}
++
++/**
++ * ═══════════════════════════════════════════════════════════════════════
++ * KENAPA FUNGSI INI ADA — kasus "saldo kurir nyangkut, gak bisa diapa-apain"
++ * ═══════════════════════════════════════════════════════════════════════
++ * `getActiveCouriers()` (di payrollLogic.js) cuma mengembalikan karyawan
++ * yang SAAT INI role-nya 'kurir' & status-nya bukan 'resign'. Itu cocok
++ * dipakai buat dropdown "pilih kurir" saat mencatat transaksi BARU (gak
++ * boleh nempelin cash ke orang yang udah resign).
++ *
++ * TAPI kalau list yang sama juga dipakai buat MENGHITUNG & MENAMPILKAN
++ * saldo kurir (ShiftView), begitu status seorang kurir diubah jadi
++ * 'resign' (atau role-nya diganti), dia LANGSUNG hilang dari daftar —
++ * padahal saldo cash dia di salesHistory/expenses/cashTransfers TETAP
++ * ada & TIDAK ikut nol. Akibatnya: uang itu masih "nyangkut" di data,
++ * tapi tombol Setor/Hapus/Ganti Uang buat nyelesaiinnya juga ikut hilang
++ * (gak pernah dirender sama sekali) — dan totalHeldByCouriers jadi
++ * under-count, bikin Saldo Akhir Dompet di shiftStats keliatan LEBIH
++ * BESAR dari kas fisik yang sebenarnya ada.
++ *
++ * Fungsi ini menggabungkan kurir aktif dengan SEMUA employeeId yang
++ * pernah tercatat sebagai cashHolder kurir di ledger manapun (expense,
++ * salesHistory, cashTransfers) — supaya baris saldo kurir yang sudah
++ * resign/ganti role TETAP muncul & tetap bisa di-Setor/Hapus/Ganti Uang
++ * sampai benar-benar tuntas, bukan cuma menghilang begitu saja.
++ *
++ * Dipakai KHUSUS untuk menghitung/menampilkan saldo (ShiftView) — BUKAN
++ * untuk dropdown pilih kurir di transaksi baru (ExpenseView/PaymentModal
++ * tetap pakai getActiveCouriers() apa adanya).
++ */
++export function getCourierBalanceTargets(activeCouriers, { expenses = [], salesHistory = [], cashTransfers = [] } = {}) {
++  const byId = new Map();
++
++  (activeCouriers || []).forEach(emp => {
++    byId.set(emp.id, { id: emp.id, name: emp.name, isActive: true });
++  });
++
++  const addFromCashHolderRecord = (record) => {
++    if (!isCourierHolder(record)) return;
++    const holder = getCashHolder(record);
++    if (!holder.employeeId || byId.has(holder.employeeId)) return;
++    byId.set(holder.employeeId, {
++      id: holder.employeeId,
++      name: holder.employeeName || 'Kurir (non-aktif)',
++      isActive: false,
++    });
++  };
++
++  (expenses || []).forEach(addFromCashHolderRecord);
++  (salesHistory || []).forEach(addFromCashHolderRecord);
++
++  (cashTransfers || []).forEach(t => {
++    if (!t.employeeId || byId.has(t.employeeId)) return;
++    byId.set(t.employeeId, {
++      id: t.employeeId,
++      name: t.employeeName || 'Kurir (non-aktif)',
++      isActive: false,
++    });
++  });
++
++  return Array.from(byId.values());
+ }
+\ No newline at end of file

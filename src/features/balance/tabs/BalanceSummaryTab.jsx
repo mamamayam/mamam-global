@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Scale, Warehouse, ShoppingCart, TrendingUp, Users,
   RefreshCw, AlertTriangle, Package, Receipt, Lock
@@ -8,39 +8,7 @@ import { Card, Button, Badge, EmptyState } from '../../../components/ui';
 import { useAppContext } from '../../../context/AppContext';
 import { getBalanceSummary } from '../balance';
 import { formatPeriodLabel } from '../periodUtils';
-
-/* ─────────────────────────────────────────────────────────────────────────
-   Sisi Stok Opname MASIH MOCK — menyusul di tahap berikutnya
-   (stockOpnameLogic.js: fetch stock_checklists dari mamam-absensi +
-   valuasi rawMaterials + snapshot ke stock_opname_bulanan).
-   Struktur objek ini sengaja dipertahankan sama persis dengan bentuk
-   snapshot asli nanti, supaya JSX di bawah tidak perlu berubah banyak
-   saat wiring stok yang sebenarnya masuk.
-───────────────────────────────────────────────────────────────────────── */
-
-const MOCK_STOK_AWAL = {
-  period: '2026-06',
-  totalValue: 4_250_000,
-  generatedAt: '2026-06-30T20:10:00',
-  itemCount: 18,
-};
-
-const MOCK_STOK_AKHIR_BELUM_GENERATE = null; // simulasikan belum di-generate
-
-const MOCK_STOK_AKHIR_SUDAH_GENERATE = {
-  period: '2026-07',
-  totalValue: 3_890_000,
-  generatedAt: '2026-07-31T21:05:00',
-  itemCount: 19,
-  unmatchedCount: 2, // item stock opname yang belum ke-link ke rawMaterials
-  items: [
-    { rawMaterialId: 'rm-1', name: 'Ayam Potong', qty: 12, unit: 'Ekor', priceSnapshot: 45000, subtotal: 540000 },
-    { rawMaterialId: 'rm-2', name: 'Minyak Goreng', qty: 20, unit: 'Liter', priceSnapshot: 21000, subtotal: 420000 },
-    { rawMaterialId: 'rm-3', name: 'Beras', qty: 50, unit: 'Kg', priceSnapshot: 14500, subtotal: 725000 },
-  ],
-};
-
-/* ────────────────────────────────────────────────────────────────────── */
+import { fetchStokAwal, fetchStokAkhirIfExists, generateStokAkhir } from '../stockOpnameLogic';
 
 const StatCard = ({ icon, label, value, tone = 'neutral', sub }) => {
   const toneMap = {
@@ -64,34 +32,58 @@ const StatCard = ({ icon, label, value, tone = 'neutral', sub }) => {
 // `period` ("YYYY-MM") diteruskan dari BalanceTab.jsx (shell) supaya
 // filter periode tetap sinkron antara tab Ringkasan dan tab Rincian.
 const BalanceSummaryTab = ({ period }) => {
-  const { salesHistory, expenses, employeeDailyRecords, employees } = useAppContext();
+  const { salesHistory, expenses, employeeDailyRecords, employees, rawMaterials, triggerAlert } = useAppContext();
 
-  const [stokAkhir, setStokAkhir] = useState(MOCK_STOK_AKHIR_BELUM_GENERATE);
+  const [stokAwal, setStokAwal] = useState(null);       // { available, period, totalValue, itemCount, generatedAt } | null (masih loading)
+  const [stokAkhir, setStokAkhir] = useState(null);      // snapshot lengkap | null (belum ada)
+  const [isLoadingStok, setIsLoadingStok] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [loadError, setLoadError] = useState(null);
 
-  // TODO(stockOpnameLogic): ganti dengan lookup snapshot periode
-  // sebelumnya dari tabel stock_opname_bulanan. Kalau belum ada snapshot
-  // bulan lalu, totalValue harus 0 + tampilkan warning ke user, bukan
-  // diam-diam pura-pura ada data.
-  const stokAwal = MOCK_STOK_AWAL;
+  // Muat ulang Stok Awal (snapshot bulan lalu) & Stok Akhir (kalau sudah
+  // pernah digenerate sebelumnya untuk periode ini) setiap `period` ganti.
+  const loadStok = useCallback(async () => {
+    setIsLoadingStok(true);
+    setLoadError(null);
+    try {
+      const [awal, akhir] = await Promise.all([
+        fetchStokAwal(period),
+        fetchStokAkhirIfExists(period),
+      ]);
+      setStokAwal(awal);
+      setStokAkhir(akhir);
+    } catch (err) {
+      console.error('[BalanceSummaryTab] gagal memuat data stok opname:', err);
+      setLoadError(err.message || 'Gagal memuat data stok opname.');
+    } finally {
+      setIsLoadingStok(false);
+    }
+  }, [period]);
 
-  const handleGenerate = () => {
+  useEffect(() => {
+    loadStok();
+  }, [loadStok]);
+
+  const handleGenerate = async () => {
     setIsGenerating(true);
-    // Simulasi delay fetch dari Supabase (stock_checklists) + valuasi
-    setTimeout(() => {
-      setStokAkhir(MOCK_STOK_AKHIR_SUDAH_GENERATE);
+    try {
+      const result = await generateStokAkhir(period, rawMaterials);
+      setStokAkhir(result);
+    } catch (err) {
+      console.error('[BalanceSummaryTab] gagal generate stok akhir:', err);
+      triggerAlert?.(err.message || 'Gagal mengambil & generate data stok akhir.');
+    } finally {
       setIsGenerating(false);
-    }, 900);
+    }
   };
 
   // Penghasilan (salesHistory), Belanja Bahan Baku/Biaya Operasional
   // (expenses), dan Biaya Gaji (employeeDailyRecords + expenses kasbon)
-  // sudah dihitung dari data ASLI lewat balance.js. Sisi stok opname
-  // (stokAwalValue/stokAkhirValue) masih mock sampai stockOpnameLogic.js
-  // selesai — begitu itu jadi, cukup ganti 2 baris di bawah ini.
+  // dihitung dari data ASLI lewat balance.js. Stok Awal/Stok Akhir sekarang
+  // juga data ASLI dari stockOpnameLogic.js (bukan mock lagi).
   const ringkasan = useMemo(() => {
     return getBalanceSummary(salesHistory, expenses, employeeDailyRecords, employees, period, {
-      stokAwalValue: stokAwal.totalValue,
+      stokAwalValue: stokAwal?.totalValue || 0,
       stokAkhirValue: stokAkhir ? stokAkhir.totalValue : 0,
     });
   }, [salesHistory, expenses, employeeDailyRecords, employees, period, stokAwal, stokAkhir]);
@@ -101,29 +93,71 @@ const BalanceSummaryTab = ({ period }) => {
   // punya makna (stok akhir belum diketahui).
   const hasil = stokAkhir ? ringkasan : null;
 
+  if (isLoadingStok) {
+    return (
+      <Card padding="lg" className="flex items-center justify-center gap-2 text-slate-400 dark:text-slate-500 text-sm py-10">
+        <RefreshCw className="w-4 h-4 animate-spin" /> Memuat data stok opname...
+      </Card>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Card padding="lg">
+        <EmptyState
+          icon={<AlertTriangle className="w-8 h-8 text-red-400" />}
+          title="Gagal memuat data stok opname"
+          description={loadError}
+        />
+        <div className="flex justify-center mt-3">
+          <Button size="sm" icon={<RefreshCw className="w-3.5 h-3.5" />} onClick={loadStok}>
+            Coba Lagi
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <div>
       {/* ── STOK AWAL vs STOK AKHIR ─────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
 
-        {/* Stok Awal — otomatis dari snapshot bulan lalu */}
+        {/* Stok Awal — otomatis dari snapshot bulan lalu (stock_opname_bulanan) */}
         <Card padding="lg">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Warehouse className="w-4 h-4 text-slate-400 dark:text-slate-500" />
               <h3 className="font-heading font-bold text-sm text-slate-800 dark:text-slate-100">Stok Awal Bulan</h3>
             </div>
-            <Badge variant="neutral">Dari opname {stokAwal.period}</Badge>
+            {stokAwal?.available && (
+              <Badge variant="neutral">Dari opname {stokAwal.period}</Badge>
+            )}
           </div>
-          <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-1">
-            {formatRupiah(stokAwal.totalValue)}
-          </p>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500">
-            {stokAwal.itemCount} item &middot; digenerate {new Date(stokAwal.generatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-          </p>
+
+          {!stokAwal?.available ? (
+            <>
+              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-1">
+                {formatRupiah(0)}
+              </p>
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2.5 py-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                Belum ada snapshot stok opname bulan {stokAwal?.period}. Stok Awal dianggap Rp 0 — HPP bulan ini kemungkinan belum akurat sampai histori tersedia.
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-1">
+                {formatRupiah(stokAwal.totalValue)}
+              </p>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                {stokAwal.itemCount} item &middot; digenerate {new Date(stokAwal.generatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </>
+          )}
         </Card>
 
-        {/* Stok Akhir — perlu di-generate dari mamam-absensi */}
+        {/* Stok Akhir — di-generate dari stock_checklists (mamam-absensi) */}
         <Card padding="lg" className={!stokAkhir ? 'border-dashed' : ''}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -158,20 +192,30 @@ const BalanceSummaryTab = ({ period }) => {
               </p>
               <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
                 {stokAkhir.itemCount} item &middot; dikunci {new Date(stokAkhir.generatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                {stokAkhir.sourceDateStr && <> &middot; sumber checklist {stokAkhir.sourceDateStr}</>}
               </p>
               {stokAkhir.unmatchedCount > 0 && (
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2.5 py-1.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2.5 py-1.5 mb-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                   {stokAkhir.unmatchedCount} item belum ter-link ke Database Bahan Baku, tidak ikut terhitung
                 </div>
               )}
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={isGenerating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                onClick={handleGenerate}
+                disabled={isGenerating}
+              >
+                {isGenerating ? 'Mengambil data...' : 'Generate Ulang'}
+              </Button>
             </>
           )}
         </Card>
       </div>
 
       {/* ── DETAIL ITEM STOK AKHIR (kalau sudah generate) ──────────────── */}
-      {stokAkhir && (
+      {stokAkhir && stokAkhir.items.length > 0 && (
         <Card padding="none" className="overflow-hidden mb-6">
           <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
             <Package className="w-4 h-4 text-slate-400 dark:text-slate-500" />
@@ -201,6 +245,29 @@ const BalanceSummaryTab = ({ period }) => {
               </tbody>
             </table>
           </div>
+        </Card>
+      )}
+
+      {/* ── ITEM YANG BELUM TER-LINK (kalau ada) ────────────────────────── */}
+      {stokAkhir && stokAkhir.unmatchedItems?.length > 0 && (
+        <Card padding="lg" className="mb-6 border-amber-200 dark:border-amber-500/30">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
+              Item Checklist Belum Ter-link ke Database Bahan Baku
+            </h3>
+          </div>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-3">
+            Nama item ini ada isian qty di checklist stok, tapi namanya tidak persis sama dengan nama bahan baku manapun di menu Bahan Baku — jadi tidak ikut dihitung ke HPP. Samakan nama lalu tekan "Generate Ulang" di atas.
+          </p>
+          <ul className="text-sm text-slate-700 dark:text-slate-200 space-y-1">
+            {stokAkhir.unmatchedItems.map((it, idx) => (
+              <li key={idx} className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-1">
+                <span className="font-semibold">{it.name}</span>
+                <span className="text-slate-500 dark:text-slate-400">{it.qty} {it.unit}</span>
+              </li>
+            ))}
+          </ul>
         </Card>
       )}
 
@@ -246,7 +313,7 @@ const BalanceSummaryTab = ({ period }) => {
           </div>
 
           <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
-            HPP = Stok Awal ({formatRupiah(stokAwal.totalValue)}) + Belanja Bahan Baku ({formatRupiah(ringkasan.belanjaBahanBaku)}) − Stok Akhir ({formatRupiah(stokAkhir.totalValue)}).
+            HPP = Stok Awal ({formatRupiah(stokAwal?.totalValue || 0)}) + Belanja Bahan Baku ({formatRupiah(ringkasan.belanjaBahanBaku)}) − Stok Akhir ({formatRupiah(stokAkhir.totalValue)}).
             Laba Bersih = Laba Kotor − Biaya Operasional − Biaya Gaji ({formatRupiah(ringkasan.biayaGaji)}). Kasbon karyawan tidak dihitung sebagai biaya di mana pun.
           </p>
         </Card>

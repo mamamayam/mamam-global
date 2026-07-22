@@ -30,8 +30,11 @@ const CartDrawer = () => {
   const setSelectedMenuForVariant = usePosStore((state) => state.setSelectedMenuForVariant);
   const setVariantSelectedOptions = usePosStore((state) => state.setVariantSelectedOptions);
   const setEditingCartItemId = usePosStore((state) => state.setEditingCartItemId);
+  
+  // Mengambil setPaymentModal dari Zustand store
+  const setPaymentModal = usePosStore((state) => state.setPaymentModal);
 
-  // Tambahan: Destructure 'setCustomers' dari appContext
+  // Tambahan: Destructure 'setCustomers' dari appContext (tanpa setPaymentModal)
   const { 
     menus, setCurrentView, savedBills, setSavedBills, triggerConfirm, formatRupiah, activeCustomer, 
     customerName, setCustomerName, setSelectedCustomerId,
@@ -40,7 +43,7 @@ const CartDrawer = () => {
     voucherInputCode, setVoucherInputCode, vouchers, appliedVoucher, setAppliedVoucher, 
     getSubtotal, triggerAlert, pointsToRedeem, setPointsToRedeem, getPointDiscount, 
     manualDiscount, setManualDiscount, getManualDiscountAmount, storeSettings, getDiscount, 
-    getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, setPaymentModal, loadSavedBill,
+    getTaxAmount, getServiceChargeAmount, getTotal, handleOpenBill, loadSavedBill,
     setReceiptModal
   } = useAppContext();
 
@@ -191,11 +194,6 @@ const CartDrawer = () => {
           ) : (
             <div className="p-4 space-y-5">
               {/* --- CUSTOMER PICKER --- */}
-              {/* Fix: udah gak ada input teks bebas di sini. Satu-satunya cara set
-                  customerName/selectedCustomerId adalah lewat CustomerPickerModal,
-                  yang selalu commit via aksi eksplisit (pilih/tambah/guest) —
-                  gak ada lagi state "ngetik tapi belum resolved" yang bisa
-                  lolos ke checkout dan bikin poin ilang diam-diam. */}
               <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
                 <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Pelanggan</label>
 
@@ -302,7 +300,7 @@ const CartDrawer = () => {
                             <Edit3 className="w-3 h-3" />
                           </button>
                         </div>
-                      )}                      
+                      )}                     
                       <p className="text-sm font-bold text-accent-600 dark:text-accent-400 mt-1">{formatRupiah(item.price)}</p>
                       <div className="w-full mt-2 flex items-center gap-1.5">
                         <Edit3 className="w-3 h-3 text-slate-400 dark:text-slate-500" />
