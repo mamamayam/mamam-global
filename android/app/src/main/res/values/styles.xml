@@ -7,16 +7,19 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
-        <!-- Edge-to-edge: biarin konten digambar di belakang status bar &
-             navigation bar. Ini yang bikin StatusBar.setOverlaysWebView(true)
-             dari Capacitor plugin beneran ngefek — kalau cuma diset di JS
-             tanpa ini, webview tetep "didorong turun" oleh sistem window
-             insets bawaan Android, jadi kelihatan sama aja kayak sebelumnya.
-             statusBarColor sengaja dibiarkan transparent di sini — warna
-             SOLID yang beneran keliatan diatur lewat StatusBar plugin di JS
-             (App.jsx), yang jalan tiap kali app dibuka/tema berubah. -->
-        <item name="android:windowTranslucentStatus">true</item>
+        <!-- Edge-to-edge: konten digambar di belakang status bar & navigation
+             bar. windowTranslucentStatus (cara lama) SENGAJA tidak dipakai —
+             API itu deprecated & gak reliable lagi di targetSdk 35+ (Android
+             15 mewajibkan edge-to-edge), penyebab ikon jam/baterai jadi
+             belang/samar di percobaan sebelumnya. Setup edge-to-edge yang
+             beneran ngefek sekarang ada di MainActivity.java lewat
+             WindowCompat.setDecorFitsSystemWindows(false) (API modern).
+             statusBarColor tetap transparent sebagai base — warna SOLID yang
+             keliatan (mengikuti tema light/dark) diatur lewat Capacitor
+             StatusBar plugin di JS (App.jsx), jalan tiap app dibuka/tema
+             berubah. -->
         <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <!-- android:windowLayoutInDisplayCutoutMode butuh API 28+ tapi aman
              dideklarasikan di sini (minSdk 24) — cuma no-op di API lama. -->
         <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="28">shortEdges</item>
