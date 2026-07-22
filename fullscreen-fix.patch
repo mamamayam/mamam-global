@@ -79,7 +79,7 @@ index d5b2606..c91bc11 100644
  </head>
  
 diff --git a/src/app/App.jsx b/src/app/App.jsx
-index a26cb6d..96d0f2e 100644
+index a26cb6d..3976165 100644
 --- a/src/app/App.jsx
 +++ b/src/app/App.jsx
 @@ -1,5 +1,7 @@
@@ -90,9 +90,9 @@ index a26cb6d..96d0f2e 100644
  import { usePersistState } from '../hook/usePersistState';
  import { useOnlineStatus } from '../hook/useOnlineStatus';
  import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
-@@ -86,6 +88,31 @@ export default function App() {
-   const [activeTab, setActiveTab] = useState('materials');
-   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+@@ -215,6 +217,31 @@ export default function App() {
+   const [theme, setTheme, l23] = usePersistState('theme', 'light');
+   const [colorTheme, setColorThemeState] = usePersistState('colorTheme', 'orange');
  
 +  // ─── Status bar edge-to-edge ────────────────────────────────────────────
 +  // overlaysWebView(true): webview digambar di BELAKANG status bar (bukan
@@ -119,9 +119,9 @@ index a26cb6d..96d0f2e 100644
 +    })();
 +  }, [theme]);
 +
-   // --- FUNGSI NAVIGASI DENGAN HISTORY STACK ---
-   // Root views = tab utama; navigasi ke sini me-reset history
-   const ROOT_VIEWS = useMemo(() => new Set(['beranda', 'kasir', 'pengaturan']), []);
+   useEffect(() => {
+     document.documentElement.setAttribute('data-color-theme', colorTheme);
+   }, [colorTheme]);
 diff --git a/src/app/AppLayout.jsx b/src/app/AppLayout.jsx
 index a327c48..c86114e 100644
 --- a/src/app/AppLayout.jsx
