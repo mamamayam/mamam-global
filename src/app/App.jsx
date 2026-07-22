@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { Capacitor } from '@capacitor/core';
 import { usePersistState } from '../hook/usePersistState';
 import { useOnlineStatus } from '../hook/useOnlineStatus';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
@@ -85,6 +87,31 @@ export default function App() {
   const [currentView, setCurrentView] = useState('kasir');
   const [activeTab, setActiveTab] = useState('materials');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // ─── Status bar edge-to-edge ────────────────────────────────────────────
+  // overlaysWebView(true): webview digambar di BELAKANG status bar (bukan
+  // di bawahnya) — ini yang bikin app kerasa "fullscreen", status bar jadi
+  // transparan menyatu sama warna header, tapi jam/baterai tetap keliatan.
+  // Konten aktual (Header, Sidebar) tetap aman dari ketiban status bar
+  // karena AppLayout kasih padding-top sebesar safe-area-inset-top (lihat
+  // env(safe-area-inset-top) di AppLayout.jsx).
+  // Cuma jalan di native (Android/iOS); di browser biasa plugin ini no-op
+  // tapi dibungkus try/catch + cek platform biar aman.
+  // Ikut `theme` supaya warna ikon status bar (jam/baterai) selalu kebaca
+  // jelas: Style.Dark (ikon gelap) di atas header terang, Style.Light
+  // (ikon terang) di atas header gelap saat dark mode aktif.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    (async () => {
+      try {
+        await StatusBar.setOverlaysWebView({ overlay: true });
+        await StatusBar.setStyle({ style: theme === 'dark' ? Style.Light : Style.Dark });
+        await StatusBar.setBackgroundColor({ color: '#00000000' });
+      } catch (err) {
+        console.warn('StatusBar setup gagal (mungkin platform tidak didukung):', err);
+      }
+    })();
+  }, [theme]);
 
   // --- FUNGSI NAVIGASI DENGAN HISTORY STACK ---
   // Root views = tab utama; navigasi ke sini me-reset history

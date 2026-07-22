@@ -1,0 +1,141 @@
+diff --git a/android/app/capacitor.build.gradle b/android/app/capacitor.build.gradle
+index a497c10..9dcbd20 100644
+--- a/android/app/capacitor.build.gradle
++++ b/android/app/capacitor.build.gradle
+@@ -17,6 +17,7 @@ dependencies {
+     implementation project(':capacitor-push-notifications')
+     implementation project(':capacitor-share')
+     implementation project(':capacitor-splash-screen')
++    implementation project(':capacitor-status-bar')
+ 
+ }
+ 
+diff --git a/android/app/src/main/res/values/styles.xml b/android/app/src/main/res/values/styles.xml
+index be874e5..497cc47 100644
+--- a/android/app/src/main/res/values/styles.xml
++++ b/android/app/src/main/res/values/styles.xml
+@@ -1,5 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<resources>
++<resources xmlns:tools="http://schemas.android.com/tools">
+ 
+     <!-- Base application theme. -->
+     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+@@ -7,6 +7,16 @@
+         <item name="colorPrimary">@color/colorPrimary</item>
+         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+         <item name="colorAccent">@color/colorAccent</item>
++        <!-- Edge-to-edge: biarin konten digambar di belakang status bar &
++             navigation bar. Ini yang bikin StatusBar.setOverlaysWebView(true)
++             dari Capacitor plugin beneran ngefek — kalau cuma diset di JS
++             tanpa ini, webview tetep "didorong turun" oleh sistem window
++             insets bawaan Android, jadi kelihatan sama aja kayak sebelumnya. -->
++        <item name="android:windowTranslucentStatus">true</item>
++        <item name="android:statusBarColor">@android:color/transparent</item>
++        <!-- android:windowLayoutInDisplayCutoutMode butuh API 28+ tapi aman
++             dideklarasikan di sini (minSdk 24) — cuma no-op di API lama. -->
++        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="28">shortEdges</item>
+     </style>
+ 
+     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+diff --git a/android/capacitor.settings.gradle b/android/capacitor.settings.gradle
+index 5e7d885..8628ca7 100644
+--- a/android/capacitor.settings.gradle
++++ b/android/capacitor.settings.gradle
+@@ -25,3 +25,6 @@ project(':capacitor-share').projectDir = new File('../node_modules/@capacitor/sh
+ 
+ include ':capacitor-splash-screen'
+ project(':capacitor-splash-screen').projectDir = new File('../node_modules/@capacitor/splash-screen/android')
++
++include ':capacitor-status-bar'
++project(':capacitor-status-bar').projectDir = new File('../node_modules/@capacitor/status-bar/android')
+diff --git a/capacitor.config.json b/capacitor.config.json
+index eda2e9f..2f9144d 100644
+--- a/capacitor.config.json
++++ b/capacitor.config.json
+@@ -7,6 +7,11 @@
+     "cleartext": false
+   },
+   "plugins": {
++    "StatusBar": {
++      "overlaysWebView": true,
++      "style": "DARK",
++      "backgroundColor": "#00000000"
++    },
+     "SplashScreen": {
+       "launchShowDuration": 2000,
+       "launchAutoHide": true,
+diff --git a/index.html b/index.html
+index d5b2606..c91bc11 100644
+--- a/index.html
++++ b/index.html
+@@ -8,7 +8,7 @@
+     rel="stylesheet">
+   <meta charset="UTF-8" />
+   <link rel="icon" type="image/png" href="/favicon.png" />
+-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+   <title>Mamam Global</title>
+ </head>
+ 
+diff --git a/src/app/App.jsx b/src/app/App.jsx
+index a26cb6d..96d0f2e 100644
+--- a/src/app/App.jsx
++++ b/src/app/App.jsx
+@@ -1,5 +1,7 @@
+ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+ import { App as CapacitorApp } from '@capacitor/app';
++import { StatusBar, Style } from '@capacitor/status-bar';
++import { Capacitor } from '@capacitor/core';
+ import { usePersistState } from '../hook/usePersistState';
+ import { useOnlineStatus } from '../hook/useOnlineStatus';
+ import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
+@@ -86,6 +88,31 @@ export default function App() {
+   const [activeTab, setActiveTab] = useState('materials');
+   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+ 
++  // ─── Status bar edge-to-edge ────────────────────────────────────────────
++  // overlaysWebView(true): webview digambar di BELAKANG status bar (bukan
++  // di bawahnya) — ini yang bikin app kerasa "fullscreen", status bar jadi
++  // transparan menyatu sama warna header, tapi jam/baterai tetap keliatan.
++  // Konten aktual (Header, Sidebar) tetap aman dari ketiban status bar
++  // karena AppLayout kasih padding-top sebesar safe-area-inset-top (lihat
++  // env(safe-area-inset-top) di AppLayout.jsx).
++  // Cuma jalan di native (Android/iOS); di browser biasa plugin ini no-op
++  // tapi dibungkus try/catch + cek platform biar aman.
++  // Ikut `theme` supaya warna ikon status bar (jam/baterai) selalu kebaca
++  // jelas: Style.Dark (ikon gelap) di atas header terang, Style.Light
++  // (ikon terang) di atas header gelap saat dark mode aktif.
++  useEffect(() => {
++    if (!Capacitor.isNativePlatform()) return;
++    (async () => {
++      try {
++        await StatusBar.setOverlaysWebView({ overlay: true });
++        await StatusBar.setStyle({ style: theme === 'dark' ? Style.Light : Style.Dark });
++        await StatusBar.setBackgroundColor({ color: '#00000000' });
++      } catch (err) {
++        console.warn('StatusBar setup gagal (mungkin platform tidak didukung):', err);
++      }
++    })();
++  }, [theme]);
++
+   // --- FUNGSI NAVIGASI DENGAN HISTORY STACK ---
+   // Root views = tab utama; navigasi ke sini me-reset history
+   const ROOT_VIEWS = useMemo(() => new Set(['beranda', 'kasir', 'pengaturan']), []);
+diff --git a/src/app/AppLayout.jsx b/src/app/AppLayout.jsx
+index a327c48..c86114e 100644
+--- a/src/app/AppLayout.jsx
++++ b/src/app/AppLayout.jsx
+@@ -110,6 +110,12 @@ export default function AppLayout({
+     <div
+       ref={containerRef}
+       className="flex h-screen bg-slate-50 dark:bg-slate-950 font-body text-slate-800 dark:text-slate-100 overflow-hidden w-full relative"
++      // paddingTop = tinggi status bar (notch/punch-hole android, dynamic
++      // island/notch iOS). Diberikan di container terluar (bukan di Header
++      // saja) supaya Sidebar overlay ikut turun dan tidak ketiban status
++      // bar juga. env(safe-area-inset-top) bernilai 0 di browser biasa,
++      // jadi aman dipakai terus tanpa perlu cek platform.
++      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+     >
+       {sidebar}
+ 
