@@ -351,9 +351,10 @@ export default function App() {
         (async () => {
           try {
             const { runAutoSync } = await import('../storage/realtimeSync');
-            const { sent, failed } = await runAutoSync({ force: true });
+            const { sent, failed, failedItems } = await runAutoSync({ force: true });
             if (sent > 0 || failed > 0) {
               console.log(`[App] Catch-up sync startup: ${sent} terkirim, ${failed} gagal`);
+              if (failed > 0) console.warn('[App] Detail item gagal (catch-up startup):', failedItems);
             }
           } catch (e) {
             console.warn('[App] Catch-up sync startup error:', e?.message);
@@ -411,7 +412,8 @@ export default function App() {
             return;
           }
           const { runAutoSync } = await import('../storage/realtimeSync');
-          const { sent, failed } = await runAutoSync({ force: true });
+          const { sent, failed, failedItems } = await runAutoSync({ force: true });
+          if (failed > 0) console.warn('[App] Detail item gagal (reconnect):', failedItems);
           setConnectionToast({
             msg: failed > 0
               ? `Tersinkronisasi sebagian — ${sent} terkirim, ${failed} gagal`
@@ -583,8 +585,9 @@ export default function App() {
       lastFlush = now;
       try {
         const { runAutoSync } = await import('../storage/realtimeSync');
-        const { sent, failed } = await runAutoSync({ force: true });
+        const { sent, failed, failedItems } = await runAutoSync({ force: true });
         console.log(`[App] Flush (${label}): ${sent} terkirim, ${failed} gagal`);
+        if (failed > 0) console.warn(`[App] Detail item gagal (flush ${label}):`, failedItems);
       } catch (e) {
         console.warn(`[App] Flush (${label}) error:`, e?.message);
       }

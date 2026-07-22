@@ -21,7 +21,7 @@ export default function Sidebar({
     const initial = appName.trim().charAt(0).toUpperCase() || 'M';
 
     return (
-        <aside className={`fixed md:static inset-y-0 left-0 z-50 w-[268px] bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl md:bg-white md:dark:bg-slate-950 border-r border-slate-100/60 dark:border-slate-900 transition-transform duration-400 ease-out flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <aside className={`fixed md:static short:!fixed inset-y-0 left-0 z-50 w-[268px] short:w-[240px] bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl md:bg-white md:dark:bg-slate-950 short:!bg-white/95 short:dark:!bg-slate-950/95 short:!backdrop-blur-xl border-r border-slate-100/60 dark:border-slate-900 transition-transform duration-400 ease-out flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 short:!-translate-x-full'}`}>
 
             {/* Header: Logo mark + Gradient Text */}
             <div className="pt-7 pb-6 px-6 flex items-start justify-between shrink-0">

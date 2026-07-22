@@ -2,6 +2,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Paytone+One&display=swap');
 @config "../tailwind.config.js";
 @custom-variant dark (&:where(.dark, .dark *));
+/* Custom variant "short:" — target layar dengan tinggi terbatas (khas HP
+   landscape: lebar bisa >768px tapi tinggi cuma ~360-420px). Breakpoint
+   bawaan Tailwind (md/lg) cuma baca lebar, jadi HP landscape sering kena
+   treat kayak tablet/desktop dan sidebar/bottom-nav jadi permanen di layar
+   yang sebenarnya sempit. "short:" mengisi celah itu. */
+@custom-variant short (@media (max-height: 480px) and (orientation: landscape));
 /* ======================================================
    ACCENT COLOR THEMES — diatur oleh data-color-theme
    ====================================================== */
