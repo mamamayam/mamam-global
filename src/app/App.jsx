@@ -590,12 +590,29 @@ export default function App() {
       }
     };
 
+    // reconnectRef juga dipanggil dari 2 listener (visibilitychange +
+    // Capacitor 'resume') yang di Android sering nembak BARENG pas app
+    // dibuka dari background. Cooldown terpisah dari lastFlush di sini
+    // (realtimeSync.js sendiri juga sudah punya guard-nya — ini lapis kedua)
+    // supaya niatnya jelas di level caller & tetap aman kalau salah satu
+    // lapis suatu saat dihapus/berubah. Lihat komen notif dobel/triple di
+    // storage/realtimeSync.js untuk kronologi lengkap masalahnya.
+    let lastReconnect = 0;
+    const RECONNECT_COOLDOWN_MS = 5000;
+    const doReconnect = (label) => {
+      const now = Date.now();
+      if (now - lastReconnect < RECONNECT_COOLDOWN_MS) return;
+      lastReconnect = now;
+      console.log(`[App] Reconnect realtime (${label})`);
+      reconnectRef.current?.();
+    };
+
     const handleVisibility = () => {
       if (document.visibilityState === 'hidden') {
         flush('visibility-hidden');
       } else if (document.visibilityState === 'visible') {
         flush('visibility-visible');
-        reconnectRef.current?.(); // lihat komen di storage/realtimeSync.js soal kenapa ini ada
+        doReconnect('visibility-visible');
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -605,7 +622,7 @@ export default function App() {
       pauseHandle = await CapacitorApp.addListener('pause', () => flush('capacitor-pause'));
       resumeHandle = await CapacitorApp.addListener('resume', () => {
         flush('capacitor-resume');
-        reconnectRef.current?.();
+        doReconnect('capacitor-resume');
       });
     })();
 
@@ -662,8 +679,13 @@ export default function App() {
   const pointsToRedeem = usePosStore((state) => state.pointsToRedeem);
   const setPointsToRedeem = usePosStore((state) => state.setPointsToRedeem);
   const resetDraft = usePosStore((state) => state.resetDraft);
+  // paymentModal pindah ke zustand — root cause "semua layar kedap-kedip
+  // pas ngetik nominal bayar" adalah state ini dulu tinggal di useState
+  // App.jsx, jadi tiap keystroke bikin object contextValue baru dan
+  // nge-trigger re-render semua consumer useAppContext() di seluruh app.
+  const paymentModal = usePosStore((state) => state.paymentModal);
+  const setPaymentModal = usePosStore((state) => state.setPaymentModal);
 
-  const [paymentModal, setPaymentModal] = useState({ isOpen: false, isSplitMode: false, splitPayments: [], method: 'Tunai', amountPaid: '', status: 'pending', ojolName: '', orderNumber: '' });
   const [receiptModal, setReceiptModal] = useState({ isOpen: false, data: null });
   const [customAlert, setCustomAlert] = useState({ isOpen: false, message: '' });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, message: '', onConfirm: null });
@@ -995,7 +1017,6 @@ export default function App() {
     activePreset, setActivePreset,
     searchQuery, setSearchQuery,
 
-    paymentModal, setPaymentModal,
     receiptModal, setReceiptModal,
     customAlert, setCustomAlert,
     confirmModal, setConfirmModal,

@@ -621,6 +621,8 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
   let cancelled = false;
   let reconnectTimer = null;
   let reconnectAttempt = 0;
+  let lastSubscribeCall = 0;
+  const RESUBSCRIBE_COOLDOWN_MS = 4000;
 
   // FIX "TRANSAKSI GAK MASUK KALAU HP DIDIEMIN": WebView Android (beda dari
   // tab browser desktop) sering nge-suspend/throttle JS timer & koneksi
@@ -653,12 +655,28 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
     reconnectTimer = setTimeout(() => {
       if (cancelled) return;
       console.warn(`[sync] realtime channel putus, reconnect percobaan ke-${reconnectAttempt}...`);
-      subscribeChannel(supabase);
+      subscribeChannel(supabase, { force: true }); // channel beneran error/putus, bukan dobel-trigger UI — bypass cooldown
     }, delay);
   }
 
-  function subscribeChannel(supabase) {
+  function subscribeChannel(supabase, { force = false } = {}) {
     if (cancelled) return;
+    // FIX NOTIF DOBEL/TRIPLE (lanjutan): App.jsx manggil reconnect() dari 2
+    // listener terpisah (visibilitychange + Capacitor 'resume'), yang di
+    // Android sering nembak BARENG (dalam <1 detik) pas app dibuka dari
+    // background. Tanpa guard ini, subscribeChannel() bisa kepanggil 2x
+    // beruntun -> channel baru dibikin 2x -> catchUpAfterReconnect() jalan
+    // 2x -> masing-masing bisa nge-trigger row-event/webhook FCM sendiri2,
+    // biarpun channel lama udah dibuang. force=true dipakai scheduleReconnect
+    // (auto-reconnect internal) supaya tetep jalan walau baru aja subscribe,
+    // karena itu artinya channel emang beneran putus/error.
+    const now = Date.now();
+    if (!force && now - lastSubscribeCall < RESUBSCRIBE_COOLDOWN_MS) {
+      console.log('[sync] subscribeChannel di-skip (cooldown, kemungkinan dobel-trigger)');
+      return;
+    }
+    lastSubscribeCall = now;
+
     // Bersihin channel lama dulu (kalau ada) sebelum bikin yang baru, biar
     // gak numpuk koneksi zombie.
     if (channel) {
@@ -815,7 +833,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
     if (cancelled) return;
 
     // 3. Realtime subscription (+ auto-reconnect kalau putus, lihat komen di atas)
-    subscribeChannel(supabase);
+    subscribeChannel(supabase, { force: true }); // initial subscribe, harus selalu jalan
   })();
 
   return {
@@ -829,7 +847,10 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
     // Dipanggil App.jsx pas app resume dari background — jaring pengaman
     // manual selain auto-reconnect di atas. Aman dipanggil kapan aja,
     // termasuk kalau channel sebenernya masih hidup (subscribeChannel bikin
-    // channel baru & buang yang lama, gak numpuk).
+    // channel baru & buang yang lama, gak numpuk). App.jsx manggil ini dari
+    // visibilitychange DAN Capacitor 'resume' yang bisa nembak bareng — gak
+    // apa2 dipanggil dobel di sini karena subscribeChannel sendiri udah ada
+    // cooldown guard-nya (lihat RESUBSCRIBE_COOLDOWN_MS).
     reconnect: async () => {
       if (cancelled) return;
       try {

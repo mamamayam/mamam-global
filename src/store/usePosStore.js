@@ -34,6 +34,27 @@ export const usePosStore = create(
       isCategoryModalOpen: false,
       setIsCategoryModalOpen: (isOpen) => set({ isCategoryModalOpen: isOpen }),
 
+      // paymentModal: proses pembayaran aktif satu transaksi (bukan draft
+      // jangka panjang) — sengaja gak dipersist, sama kayak searchQuery dkk
+      // di atas. Kalau app ke-kill di tengah proses bayar, harusnya emang
+      // reset bersih, bukan lanjut dari state payment yang nyangkut.
+      // Pindah dari AppContext biar ketikan di amountPaid gak lagi
+      // nge-trigger re-render context besar yang nyebar ke seluruh app
+      // (root cause "semua layar kedap-kedip pas ngetik angka").
+      paymentModal: {
+        isOpen: false,
+        isSplitMode: false,
+        splitPayments: [],
+        method: 'Tunai',
+        amountPaid: '',
+        status: 'pending',
+        ojolName: '',
+        orderNumber: '',
+      },
+      setPaymentModal: (update) => set((state) => ({
+        paymentModal: typeof update === 'function' ? update(state.paymentModal) : update,
+      })),
+
 
       // ─── DRAFT TRANSAKSI — dipersist ke localStorage ───────────────────────
       // Semua state di bawah ini survive app restart / batre habis / telepon masuk.

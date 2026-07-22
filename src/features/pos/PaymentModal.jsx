@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   Trash2,
   Receipt,
-  Motorbike
+  Bike
 } from "lucide-react";
 
 const PaymentModal = () => {
@@ -22,10 +22,15 @@ const PaymentModal = () => {
   const cart = usePosStore((state) => state.cart);
   const setCart = usePosStore((state) => state.setCart);
   const setIsCartOpen = usePosStore((state) => state.setIsCartOpen);
+  // paymentModal pindah ke zustand (sama kayak searchQuery buat menu) biar
+  // ngetik amountPaid cuma re-render komponen yang subscribe ke slice ini,
+  // gak nyebar ke seluruh app lewat AppContext.
+  const paymentModal = usePosStore((state) => state.paymentModal);
+  const setPaymentModal = usePosStore((state) => state.setPaymentModal);
 
   // ─── AMBIL DARI CONTEXT ───
   const {
-    paymentModal, setOrderType, setPaymentModal, getTotal, getRoundedTotal,
+    setOrderType, getTotal, getRoundedTotal,
     getRoundingAdjustment, formatRupiah, activeCustomer, pointsToRedeem,
     customers, setCustomers, claimsHistory, setClaimsHistory, getPointDiscount,
     manualDiscount, setManualDiscount, getManualDiscountAmount, customerName,
@@ -82,7 +87,22 @@ const PaymentModal = () => {
     // sendiri (bukan bikin record income terpisah — lihat penjelasan
     // lengkap di utils/cashHolders.js). Snapshot nama kurir dibekukan sama
     // seperti pola snapshot lain di codebase.
-    const isCourierCOD = orderType === 'Delivery' && method === 'Tunai' && !!deliveryCourierId;
+    //
+    // Split mode: sengaja BUKAN dicek dari `method` form aktif — itu cuma
+    // metode yang lagi disiapkan buat ditambahkan berikutnya, bukan riwayat
+    // split yang sudah masuk. Kalau kasir nambah split Tunai + pilih kurir,
+    // lalu ganti method ke QRIS buat nambah split kedua, `method` saat
+    // handleProcessPayment dipanggil sudah 'QRIS' — kalau isCourierCOD ikut
+    // baca `method`, courier assignment yang sudah dipilih kasir jadi
+    // hilang begitu saja. Makanya sumber kebenarannya adalah splitPayments
+    // yang benar-benar sudah di-"Tambah", bukan form yang belum di-submit.
+    // (Sesuai konfirmasi: satu deliveryCourierId berlaku untuk SELURUH
+    // split Tunai di order ini, gak per-baris — jadi cukup cek "ada gak
+    // split Tunai", bukan "yang mana split Tunai-nya".)
+    const hasCashSplit = isSplitMode
+      ? splitPayments.some(p => p.method === 'Tunai')
+      : method === 'Tunai';
+    const isCourierCOD = orderType === 'Delivery' && hasCashSplit && !!deliveryCourierId;
     const courier = isCourierCOD ? (employees || []).find(e => e.id === deliveryCourierId) : null;
 
     const newOrder = {
@@ -191,7 +211,7 @@ const PaymentModal = () => {
               <div className="flex flex-wrap justify-center gap-3 mb-6">
                 {(orderType === 'Ojol'
                   ? [
-                    { id: 'Ojol', icon: Motorbike }
+                    { id: 'Ojol', icon: Bike }
                   ]
                   : [
                     { id: 'Tunai', icon: Wallet },
@@ -331,6 +351,30 @@ const PaymentModal = () => {
                       <button key={m} onClick={() => setPaymentModal({ ...paymentModal, method: m })} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${method === m ? 'bg-accent-50 dark:bg-accent-500/10 border-orange-600 dark:border-orange-500 text-accent-600 dark:text-accent-400' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950'}`}>{m}</button>
                     ))}
                   </div>
+
+                  {/* Sama seperti single payment mode: muncul begitu metode
+                      yang lagi disiapkan adalah Tunai. Assignment kurir ini
+                      berlaku untuk SELURUH split Tunai di order ini (bukan
+                      per-baris) — lihat catatan di handleProcessPayment. */}
+                  {orderType === 'Delivery' && method === 'Tunai' && couriers.length > 0 && (
+                    <div className="pt-1">
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">Diterima Kurir? (opsional)</label>
+                      <select
+                        value={deliveryCourierId}
+                        onChange={(e) => setDeliveryCourierId(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-accent-500 dark:focus:border-accent-500 transition-colors"
+                      >
+                        <option value="">Tidak — Masuk Kasir</option>
+                        {couriers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      {deliveryCourierId && (
+                        <p className="text-[10px] text-accent-600 dark:text-accent-400 mt-1.5 italic">
+                          *Berlaku untuk semua split Tunai di order ini. Uang gak masuk laci kasir, dicatat sebagai dipegang kurir ini. Cek saldo di tab Setoran Kurir.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 dark:text-slate-500 text-sm">Rp</span>
