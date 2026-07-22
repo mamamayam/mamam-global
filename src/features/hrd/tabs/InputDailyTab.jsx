@@ -347,7 +347,19 @@ const InputDailyTab = () => {
     let updatedFields = {};
     let isManualOverride = editingRecord.isManualOverride || false;
 
-    if (editClockIn !== editingRecord.clockIn || editClockOut !== editingRecord.clockOut) {
+    // [FIX] Kontradiksi isDayOff:true + jam kerja valid harus ke-clear
+    // begitu admin menyimpan record ini lewat modal edit, TERLEPAS apakah
+    // dia benar-benar mengetik ulang editClockIn/editClockOut atau cuma
+    // buka-lihat-simpan tanpa mengubah nilainya. Dicek TERPISAH dari
+    // kondisi "nilai berubah" di bawah — kalau digabung ke kondisi itu
+    // saja, record yang SUDAH kontradiktif dari sebelum fix ini (isDayOff
+    // true tapi editClockIn/editClockOut form-nya sudah keisi persis sama
+    // dengan clockIn/clockOut tersimpan) gak akan pernah ke-trigger karena
+    // "tidak ada perubahan nilai" — padahal justru itu yang perlu
+    // dibersihkan. Ini pasangan dari badge "⚠️ Cek Data" di tabel record.
+    const clearsDayOffContradiction = editingRecord.isDayOff && editClockIn && editClockOut;
+
+    if (editClockIn !== editingRecord.clockIn || editClockOut !== editingRecord.clockOut || clearsDayOffContradiction) {
       isManualOverride = true;
       const cIn = editClockIn;
       const cOut = editClockOut;
@@ -388,7 +400,21 @@ const InputDailyTab = () => {
         clockOut: cOut,
         hoursWorked: cHours,
         overtimeMinutes: cOvertime,
-        isManualOverride
+        isManualOverride,
+        // [FIX] isDayOff sebelumnya TIDAK PERNAH ikut di-reset di sini —
+        // modal edit ini gak punya toggle "Libur" eksplisit (isDayOff cuma
+        // ditampilkan sebagai badge read-only di tabel), jadi kalau record
+        // ini sebelumnya kesimpen isDayOff:true (dari watchdog toAutoLibur,
+        // backfill App.jsx, atau input manual lama), lalu admin ngisi
+        // editClockIn/editClockOut buat mengoreksi jam masuk-pulang yang
+        // seharusnya, isDayOff:true itu tetap nempel TANPA admin sadar —
+        // hasilnya SATU record kesimpen isDayOff:true BERSAMAAN dengan
+        // clockIn/clockOut/hoursWorked yang valid, kontradiktif secara
+        // logika ("libur otomatis SAMA jam kerja otomatis").
+        // Mengisi cIn DAN cOut sekaligus adalah sinyal gak ambigu bahwa
+        // admin menyatakan karyawan ini HADIR di rentang jam tsb, jadi
+        // isDayOff harus ikut di-clear jadi false bersamanya.
+        isDayOff: !(cIn && cOut) && editingRecord.isDayOff,
       };
     }
 
@@ -687,7 +713,25 @@ const InputDailyTab = () => {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md font-mono">{rec.dateStr}</span>
-                                  {rec.isDayOff ? <Badge variant="neutral">Libur</Badge> : (
+                                  {rec.isDayOff ? (
+                                    <>
+                                      <Badge variant="neutral">Libur</Badge>
+                                      {(rec.hoursWorked > 0 || rec.clockIn) && (
+                                        // [+] Indikator anomali data LAMA: record ini kesimpen
+                                        // isDayOff:true BERSAMAAN dengan jam kerja aktual — ini
+                                        // gak mungkin terjadi lagi untuk record BARU sejak fix
+                                        // prioritas hasMasuk (payrollLogic.js) & pembersihan
+                                        // isDayOff (handleSaveEdit) diterapkan, tapi record LAMA
+                                        // yang sudah kadung tersimpan sebelum fix ini gak
+                                        // otomatis ter-refresh sampai attendanceLog-nya berubah
+                                        // lagi. Klik Edit lalu simpan ulang jam masuk/keluar buat
+                                        // membersihkannya.
+                                        <Badge variant="warning" title="Data lama kontradiktif: tercatat Libur tapi ada jam kerja. Buka Edit untuk membersihkan.">
+                                          ⚠️ Cek Data
+                                        </Badge>
+                                      )}
+                                    </>
+                                  ) : (
                                     <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
                                       <Clock className="w-3 h-3" />
                                       {formatJam(rec.hoursWorked) ? `${formatJam(rec.hoursWorked)} jam` : 'Belum clock-out'}

@@ -249,9 +249,32 @@ export function computeAttendanceFromLogs(employeeId, dateStr, logs) {
 
   let status = '', cIn = '', cOut = '', cBolong = 0, cHours = 0, cDayOff = false, cOvertime = 0;
 
-  if (hasLibur) {
-    status = 'Libur'; cDayOff = true;
-  } else if (hasMasuk) {
+  // [FIX] hasMasuk HARUS dicek & menang duluan, sebelum hasLibur.
+  //
+  // hasLibur bisa datang dari 3 sumber: (1) watchdog toAutoLibur di
+  // AttendanceView.jsx yang otomatis nge-declare "Libur" begitu jam sudah
+  // lewat AUTO_CLOSE_HOUR dan karyawan itu BELUM PUNYA log apa pun SAAT
+  // ITU DICEK, (2) watchdog backfill di App.jsx untuk hari-hari lampau,
+  // atau (3) admin salah tap tombol quick-confirm Libur. Ketiganya cuma
+  // DUGAAN ("kayaknya dia gak masuk kerja hari ini") pada satu titik waktu
+  // tertentu — bukan fakta permanen.
+  //
+  // hasMasuk sebaliknya adalah FAKTA KERAS: karyawan itu benar-benar
+  // menempelkan absen masuk. Ini paling sering kejadian kalau karyawan
+  // absen SETELAH watchdog sempat jalan duluan (mis. telat parah lewat
+  // AUTO_CLOSE_HOUR, atau shift malam yang jam masuknya memang di atas
+  // AUTO_CLOSE_HOUR) — log 'libur' otomatis sudah keburu tersimpan, lalu
+  // log 'masuk' yang beneran menyusul, dan sebelum fix ini keduanya
+  // nempel jadi 2 log kontradiktif untuk tanggal yang sama, di mana
+  // 'Libur' SELALU menang dan menghapus seluruh jam kerja aktual dari
+  // laporan — walau karyawan itu betulan hadir.
+  //
+  // Log 'libur' yang jadi usang begini TIDAK dihapus di sini (fungsi ini
+  // read-only, cuma menghitung status dari log yang ada) — itu tetap
+  // tersimpan sebagai jejak/riwayat bahwa sistem sempat menganggapnya
+  // absen sebelum akhirnya dia clock-in. Yang berubah cuma HASIL
+  // perhitungan status: begitu ada bukti hasMasuk, itu yang dipakai.
+  if (hasMasuk) {
     status = 'Hadir';
     const masukRec = empLogs.find(r => r.type === 'masuk');
     const keluarRec = [...empLogs].reverse().find(r => r.type === 'keluar');
@@ -273,13 +296,15 @@ export function computeAttendanceFromLogs(employeeId, dateStr, logs) {
       cBolong = calculateBolongMinutes(empLogs, new Date());
       cOut = '';
     }
+  } else if (hasLibur) {
+    status = 'Libur'; cDayOff = true;
   } else if (isPastCloseHour) {
     status = 'Libur'; cDayOff = true;
   } else {
     status = 'Belum Absen';
   }
 
-  return { status, clockIn: cIn, clockOut: cOut, bolongMinutes: cBolong, hoursWorked: cHours, overtimeMinutes: cOvertime, isDayOff: cDayOff, hasMasuk };
+  return { status, clockIn: cIn, clockOut: cOut, bolongMinutes: cBolong, hoursWorked: cHours, overtimeMinutes: cOvertime, isDayOff: cDayOff, hasMasuk, hasLibur };
 }
 
 /* ═══════════════════════════════════════════════════════════════ */
