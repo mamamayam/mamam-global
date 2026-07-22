@@ -494,11 +494,38 @@ export default function App() {
     if (!allDataLoaded) return;
     if (!employees || employees.length === 0) return;
 
+    // [FIX] ROOT CAUSE dari "karyawan selalu ke-declare Libur padahal ada
+    // log masuk": `allDataLoaded` HANYA menjamin Dexie LOKAL device ini
+    // sudah selesai dibaca — BUKAN menjamin `attendanceLog` sudah lengkap.
+    // Initial pull dari Supabase (yang narik & merge log dari device LAIN,
+    // lihat useEffect "Inisialisasi Realtime Sync" di atas) berjalan async
+    // SETELAH allDataLoaded jadi true, dan baru selesai saat syncStatus
+    // berubah jadi 'ready' (atau 'error' kalau pull gagal & fallback ke
+    // data lokal). Tanpa guard ini, watchdog bisa nge-scan & nge-declare
+    // Libur berdasarkan attendanceLog yang masih versi LOKAL PARSIAL (mis.
+    // device ini baru pertama kali dipakai employee tsb, atau baru
+    // reinstall/clear data) — padahal log 'masuk' aslinya sudah ada di
+    // Supabase / device lain, cuma belum sempat ke-pull & masuk ke state.
+    //
+    // 'idle' tetap diizinkan lanjut (artinya Supabase memang tidak
+    // dikonfigurasi sama sekali di device ini — tidak ada apa pun yang
+    // perlu ditunggu, attendanceLog lokal SUDAH final).
+    if (syncStatus === 'syncing') return;
+
     const todayStr = toLocalDateString();
 
     setEmployeeDailyRecords(prev => {
+      // [FIX] Hanya record HASIL KOREKSI MANUAL (id bukan berawalan
+      // "AUTO-LIBUR") yang dianggap final dan di-skip dari pengecekan
+      // ulang. Record auto-generated TETAP dimasukkan ke pairsToBackfill
+      // supaya bisa direcompute & dikoreksi kalau ternyata salah (mis.
+      // salah declare Libur akibat race loading data) — lihat blok
+      // self-heal di bawah untuk detail kenapa ini aman bagi koreksi
+      // manual admin.
       const existingRecordKeys = new Set(
-        activeOnly(prev).map(r => `${r.employeeId}|${r.dateStr}`)
+        activeOnly(prev)
+          .filter(r => !r.id?.startsWith('AUTO-LIBUR'))
+          .map(r => `${r.employeeId}|${r.dateStr}`)
       );
       const earliestBackfillDate = new Date();
       earliestBackfillDate.setDate(earliestBackfillDate.getDate() - AUTO_LIBUR_BACKFILL_DAYS);
@@ -530,18 +557,52 @@ export default function App() {
 
       let next = [...prev]; let changed = false;
       pairsToBackfill.forEach(({ employeeId: empId, dateStr }) => {
-        // computeAttendanceFromLogs dipanggil dengan attendanceLog kosong
-        // buat pasangan ini secara definisi (kalau dia PUNYA log, harusnya
-        // udah ke-cover oleh existingRecordKeys atau jalur InputDailyTab).
-        // Cabang isPastCloseHour otomatis aktif (dateStr < todayStr selalu true
-        // untuk tanggal-tanggal lampau) → hasilnya selalu "Libur".
+        // [UPDATE] computeAttendanceFromLogs dipanggil dengan attendanceLog
+        // TERKINI (bukan otomatis kosong lagi) — sejak fix self-heal di
+        // bawah, pasangan (karyawan, tanggal) yang record-nya AUTO-LIBUR*
+        // ikut masuk sini walau attendanceLog untuk pasangan itu sudah ada
+        // isinya, justru supaya bisa dicek ulang: kalau ternyata ada log
+        // 'masuk' asli (mis. baru sampai lewat sync device lain), hasMasuk
+        // menang dan status jadi "Hadir" — bukan lagi selalu "Libur".
+        // Untuk pasangan yang BENERAN belum py log apa pun, cabang
+        // isPastCloseHour tetap aktif seperti semula (dateStr < todayStr
+        // selalu true untuk tanggal lampau) → hasilnya "Libur", benar.
         const result = computeAttendanceFromLogs(empId, dateStr, attendanceLog);
         if (result.status === 'Belum Absen' && !result.isDayOff) return;
 
         const emp = employees.find(e => e.id === empId);
         const prevIndex = next.findIndex(r => !r.deletedAt && r.employeeId === empId && r.dateStr === dateStr);
         const prevExisting = prevIndex >= 0 ? next[prevIndex] : null;
-        if (prevExisting) return; // sudah ada (race dgn effect lain) — jangan timpa
+
+        // [FIX] Self-heal record auto-generated yang ternyata SALAH.
+        //
+        // Sebelumnya baris ini langsung `return` begitu ADA record apa pun
+        // untuk pasangan (karyawan, tanggal) itu — dengan asumsi "kalau
+        // sudah ada berarti sudah benar / race dengan effect lain". Asumsi
+        // itu keliru: record auto-libur BISA salah dari awal, contohnya
+        // kalau watchdog toAutoLibur di AttendanceView.jsx sempat jalan
+        // saat attendanceLog belum selesai dimuat (lihat fix allDataLoaded
+        // di AttendanceView.jsx) — hasilnya record "Libur" ke-declare untuk
+        // karyawan yang SEBENARNYA masuk, dan record salah itu nempel
+        // selamanya karena tidak pernah dicoba dikoreksi ulang.
+        //
+        // Fix: kalau record yang sudah ada adalah hasil AUTO-GENERATED
+        // (ditandai dari prefix id-nya, BUKAN hasil koreksi manual admin)
+        // DAN hasil recompute dari log terbaru (`result`) ternyata berbeda
+        // (mis. sekarang ada bukti hasMasuk padahal dulu di-declare Libur),
+        // timpa dengan hasil yang benar. Koreksi manual admin (id lain,
+        // biasanya prefix employee/tanggal tanpa "AUTO-") TIDAK PERNAH
+        // disentuh oleh cabang ini — supaya keputusan admin (mis. tetap
+        // menandai Libur walau ada absen nyasar) tidak pernah ketiban
+        // logic otomatis.
+        const isAutoGenerated = prevExisting?.id?.startsWith('AUTO-LIBUR');
+        const resultChanged = prevExisting && (
+          prevExisting.isDayOff !== result.isDayOff ||
+          prevExisting.clockIn !== result.clockIn ||
+          prevExisting.clockOut !== result.clockOut
+        );
+
+        if (prevExisting && !(isAutoGenerated && resultChanged)) return; // sudah ada & valid (atau koreksi manual) — jangan timpa
 
         const employeeSnapshot = snapshotEmployeeForPayroll(emp);
         const baseFields = {
@@ -553,23 +614,33 @@ export default function App() {
           overtimeMinutes: result.overtimeMinutes,
         };
         const recordSnapshot = { ...baseFields, employeeId: empId, dateStr };
-        const recalculatedAdditions = mergeAutoAdjustments(undefined, recordSnapshot, employeeSnapshot);
+        const recalculatedAdditions = mergeAutoAdjustments(
+          prevExisting?.additions,
+          recordSnapshot,
+          employeeSnapshot
+        );
 
         changed = true;
-        next.unshift({
-          id: `AUTO-LIBUR-BACKFILL-${empId}-${dateStr}`,
+        const correctedRecord = {
+          id: prevExisting ? prevExisting.id : `AUTO-LIBUR-BACKFILL-${empId}-${dateStr}`,
           employeeId: empId,
           date: new Date(dateStr),
           dateStr,
           ...baseFields,
           additions: recalculatedAdditions,
-          deductions: [],
+          deductions: prevExisting?.deductions ?? [],
           employeeSnapshot,
-        });
+        };
+
+        if (prevIndex >= 0) {
+          next[prevIndex] = correctedRecord;
+        } else {
+          next.unshift(correctedRecord);
+        }
       });
       return changed ? next : prev;
     });
-  }, [allDataLoaded, employees, attendanceLog, setEmployeeDailyRecords]);
+  }, [allDataLoaded, syncStatus, employees, attendanceLog, setEmployeeDailyRecords]);
 
   // ── Auto-sync berkala — GANTI cara lama (cek jam 21:00 yang cuma jalan
   // kalau layar BackupView lagi kebuka). Ini jalan di level App.jsx, tiap
@@ -1012,6 +1083,7 @@ export default function App() {
     pointsToRedeem, setPointsToRedeem,
 
     // Employee / Payroll
+    allDataLoaded,
     employees, setEmployees,
     employeeDailyRecords, setEmployeeDailyRecords,
     attendanceLog, setAttendanceLog,

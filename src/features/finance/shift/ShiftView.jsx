@@ -18,7 +18,7 @@ import {
   BulkSelectBar
 } from '../../../components/ui';
 
-import { useShiftLogic, sortOptions } from './useShiftLogic';
+import { useShiftLogic, sortOptions, getCourierTransferMeta } from './useShiftLogic';
 import ShiftModals from './ShiftModals';
 
 // ShiftView — orchestrator halaman Dompet. Isinya: X-Reading (laporan tutup
@@ -29,6 +29,8 @@ import ShiftModals from './ShiftModals';
 const ShiftView = () => {
   const {
     currentShift, shiftHistory, formatRupiah, storeSettings, isAdminMode, employees, cashTransfers,
+
+    activeTab, setActiveTab,
 
     initialCashInput, setInitialCashInput,
     openedByEmployeeId, setOpenedByEmployeeId,
@@ -69,7 +71,6 @@ const ShiftView = () => {
     filterStartDate, setFilterStartDate,
     filterEndDate, setFilterEndDate,
     showTrash, setShowTrash,
-    showCourierLog, setShowCourierLog,
     sortKey, setSortKey,
     isSortOpen, setIsSortOpen,
     isSelecting, setIsSelecting,
@@ -191,9 +192,38 @@ const ShiftView = () => {
       />
 
       {/* =========================================================================
-          BANNER PERINGATAN — DOMPET KEBAWA NGINAP DARI HARI SEBELUMNYA
+          TAB NAVIGASI — Aktif / Riwayat / Log Kurir (khusus Admin)
+          Log Kurir cuma dirender kalau isAdminMode true (sebelumnya section
+          collapsible "Riwayat Setoran Kurir" + "Riwayat Setor ke Owner" di
+          bawah Riwayat — sekarang jadi tab sendiri, lihat activeTab state
+          di useShiftLogic).
           ========================================================================= */}
-      {currentShift && isShiftCarriedOver && (
+      <div className="flex items-center gap-1 mb-6 border-b border-slate-200 dark:border-slate-700 shrink-0 max-w-4xl overflow-x-auto custom-scrollbar">
+        {[
+          { key: 'aktif', label: 'Aktif' },
+          { key: 'riwayat', label: 'Riwayat' },
+          ...(isAdminMode ? [{ key: 'log-kurir', label: 'Log Kurir' }] : []),
+        ].map(tab => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2.5 text-sm font-bold whitespace-nowrap border-b-2 transition-colors duration-200 -mb-px ${
+              activeTab === tab.key
+                ? 'border-accent-600 dark:border-accent-400 text-accent-600 dark:text-accent-400'
+                : 'border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* =========================================================================
+          BANNER PERINGATAN — DOMPET KEBAWA NGINAP DARI HARI SEBELUMNYA
+          Cuma tampil di tab Aktif — di tab lain gak relevan/mubazir.
+          ========================================================================= */}
+      {activeTab === 'aktif' && currentShift && isShiftCarriedOver && (
         <div className="max-w-4xl mb-6 shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="bg-red-50 dark:bg-red-500/10 border-2 border-red-100 dark:border-red-500/20 text-red-700 dark:text-red-400 p-4 rounded-2xl flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
@@ -207,7 +237,7 @@ const ShiftView = () => {
         </div>
       )}
 
-      {!currentShift ? (
+      {activeTab === 'aktif' && (!currentShift ? (
         <Card variant="elevated" className="max-w-md mx-auto text-center mt-10 mb-8 shrink-0">
           <div className="w-16 h-16 bg-gradient-to-br from-accent-50 to-accent-100 dark:from-accent-500/10 dark:to-accent-500/15 text-accent-500 dark:text-accent-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Clock className="w-8 h-8" />
@@ -434,12 +464,13 @@ const ShiftView = () => {
             </Button>
           </Card>
         </div>
-      )}
+      ))}
 
       {/* =========================================================================
-          REKAPITULASI & RIWAYAT HARIAN SHIFT KASIR
+          REKAPITULASI & RIWAYAT HARIAN SHIFT KASIR — tab "Riwayat"
           ========================================================================= */}
-      <div className="mt-8 border-t border-slate-200 dark:border-slate-700 pt-8 pb-12">
+      {activeTab === 'riwayat' && (
+      <div className="mt-8 pb-12">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
             <h3 className="font-heading text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -640,96 +671,95 @@ const ShiftView = () => {
             )}
           </div>
         </Card>
-
-        {/* --- RIWAYAT SETORAN KURIR (khusus Admin) ---
-            Ditaruh nempel di bawah Riwayat Shift, bukan halaman/menu
-            terpisah, biar seamless dari sisi navigasi. Toggle collapsed
-            by default. Sumber data cashTransfers (lihat closeStaleCourierBalances
-            & handleConfirmPartialDeposit di useShiftLogic utk siapa yang nulis ke sini). */}
-        {isAdminMode && (
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => setShowCourierLog(v => !v)}
-              className="flex items-center gap-1.5 text-xs font-bold text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
-            >
-              <Users className="w-3.5 h-3.5" />
-              {showCourierLog ? 'Sembunyikan Riwayat Setoran Kurir' : 'Lihat Riwayat Setoran Kurir'}
-            </button>
-
-            {showCourierLog && (
-              <>
-                <Card padding="none" className="overflow-hidden flex flex-col mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-                    <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Riwayat Setoran Kurir</h4>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Termasuk setoran manual & penutupan saldo lama otomatis.</p>
-                  </div>
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto custom-scrollbar">
-                    {/* Exclude transfer type 'owner' — itu bukan soal kurir
-                        (gak punya employeeId/employeeName), ditampilin
-                        terpisah di kartu "Riwayat Setor Owner" di bawah. */}
-                    {applySort(activeOnly(cashTransfers || []).filter(t => !isOwnerTransfer(t)), 'date-desc', { date: t => new Date(t.date) }).length === 0 ? (
-                      <EmptyState size="sm" icon={<History className="w-8 h-8 opacity-30" />} title="Belum ada riwayat setoran." />
-                    ) : (
-                      applySort(activeOnly(cashTransfers || []).filter(t => !isOwnerTransfer(t)), 'date-desc', { date: t => new Date(t.date) }).map(t => (
-                        <div key={t.id} className="p-3 flex items-center justify-between gap-3 text-xs">
-                          <div className="min-w-0">
-                            <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{t.employeeName}</p>
-                            <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{t.note}</p>
-                            <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(t.date).toLocaleString('id-ID')}</p>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-black text-emerald-600 dark:text-emerald-400">{formatRupiah(t.amount)}</span>
-                            <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris setoran ini">
-                              <Edit className="w-3.5 h-3.5" />
-                            </IconButton>
-                            <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris setoran ini">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </IconButton>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </Card>
-
-                {/* Riwayat Setor ke Owner — ledger terpisah dari setoran kurir
-                    di atas (beda sumbu: Dompet -> Owner, bukan Kurir -> Dompet).
-                    Pakai handler edit/hapus yang sama (generik, kerja by id). */}
-                <Card padding="none" className="overflow-hidden flex flex-col mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-                    <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Riwayat Setor ke Owner</h4>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Total: {formatRupiah(totalTransferredToOwner)}</p>
-                  </div>
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto custom-scrollbar">
-                    {applySort(activeOnly(cashTransfers || []).filter(isOwnerTransfer), 'date-desc', { date: t => new Date(t.date) }).length === 0 ? (
-                      <EmptyState size="sm" icon={<History className="w-8 h-8 opacity-30" />} title="Belum ada setoran ke Owner." />
-                    ) : (
-                      applySort(activeOnly(cashTransfers || []).filter(isOwnerTransfer), 'date-desc', { date: t => new Date(t.date) }).map(t => (
-                        <div key={t.id} className="p-3 flex items-center justify-between gap-3 text-xs">
-                          <div className="min-w-0">
-                            <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{t.note || 'Setor ke Owner'}</p>
-                            <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(t.date).toLocaleString('id-ID')}</p>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-black text-sky-600 dark:text-sky-400">{formatRupiah(t.amount)}</span>
-                            <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris setoran ini">
-                              <Edit className="w-3.5 h-3.5" />
-                            </IconButton>
-                            <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris setoran ini">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </IconButton>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </Card>
-              </>
-            )}
-          </div>
-        )}
       </div>
+      )}
+
+      {activeTab === 'log-kurir' && isAdminMode && (
+        <div className="pb-12 max-w-4xl">
+          <div className="mb-6">
+            <h3 className="font-heading text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <Users className="w-5 h-5 text-accent-600 dark:text-accent-400" /> Log Kurir
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Semua jenis transaksi kurir: setor, hapus (write-off), ganti uang (reimburse), dan setor ke Owner.</p>
+          </div>
+
+          <Card padding="none" className="overflow-hidden flex flex-col">
+            <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+              <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Riwayat Transaksi Kurir</h4>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Termasuk setoran manual, hapus setoran, ganti uang, & penutupan saldo lama otomatis.</p>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[420px] overflow-y-auto custom-scrollbar">
+              {applySort(activeOnly(cashTransfers || []).filter(t => !isOwnerTransfer(t)), 'date-desc', { date: t => new Date(t.date) }).length === 0 ? (
+                <EmptyState size="sm" icon={<History className="w-8 h-8 opacity-30" />} title="Belum ada riwayat transaksi kurir." />
+              ) : (
+                applySort(activeOnly(cashTransfers || []).filter(t => !isOwnerTransfer(t)), 'date-desc', { date: t => new Date(t.date) }).map(t => {
+                  const meta = getCourierTransferMeta(t);
+                  const isNegativeAmount = (t.amount || 0) < 0;
+                  return (
+                    <div key={t.id} className="p-3 flex items-center justify-between gap-3 text-xs">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{t.employeeName}</p>
+                          <Badge variant={meta.badgeVariant}><span className="uppercase tracking-wider text-[10px]">{meta.label}</span></Badge>
+                        </div>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{t.note}</p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(t.date).toLocaleString('id-ID')}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`font-black ${isNegativeAmount ? 'text-sky-600 dark:text-sky-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                          {formatRupiah(Math.abs(t.amount || 0))}
+                        </span>
+                        <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris transaksi ini">
+                          <Edit className="w-3.5 h-3.5" />
+                        </IconButton>
+                        <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris transaksi ini">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </IconButton>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </Card>
+
+          <Card padding="none" className="overflow-hidden flex flex-col mt-4">
+            <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+              <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Riwayat Setor ke Owner</h4>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Total: {formatRupiah(totalTransferredToOwner)}</p>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto custom-scrollbar">
+              {applySort(activeOnly(cashTransfers || []).filter(isOwnerTransfer), 'date-desc', { date: t => new Date(t.date) }).length === 0 ? (
+                <EmptyState size="sm" icon={<History className="w-8 h-8 opacity-30" />} title="Belum ada setoran ke Owner." />
+              ) : (
+                applySort(activeOnly(cashTransfers || []).filter(isOwnerTransfer), 'date-desc', { date: t => new Date(t.date) }).map(t => {
+                  const meta = getCourierTransferMeta(t);
+                  return (
+                    <div key={t.id} className="p-3 flex items-center justify-between gap-3 text-xs">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{t.note || 'Setor ke Owner'}</p>
+                          <Badge variant={meta.badgeVariant}><span className="uppercase tracking-wider text-[10px]">{meta.label}</span></Badge>
+                        </div>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(t.date).toLocaleString('id-ID')}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-black text-sky-600 dark:text-sky-400">{formatRupiah(t.amount)}</span>
+                        <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris setoran ini">
+                          <Edit className="w-3.5 h-3.5" />
+                        </IconButton>
+                        <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris setoran ini">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </IconButton>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
 
       <SortModal
         isOpen={isSortOpen}

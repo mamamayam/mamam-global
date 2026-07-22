@@ -50,7 +50,7 @@ const SORT_OPTIONS = [
 ];
 
 export default function Attendance() {
-  const { employees, attendanceLog, setAttendanceLog, isAdminMode, triggerConfirm, currentShift } = useAppContext();
+  const { employees, attendanceLog, setAttendanceLog, isAdminMode, triggerConfirm, currentShift, allDataLoaded, syncStatus } = useAppContext();
 
   const [autoClosedEmployees, setAutoClosedEmployees] = useState([]);
   const autoCloseRef = useRef('');
@@ -62,9 +62,32 @@ export default function Attendance() {
   const attendanceLogRef = useRef(attendanceLog);
   const employeesRef = useRef(employees);
   const currentShiftRef = useRef(currentShift);
+  // [FIX] allDataLoaded HARUS dicek juga di dalam ref, bukan cuma di effect
+  // guard biasa — karena checkAutoClose() dipanggil sinkron sekali saat
+  // mount (lihat pemanggilan langsung di bawah), dan watchdog-nya sendiri
+  // idle 60 detik lewat setInterval yang TIDAK di-recreate ketika
+  // allDataLoaded berubah dari false -> true. Tanpa ref ini, closure lama
+  // (yang dibuat sebelum data selesai load) akan terus baca allDataLoaded
+  // versi awal (false) selamanya, PADAHAL yang benar-benar mau dicegah
+  // adalah checkAutoClose() jalan SAAT data masih kosong/parsial — bukan
+  // dicegah permanen.
+  const allDataLoadedRef = useRef(allDataLoaded);
+  // [FIX] allDataLoaded SENDIRIAN TIDAK CUKUP — itu cuma menjamin Dexie
+  // LOKAL device ini sudah selesai dibaca, BUKAN menjamin attendanceLog
+  // sudah lengkap ter-merge dari Supabase (initial pull jalan async
+  // SETELAH allDataLoaded true, lihat App.jsx). Kalau device ini baru
+  // pertama kali dipakai / baru reinstall / karyawan absen dari device
+  // lain, attendanceLog lokal saat allDataLoaded=true bisa masih kosong
+  // untuk log yang sebenarnya ada di server. syncStatus 'ready'/'error'
+  // (atau 'idle' kalau Supabase memang tidak dikonfigurasi) menjamin fase
+  // itu sudah lewat. Ini akar dari bug "karyawan ke-declare Libur padahal
+  // ada log masuk" yang ditemukan lewat audit database.
+  const syncStatusRef = useRef(syncStatus);
   useEffect(() => { attendanceLogRef.current = attendanceLog; }, [attendanceLog]);
   useEffect(() => { employeesRef.current = employees; }, [employees]);
   useEffect(() => { currentShiftRef.current = currentShift; }, [currentShift]);
+  useEffect(() => { allDataLoadedRef.current = allDataLoaded; }, [allDataLoaded]);
+  useEffect(() => { syncStatusRef.current = syncStatus; }, [syncStatus]);
 
   // Status "Dompet (shift kasir) masih kebuka dari hari sebelumnya" — kemungkinan
   // lupa ditutup. Versi sebelumnya numpang di state `now` yang tick tiap detik
@@ -125,6 +148,27 @@ export default function Attendance() {
     const checkAutoClose = () => {
       const nowDate = new Date();
       if (nowDate.getHours() < AUTO_CLOSE_HOUR) return;
+
+      // [FIX] Jangan pernah declare auto-libur/auto-close berdasarkan data
+      // yang belum selesai dimuat dari Dexie/Supabase. Sebelum fix ini,
+      // checkAutoClose() dipanggil langsung saat mount tanpa menunggu
+      // attendanceLog terisi — kalau kebetulan tab Absensi dibuka/direfresh
+      // setelah jam 21:00 SAAT data masih fetching, attendanceLogRef.current
+      // kebaca kosong/parsial sesaat, bikin SEMUA karyawan (bukan cuma yang
+      // beneran belum absen) lolos filter toAutoLibur dan langsung di-mark
+      // "Libur" untuk hari itu. Begitu autoCloseRef ke-set, watchdog gak
+      // akan cek ulang hari itu lagi walau attendanceLog susulan sudah
+      // lengkap — jadi karyawan yang sebenarnya masuk tetap "kehitung"
+      // absen di history, tapi payroll (yang baca employeeDailyRecords,
+      // bukan recompute live) sudah kadung ke-snapshot sebagai Libur.
+      // Retry otomatis di tick berikutnya begitu allDataLoaded jadi true.
+      if (!allDataLoadedRef.current) return;
+      // [FIX] allDataLoaded doang TERBUKTI TIDAK CUKUP (lihat audit
+      // database employeeDailyRecords: puluhan hari ke-declare Libur
+      // walau attendanceLog aslinya ADA log masuk) — attendanceLog lokal
+      // bisa saja belum lengkap ter-merge dari Supabase walau Dexie lokal
+      // sudah "selesai load". Tunggu syncStatus keluar dari 'syncing'.
+      if (syncStatusRef.current === 'syncing') return;
 
       const todayStr = toLocalDateString();
       if (autoCloseRef.current === todayStr) return;
@@ -238,7 +282,18 @@ export default function Attendance() {
       checkShiftCarriedOver();
     }, 60000); // cek tiap 1 menit, bukan tiap detik
     return () => clearInterval(watchdog);
-  }, [setAttendanceLog]);
+    // [FIX] allDataLoaded ditambahkan ke dependency array supaya effect ini
+    // re-run TEPAT saat data selesai loading (transisi false -> true),
+    // bukan menunggu tick interval 60 detik berikutnya. Sebelumnya effect
+    // ini cuma bergantung pada setAttendanceLog (referensi stabil, gak
+    // pernah berubah) sehingga checkAutoClose() praktis cuma jalan SEKALI
+    // di titik mount awal — kalau titik itu kebetulan sebelum data siap,
+    // pengecekan yang valid baru terjadi di tick berikutnya (celah ~1
+    // menit). Menambahkan allDataLoaded di sini membuat pengecekan valid
+    // pertama terjadi sesegera mungkin, tanpa mengubah bagian lain dari
+    // logic guard (checkAutoClose tetap idempotent per-hari lewat
+    // autoCloseRef, jadi re-run ini aman/tidak dobel-declare).
+  }, [setAttendanceLog, allDataLoaded, syncStatus]);
 
   const todayStr = toLocalDateString();
 

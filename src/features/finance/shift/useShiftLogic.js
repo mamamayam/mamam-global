@@ -14,6 +14,7 @@ import {
   computeAllCourierBalances,
   getCourierBalanceTargets,
   isCourierHolder,
+  CASH_TRANSFER_TYPE_DEPOSIT,
   CASH_TRANSFER_TYPE_WRITEOFF,
   isWriteoffTransfer,
   CASH_TRANSFER_TYPE_REIMBURSE,
@@ -21,6 +22,25 @@ import {
   CASH_TRANSFER_TYPE_OWNER,
   isOwnerTransfer
 } from '../../../utils/cashHolders';
+
+// Label & varian Badge per jenis transaksi kurir — dipakai di tab "Log
+// Kurir" (ShiftView.jsx) supaya tiap baris riwayat langsung kelihatan
+// jenisnya tanpa perlu baca `note` satu-satu. Record lama tanpa field
+// `type` dianggap 'deposit' (lihat catatan default di cashHolders.js).
+export function getCourierTransferMeta(transfer) {
+  const type = transfer?.type || CASH_TRANSFER_TYPE_DEPOSIT;
+  switch (type) {
+    case CASH_TRANSFER_TYPE_WRITEOFF:
+      return { type, label: 'Hapus (Write-off)', badgeVariant: 'danger' };
+    case CASH_TRANSFER_TYPE_REIMBURSE:
+      return { type, label: 'Ganti Uang', badgeVariant: 'info' };
+    case CASH_TRANSFER_TYPE_OWNER:
+      return { type, label: 'Setor Owner', badgeVariant: 'orange' };
+    case CASH_TRANSFER_TYPE_DEPOSIT:
+    default:
+      return { type: CASH_TRANSFER_TYPE_DEPOSIT, label: 'Setor', badgeVariant: 'success' };
+  }
+}
 
 // Opsi sorting utk Riwayat Shift — dipakai oleh <SortModal> di ShiftView.jsx.
 // Statis (gak butuh state), jadi diekspor terpisah dari hook-nya.
@@ -58,12 +78,19 @@ export function useShiftLogic() {
   const [isEditingActiveInitial, setIsEditingActiveInitial] = useState(false);
   const [editActiveInitialInput, setEditActiveInitialInput] = useState('');
 
+  // Tab navigasi utama ShiftView: 'aktif' (kartu buka/tutup dompet),
+  // 'riwayat' (rekap + daftar penutupan dompet), 'log-kurir' (khusus Admin
+  // — riwayat semua jenis transaksi kurir: setor/hapus/ganti uang/setor
+  // owner, sebelumnya collapsible section di bawah Riwayat, sekarang
+  // tab sendiri biar lebih gampang ditemukan & gak bikin halaman Riwayat
+  // kepanjangan).
+  const [activeTab, setActiveTab] = useState('aktif'); // 'aktif' | 'riwayat' | 'log-kurir'
+
   // Filter tanggal untuk Rekapitulasi Riwayat Shift di Bagian Bawah
   const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
-  const [showCourierLog, setShowCourierLog] = useState(false); // toggle admin-only: riwayat setoran kurir
   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
   const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
@@ -892,6 +919,9 @@ export function useShiftLogic() {
     // Passthrough dari AppContext yang dipakai render layer (ShiftView.jsx / ShiftModals.jsx)
     currentShift, shiftHistory, formatRupiah, storeSettings, isAdminMode, employees, cashTransfers,
 
+    // Tab navigasi utama
+    activeTab, setActiveTab,
+
     // Halaman utama (buka dompet / kartu aktif)
     initialCashInput, setInitialCashInput,
     openedByEmployeeId, setOpenedByEmployeeId,
@@ -938,7 +968,6 @@ export function useShiftLogic() {
     filterStartDate, setFilterStartDate,
     filterEndDate, setFilterEndDate,
     showTrash, setShowTrash,
-    showCourierLog, setShowCourierLog,
     sortKey, setSortKey,
     isSortOpen, setIsSortOpen,
     isSelecting, setIsSelecting,
