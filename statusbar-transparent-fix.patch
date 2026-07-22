@@ -1,0 +1,412 @@
+diff --git a/android/app/src/main/java/com/admin/mamam/MainActivity.java b/android/app/src/main/java/com/admin/mamam/MainActivity.java
+index fb87e1e..203ad52 100644
+--- a/android/app/src/main/java/com/admin/mamam/MainActivity.java
++++ b/android/app/src/main/java/com/admin/mamam/MainActivity.java
+@@ -1,5 +1,21 @@
+ package com.admin.mamam;
+ 
++import android.os.Bundle;
++import androidx.core.view.WindowCompat;
+ import com.getcapacitor.BridgeActivity;
+ 
+-public class MainActivity extends BridgeActivity {}
++public class MainActivity extends BridgeActivity {
++    // Edge-to-edge modern (API WindowCompat, bukan windowTranslucentStatus
++    // yang deprecated & gak reliable lagi di API 35+ / Android 15).
++    // setDecorFitsSystemWindows(false) yang bikin window app digambar di
++    // BELAKANG status bar & navigation bar secara proper — ini yang bikin
++    // Capacitor StatusBar.setOverlaysWebView(true) beneran ngefek transparan
++    // tanpa bikin ikon jam/baterai jadi belang/samar seperti percobaan lama.
++    // Kontrol warna ikon (terang/gelap) tetap dipegang JS lewat
++    // StatusBar.setStyle() di App.jsx setiap kali tema light/dark berubah.
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
++        super.onCreate(savedInstanceState);
++    }
++}
+diff --git a/android/app/src/main/res/values/styles.xml b/android/app/src/main/res/values/styles.xml
+index 65a98f4..ccd12db 100644
+--- a/android/app/src/main/res/values/styles.xml
++++ b/android/app/src/main/res/values/styles.xml
+@@ -7,16 +7,19 @@
+         <item name="colorPrimary">@color/colorPrimary</item>
+         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+         <item name="colorAccent">@color/colorAccent</item>
+-        <!-- Edge-to-edge: biarin konten digambar di belakang status bar &
+-             navigation bar. Ini yang bikin StatusBar.setOverlaysWebView(true)
+-             dari Capacitor plugin beneran ngefek — kalau cuma diset di JS
+-             tanpa ini, webview tetep "didorong turun" oleh sistem window
+-             insets bawaan Android, jadi kelihatan sama aja kayak sebelumnya.
+-             statusBarColor sengaja dibiarkan transparent di sini — warna
+-             SOLID yang beneran keliatan diatur lewat StatusBar plugin di JS
+-             (App.jsx), yang jalan tiap kali app dibuka/tema berubah. -->
+-        <item name="android:windowTranslucentStatus">true</item>
++        <!-- Edge-to-edge: konten digambar di belakang status bar & navigation
++             bar. windowTranslucentStatus (cara lama) SENGAJA tidak dipakai —
++             API itu deprecated & gak reliable lagi di targetSdk 35+ (Android
++             15 mewajibkan edge-to-edge), penyebab ikon jam/baterai jadi
++             belang/samar di percobaan sebelumnya. Setup edge-to-edge yang
++             beneran ngefek sekarang ada di MainActivity.java lewat
++             WindowCompat.setDecorFitsSystemWindows(false) (API modern).
++             statusBarColor tetap transparent sebagai base — warna SOLID yang
++             keliatan (mengikuti tema light/dark) diatur lewat Capacitor
++             StatusBar plugin di JS (App.jsx), jalan tiap app dibuka/tema
++             berubah. -->
+         <item name="android:statusBarColor">@android:color/transparent</item>
++        <item name="android:navigationBarColor">@android:color/transparent</item>
+         <!-- android:windowLayoutInDisplayCutoutMode butuh API 28+ tapi aman
+              dideklarasikan di sini (minSdk 24) — cuma no-op di API lama. -->
+         <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="28">shortEdges</item>
+diff --git a/capacitor.config.json b/capacitor.config.json
+index 4fbc6a6..2f9144d 100644
+--- a/capacitor.config.json
++++ b/capacitor.config.json
+@@ -10,7 +10,7 @@
+     "StatusBar": {
+       "overlaysWebView": true,
+       "style": "DARK",
+-      "backgroundColor": "#ffffff"
++      "backgroundColor": "#00000000"
+     },
+     "SplashScreen": {
+       "launchShowDuration": 2000,
+diff --git a/package-lock.json b/package-lock.json
+index 3925ea9..5b0e592 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -3096,9 +3096,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3115,9 +3112,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3134,9 +3128,6 @@
+       "cpu": [
+         "ppc64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3153,9 +3144,6 @@
+       "cpu": [
+         "s390x"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3172,9 +3160,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3191,9 +3176,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3487,9 +3469,6 @@
+         "arm"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3504,9 +3483,6 @@
+         "arm"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3521,9 +3497,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3538,9 +3511,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3555,9 +3525,6 @@
+         "loong64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3572,9 +3539,6 @@
+         "loong64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3589,9 +3553,6 @@
+         "ppc64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3606,9 +3567,6 @@
+         "ppc64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3623,9 +3581,6 @@
+         "riscv64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3640,9 +3595,6 @@
+         "riscv64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3657,9 +3609,6 @@
+         "s390x"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3674,9 +3623,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -3691,9 +3637,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4002,9 +3945,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4021,9 +3961,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4040,9 +3977,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -4059,9 +3993,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -8647,9 +8578,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -8670,9 +8598,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -8693,9 +8618,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -8716,9 +8638,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+diff --git a/src/app/App.jsx b/src/app/App.jsx
+index 83be432..abc10e0 100644
+--- a/src/app/App.jsx
++++ b/src/app/App.jsx
+@@ -217,25 +217,29 @@ export default function App() {
+   const [theme, setTheme, l23] = usePersistState('theme', 'light');
+   const [colorTheme, setColorThemeState] = usePersistState('colorTheme', 'orange');
+ 
+-  // ─── Status bar warna solid ─────────────────────────────────────────────
+-  // Pendekatan solid (bukan overlay transparan): status bar dikasih warna
+-  // background SAMA PERSIS dengan warna Header (#ffffff light / #020617
+-  // dark = Tailwind slate-950). overlaysWebView di-set false supaya webview
+-  // tetap didorong ke bawah status bar seperti biasa — jadi gak perlu
+-  // urusan header transparan/blur "nembus" ke background window Android
+-  // yang beda warna (itu penyebab status bar keliatan belang & ikon
+-  // jam/baterai samar di percobaan overlay transparan sebelumnya).
++  // ─── Status bar transparan edge-to-edge ─────────────────────────────────
++  // overlaysWebView(true): webview digambar DI BELAKANG status bar (bukan
++  // didorong ke bawahnya) — status bar jadi transparan, otomatis nyatu
++  // dengan apa pun yang ada di baliknya (Header bg-white/95 light,
++  // bg-slate-950/95 dark). Ini beda dari percobaan lama yang gagal: dulu
++  // edge-to-edge diaktifkan lewat windowTranslucentStatus di styles.xml
++  // (API lama, deprecated & gak reliable di targetSdk 35+/Android 15),
++  // yang bikin ikon jam/baterai jadi belang/samar. Sekarang edge-to-edge
++  // beneran diaktifkan lewat WindowCompat.setDecorFitsSystemWindows(false)
++  // di MainActivity.java (API modern) — jauh lebih stabil.
++  // Konten aman dari ketiban status bar karena AppLayout & Sidebar kasih
++  // padding-top sebesar env(safe-area-inset-top) (lihat AppLayout.jsx).
++  // Style ikon tetap ikut `theme`: Style.Dark (ikon gelap) di atas Header
++  // terang (light mode), Style.Light (ikon terang) di atas Header gelap
++  // (dark mode) — supaya jam/baterai/notifikasi selalu kontras & kebaca.
+   // Cuma jalan di native (Android/iOS); di browser biasa plugin ini no-op
+   // tapi dibungkus try/catch + cek platform biar aman.
+   useEffect(() => {
+     if (!Capacitor.isNativePlatform()) return;
+     (async () => {
+       try {
+-        await StatusBar.setOverlaysWebView({ overlay: false });
+-        await StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#020617' : '#ffffff' });
+-        // Style.Dark = ikon jam/baterai gelap (dipakai saat background status
+-        // bar terang / light mode). Style.Light = ikon terang (dipakai saat
+-        // background status bar gelap / dark mode).
++        await StatusBar.setOverlaysWebView({ overlay: true });
++        await StatusBar.setBackgroundColor({ color: '#00000000' });
+         await StatusBar.setStyle({ style: theme === 'dark' ? Style.Light : Style.Dark });
+       } catch (err) {
+         console.warn('StatusBar setup gagal (mungkin platform tidak didukung):', err);
+diff --git a/src/app/AppLayout.jsx b/src/app/AppLayout.jsx
+index a327c48..9fbb589 100644
+--- a/src/app/AppLayout.jsx
++++ b/src/app/AppLayout.jsx
+@@ -110,6 +110,13 @@ export default function AppLayout({
+     <div
+       ref={containerRef}
+       className="flex h-screen bg-slate-50 dark:bg-slate-950 font-body text-slate-800 dark:text-slate-100 overflow-hidden w-full relative"
++      // paddingTop = tinggi status bar (notch/punch-hole Android, dynamic
++      // island/notch iOS). Dipasang di container terluar (bukan cuma di
++      // Header) supaya Sidebar overlay & elemen fixed lain ikut turun dan
++      // gak ketiban status bar transparan juga. env(safe-area-inset-top)
++      // bernilai 0 di browser biasa, jadi aman dipakai terus tanpa perlu
++      // cek platform native/web.
++      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+     >
+       {sidebar}
+ 

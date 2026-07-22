@@ -110,6 +110,13 @@ export default function AppLayout({
     <div
       ref={containerRef}
       className="flex h-screen bg-slate-50 dark:bg-slate-950 font-body text-slate-800 dark:text-slate-100 overflow-hidden w-full relative"
+      // paddingTop = tinggi status bar (notch/punch-hole Android, dynamic
+      // island/notch iOS). Dipasang di container terluar (bukan cuma di
+      // Header) supaya Sidebar overlay & elemen fixed lain ikut turun dan
+      // gak ketiban status bar transparan juga. env(safe-area-inset-top)
+      // bernilai 0 di browser biasa, jadi aman dipakai terus tanpa perlu
+      // cek platform native/web.
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
       {sidebar}
 
