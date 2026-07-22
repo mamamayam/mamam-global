@@ -114,6 +114,18 @@ export default function AppLayout({
       {sidebar}
 
       <main className="flex-1 flex flex-col min-w-0 relative">
+        {/* Strip solid setinggi status bar — dipasang TERPISAH dari Header
+            supaya opacity/blur Header (bg-white/95, backdrop-blur-xl) gak
+            ikut bikin status bar keliatan belang. Warna di sini harus solid
+            (bukan /95) dan sama persis dengan warna yang di-set lewat
+            StatusBar.setBackgroundColor di App.jsx (lihat useEffect
+            "Status bar menyatu warna app"), supaya nyatu mulus dari status
+            bar asli Android ke dalam webview. env(safe-area-inset-top)
+            bernilai 0 di browser biasa, jadi aman dipakai terus. */}
+        <div
+          className="bg-white dark:bg-slate-950 shrink-0"
+          style={{ height: 'env(safe-area-inset-top)' }}
+        />
         {header}
 
         <div className="flex-1 overflow-hidden relative print:overflow-visible flex flex-col">
