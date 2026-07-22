@@ -4,7 +4,7 @@ import { Button } from '../components/ui';
 import { isChunkLoadError, reloadOnceForFreshChunk, clearChunkReloadGuard } from '../utils/chunkReload';
 
 const HomeView          = lazy(() => import('../features/home/HomeView'));
-const ShiftView         = lazy(() => import('../features/finance/ShiftView'));
+const ShiftView         = lazy(() => import('../features/finance/shift/ShiftView'));
 const PosView           = lazy(() => import('../features/pos/PosView'));
 const HistoryView       = lazy(() => import('../features/reports/HistoryView'));
 const MenuManagement    = lazy(() => import('../features/menu/MenuMgmt'));
