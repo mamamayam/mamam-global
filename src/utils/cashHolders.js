@@ -59,10 +59,29 @@
 //                  kurir naik -> totalHeldByCouriers naik -> expectedCash
 //                  turun sejumlah yang diganti (uang beneran keluar dari
 //                  laci fisik ke tangan kurir).
+//   'owner'     -> Setor ke Owner. BEDA SUMBU dari deposit/writeoff/reimburse
+//                  di atas (yang semuanya soal Kurir <-> Dompet) — ini soal
+//                  Dompet -> Owner/Perusahaan. Dipakai kalau kasir narik
+//                  uang dari laci buat disetor ke pemilik bisnis (transfer
+//                  bank, setor tunai langsung, dsb). BUKAN expense (bukan
+//                  biaya operasional) & BUKAN income (bukan pemasukan bisnis
+//                  baru) — murni pemindahan lokasi uang yang sudah tercatat
+//                  sah lewat penjualan, makanya masuk cashTransfers juga
+//                  (ledger perpindahan), bukan expenses/incomes.
+//                  TIDAK punya employeeId (bukan soal kurir), jadi record
+//                  jenis ini gak ikut kehitung di computeCourierBalance /
+//                  computeAllCourierBalances sama sekali — cuma dijumlah
+//                  terpisah (lihat totalTransferredToOwner di
+//                  useShiftLogic.js) buat MENGURANGI totalCashBisnis &
+//                  expectedCash, persis kayak totalWrittenOff, TAPI beda
+//                  makna: writeoff = duit hilang (rugi), owner = duit
+//                  beneran pindah ke tangan pemilik (bukan rugi, bukan
+//                  biaya, cuma pindah lokasi).
 
 export const CASH_TRANSFER_TYPE_DEPOSIT = 'deposit';
 export const CASH_TRANSFER_TYPE_WRITEOFF = 'writeoff';
 export const CASH_TRANSFER_TYPE_REIMBURSE = 'reimburse';
+export const CASH_TRANSFER_TYPE_OWNER = 'owner';
 
 export function isWriteoffTransfer(transfer) {
   return transfer?.type === CASH_TRANSFER_TYPE_WRITEOFF;
@@ -70,6 +89,10 @@ export function isWriteoffTransfer(transfer) {
 
 export function isReimburseTransfer(transfer) {
   return transfer?.type === CASH_TRANSFER_TYPE_REIMBURSE;
+}
+
+export function isOwnerTransfer(transfer) {
+  return transfer?.type === CASH_TRANSFER_TYPE_OWNER;
 }
 
 export const CASH_HOLDER_KASIR = { type: 'kasir' };

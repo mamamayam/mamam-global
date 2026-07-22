@@ -1,7 +1,7 @@
 import { FileText, AlertTriangle, Wallet } from 'lucide-react';
 import { Button, Input, Modal } from '../../../components/ui';
 
-// 6 modal seputar Shift/Dompet, dipisah dari ShiftView.jsx biar file
+// 7 modal seputar Shift/Dompet, dipisah dari ShiftView.jsx biar file
 // orchestrator-nya gak kebanjiran JSX modal:
 //   1. Koreksi Saldo Awal Dompet Aktif (khusus Admin)
 //   2. Edit Laporan Shift yang sudah ditutup (khusus Admin)
@@ -10,6 +10,9 @@ import { Button, Input, Modal } from '../../../components/ui';
 //   5. Ganti Uang / Reimburse kurir yang nombokin (saldo negatif)
 //   6. Edit Baris Setoran Kurir — koreksi nominal/catatan 1 baris riwayat
 //      cashTransfers tanpa perlu hapus+catat ulang dari nol (khusus Admin)
+//   7. Setor ke Owner (dompet -> pemilik bisnis) — beda sumbu dari 3/4/5
+//      di atas (yang semuanya soal Kurir <-> Dompet), gak butuh target
+//      kurir, cuma nominal + catatan tujuan (opsional).
 //
 // Semua props di bawah datang langsung dari useShiftLogic() di ShiftView.jsx
 // (di-spread apa adanya) — nama & perilaku PERSIS sama dengan versi lama,
@@ -67,6 +70,17 @@ export default function ShiftModals({
   editTransferNoteInput,
   setEditTransferNoteInput,
   handleSaveCourierTransferEdit,
+
+  // Modal 7: Setor ke Owner
+  shiftStats: shiftStatsForOwnerTransfer, // shiftStats sudah ada di props Modal 1, alias biar jelas dipakai lagi di sini
+  isOwnerTransferOpen,
+  setIsOwnerTransferOpen,
+  ownerTransferInput,
+  setOwnerTransferInput,
+  ownerTransferNoteInput,
+  setOwnerTransferNoteInput,
+  handleConfirmOwnerTransfer,
+  isOwnerTransferSubmitting,
 }) {
   return (
     <>
@@ -546,6 +560,106 @@ export default function ShiftModals({
                   disabled={!isValidAmount}
                 >
                   Simpan Koreksi
+                </Button>
+              </div>
+            </>
+          );
+        })()}
+      </Modal>
+
+      {/* =========================================================================
+          MODAL SETOR KE OWNER — Dompet -> pemilik bisnis. Beda sumbu dari
+          Modal 3/4/5 (yang semuanya soal Kurir <-> Dompet): gak ada target
+          kurir, cuma nominal + catatan tujuan opsional (mis. "Transfer BCA").
+          Nominal divalidasi terhadap Saldo Akhir Dompet TERKINI — lihat
+          handleConfirmOwnerTransfer di useShiftLogic.js.
+          ========================================================================= */}
+      <Modal
+        isOpen={isOwnerTransferOpen}
+        onClose={() => { setIsOwnerTransferOpen(false); setOwnerTransferInput(''); setOwnerTransferNoteInput(''); }}
+        title="Setor ke Owner"
+      >
+        {isOwnerTransferOpen && (() => {
+          const liveExpectedCash = Math.max(shiftStatsForOwnerTransfer?.expectedCash || 0, 0);
+          const amount = Number(ownerTransferInput);
+          const isValidAmount = ownerTransferInput !== '' && Number.isFinite(amount) && amount > 0 && amount <= liveExpectedCash;
+          const sisaPreview = ownerTransferInput !== '' && Number.isFinite(amount) ? liveExpectedCash - amount : liveExpectedCash;
+
+          return (
+            <>
+              <div className="p-4 md:p-6 space-y-4">
+                <div className="flex gap-2 items-start bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 rounded-xl p-3">
+                  <Wallet className="w-4 h-4 text-sky-500 dark:text-sky-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-sky-700 dark:text-sky-300">
+                    Uang ditarik dari laci Dompet buat disetor ke Owner — <b>menurunkan</b> Saldo Akhir Dompet. Ini bukan pengeluaran/biaya, murni perpindahan lokasi uang yang sudah tercatat sah.
+                  </p>
+                </div>
+
+                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                  <span className="text-sm text-slate-500 dark:text-slate-400">Saldo Akhir Dompet saat ini</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{formatRupiah(liveExpectedCash)}</span>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Nominal Setoran</span>
+                    <button
+                      type="button"
+                      onClick={() => setOwnerTransferInput(String(liveExpectedCash))}
+                      disabled={liveExpectedCash <= 0}
+                      className="text-[11px] font-bold text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-500/30 rounded-lg px-2 py-0.5 hover:bg-sky-50 dark:hover:bg-sky-500/10 active:scale-95 transition-all duration-200 disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      Setor Semua
+                    </button>
+                  </div>
+                  <Input
+                    type="number"
+                    icon={<span className="font-bold">Rp</span>}
+                    value={ownerTransferInput}
+                    onChange={e => setOwnerTransferInput(e.target.value)}
+                    placeholder="0"
+                    className="text-lg font-bold py-3"
+                  />
+                  {ownerTransferInput !== '' && amount > liveExpectedCash && (
+                    <p className="text-xs text-accent-500 dark:text-accent-400 mt-1">
+                      Nominal melebihi Saldo Akhir Dompet saat ini ({formatRupiah(liveExpectedCash)}).
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <Input
+                    type="text"
+                    label="Catatan (opsional)"
+                    value={ownerTransferNoteInput}
+                    onChange={e => setOwnerTransferNoteInput(e.target.value)}
+                    placeholder="mis. Transfer BCA, Tunai langsung"
+                  />
+                </div>
+
+                {ownerTransferInput !== '' && isValidAmount && (
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Sisa Saldo Dompet setelah setoran:</p>
+                    <p className="font-black text-lg text-slate-800 dark:text-slate-100">{formatRupiah(sisaPreview)}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 md:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => { setIsOwnerTransferOpen(false); setOwnerTransferInput(''); setOwnerTransferNoteInput(''); }}
+                >
+                  Batal
+                </Button>
+                <Button
+                  variant="primary"
+                  className="flex-1"
+                  onClick={handleConfirmOwnerTransfer}
+                  disabled={!isValidAmount || isOwnerTransferSubmitting}
+                >
+                  {isOwnerTransferSubmitting ? 'Memproses...' : 'Setor ke Owner'}
                 </Button>
               </div>
             </>

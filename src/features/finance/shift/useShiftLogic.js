@@ -17,7 +17,9 @@ import {
   CASH_TRANSFER_TYPE_WRITEOFF,
   isWriteoffTransfer,
   CASH_TRANSFER_TYPE_REIMBURSE,
-  isReimburseTransfer
+  isReimburseTransfer,
+  CASH_TRANSFER_TYPE_OWNER,
+  isOwnerTransfer
 } from '../../../utils/cashHolders';
 
 // Opsi sorting utk Riwayat Shift — dipakai oleh <SortModal> di ShiftView.jsx.
@@ -90,6 +92,16 @@ export function useShiftLogic() {
   const [reimburseTarget, setReimburseTarget] = useState(null); // { employeeId, employeeName } | null
   const [reimburseInput, setReimburseInput] = useState('');
   const [isReimburseSubmitting, setIsReimburseSubmitting] = useState(false); // anti double-submit
+
+  // State utk Modal Setor ke Owner — beda sumbu dari Setor/Hapus/Ganti Uang
+  // di atas (yang semuanya soal Kurir <-> Dompet). Ini soal Dompet -> Owner:
+  // kasir narik uang dari laci buat disetor ke pemilik bisnis. Gak butuh
+  // target employee (bukan soal kurir), cuma nominal + catatan opsional
+  // (mis. "Transfer BCA", "Tunai langsung").
+  const [isOwnerTransferOpen, setIsOwnerTransferOpen] = useState(false);
+  const [ownerTransferInput, setOwnerTransferInput] = useState('');
+  const [ownerTransferNoteInput, setOwnerTransferNoteInput] = useState('');
+  const [isOwnerTransferSubmitting, setIsOwnerTransferSubmitting] = useState(false); // anti double-submit
 
   // State utk Modal Edit Baris Setoran Kurir (koreksi nominal/catatan kalau
   // salah input — Admin. Sebelumnya baris cashTransfers cuma bisa dihapus
@@ -195,6 +207,24 @@ export function useShiftLogic() {
   // sama, supaya write-off gak keliatan seolah nambah uang di laci kasir.
   const totalWrittenOff = useMemo(
     () => activeOnly(cashTransfers || []).filter(isWriteoffTransfer).reduce((sum, t) => sum + (t.amount || 0), 0),
+    [cashTransfers]
+  );
+
+  // Total Setor ke Owner — beda sumbu dari totalHeldByCouriers/totalWrittenOff
+  // (yang soal Kurir <-> Dompet). Ini ngitung SEMUA uang yang udah ditarik
+  // dari Dompet buat disetor ke pemilik bisnis, running total dari SEMUA
+  // record cashTransfers type 'owner' (tidak di-scope ke shift ini —
+  // konsisten sama totalHeldByCouriers, sengaja gak direset lintas
+  // shift/hari, karena begitu ditarik dari Dompet, uangnya harus TETAP
+  // ngurangin totalCashBisnis selamanya sampai ada cara buat "membatalkan"
+  // transfer, bukan cuma pas shift itu doang).
+  // MENGURANGI totalCashBisnis (lihat shiftStats) — beda makna dari
+  // totalWrittenOff: writeoff = duit hilang (rugi bisnis), owner = duit
+  // beneran pindah ke tangan pemilik (bukan rugi, murni perpindahan
+  // lokasi), tapi efeknya ke laci kasir sama-sama: SAMA-SAMA ngurangin
+  // kas yang ada di laci.
+  const totalTransferredToOwner = useMemo(
+    () => activeOnly(cashTransfers || []).filter(isOwnerTransfer).reduce((sum, t) => sum + (t.amount || 0), 0),
     [cashTransfers]
   );
 
@@ -493,7 +523,11 @@ export function useShiftLogic() {
     // ngurangin Total Kas Bisnis juga, BUKAN cuma totalHeldByCouriers.
     // Tanpa pengurangan ini, expectedCash di bawah bakal seolah-olah naik
     // tiap ada write-off — padahal duitnya gak pernah masuk laci.
-    const totalCashBisnis = currentShift.initialCash + cashSalesTotal + cashIncomeTotal - cashExpenseTotal - totalWrittenOff;
+    // Dikurangi juga totalTransferredToOwner (Setor ke Owner) — sama
+    // seperti write-off dari sisi laci kasir (duitnya keluar dari laci),
+    // tapi beda makna: bukan rugi, duitnya beneran pindah tangan ke
+    // pemilik bisnis secara sah.
+    const totalCashBisnis = currentShift.initialCash + cashSalesTotal + cashIncomeTotal - cashExpenseTotal - totalWrittenOff - totalTransferredToOwner;
 
     // Saldo Akhir (Laci Kasir) = Total Kas Bisnis - Saldo yang MASIH
     // dipegang kurir (belum disetor). Ini SATU-SATUNYA rumus buat nentuin
@@ -524,7 +558,55 @@ export function useShiftLogic() {
       totalCashBisnis,
       expectedCash
     };
-  }, [currentShift, salesHistory, expenses, incomes, totalHeldByCouriers, totalWrittenOff]);
+  }, [currentShift, salesHistory, expenses, incomes, totalHeldByCouriers, totalWrittenOff, totalTransferredToOwner]);
+
+  // Tombol "Setor ke Owner" — buka popup input nominal, buat narik uang
+  // dari Dompet (laci kasir) ke tangan pemilik bisnis. Beda sumbu dari
+  // Setor/Hapus/Ganti Uang kurir (yang semuanya soal Kurir <-> Dompet):
+  // ini soal Dompet -> Owner, jadi gak butuh target employee. Nominal
+  // divalidasi terhadap shiftStats.expectedCash (Saldo Akhir Dompet
+  // TERKINI, termasuk shift yang sedang aktif) — gak boleh setor melebihi
+  // kas yang beneran ada di laci saat ini, pola sama kayak hole #1 di
+  // handleConfirmPartialDeposit.
+  const handleOpenOwnerTransfer = () => {
+    setIsOwnerTransferOpen(true);
+    setOwnerTransferInput('');
+    setOwnerTransferNoteInput('');
+  };
+
+  const handleConfirmOwnerTransfer = () => {
+    if (!isOwnerTransferOpen || isOwnerTransferSubmitting) return;
+
+    const liveExpectedCash = Math.max(shiftStats?.expectedCash || 0, 0);
+    const amount = Number(ownerTransferInput);
+
+    if (!ownerTransferInput || !Number.isFinite(amount) || amount <= 0) {
+      triggerAlert('Nominal setoran harus lebih dari Rp 0.');
+      return;
+    }
+    if (amount > liveExpectedCash) {
+      triggerAlert(`Nominal melebihi Saldo Akhir Dompet saat ini (${formatRupiah(liveExpectedCash)}).`);
+      return;
+    }
+
+    setIsOwnerTransferSubmitting(true);
+
+    const trimmedNote = ownerTransferNoteInput.trim();
+    const newTransfer = {
+      id: generateUUID(),
+      amount,
+      type: CASH_TRANSFER_TYPE_OWNER,
+      note: trimmedNote ? `Setor ke Owner — ${trimmedNote}` : 'Setor ke Owner',
+      date: new Date(),
+    };
+    setCashTransfers([newTransfer, ...cashTransfers]);
+    triggerAlert(`${formatRupiah(amount)} berhasil disetor ke Owner.`);
+
+    setIsOwnerTransferSubmitting(false);
+    setIsOwnerTransferOpen(false);
+    setOwnerTransferInput('');
+    setOwnerTransferNoteInput('');
+  };
 
   // Deteksi dompet yang kebawa nginap dari hari sebelumnya (kemungkinan kasir lupa nutup).
   // Sengaja pakai perbandingan TANGGAL, bukan jumlah jam, karena shift resto
@@ -831,6 +913,13 @@ export function useShiftLogic() {
     depositTarget, setDepositTarget, partialDepositInput, setPartialDepositInput,
     writeoffTarget, setWriteoffTarget, writeoffInput, setWriteoffInput,
     reimburseTarget, setReimburseTarget, reimburseInput, setReimburseInput,
+
+    // Setor ke Owner (Dompet -> Owner, beda sumbu dari saldo kurir di atas)
+    totalTransferredToOwner,
+    isOwnerTransferOpen, setIsOwnerTransferOpen,
+    ownerTransferInput, setOwnerTransferInput,
+    ownerTransferNoteInput, setOwnerTransferNoteInput,
+    handleOpenOwnerTransfer, handleConfirmOwnerTransfer, isOwnerTransferSubmitting,
 
     // Shift stats (dipakai halaman utama & modal edit saldo awal aktif)
     shiftStats,

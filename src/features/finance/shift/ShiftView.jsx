@@ -2,6 +2,7 @@ import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, Arr
 import { isNativePlatform, printShiftNativeBluetooth } from '../../../library/printer';
 import { activeOnly, trashedOnly } from '../../../utils/softDelete';
 import { applySort } from '../../../utils/sortUtils';
+import { isOwnerTransfer } from '../../../utils/cashHolders';
 
 // Import komponen UI Design System
 import {
@@ -47,6 +48,12 @@ const ShiftView = () => {
     depositTarget, setDepositTarget, partialDepositInput, setPartialDepositInput,
     writeoffTarget, setWriteoffTarget, writeoffInput, setWriteoffInput,
     reimburseTarget, setReimburseTarget, reimburseInput, setReimburseInput,
+
+    totalTransferredToOwner,
+    isOwnerTransferOpen, setIsOwnerTransferOpen,
+    ownerTransferInput, setOwnerTransferInput,
+    ownerTransferNoteInput, setOwnerTransferNoteInput,
+    handleOpenOwnerTransfer, handleConfirmOwnerTransfer, isOwnerTransferSubmitting,
 
     shiftStats,
 
@@ -302,10 +309,35 @@ const ShiftView = () => {
                   langsung di sini, bukan dari shiftStats.totalCashBisnis,
                   supaya jelas ini murni penjumlahan dua baris di bawahnya). */}
               <div className="mt-2 pt-4 border-t border-dashed border-slate-200 dark:border-slate-800 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Saldo di Dompet</span>
-                  <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatRupiah(shiftStats?.expectedCash)}</span>
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">Saldo di Dompet</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatRupiah(shiftStats?.expectedCash)}</span>
+                    {/* Setor ke Owner — narik uang dari laci Dompet ke pemilik
+                        bisnis. Beda sumbu dari Setor/Hapus/Ganti Uang kurir di
+                        bawah (yang soal Kurir <-> Dompet), makanya tombolnya di
+                        baris "Saldo di Dompet", bukan di baris kurir manapun.
+                        Lihat handleOpenOwnerTransfer & totalTransferredToOwner. */}
+                    {(shiftStats?.expectedCash || 0) > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleOpenOwnerTransfer}
+                        className="text-[10px] font-bold text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-500/30 rounded-lg px-1.5 py-0.5 hover:bg-sky-50 dark:hover:bg-sky-500/10 active:scale-95 transition-all duration-200 shrink-0"
+                      >
+                        Setor ke Owner
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {/* Total yang udah disetor ke Owner — cuma tampil kalau ada,
+                    biar bisa direkonsiliasi ("harusnya ada segini di tangan
+                    Owner") tanpa perlu buka Riwayat Setoran satu-satu. */}
+                {totalTransferredToOwner > 0 && (
+                  <div className="flex justify-between items-center pl-2">
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500">— Sudah disetor ke Owner</span>
+                    <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400 shrink-0">{formatRupiah(totalTransferredToOwner)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Saldo di Kurir</span>
                   <span className={`text-sm font-bold ${totalHeldByCouriers < 0 ? 'text-accent-600 dark:text-accent-400' : totalHeldByCouriers > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>
@@ -626,36 +658,74 @@ const ShiftView = () => {
             </button>
 
             {showCourierLog && (
-              <Card padding="none" className="overflow-hidden flex flex-col mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-                  <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Riwayat Setoran Kurir</h4>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Termasuk setoran manual & penutupan saldo lama otomatis.</p>
-                </div>
-                <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto custom-scrollbar">
-                  {activeOnly(cashTransfers || []).length === 0 ? (
-                    <EmptyState size="sm" icon={<History className="w-8 h-8 opacity-30" />} title="Belum ada riwayat setoran." />
-                  ) : (
-                    applySort(activeOnly(cashTransfers || []), 'date-desc', { date: t => new Date(t.date) }).map(t => (
-                      <div key={t.id} className="p-3 flex items-center justify-between gap-3 text-xs">
-                        <div className="min-w-0">
-                          <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{t.employeeName}</p>
-                          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{t.note}</p>
-                          <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(t.date).toLocaleString('id-ID')}</p>
+              <>
+                <Card padding="none" className="overflow-hidden flex flex-col mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+                    <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Riwayat Setoran Kurir</h4>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Termasuk setoran manual & penutupan saldo lama otomatis.</p>
+                  </div>
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto custom-scrollbar">
+                    {/* Exclude transfer type 'owner' — itu bukan soal kurir
+                        (gak punya employeeId/employeeName), ditampilin
+                        terpisah di kartu "Riwayat Setor Owner" di bawah. */}
+                    {applySort(activeOnly(cashTransfers || []).filter(t => !isOwnerTransfer(t)), 'date-desc', { date: t => new Date(t.date) }).length === 0 ? (
+                      <EmptyState size="sm" icon={<History className="w-8 h-8 opacity-30" />} title="Belum ada riwayat setoran." />
+                    ) : (
+                      applySort(activeOnly(cashTransfers || []).filter(t => !isOwnerTransfer(t)), 'date-desc', { date: t => new Date(t.date) }).map(t => (
+                        <div key={t.id} className="p-3 flex items-center justify-between gap-3 text-xs">
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{t.employeeName}</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{t.note}</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(t.date).toLocaleString('id-ID')}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-black text-emerald-600 dark:text-emerald-400">{formatRupiah(t.amount)}</span>
+                            <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris setoran ini">
+                              <Edit className="w-3.5 h-3.5" />
+                            </IconButton>
+                            <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris setoran ini">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </IconButton>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="font-black text-emerald-600 dark:text-emerald-400">{formatRupiah(t.amount)}</span>
-                          <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris setoran ini">
-                            <Edit className="w-3.5 h-3.5" />
-                          </IconButton>
-                          <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris setoran ini">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </IconButton>
+                      ))
+                    )}
+                  </div>
+                </Card>
+
+                {/* Riwayat Setor ke Owner — ledger terpisah dari setoran kurir
+                    di atas (beda sumbu: Dompet -> Owner, bukan Kurir -> Dompet).
+                    Pakai handler edit/hapus yang sama (generik, kerja by id). */}
+                <Card padding="none" className="overflow-hidden flex flex-col mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+                    <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Riwayat Setor ke Owner</h4>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Total: {formatRupiah(totalTransferredToOwner)}</p>
+                  </div>
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto custom-scrollbar">
+                    {applySort(activeOnly(cashTransfers || []).filter(isOwnerTransfer), 'date-desc', { date: t => new Date(t.date) }).length === 0 ? (
+                      <EmptyState size="sm" icon={<History className="w-8 h-8 opacity-30" />} title="Belum ada setoran ke Owner." />
+                    ) : (
+                      applySort(activeOnly(cashTransfers || []).filter(isOwnerTransfer), 'date-desc', { date: t => new Date(t.date) }).map(t => (
+                        <div key={t.id} className="p-3 flex items-center justify-between gap-3 text-xs">
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{t.note || 'Setor ke Owner'}</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(t.date).toLocaleString('id-ID')}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-black text-sky-600 dark:text-sky-400">{formatRupiah(t.amount)}</span>
+                            <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris setoran ini">
+                              <Edit className="w-3.5 h-3.5" />
+                            </IconButton>
+                            <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris setoran ini">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </IconButton>
+                          </div>
                         </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Card>
+                      ))
+                    )}
+                  </div>
+                </Card>
+              </>
             )}
           </div>
         )}
@@ -711,6 +781,14 @@ const ShiftView = () => {
         editTransferNoteInput={editTransferNoteInput}
         setEditTransferNoteInput={setEditTransferNoteInput}
         handleSaveCourierTransferEdit={handleSaveCourierTransferEdit}
+        isOwnerTransferOpen={isOwnerTransferOpen}
+        setIsOwnerTransferOpen={setIsOwnerTransferOpen}
+        ownerTransferInput={ownerTransferInput}
+        setOwnerTransferInput={setOwnerTransferInput}
+        ownerTransferNoteInput={ownerTransferNoteInput}
+        setOwnerTransferNoteInput={setOwnerTransferNoteInput}
+        handleConfirmOwnerTransfer={handleConfirmOwnerTransfer}
+        isOwnerTransferSubmitting={isOwnerTransferSubmitting}
       />
     </div>
   );

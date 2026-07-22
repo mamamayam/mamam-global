@@ -10,7 +10,7 @@
     "StatusBar": {
       "overlaysWebView": true,
       "style": "DARK",
-      "backgroundColor": "#00000000"
+      "backgroundColor": "#ffffff"
     },
     "SplashScreen": {
       "launchShowDuration": 2000,
