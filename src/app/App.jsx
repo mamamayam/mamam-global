@@ -217,25 +217,26 @@ export default function App() {
   const [theme, setTheme, l23] = usePersistState('theme', 'light');
   const [colorTheme, setColorThemeState] = usePersistState('colorTheme', 'orange');
 
-  // ─── Status bar edge-to-edge ────────────────────────────────────────────
-  // overlaysWebView(true): webview digambar di BELAKANG status bar (bukan
-  // di bawahnya) — ini yang bikin app kerasa "fullscreen", status bar jadi
-  // transparan menyatu sama warna header, tapi jam/baterai tetap keliatan.
-  // Konten aktual (Header, Sidebar) tetap aman dari ketiban status bar
-  // karena AppLayout kasih padding-top sebesar safe-area-inset-top (lihat
-  // env(safe-area-inset-top) di AppLayout.jsx).
+  // ─── Status bar warna solid ─────────────────────────────────────────────
+  // Pendekatan solid (bukan overlay transparan): status bar dikasih warna
+  // background SAMA PERSIS dengan warna Header (#ffffff light / #020617
+  // dark = Tailwind slate-950). overlaysWebView di-set false supaya webview
+  // tetap didorong ke bawah status bar seperti biasa — jadi gak perlu
+  // urusan header transparan/blur "nembus" ke background window Android
+  // yang beda warna (itu penyebab status bar keliatan belang & ikon
+  // jam/baterai samar di percobaan overlay transparan sebelumnya).
   // Cuma jalan di native (Android/iOS); di browser biasa plugin ini no-op
   // tapi dibungkus try/catch + cek platform biar aman.
-  // Ikut `theme` supaya warna ikon status bar (jam/baterai) selalu kebaca
-  // jelas: Style.Dark (ikon gelap) di atas header terang, Style.Light
-  // (ikon terang) di atas header gelap saat dark mode aktif.
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     (async () => {
       try {
-        await StatusBar.setOverlaysWebView({ overlay: true });
+        await StatusBar.setOverlaysWebView({ overlay: false });
+        await StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#020617' : '#ffffff' });
+        // Style.Dark = ikon jam/baterai gelap (dipakai saat background status
+        // bar terang / light mode). Style.Light = ikon terang (dipakai saat
+        // background status bar gelap / dark mode).
         await StatusBar.setStyle({ style: theme === 'dark' ? Style.Light : Style.Dark });
-        await StatusBar.setBackgroundColor({ color: '#00000000' });
       } catch (err) {
         console.warn('StatusBar setup gagal (mungkin platform tidak didukung):', err);
       }
