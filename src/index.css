@@ -119,3 +119,41 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ======================================================
+   SAFE AREA (edge-to-edge / overlaysWebView Capacitor)
+   ======================================================
+   StatusBar.overlaysWebView = true bikin WebView gambar di
+   BELAKANG status bar & nav bar (biar look-nya native/full
+   screen). Konsekuensinya: TIAP header/footer yang nempel
+   ke tepi layar (modal, drawer, sticky header, bottom nav,
+   bottom sheet) WAJIB pakai padding sebesar safe-area-inset,
+   kalau enggak dia bakal ketiban jam/status bar atau nabrak
+   gesture bar Android — persis kejadian di CartDrawer &
+   VariantSelectionModal sebelum fix ini.
+
+   env(safe-area-inset-*) cuma punya nilai kalau meta viewport
+   ada viewport-fit=cover (sudah ada di index.html). Fallback
+   0px dikasih biar aman kalau dibuka di browser desktop biasa.
+   ====================================================== */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Varian "tambah" — dipakai di elemen yang sudah punya padding
+   sendiri (mis. p-4/p-5) dan cuma perlu NAMBAH sisa inset di
+   atasnya, bukan menimpanya. Pakai calc() supaya padding asli
+   dari Tailwind (p-4 dsb) tetap kepakai. */
+.safe-top-add {
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--safe-add, 1rem));
+}
+.safe-bottom-add {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--safe-add, 1rem));
+}
