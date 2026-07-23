@@ -156,28 +156,27 @@ const ShiftView = () => {
             </div>
           </div>
 
-          {/* POSISI UANG saat shift ini ditutup — MURNI STATUS/SNAPSHOT,
-              bukan transaksi. Kurir tetap jalan sebagai running total
-              (gak direset/dipindah otomatis) — bagian ini cuma nunjukin
-              "per saat ini, segini yang masih di tangan kurir", biar
-              kasir/owner bisa lihat langsung dari laporan kalau ada
-              uang yang belum disetor, tanpa sistem bikin perpindahan
-              uang sendiri. Shift lama (sebelum field ini ada) gak
-              nampilin section ini sama sekali. */}
-          {Array.isArray(closedShiftData.courierBalancesSnapshot) && (
+          {/* POSISI UANG saat shift ini ditutup — MURNI KETERANGAN "dari
+              mana actualCash ini berasal", BUKAN angka tambahan yang
+              dijumlah lagi. actualCash (Saldo Aktual di atas) SUDAH
+              gabungan kasir+kurir (sesuai definisi toko: kasir input
+              total uang fisik + laporan setoran kurir jadi satu angka).
+              Rincian di bawah ini cuma referensi/audit — berapa dari
+              kurir mana — BUKAN baris kedua yang ditambah ke Dompet.
+              Saldo kurir sudah direset ke 0 saat shift ini ditutup (lihat
+              handleCloseShift); snapshot ini nyimpen nilainya SEBELUM
+              direset. Shift lama (sebelum field ini ada) gak nampilin
+              section ini sama sekali. */}
+          {Array.isArray(closedShiftData.courierBalancesSnapshot) && closedShiftData.courierBalancesSnapshot.length > 0 && (
             <div className="border-t-2 border-dashed border-slate-300 dark:border-slate-600 mt-4 pt-4 print:mt-2 print:pt-2 text-xs space-y-1.5 print:text-black">
-              <p className="font-bold uppercase tracking-wide text-[10px] text-slate-500 dark:text-slate-400 print:text-black mb-1">Posisi Uang Saat Ditutup</p>
-              <div className="flex justify-between"><span>Kasir (Dompet)</span> <span className="font-bold">{formatRupiah(closedShiftData.actualCash)}</span></div>
-              {closedShiftData.courierBalancesSnapshot.length === 0 ? (
-                <p className="text-slate-400 dark:text-slate-500 italic">Semua kurir sudah setor — tidak ada uang nyangkut.</p>
-              ) : (
-                closedShiftData.courierBalancesSnapshot.map(c => (
-                  <div key={c.employeeId} className="flex justify-between">
-                    <span>{c.employeeName}</span>
-                    <span className="font-bold">{formatRupiah(c.balance)}</span>
-                  </div>
-                ))
-              )}
+              <p className="font-bold uppercase tracking-wide text-[10px] text-slate-500 dark:text-slate-400 print:text-black mb-1">Rincian Asal Saldo Aktual (sudah termasuk di atas)</p>
+              {closedShiftData.courierBalancesSnapshot.map(c => (
+                <div key={c.employeeId} className="flex justify-between text-slate-500 dark:text-slate-400">
+                  <span>dari {c.employeeName}</span>
+                  <span>{formatRupiah(c.balance)}</span>
+                </div>
+              ))}
+              <p className="text-slate-400 dark:text-slate-500 italic pt-1">Saldo kurir di atas sudah direset ke 0 (dianggap sudah masuk Saldo Aktual).</p>
             </div>
           )}
 
