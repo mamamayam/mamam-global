@@ -6,7 +6,10 @@ export default function BottomNav({
     navigate,
 }) {
     return (
-        <div className="short:hidden bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-slate-100/60 dark:border-slate-900 flex justify-around items-center h-16 shrink-0 z-30 print:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.02)] dark:shadow-none">
+        <div
+            className="short:hidden bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-slate-100/60 dark:border-slate-900 flex justify-around items-center h-16 shrink-0 z-30 print:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.02)] dark:shadow-none box-content"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        >
             
             {/* Tombol Beranda */}
             <button
