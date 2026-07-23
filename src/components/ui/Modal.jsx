@@ -110,9 +110,11 @@ export default function Modal({
             ${className}
           `}
         >
-          {/* Header opsional */}
+          {/* Header opsional — safe-top wajib di sini karena panel ini
+              full-height (h-full) dan nempel persis ke tepi atas layar,
+              sama kayak CartDrawer sebelum di-fix. */}
           {title && (
-            <div className="flex items-center justify-between gap-3 p-5 pb-3 shrink-0 border-b border-slate-100 dark:border-slate-800">
+            <div className="safe-top flex items-center justify-between gap-3 p-5 pb-3 shrink-0 border-b border-slate-100 dark:border-slate-800">
               <h3 className="font-heading font-bold text-slate-900 dark:text-slate-50 text-lg min-w-0 truncate">{title}</h3>
               {onClose && (
                 <button
@@ -125,8 +127,11 @@ export default function Modal({
             </div>
           )}
 
-          {/* Konten — selalu scrollable karena panel udah full-height */}
-          <div className="overflow-y-auto flex-1">
+          {/* Konten — selalu scrollable karena panel udah full-height.
+              safe-bottom di sini (bukan di footer statis) karena variant
+              ini gak punya footer baku — kalau caller taruh tombol aksi
+              di ujung children, dia ikut ke-push oleh padding ini. */}
+          <div className="overflow-y-auto flex-1 safe-bottom">
             {children}
           </div>
         </div>
