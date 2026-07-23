@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../../context/AppContext';
 import { getIngredientCost } from '../../../utils/hppUtils';
 import { formatRupiah } from '../../../utils/formatters';
-import { Card, Button, IconButton, PageHeader, EmptyState, Badge, SortModal } from '../../../components/ui';
+import { Card, Button, IconButton, EmptyState, Badge, SortModal } from '../../../components/ui';
 import { applySort } from '../../../utils/sortUtils';
 import { markDeleted, activeOnly } from '../../../utils/softDelete';
 import { BookOpen, Search, X, Edit3, Trash2, TrendingDown, ArrowUpDown, Save } from 'lucide-react';
@@ -128,13 +128,6 @@ const LibraryHppView = () => {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out relative">
-            <PageHeader
-                title="Katalog Library Menu (Final)"
-                subtitle="Daftar menu dengan total HPP terhitung otomatis berdasarkan harga bahan baku pasar & bahan setengah jadi terbaru."
-                icon={<BookOpen className="w-6 h-6 text-accent-600 dark:text-accent-400" />}
-                className="border-b border-slate-200 dark:border-slate-700 pb-5"
-            />
-
             <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative w-full sm:w-72">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />

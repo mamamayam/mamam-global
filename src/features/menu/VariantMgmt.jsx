@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { useAppContext } from "../../context/AppContext";
 import { ChevronLeft, Plus, Edit3, Trash2, Settings2, Trash, GripVertical, ChevronDown, ChevronUp } from "lucide-react";
 import CategoryModal from "../../components/CategoryModal";
-import { Button, IconButton, Input, Select, PageHeader, EmptyState, Badge } from "../../components/ui";
+import { Button, IconButton, Input, Select, EmptyState, Badge } from "../../components/ui";
 
 // ─── Hook drag & drop reorder ───
 function useDragReorder(onReorder) {
@@ -436,15 +436,12 @@ const VariantManagement = () => {
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
-      <PageHeader
-        title="Library Varian"
-        action={
-          <Button icon={<Plus className="w-4 h-4" />} onClick={() => {
-            setFormData({ id: '', name: '', category: variantCategories?.[0] || 'Lainnya', isRequired: false, maxSelection: 1, options: [] });
-            setIsEditing(true);
-          }}>Tambah Grup Varian</Button>
-        }
-      />
+      <div className="flex justify-end mb-6">
+        <Button icon={<Plus className="w-4 h-4" />} className="w-full sm:w-auto" onClick={() => {
+          setFormData({ id: '', name: '', category: variantCategories?.[0] || 'Lainnya', isRequired: false, maxSelection: 1, options: [] });
+          setIsEditing(true);
+        }}>Tambah Grup Varian</Button>
+      </div>
       <div className="space-y-6 pb-10">
         {sortedCategoryKeys.map(category => (
           <VariantCategorySection

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Fingerprint, Users, Trash2, RotateCcw,
+  Users, Trash2, RotateCcw,
   AlertTriangle, Camera, AlarmClock, X, PenLine,
   History, Search, Calendar, ChevronRight, Filter, ArrowUpDown,
 } from 'lucide-react';
@@ -10,7 +10,7 @@ import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/s
 import { isSupabaseConfigured } from '../../storage/syncClient';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
 import {
-  Card, Button, PageHeader, EmptyState, Badge, IconButton, Alert, SortModal, BulkSelectBar, Modal,
+  Card, Button, EmptyState, Badge, IconButton, Alert, SortModal, BulkSelectBar, Modal,
 } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
@@ -543,12 +543,6 @@ export default function Attendance() {
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6">
-      <PageHeader
-        title="Absensi Karyawan"
-        subtitle={`${sudahMasukCount} dari ${employees.length} karyawan sudah absen masuk hari ini`}
-        icon={<Fingerprint className="w-6 h-6" />}
-      />
-
       {currentShift && isShiftCarriedOver && (
         <div className="mb-4 border-2 border-red-200 dark:border-red-500/40 bg-red-50 dark:bg-red-950/40 rounded-2xl p-4">
           <div className="flex items-start gap-3">

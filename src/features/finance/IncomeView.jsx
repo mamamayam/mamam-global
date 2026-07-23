@@ -3,7 +3,7 @@ import { TrendingUp, History, Save, Trash2, Pencil, X, Settings2, RotateCcw, Arr
 import { useAppContext } from '../../context/AppContext';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import CategoryModal from '../../components/CategoryModal';
-import { PageHeader, Card, Input, Select, Badge, IconButton, EmptyState, Button, SortModal, BulkSelectBar } from '../../components/ui';
+import { Card, Input, Select, Badge, IconButton, EmptyState, Button, SortModal, BulkSelectBar } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
@@ -193,10 +193,6 @@ const IncomeView = () => {
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
-      <PageHeader
-        title="Pemasukan"
-        icon={<TrendingUp className="w-6 h-6 text-emerald-500 dark:text-emerald-400" />}
-      />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full min-w-0">
         <Card padding="none" className="lg:col-span-1 p-5 space-y-4 h-fit w-full min-w-0 transition-shadow duration-300 hover:shadow-md">
           {editingId && (

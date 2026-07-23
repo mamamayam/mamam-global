@@ -9,7 +9,6 @@ import {
   Card,
   Input,
   Select,
-  PageHeader,
   EmptyState,
   Badge,
   IconButton,
@@ -203,12 +202,6 @@ const ShiftView = () => {
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar relative">
       
-      {/* Menggunakan komponen PageHeader */}
-      <PageHeader 
-        title="Manajemen Dompet" 
-        icon={<Clock className="w-6 h-6 text-accent-500 dark:text-accent-400" />} 
-      />
-
       {/* =========================================================================
           TAB NAVIGASI — Aktif / Riwayat / Log Transaksi
           ========================================================================= */}

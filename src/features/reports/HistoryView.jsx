@@ -3,7 +3,7 @@ import { useAppContext } from '../../context/AppContext';
 import { X, History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw, ArrowUpDown, Eye, CreditCard } from 'lucide-react';
 import { formatRupiah } from '../../utils/formatters';
 import { useBulkSelect } from '../../hook/useBulkSelect';
-import { BulkSelectBar, PageHeader, Card, Button, DetailModal, SortModal } from '../../components/ui';
+import { BulkSelectBar, Card, Button, DetailModal, SortModal } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { pushTransactionDelete } from '../../storage/realtimeSync';
@@ -190,12 +190,13 @@ const HistoryView = () => {
         <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
 
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                <PageHeader
-                    title={showTrash ? 'Recycle Bin' : 'Riwayat Pesanan'}
-                    icon={<History className="w-6 h-6 text-accent-500 dark:text-accent-400" />}
-                />
+                {showTrash && (
+                    <span className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-3 py-1 rounded-full text-xs font-bold shrink-0">
+                        <History className="w-3.5 h-3.5" /> Recycle Bin
+                    </span>
+                )}
                 {isAdminMode && (
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 lg:ml-auto">
                         <Button
                             size="sm"
                             variant="secondary"

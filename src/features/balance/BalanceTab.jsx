@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Scale, Calendar } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { toLocalMonthString } from '../../utils/formatters';
-import { Card, PageHeader, Button } from '../../components/ui';
+import { Card, Button } from '../../components/ui';
 import BalanceSummaryTab from './tabs/BalanceSummaryTab';
 import BalanceDetailTab from './tabs/BalanceDetailTab';
 
-// Shell tipis: cuma nampung PageHeader, filter periode, dan tab switcher
+// Shell tipis: cuma nampung filter periode dan tab switcher
 // Ringkasan/Rincian. Perhitungan & tampilan sesungguhnya ada di
 // tabs/BalanceSummaryTab.jsx (dashboard ringkas apa adanya, tidak berubah
 // dari sebelumnya) dan tabs/BalanceDetailTab.jsx (rincian per kategori/
@@ -19,12 +19,6 @@ const BalanceTab = () => {
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
-
-      <PageHeader
-        title="Laba Rugi"
-        subtitle="Laporan bulanan berbasis stok opname aktual"
-        icon={<Scale className="w-6 h-6 text-accent-500 dark:text-accent-400" />}
-      />
 
       {/* ── FILTER PERIODE ──────────────────────────────────────────────── */}
       <Card className="flex items-center gap-3 mb-4 overflow-x-auto scrollbar-hide">

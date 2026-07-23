@@ -5,7 +5,7 @@ import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2, Save, R
 import { useState, useMemo } from 'react';
 import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
-import { PageHeader, Card, Input, Select, Button, EmptyState, BulkSelectBar } from '../../components/ui';
+import { Card, Input, Select, Button, EmptyState, BulkSelectBar } from '../../components/ui';
 import { useBulkSelect } from '../../hook/useBulkSelect';
 
 const CustomerView = () => {
@@ -294,12 +294,6 @@ const CustomerView = () => {
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col min-h-0 relative animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
       <div className="shrink-0">
-        <PageHeader
-          title="Pelanggan & Voucher"
-          icon={<Users className="w-6 h-6 text-accent-600 dark:text-accent-400" />}
-          className="mb-4"
-        />
-
         <div className="p-2 flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-3 mb-6 overflow-x-auto hide-scrollbar">
           <Button
             variant={customerSubTab === 'manage' ? 'primary' : 'secondary'}

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../../context/AppContext';
 import { formatRupiah } from '../../../utils/formatters';
-import { Card, Button, IconButton, PageHeader, EmptyState, Input, SortModal } from '../../../components/ui';
+import { Card, Button, IconButton, EmptyState, Input, SortModal } from '../../../components/ui';
 import { applySort } from '../../../utils/sortUtils';
 import { markDeleted, activeOnly } from '../../../utils/softDelete';
-import { Package, Plus, X, Search, Clock, Edit3, Trash2, Save, ArrowUpDown } from 'lucide-react';
+import { Plus, X, Search, Clock, Edit3, Trash2, Save, ArrowUpDown } from 'lucide-react';
 
 const BahanBakuView = () => {
     const { rawMaterials, setRawMaterials, triggerAlert, triggerConfirm } = useAppContext();
@@ -69,18 +69,6 @@ const BahanBakuView = () => {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out relative">
-            <PageHeader
-                title="Database Bahan Baku Pasar"
-                subtitle="Kelola acuan harga bahan baku dasar murni dari pasar disini."
-                icon={<Package className="w-6 h-6 text-accent-600 dark:text-accent-400" />}
-                className="mb-2"
-                action={
-                    <Button icon={<Plus className="w-4 h-4" />} onClick={() => setIsEditing(true)}>
-                        Tambah Bahan Baku
-                    </Button>
-                }
-            />
-
             <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative w-full sm:w-72">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
@@ -106,6 +94,10 @@ const BahanBakuView = () => {
                     <span className="truncate">{sortOptions.find(o => o.key === sortKey)?.label || 'Urutkan'}</span>
                     <ArrowUpDown className="text-slate-400 w-4 h-4 shrink-0" />
                 </button>
+
+                <Button icon={<Plus className="w-4 h-4" />} onClick={() => setIsEditing(true)} className="w-full sm:w-auto sm:ml-auto">
+                    Tambah Bahan Baku
+                </Button>
             </div>
 
             <Card padding="none" className="overflow-hidden">

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { AppContext, useAppContext } from '../../context/AppContext';
 import { usePersistState } from '../../hook/usePersistState';
 import CategoryModal from '../../components/CategoryModal';
-import { Button, PageHeader } from '../../components/ui';
+import { Button } from '../../components/ui';
 import { INITIAL_RAW_MATERIALS } from '../../data/initialData';
 
 // Import Tabs
@@ -79,8 +79,6 @@ export default function HppView() {
             <div className="h-full w-full flex flex-col bg-slate-50 dark:bg-slate-950 font-body text-slate-800 dark:text-slate-100">
                 <div className="flex-1 overflow-hidden relative flex flex-col p-4 md:p-6 overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
                     
-                    <PageHeader title="Kalkulator HPP Cerdas" />
-
                     <div className="p-2 flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-3 mb-8 overflow-x-auto hide-scrollbar shrink-0">
                         {[
                             { key: 'materials', label: 'Database Bahan Baku' },
