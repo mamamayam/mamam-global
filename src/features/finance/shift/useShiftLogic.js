@@ -650,7 +650,16 @@ export function useShiftLogic() {
       openedByEmployeeName: selectedEmployee?.name || null,
     };
     setCurrentShift(newShift);
-    closeStaleCourierBalances({ silent: true }); // ganti hari = saldo kurir kemarin dianggap lunas
+    // closeStaleCourierBalances() SENGAJA TIDAK dipanggil otomatis di sini
+    // lagi (dulu dipanggil di titik ini) — itu jadi sumber bug
+    // double-counting: fungsi itu menutup saldo kurir berdasar snapshot
+    // "sebelum hari ini", tanpa tahu soal transaksi penutup yang BARU
+    // ditulis handleCloseShift (yang sekarang sudah menutup SEMUA saldo
+    // kurir tiap shift ditutup). Kalau dua-duanya jalan, saldo yang sama
+    // ketutup dua kali — Dompet dobel-tambah, kurir jadi minus (utang
+    // palsu). Fungsi closeStaleCourierBalances tetap ada di bawah, cuma
+    // sekarang jadi tombol manual (jaring pengaman opsional), bukan
+    // auto-trigger.
     pushLiveState('currentShift', newShift).catch(err =>
       console.warn('Gagal push manual :', err)
     );
