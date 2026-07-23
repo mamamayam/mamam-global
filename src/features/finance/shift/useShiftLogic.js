@@ -382,16 +382,16 @@ export function useShiftLogic() {
   );
   // Pengeluaran Kasir/Kurir buat card display — HANYA expense ASLI
   // (isVirtual: true, hasil terjemahan dari ExpenseView/PosView), BUKAN
-  // write-off manual. Sebelumnya dua-duanya (expense asli + write-off
-  // manual "Kurir/Dompet -> Hilang") ikut numpuk jadi satu angka —
-  // matematisnya benar (sama-sama uang yang gak balik ke Dompet), TAPI
-  // artinya beda: expense = belanja operasional beneran, sedangkan
-  // write-off = uang hilang/kecolongan yang dicatat manual lewat card
-  // "Catat Perpindahan Uang". Nyampur keduanya bikin card "Pengeluaran
-  // Kasir/Kurir" gak match kalau dicocokkan ke rekap ExpenseView (yang
-  // cuma nampilin expense asli). Sekarang dipisah: expense asli tetap di
-  // sini, write-off manual pindah ke cashWriteOffTotal (card baru,
-  // terpisah) di bawah.
+  // transaksi "Hilang" manual. Sebelumnya dua-duanya (expense asli +
+  // transaksi manual "Kurir/Dompet -> Hilang") ikut numpuk jadi satu
+  // angka — matematisnya benar (sama-sama uang yang gak balik ke
+  // Dompet), TAPI artinya beda: expense = belanja operasional beneran,
+  // sedangkan transaksi Hilang = uang kecolongan/lenyap yang dicatat
+  // manual lewat card "Catat Perpindahan Uang". Nyampur keduanya bikin
+  // card "Pengeluaran Kasir/Kurir" gak match kalau dicocokkan ke rekap
+  // ExpenseView (yang cuma nampilin expense asli). Sekarang dipisah:
+  // expense asli tetap di sini, transaksi Hilang pindah ke
+  // cashHilangTotal (card baru, terpisah) di bawah.
   const cashExpenseKasirTotal = useMemo(
     () => activeShiftTransactions.filter(t => t.isVirtual && t.to === LOCATION_HILANG && t.from === LOCATION_DOMPET).reduce((s, t) => s + t.amount, 0),
     [activeShiftTransactions]
@@ -400,11 +400,11 @@ export function useShiftLogic() {
     () => activeShiftTransactions.filter(t => t.isVirtual && t.to === LOCATION_HILANG && isCourierLocation(t.from)).reduce((s, t) => s + t.amount, 0),
     [activeShiftTransactions]
   );
-  // Uang Hilang (Write-off) — transaksi MANUAL (bukan expense asli) yang
-  // tujuannya 'Hilang', dari lokasi manapun (Dompet atau kurir manapun).
-  // Ini kategori terpisah dari Pengeluaran Kasir/Kurir: uang kecolongan/
-  // hilang/tidak balik, bukan belanja operasional.
-  const cashWriteOffTotal = useMemo(
+  // Uang Hilang — transaksi MANUAL (bukan expense asli) yang tujuannya
+  // 'Hilang', dari lokasi manapun (Dompet atau kurir manapun). Ini
+  // kategori terpisah dari Pengeluaran Kasir/Kurir: uang kecolongan/
+  // lenyap/tidak balik, bukan belanja operasional.
+  const cashHilangTotal = useMemo(
     () => activeShiftTransactions.filter(t => !t.isVirtual && t.to === LOCATION_HILANG).reduce((s, t) => s + t.amount, 0),
     [activeShiftTransactions]
   );
@@ -424,7 +424,7 @@ export function useShiftLogic() {
     ...couriers.map(c => ({ key: courierLocationKey(c.id), label: c.name })),
     { key: LOCATION_DOMPET, label: 'Dompet' },
     { key: LOCATION_OWNER, label: 'Owner' },
-    { key: LOCATION_HILANG, label: 'Hilang (write-off)' },
+    { key: LOCATION_HILANG, label: 'Hilang' },
   ], [couriers]);
 
   const balanceOfLocation = (key) => {
@@ -604,17 +604,17 @@ export function useShiftLogic() {
       cashExpenses: cashExpenseTotal,
       cashExpensesKasir: cashExpenseKasirTotal,
       cashExpensesKurir: cashExpenseKurirTotal,
-      // Uang Hilang (Write-off) — kategori TERPISAH dari Pengeluaran
-      // Kasir/Kurir (lihat cashWriteOffTotal di atas). Tetap kehitung di
-      // expectedCash lewat dompetBalance (computeLocationBalance sudah
-      // memasukkan SEMUA transaksi ke LOCATION_HILANG, virtual maupun
-      // manual) — jadi Saldo Akhir TIDAK berubah, ini murni pemisahan
+      // Uang Hilang — kategori TERPISAH dari Pengeluaran Kasir/Kurir
+      // (lihat cashHilangTotal di atas). Tetap kehitung di expectedCash
+      // lewat dompetBalance (computeLocationBalance sudah memasukkan
+      // SEMUA transaksi ke LOCATION_HILANG, virtual maupun manual) —
+      // jadi Saldo Akhir TIDAK berubah, ini murni pemisahan
       // tampilan/kategori, bukan perubahan matematika saldo.
-      cashWriteOff: cashWriteOffTotal,
+      cashHilang: cashHilangTotal,
       totalCashBisnis: expectedCash + totalHeldByCouriers,
       expectedCash,
     };
-  }, [currentShift, incomes, dompetBalance, cashSalesTotal, cashExpenseKasirTotal, cashExpenseKurirTotal, cashWriteOffTotal, totalHeldByCouriers]);
+  }, [currentShift, incomes, dompetBalance, cashSalesTotal, cashExpenseKasirTotal, cashExpenseKurirTotal, cashHilangTotal, totalHeldByCouriers]);
 
   // Deteksi dompet yang kebawa nginap dari hari sebelumnya (kemungkinan kasir lupa nutup).
   // Sengaja pakai perbandingan TANGGAL, bukan jumlah jam, karena shift resto
@@ -652,12 +652,25 @@ export function useShiftLogic() {
     const actualCash = Number(actualCashInput);
     const difference = actualCash - shiftStats.expectedCash;
 
+    // Snapshot "posisi uang" saat shift ini ditutup — MURNI CATATAN,
+    // BUKAN transaksi. Ini TIDAK menulis apapun ke cashTransfers, TIDAK
+    // mereset atau memindahkan saldo kurir manapun. Saldo kurir tetap
+    // berjalan sebagai running total seperti biasa (lihat catatan di
+    // cashHolders.js) — snapshot ini cuma dokumentasi "per tanggal X,
+    // begini posisi uangnya" biar kelihatan di laporan cetak & riwayat,
+    // supaya kasir/owner bisa lihat kalau ada uang yang belum disetor
+    // TANPA sistem diam-diam bikin transaksi/perpindahan uang sendiri.
+    const courierBalancesSnapshot = courierBalances
+      .filter(b => b.balance !== 0)
+      .map(b => ({ employeeId: b.employeeId, employeeName: b.employeeName, balance: b.balance }));
+
     const shiftData = {
       ...currentShift,
       endTime: new Date(),
       stats: shiftStats,
       actualCash,
-      difference
+      difference,
+      courierBalancesSnapshot,
     };
 
     triggerConfirm(`Apakah Anda yakin ingin menutup dompet ini? Semua transaksi selanjutnya tidak akan terekap di dompet ini.`, () => {
