@@ -580,7 +580,7 @@ const PosView = () => {
                         </div>
 
                         {/* Footer: Reset + Terapkan */}
-                        <div className="flex items-center gap-3 px-5 py-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
+                        <div className="safe-bottom flex items-center gap-3 px-5 py-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
                             <button
                                 onClick={handleResetFilter}
                                 className="flex-1 py-3 rounded-full border border-slate-200 dark:border-slate-700 font-bold text-sm text-slate-700 dark:text-slate-200 active:scale-95 transition-transform duration-200"
