@@ -1,5 +1,5 @@
 {
-  "version": "3.9.1",
+  "version": "3.9.2",
   "updatedAt": "2026-07-22",
-  "note": "remove pageheader"
+  "note": "fix shiftview"
 }
