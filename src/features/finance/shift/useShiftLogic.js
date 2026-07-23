@@ -521,8 +521,21 @@ export function useShiftLogic() {
   // sempat beneran disetor/dilaporkan.
   //
   // Dipanggil otomatis tiap kali "Buka Dompet" (lihat handleOpenShift) —
-  // karena di lapangan setoran fisik sering kejadian tanpa sempat dicatat,
-  // jadi ganti hari = anggap lunas.
+  // sebagai JARING PENGAMAN kalau ada saldo kurir yang entah kenapa masih
+  // nyangkut dari hari-hari sebelumnya (harusnya sudah dibereskan oleh
+  // handleCloseShift di bawah setiap shift ditutup, tapi ini tetap ada
+  // buat kasus shift yang lupa ditutup / dibuka ulang, dsb).
+  //
+  // RELASI DENGAN handleCloseShift: keduanya menulis transaksi
+  // "Kurir -> Dompet" dengan pola yang sama, tapi TRIGGER dan CAKUPAN
+  // beda — bukan duplikat:
+  //   - handleCloseShift (saat TUTUP): nutup SEMUA kurir yang masih ada
+  //     saldo, kapanpun transaksinya (termasuk hari ini) — karena SOP
+  //     toko: kurir pasti setor & sudah dilaporkan manual ke kasir,
+  //     tercermin di actualCash yang diketik kasir saat itu.
+  //   - closeStaleCourierBalances (saat BUKA): jaring pengaman, cuma
+  //     nutup saldo dari SEBELUM hari ini (bukan hari ini) — buat kasus
+  //     shift kemarin lupa ditutup lewat tombol resminya.
   const closeStaleCourierBalances = ({ silent = false } = {}) => {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
@@ -652,17 +665,39 @@ export function useShiftLogic() {
     const actualCash = Number(actualCashInput);
     const difference = actualCash - shiftStats.expectedCash;
 
-    // Snapshot "posisi uang" saat shift ini ditutup — MURNI CATATAN,
-    // BUKAN transaksi. Ini TIDAK menulis apapun ke cashTransfers, TIDAK
-    // mereset atau memindahkan saldo kurir manapun. Saldo kurir tetap
-    // berjalan sebagai running total seperti biasa (lihat catatan di
-    // cashHolders.js) — snapshot ini cuma dokumentasi "per tanggal X,
-    // begini posisi uangnya" biar kelihatan di laporan cetak & riwayat,
-    // supaya kasir/owner bisa lihat kalau ada uang yang belum disetor
-    // TANPA sistem diam-diam bikin transaksi/perpindahan uang sendiri.
+    // Snapshot "posisi uang" SEBELUM direset — buat laporan cetak &
+    // riwayat (lihat courierBalancesSnapshot di shiftData). Diambil
+    // duluan di sini karena courierBalances masih mencerminkan saldo
+    // SEBELUM transaksi penutupan di bawah ditulis.
     const courierBalancesSnapshot = courierBalances
       .filter(b => b.balance !== 0)
       .map(b => ({ employeeId: b.employeeId, employeeName: b.employeeName, balance: b.balance }));
+
+    // Penutupan saldo kurir saat TUTUP shift — kasir sudah memasukkan
+    // actualCash yang MENCAKUP laporan setoran kurir (SOP toko: kurir
+    // pasti setor, dilaporkan manual ke kasir meski belum sempat
+    // di-input real-time ke aplikasi). Begitu shift ditutup, saldo itu
+    // dianggap "sudah ketemu" di actualCash — jadi saldo kurir di sistem
+    // direset ke 0 lewat transaksi TERCATAT (bukan diam-diam diubah
+    // tanpa jejak), pola yang SAMA PERSIS dengan closeStaleCourierBalances
+    // (dipanggil saat buka shift, buat saldo dari hari sebelumnya) — di
+    // sini cakupannya SEMUA kurir yang masih ada saldo, karena baru saja
+    // "dihitung ketemu" oleh kasir lewat actualCash.
+    // PENTING: transaksi ini TIDAK menambah expectedCash/actualCash shift
+    // YANG SEDANG DITUTUP INI (actualCash sudah final, diketik apa
+    // adanya oleh kasir) — efeknya baru kelihatan di dompetBalance shift
+    // BERIKUTNYA (yang mulai dari activeShiftTransactions kosong lagi).
+    const closingCourierTransfers = courierBalances
+      .filter(b => b.balance !== 0)
+      .map(b => ({
+        id: generateUUID(),
+        from: courierLocationKey(b.employeeId),
+        to: LOCATION_DOMPET,
+        amount: b.balance,
+        note: 'Setoran kurir (otomatis saat tutup shift — dilaporkan manual ke kasir)',
+        date: new Date(),
+        employeeNameSnapshot: { [b.employeeId]: b.employeeName },
+      }));
 
     const shiftData = {
       ...currentShift,
@@ -674,6 +709,9 @@ export function useShiftLogic() {
     };
 
     triggerConfirm(`Apakah Anda yakin ingin menutup dompet ini? Semua transaksi selanjutnya tidak akan terekap di dompet ini.`, () => {
+      if (closingCourierTransfers.length > 0) {
+        setCashTransfers([...closingCourierTransfers, ...(cashTransfers || [])]);
+      }
       const filteredHistory = shiftHistory.filter(s => s.id !== shiftData.id);
       setShiftHistory([shiftData, ...filteredHistory]);
       setCurrentShift(null);
