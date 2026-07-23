@@ -9,6 +9,7 @@ import {
   Card,
   Input,
   Select,
+  PageHeader,
   EmptyState,
   Badge,
   IconButton,
@@ -137,12 +138,12 @@ const ShiftView = () => {
             {closedShiftData.stats.cashExpensesKurir > 0 && (
               <div className="flex justify-between text-accent-500 dark:text-accent-400 print:text-black"><span>Pengeluaran Kurir</span> <span>-{formatRupiah(closedShiftData.stats.cashExpensesKurir)}</span></div>
             )}
-            {/* Uang Hilang (Write-off) — field baru, gak ada di shift
-                lama yang ditutup sebelum fix ini (stats.cashWriteOff
-                undefined) — pakai fallback 0 lewat `> 0` check, biar
-                shift lama gak nampilin baris Rp 0 yang menyesatkan. */}
-            {closedShiftData.stats.cashWriteOff > 0 && (
-              <div className="flex justify-between text-red-500 dark:text-red-400 print:text-black"><span>Uang Hilang (Write-off)</span> <span>-{formatRupiah(closedShiftData.stats.cashWriteOff)}</span></div>
+            {/* Fallback utk shift lama yang stats-nya belum punya field
+                cashHilang (sebelum field ini ditambahkan) — pakai
+                fallback 0 lewat `> 0` check, biar shift lama gak
+                nampilin baris Rp 0 yang menyesatkan. */}
+            {closedShiftData.stats.cashHilang > 0 && (
+              <div className="flex justify-between text-red-500 dark:text-red-400 print:text-black"><span>Uang Hilang</span> <span>-{formatRupiah(closedShiftData.stats.cashHilang)}</span></div>
             )}
           </div>
 
@@ -154,6 +155,31 @@ const ShiftView = () => {
               <span>{formatRupiah(closedShiftData.difference)}</span>
             </div>
           </div>
+
+          {/* POSISI UANG saat shift ini ditutup — MURNI STATUS/SNAPSHOT,
+              bukan transaksi. Kurir tetap jalan sebagai running total
+              (gak direset/dipindah otomatis) — bagian ini cuma nunjukin
+              "per saat ini, segini yang masih di tangan kurir", biar
+              kasir/owner bisa lihat langsung dari laporan kalau ada
+              uang yang belum disetor, tanpa sistem bikin perpindahan
+              uang sendiri. Shift lama (sebelum field ini ada) gak
+              nampilin section ini sama sekali. */}
+          {Array.isArray(closedShiftData.courierBalancesSnapshot) && (
+            <div className="border-t-2 border-dashed border-slate-300 dark:border-slate-600 mt-4 pt-4 print:mt-2 print:pt-2 text-xs space-y-1.5 print:text-black">
+              <p className="font-bold uppercase tracking-wide text-[10px] text-slate-500 dark:text-slate-400 print:text-black mb-1">Posisi Uang Saat Ditutup</p>
+              <div className="flex justify-between"><span>Kasir (Dompet)</span> <span className="font-bold">{formatRupiah(closedShiftData.actualCash)}</span></div>
+              {closedShiftData.courierBalancesSnapshot.length === 0 ? (
+                <p className="text-slate-400 dark:text-slate-500 italic">Semua kurir sudah setor — tidak ada uang nyangkut.</p>
+              ) : (
+                closedShiftData.courierBalancesSnapshot.map(c => (
+                  <div key={c.employeeId} className="flex justify-between">
+                    <span>{c.employeeName}</span>
+                    <span className="font-bold">{formatRupiah(c.balance)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
 
           <div className="text-center mt-8 text-[10px] text-slate-500 dark:text-slate-400 print:mt-4 print:text-black">
             <p>-- Akhir Laporan --</p>
@@ -202,6 +228,12 @@ const ShiftView = () => {
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar relative">
       
+      {/* Menggunakan komponen PageHeader */}
+      <PageHeader 
+        title="Manajemen Dompet" 
+        icon={<Clock className="w-6 h-6 text-accent-500 dark:text-accent-400" />} 
+      />
+
       {/* =========================================================================
           TAB NAVIGASI — Aktif / Riwayat / Log Transaksi
           ========================================================================= */}
@@ -340,16 +372,16 @@ const ShiftView = () => {
                   <span className="font-bold text-accent-600 dark:text-accent-400">-{formatRupiah(shiftStats?.cashExpensesKurir)}</span>
                 </div>
               )}
-              {/* Uang Hilang (Write-off) — TERPISAH dari Pengeluaran
-                  Kasir/Kurir. Ini transaksi manual "Kurir/Dompet -> Hilang"
-                  yang dicatat lewat card "Catat Perpindahan Uang" (bukan
-                  expense operasional beneran) — uang kecolongan/hilang/
-                  tidak balik. Sebelumnya nyampur ke Pengeluaran Kasir/Kurir,
+              {/* Uang Hilang — TERPISAH dari Pengeluaran Kasir/Kurir. Ini
+                  transaksi manual "Kurir/Dompet -> Hilang" yang dicatat
+                  lewat card "Catat Perpindahan Uang" (bukan expense
+                  operasional beneran) — uang kecolongan/lenyap/tidak
+                  balik. Sebelumnya nyampur ke Pengeluaran Kasir/Kurir,
                   bikin angka gak match kalau dicocokkan ke rekap ExpenseView. */}
-              {shiftStats?.cashWriteOff > 0 && (
+              {shiftStats?.cashHilang > 0 && (
                 <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
-                  <span className="text-sm text-slate-500 dark:text-slate-400">Uang Hilang (Write-off)</span>
-                  <span className="font-bold text-red-500 dark:text-red-400">-{formatRupiah(shiftStats?.cashWriteOff)}</span>
+                  <span className="text-sm text-slate-500 dark:text-slate-400">Uang Hilang</span>
+                  <span className="font-bold text-red-500 dark:text-red-400">-{formatRupiah(shiftStats?.cashHilang)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center pt-2">
