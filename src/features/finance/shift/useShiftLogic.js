@@ -12,34 +12,31 @@ import { useBulkSelect } from '../../../hook/useBulkSelect';
 import { getActiveCouriers } from '../../hrd/utils/payrollLogic';
 import {
   computeAllCourierBalances,
+  computeLocationBalance,
   getCourierBalanceTargets,
   isCourierHolder,
-  CASH_TRANSFER_TYPE_DEPOSIT,
-  CASH_TRANSFER_TYPE_WRITEOFF,
-  isWriteoffTransfer,
-  CASH_TRANSFER_TYPE_REIMBURSE,
-  isReimburseTransfer,
-  CASH_TRANSFER_TYPE_OWNER,
-  isOwnerTransfer
+  getCashHolder,
+  migrateLegacyCashTransfer,
+  courierLocationKey,
+  isCourierLocation,
+  courierIdFromLocation,
+  locationLabel,
+  LOCATION_DOMPET,
+  LOCATION_OWNER,
+  LOCATION_HILANG,
+  LOCATION_CUSTOMER,
 } from '../../../utils/cashHolders';
 
-// Label & varian Badge per jenis transaksi kurir — dipakai di tab "Log
-// Kurir" (ShiftView.jsx) supaya tiap baris riwayat langsung kelihatan
-// jenisnya tanpa perlu baca `note` satu-satu. Record lama tanpa field
-// `type` dianggap 'deposit' (lihat catatan default di cashHolders.js).
-export function getCourierTransferMeta(transfer) {
-  const type = transfer?.type || CASH_TRANSFER_TYPE_DEPOSIT;
-  switch (type) {
-    case CASH_TRANSFER_TYPE_WRITEOFF:
-      return { type, label: 'Hapus (Write-off)', badgeVariant: 'danger' };
-    case CASH_TRANSFER_TYPE_REIMBURSE:
-      return { type, label: 'Ganti Uang', badgeVariant: 'info' };
-    case CASH_TRANSFER_TYPE_OWNER:
-      return { type, label: 'Setor Owner', badgeVariant: 'orange' };
-    case CASH_TRANSFER_TYPE_DEPOSIT:
-    default:
-      return { type: CASH_TRANSFER_TYPE_DEPOSIT, label: 'Setor', badgeVariant: 'success' };
-  }
+// Label & warna per lokasi — dipakai di ShiftView.jsx (dropdown form,
+// chip Log Transaksi, breakdown Rincian Posisi Uang) biar konsisten di
+// satu tempat, gak ke-copy paste di banyak file.
+export function getLocationMeta(key) {
+  if (key === LOCATION_DOMPET) return { label: 'Dompet', colorClass: 'bg-slate-400', chipClass: 'text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800' };
+  if (key === LOCATION_OWNER) return { label: 'Owner', colorClass: 'bg-orange-400', chipClass: 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10' };
+  if (key === LOCATION_HILANG) return { label: 'Hilang', colorClass: 'bg-red-400', chipClass: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10' };
+  if (key === LOCATION_CUSTOMER) return { label: 'Customer', colorClass: 'bg-emerald-400', chipClass: 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10' };
+  if (isCourierLocation(key)) return { label: null, colorClass: 'bg-sky-400', chipClass: 'text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10' };
+  return { label: key || '-', colorClass: 'bg-slate-300', chipClass: 'text-slate-500 bg-slate-100' };
 }
 
 // Opsi sorting utk Riwayat Shift — dipakai oleh <SortModal> di ShiftView.jsx.
@@ -69,6 +66,12 @@ export function useShiftLogic() {
   const [showXReading, setShowXReading] = useState(false);
   const [closedShiftData, setClosedShiftData] = useState(null);
 
+  // Tab navigasi utama ShiftView: 'aktif' (kartu buka/tutup dompet +
+  // rincian posisi uang + form transaksi), 'riwayat' (rekap + daftar
+  // penutupan dompet), 'log' (Log Transaksi — satu list gabungan semua
+  // perpindahan uang, manual & otomatis dari penjualan/pengeluaran).
+  const [activeTab, setActiveTab] = useState('aktif');
+
   // State untuk Fitur Edit (Khusus Admin)
   const [editingShift, setEditingShift] = useState(null);
   const [editActualCashInput, setEditActualCashInput] = useState('');
@@ -77,14 +80,6 @@ export function useShiftLogic() {
   // State untuk Fitur Edit Saldo Awal pada Shift yang SEDANG AKTIF (Khusus Admin)
   const [isEditingActiveInitial, setIsEditingActiveInitial] = useState(false);
   const [editActiveInitialInput, setEditActiveInitialInput] = useState('');
-
-  // Tab navigasi utama ShiftView: 'aktif' (kartu buka/tutup dompet),
-  // 'riwayat' (rekap + daftar penutupan dompet), 'log-kurir' (khusus Admin
-  // — riwayat semua jenis transaksi kurir: setor/hapus/ganti uang/setor
-  // owner, sebelumnya collapsible section di bawah Riwayat, sekarang
-  // tab sendiri biar lebih gampang ditemukan & gak bikin halaman Riwayat
-  // kepanjangan).
-  const [activeTab, setActiveTab] = useState('aktif'); // 'aktif' | 'riwayat' | 'log-kurir'
 
   // Filter tanggal untuk Rekapitulasi Riwayat Shift di Bagian Bawah
   const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
@@ -95,48 +90,26 @@ export function useShiftLogic() {
   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
   const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
 
-  // State utk Modal Setor Sebagian (Kurir -> Dompet)
-  const [depositTarget, setDepositTarget] = useState(null); // { employeeId, employeeName } | null
-  const [partialDepositInput, setPartialDepositInput] = useState('');
-  const [isDepositSubmitting, setIsDepositSubmitting] = useState(false); // anti double-submit
+  // State utk Card "Catat Perpindahan Uang" — SATU form generik gantiin
+  // 4 modal terpisah yang dulu ada (Setor/Hapus/Ganti Uang/Setor Owner).
+  // Setiap transaksi kurir sekarang cuma punya 2 field lokasi (`from`/
+  // `to`), lihat model lengkap di utils/cashHolders.js. `showTransferForm`
+  // ngontrol collapse/expand card-nya di ShiftView.jsx.
+  const [showTransferForm, setShowTransferForm] = useState(false);
+  const [transferFrom, setTransferFrom] = useState('');
+  const [transferTo, setTransferTo] = useState('');
+  const [transferAmountInput, setTransferAmountInput] = useState('');
+  const [transferNoteInput, setTransferNoteInput] = useState('');
+  const [confirmOverdraft, setConfirmOverdraft] = useState(false); // centang "lanjutkan sebagai talangan" saat saldo `from` kurang
+  const [isTransferSubmitting, setIsTransferSubmitting] = useState(false); // anti double-submit
 
-  // State utk Modal Hapus Setoran (write-off saldo kurir yang hilang/gak
-  // balik — TIDAK menaikkan Saldo Dompet, beda dari Setor. Khusus Admin,
-  // lihat isAdminMode check di tombol pemicunya).
-  const [writeoffTarget, setWriteoffTarget] = useState(null); // { employeeId, employeeName } | null
-  const [writeoffInput, setWriteoffInput] = useState('');
-  const [isWriteoffSubmitting, setIsWriteoffSubmitting] = useState(false); // anti double-submit
-
-  // State utk Modal Ganti Uang (reimburse) — kebalikan dari Setor: dipakai
-  // saat saldo kurir NEGATIF (kurir nombokin belanja pakai duit pribadi
-  // karena saldo COD-nya gak cukup). Kasir ganti uang kurir dari laci
-  // -> saldo kurir naik balik ke 0 (atau mendekati), DAN Saldo Dompet
-  // TURUN sejumlah yang diganti (uang beneran keluar dari laci fisik).
-  // Dicatat sebagai cashTransfers dgn type: 'reimburse', amount NEGATIF
-  // (kebalikan tanda dari deposit/writeoff) supaya computeCourierBalance
-  // otomatis benar tanpa perlu cabang logic baru (lihat catatan di
-  // utils/cashHolders.js).
-  const [reimburseTarget, setReimburseTarget] = useState(null); // { employeeId, employeeName } | null
-  const [reimburseInput, setReimburseInput] = useState('');
-  const [isReimburseSubmitting, setIsReimburseSubmitting] = useState(false); // anti double-submit
-
-  // State utk Modal Setor ke Owner — beda sumbu dari Setor/Hapus/Ganti Uang
-  // di atas (yang semuanya soal Kurir <-> Dompet). Ini soal Dompet -> Owner:
-  // kasir narik uang dari laci buat disetor ke pemilik bisnis. Gak butuh
-  // target employee (bukan soal kurir), cuma nominal + catatan opsional
-  // (mis. "Transfer BCA", "Tunai langsung").
-  const [isOwnerTransferOpen, setIsOwnerTransferOpen] = useState(false);
-  const [ownerTransferInput, setOwnerTransferInput] = useState('');
-  const [ownerTransferNoteInput, setOwnerTransferNoteInput] = useState('');
-  const [isOwnerTransferSubmitting, setIsOwnerTransferSubmitting] = useState(false); // anti double-submit
-
-  // State utk Modal Edit Baris Setoran Kurir (koreksi nominal/catatan kalau
-  // salah input — Admin. Sebelumnya baris cashTransfers cuma bisa dihapus
-  // total (handleDeleteCourierTransfer), gak ada cara koreksi nominal tanpa
-  // hapus+catat ulang dari nol).
+  // State utk Modal Edit Baris Transaksi (koreksi nominal/catatan kalau
+  // salah input — Admin. Baris cashTransfers juga bisa dihapus total lewat
+  // handleDeleteCourierTransfer).
   const [editingTransfer, setEditingTransfer] = useState(null); // cashTransfers record | null
   const [editTransferAmountInput, setEditTransferAmountInput] = useState('');
   const [editTransferNoteInput, setEditTransferNoteInput] = useState('');
+
 
   const handleShareImage = async () => {
     const reportElement = document.getElementById('xreading-content');
@@ -208,241 +181,344 @@ export function useShiftLogic() {
   // sedikit dari yang seharusnya, padahal sebagian pengeluaran sudah
   // ditalangi kurir dari kantongnya sendiri (bukan dari kas fisik toko).
   const activeCouriers = useMemo(() => getActiveCouriers(employees), [employees]);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // MIGRASI PERMANEN — cashTransfers format lama (type + employeeId)
+  // ke format baru (from + to). Dijalankan tiap render (murah, cuma
+  // dipakai kalau ada record yang BELUM py from/to — lihat
+  // migrateLegacyCashTransfer di utils/cashHolders.js), tapi PENULISAN
+  // balik ke state cuma terjadi SEKALI lewat useEffect di bawah, biar
+  // gak infinite-loop render & biar data lama beneran diganti permanen
+  // (bukan sekadar "diterjemahkan pas ditampilkan").
+  // ═══════════════════════════════════════════════════════════════════
+  const needsMigration = useMemo(
+    () => (cashTransfers || []).some(t => t.type && !(t.from && t.to)),
+    [cashTransfers]
+  );
+  const migratedTransfers = useMemo(
+    () => (cashTransfers || []).map(migrateLegacyCashTransfer),
+    [cashTransfers]
+  );
+  if (needsMigration) {
+    // Tulis balik SEKALI — render berikutnya needsMigration otomatis
+    // false (semua record udah punya from/to), gak ada loop.
+    setCashTransfers(migratedTransfers);
+  }
+  // Ledger aktif (sudah pasti format from/to) yang dipakai SEMUA
+  // perhitungan saldo di bawah — soft-delete di-filter di sini SEKALI,
+  // bukan di tiap useMemo terpisah.
+  const activeManualTransfers = useMemo(
+    () => activeOnly(needsMigration ? migratedTransfers : (cashTransfers || [])),
+    [needsMigration, migratedTransfers, cashTransfers]
+  );
+
+  // ═══════════════════════════════════════════════════════════════════
+  // TRANSAKSI VIRTUAL — terjemahan on-the-fly dari salesHistory/expenses
+  // jadi bentuk from/to yang SAMA dengan cashTransfers manual, TANPA
+  // menulis balik ke tabel manapun (salesHistory/expenses/PosView/
+  // ExpenseView TIDAK disentuh sama sekali — lihat keputusan scope
+  // rombakan ini). Digabung dengan activeManualTransfers jadi SATU
+  // ledger seragam yang dipakai computeLocationBalance — gak ada lagi
+  // 2 sumber angka terpisah yang harus disinkronin manual (itu penyebab
+  // bug "Saldo Akhir gak match sama breakdown" yang sempat kejadian pas
+  // didesain di mockup).
+  //   Penjualan TUNAI (kasir langsung, atau Split Payment porsi tunainya)
+  //                                              -> Customer -> Dompet
+  //   Penjualan Delivery COD TUNAI dibayar kurir -> Customer -> Kurir X
+  //   Pengeluaran TUNAI dibayar dari laci kasir  -> Dompet -> Hilang
+  //   Pengeluaran TUNAI dibayar pakai cash kurir -> Kurir X -> Hilang
+  //
+  // PENTING — HANYA porsi TUNAI yang masuk ledger cash ini. Penjualan/
+  // pengeluaran Non-Tunai (transfer bank, dsb) SAMA SEKALI TIDAK
+  // menyentuh kas fisik (Dompet/Kurir), jadi tidak boleh ikut dihitung
+  // di sini. Ini SEMPAT TERLEWAT di iterasi pertama rombakan ini — semua
+  // order/expense ikut dihitung apa adanya tanpa cek paymentMethod, jadi
+  // penjualan Non-Tunai ikut menaikkan saldo Dompet padahal uangnya gak
+  // pernah masuk laci. Sekarang match persis logic asli (shiftSales/
+  // shiftExpenses sebelum rombakan): 'Tunai' penuh, 'Split Payment' cuma
+  // porsi method:'Tunai' di splitDetails, dan expense filter
+  // paymentMethod==='Tunai' (default 'Tunai' utk data lama tanpa field ini).
+  //
+  // Pemasukan Non-Penjualan (`incomes`) BELUM diterjemahkan ke ledger
+  // ini (behavior sama seperti versi sebelumnya — baris "Pemasukan
+  // Non-Penjualan" di card dihitung terpisah, lihat shiftStats).
+  const virtualTransactions = useMemo(() => {
+    const sales = [];
+    activeOnly(salesHistory).forEach(order => {
+      const to = isCourierHolder(order) ? courierLocationKey(getCashHolder(order).employeeId) : LOCATION_DOMPET;
+      if (order.paymentMethod === 'Tunai') {
+        sales.push({
+          id: `virtual-sale-${order.id}`,
+          from: LOCATION_CUSTOMER,
+          to,
+          amount: order.total || 0,
+          note: order.orderType || 'Penjualan',
+          date: order.date,
+          isVirtual: true,
+        });
+      } else if (order.paymentMethod === 'Split Payment') {
+        (order.splitDetails || []).forEach((p, idx) => {
+          if (p.method !== 'Tunai') return;
+          sales.push({
+            id: `virtual-sale-${order.id}-split-${idx}`,
+            from: LOCATION_CUSTOMER,
+            to,
+            amount: p.amount || 0,
+            note: `${order.orderType || 'Penjualan'} (Split Payment - porsi tunai)`,
+            date: order.date,
+            isVirtual: true,
+          });
+        });
+      }
+      // Metode lain (Non-Tunai/QRIS/dll sepenuhnya) TIDAK menyentuh kas
+      // fisik sama sekali — sengaja tidak menghasilkan transaksi ledger.
+    });
+
+    const exp = activeOnly(expenses)
+      .filter(e => (e.paymentMethod || 'Tunai') === 'Tunai') // default 'Tunai' utk data lama tanpa field ini, sama seperti logic asli
+      .map(e => ({
+        id: `virtual-expense-${e.id}`,
+        from: isCourierHolder(e) ? courierLocationKey(getCashHolder(e).employeeId) : LOCATION_DOMPET,
+        to: LOCATION_HILANG,
+        amount: e.amount || 0,
+        note: e.description || e.note || 'Pengeluaran',
+        date: e.date,
+        isVirtual: true,
+      }));
+    return [...sales, ...exp];
+  }, [salesHistory, expenses]);
+
+  // Ledger LENGKAP (manual + virtual) — satu-satunya input buat
+  // computeLocationBalance di seluruh modul Shift.
+  const allTransactions = useMemo(
+    () => [...activeManualTransfers, ...virtualTransactions],
+    [activeManualTransfers, virtualTransactions]
+  );
+
   // Gabungan kurir aktif + kurir yang udah resign/ganti role tapi masih
   // punya jejak saldo di ledger — lihat catatan panjang di
   // getCourierBalanceTargets() (utils/cashHolders.js) soal kenapa ini perlu.
   const couriers = useMemo(() => getCourierBalanceTargets(activeCouriers, {
     expenses: activeOnly(expenses),
     salesHistory: activeOnly(salesHistory),
-    cashTransfers: activeOnly(cashTransfers || []),
-  }), [activeCouriers, expenses, salesHistory, cashTransfers]);
-  const courierBalances = useMemo(() => computeAllCourierBalances(couriers, {
-    expenses: activeOnly(expenses),
-    salesHistory: activeOnly(salesHistory),
-    cashTransfers: activeOnly(cashTransfers || []),
-  }), [couriers, expenses, salesHistory, cashTransfers]);
+    cashTransfers: activeManualTransfers,
+  }), [activeCouriers, expenses, salesHistory, activeManualTransfers]);
+
+  const courierBalances = useMemo(
+    () => computeAllCourierBalances(couriers, allTransactions),
+    [couriers, allTransactions]
+  );
   const totalHeldByCouriers = useMemo(
     () => courierBalances.reduce((sum, b) => sum + b.balance, 0),
     [courierBalances]
   );
 
-  // Total Hapus Setoran (write-off) — dijumlah TERPISAH dari totalHeldByCouriers.
-  // Dipakai buat ngoreksi totalCashBisnis di shiftStats: begitu ada write-off,
-  // saldo kurir turun (lewat totalHeldByCouriers) SAMA seperti setoran biasa,
-  // tapi duitnya beneran hilang — bukan pindah ke laci — jadi totalCashBisnis
-  // (dan ujungnya expectedCash/Saldo Dompet) HARUS ikut turun sejumlah yang
-  // sama, supaya write-off gak keliatan seolah nambah uang di laci kasir.
-  const totalWrittenOff = useMemo(
-    () => activeOnly(cashTransfers || []).filter(isWriteoffTransfer).reduce((sum, t) => sum + (t.amount || 0), 0),
-    [cashTransfers]
+  // Rincian Posisi Uang (dipakai di card Dompet Aktif) — SEMUA lokasi
+  // dihitung dengan rumus yang SAMA (computeLocationBalance), gak ada
+  // lagi akumulator khusus per "jenis transaksi". TAPI beda SCOPE waktu
+  // antar lokasi, dan ini penting:
+  //   - Kurir & Owner: RUNNING TOTAL lintas shift/hari (sengaja gak
+  //     direset) — uang yang masih di tangan kurir dari kemarin/shift
+  //     lalu itu MEMANG masih nyangkut secara fisik sampai beneran
+  //     disetor, gak peduli shift keberapa sekarang.
+  //   - Dompet: HARUS "pure hari ini" — gak boleh ada transaksi nyangkut
+  //     dari kemarin/hari-hari sebelumnya, BAHKAN kalau shift yang sama
+  //     kebawa nginep (belum ditutup). Begitu sebuah shift ditutup, uang
+  //     di laci itu "selesai" — dicatat sbg actualCash final di
+  //     shiftHistory, TIDAK nyambung ke shift berikutnya.
+  // BUG #1 YANG SEMPAT KEJADIAN: dompetBalance awalnya dihitung dari
+  // allTransactions (SEMUA transaksi sepanjang sejarah aplikasi, gak
+  // di-scope), sementara initialCash yang jadi openingBalance-nya cuma
+  // punya shift AKTIF — hasilnya nyampur modal hari ini dengan akumulasi
+  // penjualan/pengeluaran dari shift-shift lama yang udah lama ditutup,
+  // angka jadi jutaan padahal shift baru buka dgn modal puluhan ribu.
+  // Fix: dompetBalance HARUS pakai activeShiftTransactions (didefinisikan
+  // di bawah), BUKAN allTransactions.
+  // BUG #2 YANG SEMPAT KEJADIAN: filter awalnya bandingin TIMESTAMP penuh
+  // (`new Date(t.date) >= new Date(currentShift.startTime)`), bukan
+  // TANGGAL. currentShift.startTime = jam PERSIS shift dibuka (mis.
+  // 09:53:27) — sedangkan expense yang dicatat lewat input tanggal manual
+  // (ExpenseView) jamnya default 00:00:00. Walau tanggalnya SAMA dengan
+  // hari ini, 00:00:00 < 09:53:27, jadi expense itu ke-filter KELUAR
+  // keliru — bikin "Pengeluaran Kasir" tampil Rp 0 walau ada banyak
+  // expense hari itu. Fix: bandingin TANGGAL KALENDER (toLocalDateString,
+  // pola yg sama dgn matchesDateFilter/closeStaleCourierBalances di file
+  // ini), bukan timestamp — jam berapapun expense dicatat, selama
+  // tanggalnya >= tanggal buka shift/hari ini, tetap kehitung.
+  const activeShiftTransactions = useMemo(() => {
+    if (!currentShift) return [];
+    const shiftStartDay = toLocalDateString(currentShift.startTime);
+    const today = toLocalDateString();
+    // Batas bawah = tanggal yang PALING BARU antara hari buka shift dan
+    // hari ini (string "YYYY-MM-DD" aman dibandingkan leksikografis).
+    // Kasus normal (shift dibuka hari ini): shiftStartDay === today.
+    // Kasus shift kebawa nginep (isShiftCarriedOver true, dibuka
+    // kemarin/lebih lama): today > shiftStartDay, jadi transaksi
+    // kemarin-dst di shift yang sama ikut ke-exclude — Saldo Akhir tetap
+    // "pure hari ini" walau shift belum ditutup manual.
+    const cutoffDay = shiftStartDay > today ? shiftStartDay : today;
+    return allTransactions.filter(t => toLocalDateString(t.date) >= cutoffDay);
+  }, [allTransactions, currentShift]);
+
+  const dompetBalance = useMemo(
+    () => computeLocationBalance(LOCATION_DOMPET, activeShiftTransactions, currentShift?.initialCash || 0),
+    [activeShiftTransactions, currentShift]
+  );
+  const ownerBalance = useMemo(
+    () => computeLocationBalance(LOCATION_OWNER, allTransactions),
+    [allTransactions]
+  );
+  const hilangBalance = useMemo(
+    () => computeLocationBalance(LOCATION_HILANG, allTransactions),
+    [allTransactions]
   );
 
-  // Total Setor ke Owner — beda sumbu dari totalHeldByCouriers/totalWrittenOff
-  // (yang soal Kurir <-> Dompet). Ini ngitung SEMUA uang yang udah ditarik
-  // dari Dompet buat disetor ke pemilik bisnis, running total dari SEMUA
-  // record cashTransfers type 'owner' (tidak di-scope ke shift ini —
-  // konsisten sama totalHeldByCouriers, sengaja gak direset lintas
-  // shift/hari, karena begitu ditarik dari Dompet, uangnya harus TETAP
-  // ngurangin totalCashBisnis selamanya sampai ada cara buat "membatalkan"
-  // transfer, bukan cuma pas shift itu doang).
-  // MENGURANGI totalCashBisnis (lihat shiftStats) — beda makna dari
-  // totalWrittenOff: writeoff = duit hilang (rugi bisnis), owner = duit
-  // beneran pindah ke tangan pemilik (bukan rugi, murni perpindahan
-  // lokasi), tapi efeknya ke laci kasir sama-sama: SAMA-SAMA ngurangin
-  // kas yang ada di laci.
-  const totalTransferredToOwner = useMemo(
-    () => activeOnly(cashTransfers || []).filter(isOwnerTransfer).reduce((sum, t) => sum + (t.amount || 0), 0),
-    [cashTransfers]
+  // Total Penjualan/Pengeluaran Kasir/Pengeluaran Kurir buat card display
+  // — dihitung dari activeShiftTransactions yang SAMA dengan dompetBalance
+  // di atas (satu sumber, satu scope), bukan angka terpisah.
+  const cashSalesTotal = useMemo(
+    () => activeShiftTransactions.filter(t => t.from === LOCATION_CUSTOMER).reduce((s, t) => s + t.amount, 0),
+    [activeShiftTransactions]
+  );
+  // Pengeluaran Kasir/Kurir buat card display — HANYA expense ASLI
+  // (isVirtual: true, hasil terjemahan dari ExpenseView/PosView), BUKAN
+  // write-off manual. Sebelumnya dua-duanya (expense asli + write-off
+  // manual "Kurir/Dompet -> Hilang") ikut numpuk jadi satu angka —
+  // matematisnya benar (sama-sama uang yang gak balik ke Dompet), TAPI
+  // artinya beda: expense = belanja operasional beneran, sedangkan
+  // write-off = uang hilang/kecolongan yang dicatat manual lewat card
+  // "Catat Perpindahan Uang". Nyampur keduanya bikin card "Pengeluaran
+  // Kasir/Kurir" gak match kalau dicocokkan ke rekap ExpenseView (yang
+  // cuma nampilin expense asli). Sekarang dipisah: expense asli tetap di
+  // sini, write-off manual pindah ke cashWriteOffTotal (card baru,
+  // terpisah) di bawah.
+  const cashExpenseKasirTotal = useMemo(
+    () => activeShiftTransactions.filter(t => t.isVirtual && t.to === LOCATION_HILANG && t.from === LOCATION_DOMPET).reduce((s, t) => s + t.amount, 0),
+    [activeShiftTransactions]
+  );
+  const cashExpenseKurirTotal = useMemo(
+    () => activeShiftTransactions.filter(t => t.isVirtual && t.to === LOCATION_HILANG && isCourierLocation(t.from)).reduce((s, t) => s + t.amount, 0),
+    [activeShiftTransactions]
+  );
+  // Uang Hilang (Write-off) — transaksi MANUAL (bukan expense asli) yang
+  // tujuannya 'Hilang', dari lokasi manapun (Dompet atau kurir manapun).
+  // Ini kategori terpisah dari Pengeluaran Kasir/Kurir: uang kecolongan/
+  // hilang/tidak balik, bukan belanja operasional.
+  const cashWriteOffTotal = useMemo(
+    () => activeShiftTransactions.filter(t => !t.isVirtual && t.to === LOCATION_HILANG).reduce((s, t) => s + t.amount, 0),
+    [activeShiftTransactions]
   );
 
-  // Tombol "Setor" — SATU-SATUNYA jalur setor kurir->dompet, selalu buka
-  // popup input nominal (gak ada lagi jalur instant tanpa konfirmasi
-  // nominal). Popup punya tombol "Setor Semua" buat auto-isi input dgn
-  // full balance, atau kasir bisa ketik nominal custom buat setor
-  // sebagian. Balance yang dipakai selalu diambil ULANG dari
-  // courierBalances (live, bukan snapshot lama yang nempel di tombol) —
-  // jaga-jaga kalau ada transaksi baru masuk SELAGI popup ini kebuka
-  // (hole #4).
-  const handleOpenDeposit = (balanceEntry) => {
-    setDepositTarget({ employeeId: balanceEntry.employeeId, employeeName: balanceEntry.employeeName });
-    setPartialDepositInput('');
+  // ═══════════════════════════════════════════════════════════════════
+  // CARD "CATAT PERPINDAHAN UANG" — SATU form generik gantiin 4 modal
+  // terpisah (Setor/Hapus/Ganti Uang/Setor Owner). User pilih lokasi
+  // `from` & `to` dari dropdown yang sama (kurir manapun, Dompet, Owner,
+  // Hilang), isi nominal, submit -> 1 baris cashTransfers baru.
+  // ═══════════════════════════════════════════════════════════════════
+
+  // Semua lokasi yang bisa dipilih di dropdown from/to — kurir (dari
+  // `couriers`, termasuk yang non-aktif tapi masih ada saldo nyangkut),
+  // + Dompet, Owner, Hilang. TIDAK termasuk 'customer' (itu cuma dipakai
+  // internal buat transaksi virtual penjualan, bukan pilihan manual).
+  const transferLocations = useMemo(() => [
+    ...couriers.map(c => ({ key: courierLocationKey(c.id), label: c.name })),
+    { key: LOCATION_DOMPET, label: 'Dompet' },
+    { key: LOCATION_OWNER, label: 'Owner' },
+    { key: LOCATION_HILANG, label: 'Hilang (write-off)' },
+  ], [couriers]);
+
+  const balanceOfLocation = (key) => {
+    if (key === LOCATION_DOMPET) return dompetBalance;
+    if (key === LOCATION_OWNER) return ownerBalance;
+    if (key === LOCATION_HILANG) return hilangBalance;
+    if (isCourierLocation(key)) {
+      const id = courierIdFromLocation(key);
+      return courierBalances.find(b => b.employeeId === id)?.balance || 0;
+    }
+    return 0;
   };
 
-  const handleConfirmPartialDeposit = () => {
-    if (!depositTarget || isDepositSubmitting) return; // hole #2: cegah double-submit
+  const transferFromBalance = transferFrom ? balanceOfLocation(transferFrom) : 0;
 
-    // Re-fetch balance TERKINI, bukan yang di-snapshot pas modal dibuka.
-    const liveEntry = courierBalances.find(b => b.employeeId === depositTarget.employeeId);
-    const liveBalance = Math.max(liveEntry?.balance || 0, 0);
+  const handleOpenTransferForm = () => {
+    setShowTransferForm(true);
+    // Default: kurir pertama yang punya saldo -> Dompet (kasus paling
+    // umum, "kurir setor"), biar user gak mulai dari form kosong.
+    const firstCourierWithBalance = courierBalances.find(b => b.balance > 0);
+    setTransferFrom(firstCourierWithBalance ? courierLocationKey(firstCourierWithBalance.employeeId) : LOCATION_DOMPET);
+    setTransferTo(LOCATION_DOMPET);
+    setTransferAmountInput('');
+    setTransferNoteInput('');
+    setConfirmOverdraft(false);
+  };
 
-    const amount = Number(partialDepositInput);
+  const handleCloseTransferForm = () => {
+    setShowTransferForm(false);
+    setTransferAmountInput('');
+    setTransferNoteInput('');
+    setConfirmOverdraft(false);
+  };
 
-    // hole #3: nominal wajib > 0
-    if (!partialDepositInput || !Number.isFinite(amount) || amount <= 0) {
-      triggerAlert('Nominal setoran harus lebih dari Rp 0.');
+  const handleSubmitTransfer = () => {
+    if (isTransferSubmitting) return;
+    const amount = Number(transferAmountInput);
+
+    if (!transferFrom || !transferTo) {
+      return triggerAlert('Pilih lokasi Dari dan Ke terlebih dahulu.');
+    }
+    if (transferFrom === transferTo) {
+      return triggerAlert('Lokasi Dari dan Ke tidak boleh sama.');
+    }
+    if (!transferAmountInput || !Number.isFinite(amount) || amount <= 0) {
+      return triggerAlert('Nominal harus lebih dari Rp 0.');
+    }
+
+    // Cek saldo `from` LIVE (bukan snapshot lama) — jaga-jaga ada
+    // transaksi baru masuk selagi form ini kebuka (hole #4, pola yang
+    // sama dengan modal-modal versi sebelumnya).
+    const liveFromBalance = balanceOfLocation(transferFrom);
+    const insufficientFunds = amount > liveFromBalance;
+    if (insufficientFunds && !confirmOverdraft) {
+      // JANGAN submit — biarkan UI (ShiftView.jsx) menampilkan peringatan
+      // & checkbox konfirmasi talangan. User harus centang dulu baru
+      // klik submit lagi.
       return;
     }
-    // hole #1: gak boleh setor melebihi saldo yang beneran tercatat
-    if (amount > liveBalance) {
-      triggerAlert(`Nominal melebihi saldo ${depositTarget.employeeName} saat ini (${formatRupiah(liveBalance)}).`);
-      return;
-    }
 
-    setIsDepositSubmitting(true);
-    const isFull = amount === liveBalance;
-    const sisaSetelahSetor = liveBalance - amount;
+    setIsTransferSubmitting(true);
+    const employeeNameSnapshot = {};
+    [transferFrom, transferTo].forEach(key => {
+      const id = courierIdFromLocation(key);
+      if (id) {
+        const name = couriers.find(c => c.id === id)?.name;
+        if (name) employeeNameSnapshot[id] = name;
+      }
+    });
 
     const newTransfer = {
       id: generateUUID(),
-      employeeId: depositTarget.employeeId,
-      employeeName: depositTarget.employeeName,
+      from: transferFrom,
+      to: transferTo,
       amount,
-      // hole #6: note dibedain biar riwayat tetap keauditkan meski ada
-      // beberapa kali setoran sebagian dari kurir yang sama dalam sehari.
-      note: isFull ? 'Setoran penuh dari Dompet' : `Setoran sebagian dari Dompet (sisa ${formatRupiah(sisaSetelahSetor)})`,
+      note: transferNoteInput.trim() || '-',
       date: new Date(),
+      employeeNameSnapshot, // dipakai getCourierBalanceTargets kalau kurir ini nanti resign
     };
-    setCashTransfers([newTransfer, ...cashTransfers]);
-    triggerAlert(
-      isFull
-        ? `Saldo ${depositTarget.employeeName} sebesar ${formatRupiah(amount)} berhasil dipindah ke Dompet.`
-        : `${formatRupiah(amount)} dari saldo ${depositTarget.employeeName} dipindah ke Dompet. Sisa: ${formatRupiah(sisaSetelahSetor)}.`
-    );
+    setCashTransfers([newTransfer, ...(cashTransfers || [])]);
 
-    setIsDepositSubmitting(false);
-    setDepositTarget(null);
-    setPartialDepositInput('');
-  };
+    const fromLabel = locationLabel(transferFrom, new Map(couriers.map(c => [c.id, c])));
+    const toLabel = locationLabel(transferTo, new Map(couriers.map(c => [c.id, c])));
+    triggerAlert(`${formatRupiah(amount)} dicatat: ${fromLabel} → ${toLabel}.`);
 
-  // Tombol "Hapus" — buka popup Hapus Setoran (write-off saldo kurir),
-  // khusus Admin. Sama pola dengan handleOpenDeposit: hanya nyimpen
-  // employeeId/employeeName ke state, nominal live selalu diambil ULANG
-  // dari courierBalances pas modal render (lihat handleConfirmWriteoff).
-  const handleOpenWriteoff = (balanceEntry) => {
-    setWriteoffTarget({ employeeId: balanceEntry.employeeId, employeeName: balanceEntry.employeeName });
-    setWriteoffInput('');
-  };
-
-  const handleConfirmWriteoff = () => {
-    if (!writeoffTarget || isWriteoffSubmitting) return;
-
-    const liveEntry = courierBalances.find(b => b.employeeId === writeoffTarget.employeeId);
-    const liveBalance = Math.max(liveEntry?.balance || 0, 0);
-
-    const amount = Number(writeoffInput);
-
-    if (!writeoffInput || !Number.isFinite(amount) || amount <= 0) {
-      triggerAlert('Nominal yang dihapus harus lebih dari Rp 0.');
-      return;
-    }
-    if (amount > liveBalance) {
-      triggerAlert(`Nominal melebihi saldo ${writeoffTarget.employeeName} saat ini (${formatRupiah(liveBalance)}).`);
-      return;
-    }
-
-    setIsWriteoffSubmitting(true);
-    const isFull = amount === liveBalance;
-    const sisaSetelahHapus = liveBalance - amount;
-
-    // type: 'writeoff' — beda dari setoran biasa: turunin saldo kurir
-    // TAPI TIDAK menaikkan Saldo Akhir Dompet (lihat shiftStats di bawah,
-    // totalCashBisnis dikurangi totalWrittenOff persis supaya efeknya
-    // gak nyampur ke expectedCash/laci kasir).
-    const newTransfer = {
-      id: generateUUID(),
-      employeeId: writeoffTarget.employeeId,
-      employeeName: writeoffTarget.employeeName,
-      amount,
-      type: CASH_TRANSFER_TYPE_WRITEOFF,
-      note: isFull ? 'Hapus setoran (write-off, uang hilang/tidak balik)' : `Hapus setoran sebagian (write-off, sisa ${formatRupiah(sisaSetelahHapus)})`,
-      date: new Date(),
-    };
-    setCashTransfers([newTransfer, ...cashTransfers]);
-    triggerAlert(
-      isFull
-        ? `Saldo ${writeoffTarget.employeeName} sebesar ${formatRupiah(amount)} dihapus (dicatat sebagai kerugian).`
-        : `${formatRupiah(amount)} dari saldo ${writeoffTarget.employeeName} dihapus. Sisa: ${formatRupiah(sisaSetelahHapus)}.`
-    );
-
-    setIsWriteoffSubmitting(false);
-    setWriteoffTarget(null);
-    setWriteoffInput('');
-  };
-
-  // Tombol "Ganti Uang" — buka popup Reimburse, buat kurir yang saldonya
-  // NEGATIF (nombokin belanja bisnis pakai duit pribadi). Beda dari
-  // handleOpenDeposit/handleOpenWriteoff: di sini liveBalance yang relevan
-  // justru saldo negatifnya (jumlah yang harus diganti kasir), BUKAN
-  // di-clamp ke 0 — kalau di-clamp, gak akan pernah ada nominal yang valid
-  // buat diganti.
-  const handleOpenReimburse = (balanceEntry) => {
-    setReimburseTarget({ employeeId: balanceEntry.employeeId, employeeName: balanceEntry.employeeName });
-    setReimburseInput('');
-  };
-
-  const handleConfirmReimburse = () => {
-    if (!reimburseTarget || isReimburseSubmitting) return;
-
-    // Re-fetch balance TERKINI (pola sama kayak deposit/writeoff, hole #4).
-    // Saldo yang relevan di sini adalah UTANG bisnis ke kurir, yaitu nilai
-    // absolut dari balance negatif. Kalau ternyata balance udah gak lagi
-    // negatif (misal ada transaksi lain masuk selagi modal terbuka), utang
-    // dianggap 0 — gak ada yang perlu diganti.
-    const liveEntry = courierBalances.find(b => b.employeeId === reimburseTarget.employeeId);
-    const liveDebt = liveEntry && liveEntry.balance < 0 ? Math.abs(liveEntry.balance) : 0;
-
-    const amount = Number(reimburseInput);
-
-    if (!reimburseInput || !Number.isFinite(amount) || amount <= 0) {
-      triggerAlert('Nominal yang diganti harus lebih dari Rp 0.');
-      return;
-    }
-    if (amount > liveDebt) {
-      triggerAlert(`Nominal melebihi utang ke ${reimburseTarget.employeeName} saat ini (${formatRupiah(liveDebt)}).`);
-      return;
-    }
-
-    setIsReimburseSubmitting(true);
-    const isFull = amount === liveDebt;
-    const sisaUtangSetelahGanti = liveDebt - amount;
-
-    // type: 'reimburse', amount NEGATIF — lihat catatan lengkap di
-    // utils/cashHolders.js soal kenapa tandanya dibalik: biar formula
-    // `deposited = sum(amount)` di computeCourierBalance otomatis
-    // MENAMBAH saldo kurir (menutup defisitnya) tanpa cabang logic baru,
-    // dan efeknya ke expectedCash (Saldo Dompet turun karena kasir
-    // beneran ngeluarin uang tunai) juga otomatis benar lewat
-    // totalHeldByCouriers, tanpa perlu variabel koreksi terpisah seperti
-    // totalWrittenOff.
-    const newTransfer = {
-      id: generateUUID(),
-      employeeId: reimburseTarget.employeeId,
-      employeeName: reimburseTarget.employeeName,
-      amount: -amount,
-      type: CASH_TRANSFER_TYPE_REIMBURSE,
-      note: isFull
-        ? 'Ganti uang kurir (reimburse, lunas)'
-        : `Ganti uang kurir sebagian (reimburse, sisa utang ${formatRupiah(sisaUtangSetelahGanti)})`,
-      date: new Date(),
-    };
-    setCashTransfers([newTransfer, ...cashTransfers]);
-    triggerAlert(
-      isFull
-        ? `Utang ke ${reimburseTarget.employeeName} sebesar ${formatRupiah(amount)} sudah diganti (lunas).`
-        : `${formatRupiah(amount)} sudah diganti ke ${reimburseTarget.employeeName}. Sisa utang: ${formatRupiah(sisaUtangSetelahGanti)}.`
-    );
-
-    setIsReimburseSubmitting(false);
-    setReimburseTarget(null);
-    setReimburseInput('');
+    setIsTransferSubmitting(false);
+    handleCloseTransferForm();
   };
 
   // Tutup Saldo Lama — nolin saldo kurir yang kebawa dari SEBELUM hari ini
-  // (bukan dihapus, tapi dicatat sebagai transaksi cashTransfers normal
-  // bernote jelas, biar tetap keauditkan & muncul di Riwayat Setoran —
-  // lihat toggle "Riwayat Setoran" khusus admin di bagian Riwayat bawah).
-  // Saldo dari transaksi HARI INI sengaja TIDAK disentuh — biar gak
-  // nge-reset uang yang belum sempat beneran disetor/dilaporkan.
+  // (dicatat sebagai transaksi Kurir -> Dompet normal bernote jelas, biar
+  // tetap keauditkan & muncul di tab Log Transaksi). Saldo dari transaksi
+  // HARI INI sengaja TIDAK disentuh — biar gak nge-reset uang yang belum
+  // sempat beneran disetor/dilaporkan.
   //
   // Dipanggil otomatis tiap kali "Buka Dompet" (lihat handleOpenShift) —
   // karena di lapangan setoran fisik sering kejadian tanpa sempat dicatat,
@@ -451,21 +527,16 @@ export function useShiftLogic() {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    const priorExpenses = activeOnly(expenses).filter(e => new Date(e.date) < startOfToday);
-    const priorSales = activeOnly(salesHistory).filter(s => new Date(s.date) < startOfToday);
-    const priorTransfers = activeOnly(cashTransfers || []).filter(t => new Date(t.date) < startOfToday);
+    const priorTransactions = allTransactions.filter(t => new Date(t.date) < startOfToday);
 
     // SENGAJA pakai activeCouriers (bukan `couriers` yang sudah digabung
     // dengan kurir non-aktif) — auto-close ini mengasumsikan uangnya udah
     // beneran disetor fisik tapi lupa dicatat, asumsi yang gak valid buat
     // kurir yang udah resign (gak ada lagi yang bisa "lupa nyetor"). Saldo
-    // kurir non-aktif harus diselesaikan manual lewat Setor/Hapus/Ganti
-    // Uang di Riwayat, biar ada jejak keputusan yang jelas.
-    const staleBalances = computeAllCourierBalances(activeCouriers, {
-      expenses: priorExpenses,
-      salesHistory: priorSales,
-      cashTransfers: priorTransfers,
-    }).filter(b => b.balance > 0);
+    // kurir non-aktif harus diselesaikan manual lewat Card Catat
+    // Perpindahan Uang, biar ada jejak keputusan yang jelas.
+    const staleBalances = computeAllCourierBalances(activeCouriers, priorTransactions)
+      .filter(b => b.balance > 0);
 
     if (staleBalances.length === 0) {
       if (!silent) triggerAlert('Tidak ada saldo kurir dari hari sebelumnya yang perlu ditutup.');
@@ -474,14 +545,15 @@ export function useShiftLogic() {
 
     const closingTransfers = staleBalances.map(b => ({
       id: generateUUID(),
-      employeeId: b.employeeId,
-      employeeName: b.employeeName,
+      from: courierLocationKey(b.employeeId),
+      to: LOCATION_DOMPET,
       amount: b.balance,
       note: 'Penutupan saldo lama (otomatis/manual, bukan setoran fisik tercatat)',
       date: new Date(),
+      employeeNameSnapshot: { [b.employeeId]: b.employeeName },
     }));
 
-    setCashTransfers([...closingTransfers, ...cashTransfers]);
+    setCashTransfers([...closingTransfers, ...(cashTransfers || [])]);
 
     if (!silent) {
       const rincian = staleBalances.map(b => `${b.employeeName}: ${formatRupiah(b.balance)}`).join(', ');
@@ -489,91 +561,41 @@ export function useShiftLogic() {
     }
   };
 
-  // Calculate stats for current shift
+  // Calculate stats for current shift — SEKARANG murni "rebranding" dari
+  // angka yang udah dihitung di scope hook ini (cashSalesTotal,
+  // cashExpenseKasirTotal, cashExpenseKurirTotal, dompetBalance — semua
+  // dari allTransactions, SATU sumber ledger yang sama), BUKAN hitung
+  // ulang terpisah dari salesHistory/expenses. Ini mencegah kelas bug
+  // yang sempat kejadian pas desain mockup: "Saldo Akhir" & breakdown
+  // rincian baca dari 2 sumber angka berbeda yang gak dijamin sinkron.
   const shiftStats = useMemo(() => {
     if (!currentShift) return null;
-    const start = currentShift.startTime;
 
-    // Batas HARI (local midnight) shift dibuka — khusus dipakai buat filter
-    // Pemasukan & Pengeluaran, BUKAN `start` yang presisi jam-menit-detik.
-    // Sebabnya: ExpenseView/IncomeView cuma punya input TANGGAL (gak ada
-    // jam), jadi field `date`-nya selalu tersimpan sebagai local midnight
-    // 00:00 lewat parseLocalDate(). Kalau dibandingkan langsung ke `start`
-    // (jam persis shift dibuka, mis. 08:00), maka 00:00 >= 08:00 SELALU
-    // false → transaksi yang dicatat "hari ini" gak akan pernah kehitung
-    // masuk shift yang lagi jalan (ini penyebab pengeluaran & pemasukan
-    // gak muncul di Dompet). Penjualan (shiftSales) TETAP pakai `start`
-    // presisi jam karena timestamp-nya emang jam asli waktu checkout.
-    const shiftStartDate = new Date(start);
-    const startOfShiftDay = new Date(shiftStartDate.getFullYear(), shiftStartDate.getMonth(), shiftStartDate.getDate());
+    // Pemasukan Non-Penjualan (`incomes`) BELUM masuk ke ledger from/to
+    // (lihat catatan di virtualTransactions) — tetap dihitung terpisah
+    // di sini, dengan SCOPE TANGGAL yang sama dengan activeShiftTransactions
+    // (MAX antara hari buka shift dan hari ini) — bukan cuma hari buka
+    // shift doang. Tanpa clamp ke hari ini, shift yang kebawa nginep
+    // (isShiftCarriedOver) bakal ikut narik incomes dari kemarin, bug
+    // kelas yang sama dengan yang sudah difix di activeShiftTransactions.
+    const shiftStartDay = toLocalDateString(currentShift.startTime);
+    const today = toLocalDateString();
+    const cutoffDay = shiftStartDay > today ? shiftStartDay : today;
+    const cashIncomeTotal = activeOnly(incomes)
+      .filter(i => toLocalDateString(i.date) >= cutoffDay)
+      .reduce((s, i) => s + i.amount, 0);
 
-    // Penjualan Tunai — SEMUA cash sale, kasir MAUPUN kurir COD. Di level
-    // ini kita hitung "Total Kas Bisnis" (bukan laci kasir doang), jadi
-    // duit COD kurir tetap dihitung sebagai pemasukan cash yang sah —
-    // cuma lokasinya belum tentu di laci. Pemisahan "yang masih di tangan
-    // kurir" diurus BELAKANGAN lewat pengurangan totalHeldByCouriers di
-    // bawah (satu titik saja), BUKAN dengan exclude manual per record di
-    // sini — biar gak ada 2 tempat yang harus saling sinkron soal
-    // "kurir vs bukan kurir".
-    const shiftSales = activeOnly(salesHistory).filter(s => new Date(s.date) >= start);
-    let cashSalesTotal = 0;
-    shiftSales.forEach(sale => {
-      if (sale.paymentMethod === 'Tunai') cashSalesTotal += sale.total;
-      else if (sale.paymentMethod === 'Split Payment') {
-        sale.splitDetails.forEach(p => { if (p.method === 'Tunai') cashSalesTotal += p.amount; });
-      }
-    });
-
-    // Pemasukan & Pengeluaran (Tunai) — sama, level Total Kas Bisnis.
-    // Pengeluaran yang dibayar pakai cash kurir (cashHolder: kurir, misal
-    // kurir belanja sebelum sempat setor) TETAP ikut kehitung di
-    // totalCashBisnis (bukan di-exclude), karena itu tetap pengeluaran
-    // cash bisnis yang sah — pemisahan lokasinya (siapa yang megang)
-    // diurus lewat totalHeldByCouriers. TAPI buat keterangan di UI,
-    // kasir & kurir dipisah jadi 2 baris sendiri (bukan digabung jadi
-    // satu angka "Pengeluaran") biar kasir bisa lihat jelas mana yang
-    // keluar dari lacinya sendiri vs mana yang dipotong dari saldo kurir.
-    const shiftIncomes = activeOnly(incomes).filter(i => new Date(i.date) >= startOfShiftDay);
-    const shiftExpenses = activeOnly(expenses).filter(e => new Date(e.date) >= startOfShiftDay && (e.paymentMethod || 'Tunai') === 'Tunai');
-    const shiftExpensesKasir = shiftExpenses.filter(e => !isCourierHolder(e));
-    const shiftExpensesKurir = shiftExpenses.filter(e => isCourierHolder(e));
-
-    const cashIncomeTotal = shiftIncomes.reduce((s, i) => s + i.amount, 0);
-    const cashExpenseKasirTotal = shiftExpensesKasir.reduce((s, e) => s + e.amount, 0);
-    const cashExpenseKurirTotal = shiftExpensesKurir.reduce((s, e) => s + e.amount, 0);
     const cashExpenseTotal = cashExpenseKasirTotal + cashExpenseKurirTotal;
 
-    // Total Kas Bisnis — gabungan laci kasir + yang masih di tangan kurir,
-    // murni cash-basis, gak peduli lokasi fisiknya di mana saat ini.
-    // Dikurangi totalWrittenOff (Hapus Setoran) — itu uang yang beneran
-    // hilang dari bisnis (bukan cuma "belum disetor"), jadi harus ikut
-    // ngurangin Total Kas Bisnis juga, BUKAN cuma totalHeldByCouriers.
-    // Tanpa pengurangan ini, expectedCash di bawah bakal seolah-olah naik
-    // tiap ada write-off — padahal duitnya gak pernah masuk laci.
-    // Dikurangi juga totalTransferredToOwner (Setor ke Owner) — sama
-    // seperti write-off dari sisi laci kasir (duitnya keluar dari laci),
-    // tapi beda makna: bukan rugi, duitnya beneran pindah tangan ke
-    // pemilik bisnis secara sah.
-    const totalCashBisnis = currentShift.initialCash + cashSalesTotal + cashIncomeTotal - cashExpenseTotal - totalWrittenOff - totalTransferredToOwner;
-
-    // Saldo Akhir (Laci Kasir) = Total Kas Bisnis - Saldo yang MASIH
-    // dipegang kurir (belum disetor). Ini SATU-SATUNYA rumus buat nentuin
-    // laci kasir. Konsekuensinya otomatis benar tanpa perlu tracking
-    // manual: begitu kurir setor (tombol "Setor" nge-nolin saldo dia di
-    // totalHeldByCouriers), expectedCash di sini OTOMATIS naik sejumlah
-    // yang disetor — gak perlu nambahin cashTransfers sebagai baris
-    // terpisah lagi. Konsekuensi lain: kalau kurir BELUM setor,
-    // otomatis ke-exclude dari laci kasir juga tanpa perlu filter manual
-    // per record sales/expenses di atas.
-    //
-    // Catatan: totalHeldByCouriers TIDAK di-scope ke jam mulai shift ini
-    // (dia running balance real-time, lihat computeAllCourierBalances di
-    // atas) — sengaja begitu, karena saldo kurir itu murni carry-over
-    // sampai BENERAN disetor lewat tombol "Setor" (lihat handleOpenDeposit
-    // & handleConfirmPartialDeposit). Tidak ada reset
-    // otomatis lintas hari maupun lintas shift — kasir/kurir yang
-    // menentukan kapan setoran dicatat, bukan sistem.
-    const expectedCash = totalCashBisnis - totalHeldByCouriers;
+    // expectedCash (Saldo Akhir / laci kasir) = dompetBalance, yang
+    // sudah dihitung di atas lewat computeLocationBalance(LOCATION_DOMPET,
+    // allTransactions, initialCash) — SATU-SATUNYA rumus buat lokasi
+    // Dompet, sama persis dipakai buat baris "Kasir (Dompet)" di
+    // breakdown Rincian Posisi Uang. Bedanya cuma cashIncomeTotal
+    // (Pemasukan Non-Penjualan) yang belum masuk ledger, jadi ditambah
+    // manual di sini — SEKALI, di titik yang sama dgn dompetBalance,
+    // bukan titik terpisah yang bisa lupa disinkronkan.
+    const expectedCash = dompetBalance + cashIncomeTotal;
 
     return {
       initialCash: currentShift.initialCash,
@@ -582,58 +604,17 @@ export function useShiftLogic() {
       cashExpenses: cashExpenseTotal,
       cashExpensesKasir: cashExpenseKasirTotal,
       cashExpensesKurir: cashExpenseKurirTotal,
-      totalCashBisnis,
-      expectedCash
+      // Uang Hilang (Write-off) — kategori TERPISAH dari Pengeluaran
+      // Kasir/Kurir (lihat cashWriteOffTotal di atas). Tetap kehitung di
+      // expectedCash lewat dompetBalance (computeLocationBalance sudah
+      // memasukkan SEMUA transaksi ke LOCATION_HILANG, virtual maupun
+      // manual) — jadi Saldo Akhir TIDAK berubah, ini murni pemisahan
+      // tampilan/kategori, bukan perubahan matematika saldo.
+      cashWriteOff: cashWriteOffTotal,
+      totalCashBisnis: expectedCash + totalHeldByCouriers,
+      expectedCash,
     };
-  }, [currentShift, salesHistory, expenses, incomes, totalHeldByCouriers, totalWrittenOff, totalTransferredToOwner]);
-
-  // Tombol "Setor ke Owner" — buka popup input nominal, buat narik uang
-  // dari Dompet (laci kasir) ke tangan pemilik bisnis. Beda sumbu dari
-  // Setor/Hapus/Ganti Uang kurir (yang semuanya soal Kurir <-> Dompet):
-  // ini soal Dompet -> Owner, jadi gak butuh target employee. Nominal
-  // divalidasi terhadap shiftStats.expectedCash (Saldo Akhir Dompet
-  // TERKINI, termasuk shift yang sedang aktif) — gak boleh setor melebihi
-  // kas yang beneran ada di laci saat ini, pola sama kayak hole #1 di
-  // handleConfirmPartialDeposit.
-  const handleOpenOwnerTransfer = () => {
-    setIsOwnerTransferOpen(true);
-    setOwnerTransferInput('');
-    setOwnerTransferNoteInput('');
-  };
-
-  const handleConfirmOwnerTransfer = () => {
-    if (!isOwnerTransferOpen || isOwnerTransferSubmitting) return;
-
-    const liveExpectedCash = Math.max(shiftStats?.expectedCash || 0, 0);
-    const amount = Number(ownerTransferInput);
-
-    if (!ownerTransferInput || !Number.isFinite(amount) || amount <= 0) {
-      triggerAlert('Nominal setoran harus lebih dari Rp 0.');
-      return;
-    }
-    if (amount > liveExpectedCash) {
-      triggerAlert(`Nominal melebihi Saldo Akhir Dompet saat ini (${formatRupiah(liveExpectedCash)}).`);
-      return;
-    }
-
-    setIsOwnerTransferSubmitting(true);
-
-    const trimmedNote = ownerTransferNoteInput.trim();
-    const newTransfer = {
-      id: generateUUID(),
-      amount,
-      type: CASH_TRANSFER_TYPE_OWNER,
-      note: trimmedNote ? `Setor ke Owner — ${trimmedNote}` : 'Setor ke Owner',
-      date: new Date(),
-    };
-    setCashTransfers([newTransfer, ...cashTransfers]);
-    triggerAlert(`${formatRupiah(amount)} berhasil disetor ke Owner.`);
-
-    setIsOwnerTransferSubmitting(false);
-    setIsOwnerTransferOpen(false);
-    setOwnerTransferInput('');
-    setOwnerTransferNoteInput('');
-  };
+  }, [currentShift, incomes, dompetBalance, cashSalesTotal, cashExpenseKasirTotal, cashExpenseKurirTotal, cashWriteOffTotal, totalHeldByCouriers]);
 
   // Deteksi dompet yang kebawa nginap dari hari sebelumnya (kemungkinan kasir lupa nutup).
   // Sengaja pakai perbandingan TANGGAL, bukan jumlah jam, karena shift resto
@@ -766,24 +747,23 @@ export function useShiftLogic() {
     });
   };
 
-  // Hapus 1 baris riwayat setoran kurir (koreksi kalau kasir/admin salah
-  // catat) — soft-delete konsisten sama pola recycle bin di seluruh app
-  // (activeOnly() di list Riwayat Setoran Kurir otomatis nyembunyiin ini).
-  // Beda dari shift, sengaja gak dikasih recycle bin terpisah di sini
-  // karena penggunaannya cuma buat koreksi cepat, bukan alur audit shift.
+  // Hapus 1 baris Log Transaksi (koreksi kalau kasir/admin salah catat) —
+  // soft-delete konsisten sama pola recycle bin di seluruh app (activeOnly()
+  // di tab Log Transaksi otomatis nyembunyiin ini). Beda dari shift, sengaja
+  // gak dikasih recycle bin terpisah di sini karena penggunaannya cuma buat
+  // koreksi cepat, bukan alur audit shift.
   const handleDeleteCourierTransfer = (id) => {
-    triggerConfirm('Hapus baris setoran ini? Saldo kurir terkait akan otomatis kehitung ulang.', () => {
-      setCashTransfers(cashTransfers.map(t => t.id === id ? markDeleted(t) : t));
-      triggerAlert('Baris setoran dihapus.');
+    triggerConfirm('Hapus baris transaksi ini? Saldo terkait akan otomatis kehitung ulang.', () => {
+      setCashTransfers((cashTransfers || []).map(t => t.id === id ? markDeleted(t) : t));
+      triggerAlert('Baris transaksi dihapus.');
     });
   };
 
-  // Koreksi 1 baris riwayat setoran kurir TANPA hapus-lalu-catat-ulang —
-  // dipakai kalau kasir/admin salah ketik nominal atau mau perjelas catatan.
-  // Nominal yang diketik di form SELALU angka positif (biar gak
-  // membingungkan admin yang koreksi); tandanya baru disesuaikan lagi pas
-  // disimpan, khusus utk baris 'reimburse' yang secara data disimpan
-  // negatif (lihat catatan tanda di utils/cashHolders.js).
+  // Koreksi 1 baris Log Transaksi TANPA hapus-lalu-catat-ulang — dipakai
+  // kalau kasir/admin salah ketik nominal, salah pilih lokasi, atau mau
+  // perjelas catatan. Amount SELALU positif (gak ada lagi trik tanda
+  // negatif dari model lama), jadi edit jauh lebih simpel — tinggal ganti
+  // field-nya langsung, gak perlu tau "jenis" transaksinya apa.
   const handleOpenEditCourierTransfer = (transfer) => {
     setEditingTransfer(transfer);
     setEditTransferAmountInput(String(Math.abs(transfer.amount || 0)));
@@ -797,15 +777,13 @@ export function useShiftLogic() {
       return triggerAlert('Nominal harus lebih dari Rp 0.');
     }
 
-    const signedAmount = isReimburseTransfer(editingTransfer) ? -rawAmount : rawAmount;
-
-    triggerConfirm('Simpan koreksi baris setoran ini? Saldo kurir terkait akan otomatis kehitung ulang.', () => {
-      setCashTransfers(cashTransfers.map(t => t.id === editingTransfer.id ? {
+    triggerConfirm('Simpan koreksi baris transaksi ini? Saldo terkait akan otomatis kehitung ulang.', () => {
+      setCashTransfers((cashTransfers || []).map(t => t.id === editingTransfer.id ? {
         ...t,
-        amount: signedAmount,
+        amount: rawAmount,
         note: editTransferNoteInput,
       } : t));
-      triggerAlert('Baris setoran berhasil dikoreksi.');
+      triggerAlert('Baris transaksi berhasil dikoreksi.');
       setEditingTransfer(null);
       setEditTransferAmountInput('');
       setEditTransferNoteInput('');
@@ -919,7 +897,7 @@ export function useShiftLogic() {
     // Passthrough dari AppContext yang dipakai render layer (ShiftView.jsx / ShiftModals.jsx)
     currentShift, shiftHistory, formatRupiah, storeSettings, isAdminMode, employees, cashTransfers,
 
-    // Tab navigasi utama
+    // Tab navigasi utama: 'aktif' | 'riwayat' | 'log' (Log Transaksi)
     activeTab, setActiveTab,
 
     // Halaman utama (buka dompet / kartu aktif)
@@ -935,24 +913,23 @@ export function useShiftLogic() {
     closedShiftData, setClosedShiftData,
     handleShareImage,
 
-    // Saldo & aksi kurir (dipakai halaman utama utk trigger, & ShiftModals utk isi form)
+    // Rincian Posisi Uang (card Dompet Aktif, pure display) — SEMUA
+    // dihitung dari allTransactions lewat computeLocationBalance, satu
+    // rumus yang sama di semua lokasi.
     couriers, courierBalances, totalHeldByCouriers,
-    handleOpenDeposit, handleConfirmPartialDeposit, isDepositSubmitting,
-    handleOpenWriteoff, handleConfirmWriteoff, isWriteoffSubmitting,
-    handleOpenReimburse, handleConfirmReimburse, isReimburseSubmitting,
-    depositTarget, setDepositTarget, partialDepositInput, setPartialDepositInput,
-    writeoffTarget, setWriteoffTarget, writeoffInput, setWriteoffInput,
-    reimburseTarget, setReimburseTarget, reimburseInput, setReimburseInput,
-
-    // Setor ke Owner (Dompet -> Owner, beda sumbu dari saldo kurir di atas)
-    totalTransferredToOwner,
-    isOwnerTransferOpen, setIsOwnerTransferOpen,
-    ownerTransferInput, setOwnerTransferInput,
-    ownerTransferNoteInput, setOwnerTransferNoteInput,
-    handleOpenOwnerTransfer, handleConfirmOwnerTransfer, isOwnerTransferSubmitting,
+    dompetBalance, ownerBalance, hilangBalance,
 
     // Shift stats (dipakai halaman utama & modal edit saldo awal aktif)
     shiftStats,
+
+    // Card "Catat Perpindahan Uang" — SATU form generik gantiin 4 modal lama
+    transferLocations, balanceOfLocation, transferFromBalance,
+    showTransferForm, handleOpenTransferForm, handleCloseTransferForm,
+    transferFrom, setTransferFrom, transferTo, setTransferTo,
+    transferAmountInput, setTransferAmountInput,
+    transferNoteInput, setTransferNoteInput,
+    confirmOverdraft, setConfirmOverdraft,
+    handleSubmitTransfer, isTransferSubmitting,
 
     // Modal edit (khusus Admin)
     editingShift, setEditingShift,
@@ -975,9 +952,10 @@ export function useShiftLogic() {
     selectedIds, allSelected, toggleSelectOne, toggleSelectAll, resetSelection, count,
     handleDeleteShift, handleRestoreShift, handlePermanentDeleteShift,
     handleBulkSoftDeleteShift, handleBulkPermanentDeleteShift,
-    handleDeleteCourierTransfer,
 
-    // Edit baris Riwayat Setoran Kurir (khusus Admin)
+    // Tab "Log Transaksi" — satu list gabungan (manual + virtual)
+    allTransactions,
+    handleDeleteCourierTransfer,
     editingTransfer, setEditingTransfer,
     editTransferAmountInput, setEditTransferAmountInput,
     editTransferNoteInput, setEditTransferNoteInput,

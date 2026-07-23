@@ -113,10 +113,10 @@ export default function AppLayout({
     >
       {sidebar}
 
-      <main className="flex-1 flex flex-col min-w-0 relative">
+      <main className="flex-1 flex flex-col min-w-0 min-h-0 relative">
         {header}
 
-        <div className="flex-1 overflow-hidden relative print:overflow-visible flex flex-col">
+        <div className="flex-1 min-h-0 overflow-hidden relative print:overflow-visible flex flex-col">
           {content}
         </div>
 

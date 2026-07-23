@@ -1,7 +1,7 @@
 // utils/cashHolders.js
 //
 // ═══════════════════════════════════════════════════════════════════════
-//  KONSEP "PEMEGANG KAS" (cash holder)
+//  KONSEP "PEMEGANG KAS" (cash holder) — dipakai di salesHistory & expenses
 // ═══════════════════════════════════════════════════════════════════════
 // Realita di lapangan: uang cash toko gak selalu ada di tangan kasir.
 // Kurir juga pegang cash — TAPI cuma dari SATU sumber: pesanan Delivery
@@ -19,7 +19,8 @@
 // sama, jadi tetap SATU ledger (bukan 2 source of truth).
 //
 // Struktur `cashHolder` yang ditempel di record expense ATAUPUN order
-// salesHistory:
+// salesHistory (field ini TIDAK berubah dari sebelumnya — PosView.jsx &
+// ExpenseView.jsx TIDAK disentuh oleh rombakan model transaksi kurir):
 //   { type: 'kasir' }                                  -> uang toko/laci kasir (default, berlaku utk data lama)
 //   { type: 'kurir', employeeId: 'EMP-xxx', employeeName: 'Budi' }  -> uang di tangan kurir tsb
 //
@@ -29,71 +30,6 @@
 //
 // Field ini OPSIONAL & backward-compatible: record lama tanpa `cashHolder`
 // otomatis dianggap `{ type: 'kasir' }` (lihat getCashHolder di bawah).
-//
-// Selain expense/salesHistory, ada `cashTransfers` — ledger TERPISAH khusus
-// buat mencatat "setoran" kurir -> kasir (transfer internal, bukan
-// pengeluaran ataupun pemasukan bisnis baru, jadi sengaja gak dicampur ke
-// expenses/incomes supaya gak dobel-hitung di laporan Laba/Rugi — uangnya
-// kan sudah tercatat masuk lewat penjualan Delivery COD itu sendiri).
-//
-// Field `type` pada record cashTransfers (opsional, default 'deposit' utk
-// data lama yang belum punya field ini):
-//   'deposit'   -> setoran normal, uang BENERAN pindah ke laci kasir.
-//                  Menurunkan saldo kurir DAN menaikkan Saldo Akhir Dompet
-//                  (lihat expectedCash di ShiftView.jsx).
-//   'writeoff'  -> kerugian/uang hilang (kurir kehilangan uang, dsb).
-//                  Menurunkan saldo kurir SAMA seperti deposit (dari sisi
-//                  computeCourierBalance di bawah, keduanya identik — cuma
-//                  pengurang), TAPI TIDAK menaikkan Saldo Akhir Dompet,
-//                  karena duitnya emang hilang, bukan pindah ke laci.
-//                  ShiftView.jsx yang membedakan efeknya ke expectedCash.
-//   'reimburse' -> kebalikan dari deposit/writeoff. Dipakai kalau saldo
-//                  kurir NEGATIF (kurir nombokin belanja bisnis pakai duit
-//                  pribadinya karena saldo COD dia gak cukup) — kasir
-//                  ganti uang kurir dari laci. `amount` pada record jenis
-//                  ini SENGAJA disimpan NEGATIF (kebalikan tanda dari
-//                  deposit/writeoff yang selalu positif), supaya formula
-//                  `deposited = sum(amount)` di computeCourierBalance
-//                  otomatis MENAMBAH saldo kurir tanpa perlu cabang logic
-//                  terpisah. Efek ke Saldo Dompet juga otomatis: saldo
-//                  kurir naik -> totalHeldByCouriers naik -> expectedCash
-//                  turun sejumlah yang diganti (uang beneran keluar dari
-//                  laci fisik ke tangan kurir).
-//   'owner'     -> Setor ke Owner. BEDA SUMBU dari deposit/writeoff/reimburse
-//                  di atas (yang semuanya soal Kurir <-> Dompet) — ini soal
-//                  Dompet -> Owner/Perusahaan. Dipakai kalau kasir narik
-//                  uang dari laci buat disetor ke pemilik bisnis (transfer
-//                  bank, setor tunai langsung, dsb). BUKAN expense (bukan
-//                  biaya operasional) & BUKAN income (bukan pemasukan bisnis
-//                  baru) — murni pemindahan lokasi uang yang sudah tercatat
-//                  sah lewat penjualan, makanya masuk cashTransfers juga
-//                  (ledger perpindahan), bukan expenses/incomes.
-//                  TIDAK punya employeeId (bukan soal kurir), jadi record
-//                  jenis ini gak ikut kehitung di computeCourierBalance /
-//                  computeAllCourierBalances sama sekali — cuma dijumlah
-//                  terpisah (lihat totalTransferredToOwner di
-//                  useShiftLogic.js) buat MENGURANGI totalCashBisnis &
-//                  expectedCash, persis kayak totalWrittenOff, TAPI beda
-//                  makna: writeoff = duit hilang (rugi), owner = duit
-//                  beneran pindah ke tangan pemilik (bukan rugi, bukan
-//                  biaya, cuma pindah lokasi).
-
-export const CASH_TRANSFER_TYPE_DEPOSIT = 'deposit';
-export const CASH_TRANSFER_TYPE_WRITEOFF = 'writeoff';
-export const CASH_TRANSFER_TYPE_REIMBURSE = 'reimburse';
-export const CASH_TRANSFER_TYPE_OWNER = 'owner';
-
-export function isWriteoffTransfer(transfer) {
-  return transfer?.type === CASH_TRANSFER_TYPE_WRITEOFF;
-}
-
-export function isReimburseTransfer(transfer) {
-  return transfer?.type === CASH_TRANSFER_TYPE_REIMBURSE;
-}
-
-export function isOwnerTransfer(transfer) {
-  return transfer?.type === CASH_TRANSFER_TYPE_OWNER;
-}
 
 export const CASH_HOLDER_KASIR = { type: 'kasir' };
 
@@ -117,50 +53,105 @@ export function cashHolderLabel(record) {
   return 'Kasir/Toko';
 }
 
-/**
- * Hitung saldo cash yang sedang dipegang SATU kurir tertentu, di luar
- * kas kasir/toko:
- *
- *   saldo = uang masuk (order Delivery COD yg dibayar customer ke kurir)
- *         - uang keluar (expense yg dibayar pakai cash kurir, misal belanja)
- *         - total sudah disetor ke kasir (cashTransfers)
- *
- * Semua parameter sudah harus di-filter `activeOnly` dulu oleh pemanggil
- * (biar util ini gak perlu tau soal recycle bin).
- */
-export function computeCourierBalance(employeeId, { expenses = [], salesHistory = [], cashTransfers = [] } = {}) {
-  const cashIn = salesHistory
-    .filter(order => isCourierHolder(order) && getCashHolder(order).employeeId === employeeId)
-    .reduce((sum, order) => sum + (order.total || 0), 0);
+// ═══════════════════════════════════════════════════════════════════════
+//  MODEL LEDGER "DARI -> KE" (rombakan total, gantiin sistem 5-tipe lama)
+// ═══════════════════════════════════════════════════════════════════════
+// Sebelumnya: cashTransfers punya field `type` (deposit/writeoff/reimburse/
+// owner), masing-masing punya efek TERSEMBUNYI & BEDA-BEDA ke 3 akumulator
+// terpisah (totalHeldByCouriers, totalWrittenOff, totalTransferredToOwner)
+// yang harus disinkronin manual satu-satu ke formula totalCashBisnis. Itu
+// sumber bug berulang (termasuk salah hitung yang sempat kejadian pas
+// nambah tipe baru) — gampang lupa update satu tempat pas nambah kasus.
+//
+// Sekarang: SETIAP transaksi kurir cuma py 2 field lokasi — `from` & `to`.
+// Uang bisnis SELALU ada di salah satu dari 4 lokasi:
+//   'dompet'      -> laci kasir fisik
+//   'kurir:<id>'  -> di tangan kurir tsb (belum disetor)
+//   'owner'       -> sudah di tangan pemilik bisnis (transfer/tunai)
+//   'hilang'      -> dianggap lenyap (write-off, kecolongan, dst)
+//
+// Amount SELALU POSITIF (gak ada lagi trik "amount disimpan negatif" buat
+// reimburse — itu jebakan baca kode). Saldo di lokasi manapun dihitung
+// dengan RUMUS YANG SAMA PERSIS, gak peduli lokasinya apa:
+//
+//   saldo(X) = jumlah(to === X) - jumlah(from === X)
+//
+// Ini satu-satunya rumus saldo di seluruh modul Shift. Gak ada akumulator
+// terpisah yang harus disinkronin manual lagi.
+//
+// Field record cashTransfers (BARU):
+//   { id, from, to, amount (selalu positif), note, date }
+//
+// Contoh pemetaan kejadian dunia nyata -> from/to:
+//   Kurir setor tunai ke kasir              -> from: 'kurir:X', to: 'dompet'
+//   Kasir ganti uang kurir yg nombokin       -> from: 'dompet', to: 'kurir:X'
+//   Uang kurir hilang/gak balik              -> from: 'kurir:X', to: 'hilang'
+//   Kasir narik dari laci buat setor Owner   -> from: 'dompet', to: 'owner'
+//   Kurir transfer COD LANGSUNG ke Owner     -> from: 'kurir:X', to: 'owner'
+//   Owner nombokin belanja kurir duluan      -> from: 'owner', to: 'kurir:X'
+//   Selisih/uang di laci ketahuan hilang     -> from: 'dompet', to: 'hilang'
 
-  const cashOut = expenses
-    .filter(exp => isCourierHolder(exp) && getCashHolder(exp).employeeId === employeeId)
-    .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+export const LOCATION_DOMPET = 'dompet';
+export const LOCATION_OWNER = 'owner';
+export const LOCATION_HILANG = 'hilang';
+export const LOCATION_CUSTOMER = 'customer'; // dipakai KHUSUS transaksi virtual dari penjualan, gak pernah muncul di cashTransfers beneran
 
-  const deposited = cashTransfers
-    .filter(t => t.employeeId === employeeId)
-    .reduce((sum, t) => sum + (t.amount || 0), 0);
+export function courierLocationKey(employeeId) {
+  return `kurir:${employeeId}`;
+}
 
-  return cashIn - cashOut - deposited;
+export function isCourierLocation(key) {
+  return typeof key === 'string' && key.startsWith('kurir:');
+}
+
+export function courierIdFromLocation(key) {
+  return isCourierLocation(key) ? key.slice('kurir:'.length) : null;
+}
+
+/** Label tampilan buat sebuah location key ('dompet'/'owner'/'hilang'/'kurir:xxx'/'customer'). */
+export function locationLabel(key, employeesById) {
+  if (key === LOCATION_DOMPET) return 'Dompet';
+  if (key === LOCATION_OWNER) return 'Owner';
+  if (key === LOCATION_HILANG) return 'Hilang';
+  if (key === LOCATION_CUSTOMER) return 'Customer';
+  if (isCourierLocation(key)) {
+    const id = courierIdFromLocation(key);
+    return employeesById?.get(id)?.name || 'Kurir';
+  }
+  return key || '-';
 }
 
 /**
- * Hitung saldo semua kurir sekaligus (dipakai buat dashboard ringkasan).
- * Mengembalikan array [{ employeeId, employeeName, isActive, balance }],
- * hanya kurir yang punya aktivitas kas (cashIn/cashOut/deposit != 0) ATAU
- * yang saat ini masih berstatus kurir aktif (dari daftar `couriers`).
+ * Saldo di SATU lokasi, dihitung dari ledger transaksi manual
+ * (cashTransfers, format from/to baru) DITAMBAH transaksi virtual yang
+ * diteruskan lewat parameter `extraTransactions` (lihat
+ * buildVirtualTransactions di useShiftLogic.js — hasil "terjemahan"
+ * salesHistory/expenses jadi bentuk from/to, TANPA menulis balik ke
+ * tabel manapun).
  *
- * `couriers` idealnya array hasil `getCourierBalanceTargets()` di bawah
- * (sudah termasuk kurir non-aktif yang masih ada saldo nyangkut), TAPI
- * tetap backward-compatible kalau cuma di-pass array employee biasa
- * ({ id, name }) — `isActive` default true kalau field-nya gak ada.
+ * `openingBalance` dipakai KHUSUS lokasi 'dompet' (uang kas awal shift);
+ * default 0 buat lokasi lain (kurir/owner/hilang selalu mulai dari 0).
  */
-export function computeAllCourierBalances(couriers, { expenses = [], salesHistory = [], cashTransfers = [] } = {}) {
+export function computeLocationBalance(locationKey, transactions, openingBalance = 0) {
+  return (transactions || []).reduce((bal, t) => {
+    if (t.to === locationKey) bal += (t.amount || 0);
+    if (t.from === locationKey) bal -= (t.amount || 0);
+    return bal;
+  }, openingBalance);
+}
+
+/**
+ * Saldo SEMUA kurir sekaligus (dipakai buat breakdown "Rincian Posisi
+ * Uang" & dropdown form transaksi). `couriers` idealnya hasil
+ * getCourierBalanceTargets() (termasuk kurir non-aktif yg masih ada
+ * saldo nyangkut).
+ */
+export function computeAllCourierBalances(couriers, transactions) {
   return (couriers || []).map(emp => ({
     employeeId: emp.id,
     employeeName: emp.name,
     isActive: emp.isActive !== false,
-    balance: computeCourierBalance(emp.id, { expenses, salesHistory, cashTransfers }),
+    balance: computeLocationBalance(courierLocationKey(emp.id), transactions),
   }));
 }
 
@@ -178,16 +169,15 @@ export function computeAllCourierBalances(couriers, { expenses = [], salesHistor
  * 'resign' (atau role-nya diganti), dia LANGSUNG hilang dari daftar —
  * padahal saldo cash dia di salesHistory/expenses/cashTransfers TETAP
  * ada & TIDAK ikut nol. Akibatnya: uang itu masih "nyangkut" di data,
- * tapi tombol Setor/Hapus/Ganti Uang buat nyelesaiinnya juga ikut hilang
- * (gak pernah dirender sama sekali) — dan totalHeldByCouriers jadi
- * under-count, bikin Saldo Akhir Dompet di shiftStats keliatan LEBIH
- * BESAR dari kas fisik yang sebenarnya ada.
+ * tapi baris buat nyelesaiinnya juga ikut hilang dari UI (gak pernah
+ * dirender sama sekali) — bikin Saldo Akhir keliatan gak balance dengan
+ * kas fisik yang sebenarnya ada.
  *
  * Fungsi ini menggabungkan kurir aktif dengan SEMUA employeeId yang
  * pernah tercatat sebagai cashHolder kurir di ledger manapun (expense,
  * salesHistory, cashTransfers) — supaya baris saldo kurir yang sudah
- * resign/ganti role TETAP muncul & tetap bisa di-Setor/Hapus/Ganti Uang
- * sampai benar-benar tuntas, bukan cuma menghilang begitu saja.
+ * resign/ganti role TETAP muncul & tetap bisa diselesaikan lewat form
+ * transaksi, sampai benar-benar tuntas, bukan cuma menghilang begitu saja.
  *
  * Dipakai KHUSUS untuk menghitung/menampilkan saldo (ShiftView) — BUKAN
  * untuk dropdown pilih kurir di transaksi baru (ExpenseView/PaymentModal
@@ -215,13 +205,39 @@ export function getCourierBalanceTargets(activeCouriers, { expenses = [], salesH
   (salesHistory || []).forEach(addFromCashHolderRecord);
 
   (cashTransfers || []).forEach(t => {
-    if (!t.employeeId || byId.has(t.employeeId)) return;
-    byId.set(t.employeeId, {
-      id: t.employeeId,
-      name: t.employeeName || 'Kurir (non-aktif)',
-      isActive: false,
+    [t.from, t.to].forEach(locKey => {
+      const id = courierIdFromLocation(locKey);
+      if (!id || byId.has(id)) return;
+      byId.set(id, { id, name: t.employeeNameSnapshot?.[id] || 'Kurir (non-aktif)', isActive: false });
     });
   });
 
   return Array.from(byId.values());
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  MIGRASI DATA LAMA (format type/employeeId -> format from/to)
+// ═══════════════════════════════════════════════════════════════════════
+// Dipanggil SEKALI oleh useShiftLogic.js saat data cashTransfers lama
+// terdeteksi (record punya field `type` tapi belum punya `from`/`to`).
+// Permanen — hasil migrasi ditulis balik menggantikan data lama.
+export function migrateLegacyCashTransfer(t) {
+  if (t.from && t.to) return t; // sudah format baru, gak perlu migrasi
+  const kurirKey = t.employeeId ? courierLocationKey(t.employeeId) : null;
+  const base = { id: t.id, note: t.note, date: t.date, isDeleted: t.isDeleted, deletedAt: t.deletedAt };
+
+  switch (t.type) {
+    case 'writeoff':
+      return { ...base, from: kurirKey, to: LOCATION_HILANG, amount: Math.abs(t.amount || 0) };
+    case 'reimburse':
+      // amount lama disimpan NEGATIF -> uang keluar dari Dompet ke Kurir
+      return { ...base, from: LOCATION_DOMPET, to: kurirKey, amount: Math.abs(t.amount || 0) };
+    case 'owner':
+      return { ...base, from: LOCATION_DOMPET, to: LOCATION_OWNER, amount: Math.abs(t.amount || 0) };
+    case 'courier_owner':
+      return { ...base, from: kurirKey, to: LOCATION_OWNER, amount: Math.abs(t.amount || 0) };
+    case 'deposit':
+    default:
+      return { ...base, from: kurirKey, to: LOCATION_DOMPET, amount: Math.abs(t.amount || 0) };
+  }
 }

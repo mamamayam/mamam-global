@@ -1,8 +1,7 @@
-import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown, AlertTriangle, Users } from 'lucide-react';
+import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown, AlertTriangle, Users, ArrowRight, ChevronDown } from 'lucide-react';
 import { isNativePlatform, printShiftNativeBluetooth } from '../../../library/printer';
-import { activeOnly, trashedOnly } from '../../../utils/softDelete';
-import { applySort } from '../../../utils/sortUtils';
-import { isOwnerTransfer } from '../../../utils/cashHolders';
+import { trashedOnly } from '../../../utils/softDelete';
+import { isCourierLocation } from '../../../utils/cashHolders';
 
 // Import komponen UI Design System
 import {
@@ -18,17 +17,19 @@ import {
   BulkSelectBar
 } from '../../../components/ui';
 
-import { useShiftLogic, sortOptions, getCourierTransferMeta } from './useShiftLogic';
+import { useShiftLogic, sortOptions, getLocationMeta } from './useShiftLogic';
 import ShiftModals from './ShiftModals';
 
-// ShiftView — orchestrator halaman Dompet. Isinya: X-Reading (laporan tutup
-// dompet), halaman utama (buka dompet / kartu shift aktif), dan Riwayat
-// (rekap + daftar + riwayat setoran kurir). Semua state/logic ada di
-// useShiftLogic(), 5 modal (edit saldo aktif, edit shift, setor, write-off,
-// reimburse) ada di ShiftModals.jsx.
+// ShiftView — orchestrator halaman Dompet. 3 tab: 'aktif' (kartu buka/tutup
+// dompet + rincian posisi uang + form Catat Perpindahan Uang), 'riwayat'
+// (rekap + daftar penutupan dompet), 'log' (Log Transaksi — satu list
+// gabungan semua perpindahan uang, manual & otomatis). Semua state/logic
+// ada di useShiftLogic(), modal buka/tutup/edit shift ada di ShiftModals.jsx
+// (modal transaksi kurir yang dulu terpisah SUDAH DIHAPUS, gantiin dengan
+// form generik langsung di tab Aktif — lihat card "Catat Perpindahan Uang").
 const ShiftView = () => {
   const {
-    currentShift, shiftHistory, formatRupiah, storeSettings, isAdminMode, employees, cashTransfers,
+    currentShift, shiftHistory, formatRupiah, storeSettings, isAdminMode, employees,
 
     activeTab, setActiveTab,
 
@@ -44,20 +45,17 @@ const ShiftView = () => {
     handleShareImage,
 
     couriers, courierBalances, totalHeldByCouriers,
-    handleOpenDeposit, handleConfirmPartialDeposit, isDepositSubmitting,
-    handleOpenWriteoff, handleConfirmWriteoff, isWriteoffSubmitting,
-    handleOpenReimburse, handleConfirmReimburse, isReimburseSubmitting,
-    depositTarget, setDepositTarget, partialDepositInput, setPartialDepositInput,
-    writeoffTarget, setWriteoffTarget, writeoffInput, setWriteoffInput,
-    reimburseTarget, setReimburseTarget, reimburseInput, setReimburseInput,
-
-    totalTransferredToOwner,
-    isOwnerTransferOpen, setIsOwnerTransferOpen,
-    ownerTransferInput, setOwnerTransferInput,
-    ownerTransferNoteInput, setOwnerTransferNoteInput,
-    handleOpenOwnerTransfer, handleConfirmOwnerTransfer, isOwnerTransferSubmitting,
+    dompetBalance, ownerBalance,
 
     shiftStats,
+
+    transferLocations, transferFromBalance,
+    showTransferForm, handleOpenTransferForm, handleCloseTransferForm,
+    transferFrom, setTransferFrom, transferTo, setTransferTo,
+    transferAmountInput, setTransferAmountInput,
+    transferNoteInput, setTransferNoteInput,
+    confirmOverdraft, setConfirmOverdraft,
+    handleSubmitTransfer, isTransferSubmitting,
 
     editingShift, setEditingShift,
     editActualCashInput, setEditActualCashInput,
@@ -78,13 +76,26 @@ const ShiftView = () => {
     selectedIds, allSelected, toggleSelectOne, toggleSelectAll, resetSelection, count,
     handleDeleteShift, handleRestoreShift, handlePermanentDeleteShift,
     handleBulkSoftDeleteShift, handleBulkPermanentDeleteShift,
-    handleDeleteCourierTransfer,
 
+    allTransactions,
+    handleDeleteCourierTransfer,
     editingTransfer, setEditingTransfer,
     editTransferAmountInput, setEditTransferAmountInput,
     editTransferNoteInput, setEditTransferNoteInput,
     handleOpenEditCourierTransfer, handleSaveCourierTransferEdit,
   } = useShiftLogic();
+
+  // Map employeeId -> nama, dipakai locationLabel-style rendering di JSX
+  // (chip Log Transaksi, dropdown form) tanpa perlu import locationLabel
+  // terpisah — cukup cari dari `couriers` yang udah ada di scope ini.
+  const courierNameById = new Map(couriers.map(c => [c.id, c.name]));
+  const labelForLocation = (key) => {
+    if (isCourierLocation(key)) {
+      const id = key.split(':')[1];
+      return courierNameById.get(id) || 'Kurir';
+    }
+    return getLocationMeta(key).label;
+  };
 
   if (showXReading && closedShiftData) {
     return (
@@ -126,6 +137,13 @@ const ShiftView = () => {
             <div className="flex justify-between text-accent-500 dark:text-accent-400 print:text-black"><span>Pengeluaran Kasir</span> <span>-{formatRupiah(closedShiftData.stats.cashExpensesKasir ?? closedShiftData.stats.cashExpenses)}</span></div>
             {closedShiftData.stats.cashExpensesKurir > 0 && (
               <div className="flex justify-between text-accent-500 dark:text-accent-400 print:text-black"><span>Pengeluaran Kurir</span> <span>-{formatRupiah(closedShiftData.stats.cashExpensesKurir)}</span></div>
+            )}
+            {/* Uang Hilang (Write-off) — field baru, gak ada di shift
+                lama yang ditutup sebelum fix ini (stats.cashWriteOff
+                undefined) — pakai fallback 0 lewat `> 0` check, biar
+                shift lama gak nampilin baris Rp 0 yang menyesatkan. */}
+            {closedShiftData.stats.cashWriteOff > 0 && (
+              <div className="flex justify-between text-red-500 dark:text-red-400 print:text-black"><span>Uang Hilang (Write-off)</span> <span>-{formatRupiah(closedShiftData.stats.cashWriteOff)}</span></div>
             )}
           </div>
 
@@ -192,17 +210,13 @@ const ShiftView = () => {
       />
 
       {/* =========================================================================
-          TAB NAVIGASI — Aktif / Riwayat / Log Kurir (khusus Admin)
-          Log Kurir cuma dirender kalau isAdminMode true (sebelumnya section
-          collapsible "Riwayat Setoran Kurir" + "Riwayat Setor ke Owner" di
-          bawah Riwayat — sekarang jadi tab sendiri, lihat activeTab state
-          di useShiftLogic).
+          TAB NAVIGASI — Aktif / Riwayat / Log Transaksi
           ========================================================================= */}
       <div className="flex items-center gap-1 mb-6 border-b border-slate-200 dark:border-slate-700 shrink-0 max-w-4xl overflow-x-auto custom-scrollbar">
         {[
           { key: 'aktif', label: 'Aktif' },
           { key: 'riwayat', label: 'Riwayat' },
-          ...(isAdminMode ? [{ key: 'log-kurir', label: 'Log Kurir' }] : []),
+          { key: 'log', label: 'Log Transaksi' },
         ].map(tab => (
           <button
             key={tab.key}
@@ -221,7 +235,7 @@ const ShiftView = () => {
 
       {/* =========================================================================
           BANNER PERINGATAN — DOMPET KEBAWA NGINAP DARI HARI SEBELUMNYA
-          Cuma tampil di tab Aktif — di tab lain gak relevan/mubazir.
+          Cuma tampil di tab Aktif — di tab lain gak relevan.
           ========================================================================= */}
       {activeTab === 'aktif' && currentShift && isShiftCarriedOver && (
         <div className="max-w-4xl mb-6 shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -276,8 +290,12 @@ const ShiftView = () => {
           </Button>
         </Card>
       ) : (
+        <>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl mb-8 shrink-0 w-full min-w-0">
-          {/* Card Info Shift Aktif */}
+          {/* Card Info Shift Aktif — PURE DISPLAY. Semua tombol aksi
+              transaksi kurir (Setor/Hapus/Ganti Uang/Setor Owner) yang
+              dulu nempel di sini SUDAH DIPINDAH ke card "Catat
+              Perpindahan Uang" di bawah (form generik dari/ke). */}
           <Card variant="elevated" className="flex flex-col justify-between relative overflow-hidden animate-in slide-in-from-left-4 duration-500">
             <div className="absolute top-0 right-0 p-8 opacity-5 dark:opacity-10">
               <FileText className="w-32 h-32" />
@@ -298,7 +316,7 @@ const ShiftView = () => {
             <div className="mt-8 space-y-4 relative z-10">
               <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
                 <span className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                  Uang Kas
+                  Uang Kas Awal
                   {isAdminMode && (
                     <button
                       onClick={handleOpenEditActiveInitial}
@@ -329,112 +347,62 @@ const ShiftView = () => {
                   <span className="font-bold text-accent-600 dark:text-accent-400">-{formatRupiah(shiftStats?.cashExpensesKurir)}</span>
                 </div>
               )}
+              {/* Uang Hilang (Write-off) — TERPISAH dari Pengeluaran
+                  Kasir/Kurir. Ini transaksi manual "Kurir/Dompet -> Hilang"
+                  yang dicatat lewat card "Catat Perpindahan Uang" (bukan
+                  expense operasional beneran) — uang kecolongan/hilang/
+                  tidak balik. Sebelumnya nyampur ke Pengeluaran Kasir/Kurir,
+                  bikin angka gak match kalau dicocokkan ke rekap ExpenseView. */}
+              {shiftStats?.cashWriteOff > 0 && (
+                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                  <span className="text-sm text-slate-500 dark:text-slate-400">Uang Hilang (Write-off)</span>
+                  <span className="font-bold text-red-500 dark:text-red-400">-{formatRupiah(shiftStats?.cashWriteOff)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center pt-2">
                 <span className="text-sm font-bold text-slate-500 dark:text-slate-400">Saldo Akhir</span>
-                <span className="font-black text-2xl text-slate-800 dark:text-slate-100">{formatRupiah((shiftStats?.expectedCash || 0) + totalHeldByCouriers)}</span>
+                {/* SATU-SATUNYA angka Saldo Akhir — jumlah dari breakdown
+                    Rincian Posisi Uang di bawah (dompetBalance +
+                    ownerBalance + total saldo semua kurir), BUKAN formula
+                    terpisah. Ini yang memastikan angka di sini SELALU
+                    match sama breakdown-nya — gak ada lagi 2 sumber angka
+                    yang bisa nyimpang (bug yang sempat kejadian pas
+                    desain mockup). */}
+                <span className="font-black text-2xl text-slate-800 dark:text-slate-100">
+                  {formatRupiah(dompetBalance + ownerBalance + totalHeldByCouriers)}
+                </span>
               </div>
 
-              {/* Ringkasan lokasi cash — dompet kasir vs yang masih di tangan kurir.
-                  "Saldo Akhir" di atas = Saldo Dompet + Saldo Kurir (dihitung
-                  langsung di sini, bukan dari shiftStats.totalCashBisnis,
-                  supaya jelas ini murni penjumlahan dua baris di bawahnya). */}
-              <div className="mt-2 pt-4 border-t border-dashed border-slate-200 dark:border-slate-800 space-y-2">
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">Saldo di Dompet</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatRupiah(shiftStats?.expectedCash)}</span>
-                    {/* Setor ke Owner — narik uang dari laci Dompet ke pemilik
-                        bisnis. Beda sumbu dari Setor/Hapus/Ganti Uang kurir di
-                        bawah (yang soal Kurir <-> Dompet), makanya tombolnya di
-                        baris "Saldo di Dompet", bukan di baris kurir manapun.
-                        Lihat handleOpenOwnerTransfer & totalTransferredToOwner. */}
-                    {(shiftStats?.expectedCash || 0) > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleOpenOwnerTransfer}
-                        className="text-[10px] font-bold text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-500/30 rounded-lg px-1.5 py-0.5 hover:bg-sky-50 dark:hover:bg-sky-500/10 active:scale-95 transition-all duration-200 shrink-0"
-                      >
-                        Setor ke Owner
-                      </button>
-                    )}
-                  </div>
+              {/* Rincian Posisi Uang — di mana aja posisi cash saat ini,
+                  SEMUA dihitung dgn rumus yang sama (computeLocationBalance
+                  di useShiftLogic.js), termasuk Owner (bukan kartu
+                  terpisah lagi) karena itu tetap bagian dari Saldo Akhir
+                  yang harus dipertanggungjawabkan, cuma udah pindah lokasi
+                  ke tangan pemilik. TIDAK ADA tombol aksi apapun di sini —
+                  semua aksi (Setor/Hapus/Ganti Uang/Setor Owner) sekarang
+                  lewat card "Catat Perpindahan Uang" di bawah. */}
+              <div className="mt-2 pt-4 border-t border-dashed border-slate-200 dark:border-slate-800">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Rincian Posisi Uang</p>
+                <div className="space-y-1.5">
+                  <BreakdownRow label="Kasir (Dompet)" value={dompetBalance} colorClass="bg-slate-400" formatRupiah={formatRupiah} />
+                  {courierBalances.filter(b => b.balance !== 0 || b.isActive).map(b => (
+                    <BreakdownRow
+                      key={b.employeeId}
+                      label={`${b.employeeName}${!b.isActive ? ' (Resign)' : ''}`}
+                      value={b.balance}
+                      colorClass="bg-sky-400"
+                      isDebt={b.balance < 0}
+                      formatRupiah={formatRupiah}
+                    />
+                  ))}
+                  <BreakdownRow
+                    label="Owner (hasil transfer, bukan saldo milik Owner)"
+                    value={ownerBalance}
+                    colorClass="bg-orange-400"
+                    formatRupiah={formatRupiah}
+                  />
                 </div>
-                {/* Total yang udah disetor ke Owner — cuma tampil kalau ada,
-                    biar bisa direkonsiliasi ("harusnya ada segini di tangan
-                    Owner") tanpa perlu buka Riwayat Setoran satu-satu. */}
-                {totalTransferredToOwner > 0 && (
-                  <div className="flex justify-between items-center pl-2">
-                    <span className="text-[11px] text-slate-400 dark:text-slate-500">— Sudah disetor ke Owner</span>
-                    <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400 shrink-0">{formatRupiah(totalTransferredToOwner)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Saldo di Kurir</span>
-                  <span className={`text-sm font-bold ${totalHeldByCouriers < 0 ? 'text-accent-600 dark:text-accent-400' : totalHeldByCouriers > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                    {formatRupiah(totalHeldByCouriers)}
-                  </span>
-                </div>
-                {/* Gate pakai !== 0 (bukan > 0) — kurir dengan saldo NEGATIF
-                    (nombokin belanja pakai duit pribadi) tetap harus muncul
-                    di sini, karena itu artinya bisnis berutang ke kurir dan
-                    owner perlu tahu supaya bisa ganti uangnya. */}
-                {couriers.length > 0 && totalHeldByCouriers !== 0 && (
-                  <div className="pl-2 space-y-1 pt-1">
-                    {courierBalances.filter(b => b.balance !== 0).map(b => {
-                      const isNegative = b.balance < 0;
-                      return (
-                        <div key={b.employeeId} className="flex justify-between items-center gap-2">
-                          <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">
-                            — {b.employeeName}
-                            {!b.isActive && (
-                              <span className="ml-1 text-amber-500 dark:text-amber-400 font-semibold">(Resign)</span>
-                            )}
-                          </span>
-                          <span className={`text-[11px] font-semibold shrink-0 ${isNegative ? 'text-accent-500 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400'}`}>
-                            {isNegative ? `Toko berutang ${formatRupiah(Math.abs(b.balance))}` : formatRupiah(b.balance)}
-                          </span>
-                          {/* Setor & Hapus cuma masuk akal buat saldo POSITIF
-                              (ada cash beneran di tangan kurir). Saldo NEGATIF
-                              dapat tombol "Ganti Uang" (reimburse) sebagai
-                              gantinya — kasir bayar utang bisnis ke kurir. */}
-                          {!isNegative ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenDeposit(b)}
-                                className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 rounded-lg px-1.5 py-0.5 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 active:scale-95 transition-all duration-200 shrink-0"
-                              >
-                                Setor
-                              </button>
-                              {/* Hapus Setoran (write-off) — khusus Admin. Beda dari
-                                  Setor: nurunin saldo kurir TAPI gak nambah Saldo
-                                  Dompet (lihat handleConfirmWriteoff & totalWrittenOff). */}
-                              {isAdminMode && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenWriteoff(b)}
-                                  className="text-[10px] font-bold text-accent-600 dark:text-accent-400 border border-accent-200 dark:border-accent-500/30 rounded-lg px-1.5 py-0.5 hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-95 transition-all duration-200 shrink-0"
-                                >
-                                  Hapus
-                                </button>
-                              )}
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenReimburse(b)}
-                              className="text-[10px] font-bold text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-500/30 rounded-lg px-1.5 py-0.5 hover:bg-sky-50 dark:hover:bg-sky-500/10 active:scale-95 transition-all duration-200 shrink-0"
-                            >
-                              Ganti Uang
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
-
             </div>
           </Card>
 
@@ -464,13 +432,110 @@ const ShiftView = () => {
             </Button>
           </Card>
         </div>
+
+        {/* =========================================================================
+            CARD "CATAT PERPINDAHAN UANG" — SATU form generik gantiin 4
+            modal terpisah (Setor/Hapus/Ganti Uang/Setor Owner). User
+            pilih lokasi Dari & Ke dari dropdown yang sama (kurir manapun,
+            Dompet, Owner, Hilang), isi nominal, submit. Collapsed by
+            default biar gak mengganggu tampilan pas cuma mau lihat saldo.
+            ========================================================================= */}
+        <Card padding="none" className="max-w-4xl overflow-hidden mb-8 shrink-0">
+          <button
+            type="button"
+            onClick={() => showTransferForm ? handleCloseTransferForm() : handleOpenTransferForm()}
+            className="w-full p-4 flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <ArrowRight className="w-4 h-4 text-accent-500 dark:text-accent-400" />
+              <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">Catat Perpindahan Uang</span>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showTransferForm ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showTransferForm && (
+            <div className="p-4 pt-0 space-y-3 border-t border-slate-100 dark:border-slate-800 animate-in fade-in slide-in-from-top-2 duration-200">
+              <p className="text-xs text-slate-500 dark:text-slate-400 pt-3">
+                Pilih asal & tujuan uang berpindah, lalu nominal. Berlaku buat semua jenis: setor kurir, ganti uang, hapus saldo, setor ke owner, dsb.
+              </p>
+
+              <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 block">Dari</label>
+                  <Select value={transferFrom} onChange={e => setTransferFrom(e.target.value)} className="text-sm font-semibold">
+                    {transferLocations.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
+                  </Select>
+                </div>
+                <ArrowRight className="w-4 h-4 text-slate-300 dark:text-slate-600 mb-3 shrink-0" />
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1 block">Ke</label>
+                  <Select value={transferTo} onChange={e => setTransferTo(e.target.value)} className="text-sm font-semibold">
+                    {transferLocations.map(l => <option key={l.key} value={l.key}>{l.label}</option>)}
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950 rounded-lg px-3 py-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Saldo {labelForLocation(transferFrom)} saat ini</span>
+                <span className="font-bold text-sm text-slate-800 dark:text-slate-100">{formatRupiah(transferFromBalance)}</span>
+              </div>
+
+              <Input
+                type="number"
+                label="Nominal"
+                icon={<span className="font-bold">Rp</span>}
+                value={transferAmountInput}
+                onChange={e => { setTransferAmountInput(e.target.value); setConfirmOverdraft(false); }}
+                placeholder="0"
+                className="text-lg font-bold py-2.5"
+              />
+
+              <Input
+                type="text"
+                label="Catatan (opsional)"
+                value={transferNoteInput}
+                onChange={e => setTransferNoteInput(e.target.value)}
+                placeholder="mis. Transfer BCA, ganti uang belanja..."
+              />
+
+              {/* Peringatan talangan — saldo `from` gak cukup. User HARUS
+                  centang dulu baru submit bisa jalan (lihat
+                  handleSubmitTransfer: kalau insufficientFunds &&
+                  !confirmOverdraft, submit di-cancel diam-diam supaya
+                  checkbox ini yang jadi satu-satunya jalan lanjut). */}
+              {Number(transferAmountInput) > transferFromBalance && transferAmountInput !== '' && (
+                <div className="flex gap-2 items-start bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl p-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-xs text-amber-800 dark:text-amber-300 mb-2">
+                      Saldo {labelForLocation(transferFrom)} cuma {formatRupiah(transferFromBalance)}, kurang dari {formatRupiah(Number(transferAmountInput))}. Lanjutkan sebagai talangan?
+                    </p>
+                    <label className="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300 cursor-pointer">
+                      <input type="checkbox" checked={confirmOverdraft} onChange={e => setConfirmOverdraft(e.target.checked)} className="w-3.5 h-3.5 accent-amber-600" />
+                      Ya, lanjutkan (saldo akan minus)
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                size="full"
+                onClick={handleSubmitTransfer}
+                disabled={isTransferSubmitting || !transferAmountInput || Number(transferAmountInput) <= 0 || transferFrom === transferTo || (Number(transferAmountInput) > transferFromBalance && !confirmOverdraft)}
+              >
+                {isTransferSubmitting ? 'Memproses...' : 'Catat Perpindahan'}
+              </Button>
+            </div>
+          )}
+        </Card>
+        </>
       ))}
 
       {/* =========================================================================
           REKAPITULASI & RIWAYAT HARIAN SHIFT KASIR — tab "Riwayat"
           ========================================================================= */}
       {activeTab === 'riwayat' && (
-      <div className="mt-8 pb-12">
+      <div className="pb-12">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
             <h3 className="font-heading text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -671,86 +736,59 @@ const ShiftView = () => {
             )}
           </div>
         </Card>
+
       </div>
       )}
 
-      {activeTab === 'log-kurir' && isAdminMode && (
+      {/* =========================================================================
+          TAB "LOG TRANSAKSI" — satu list gabungan SEMUA perpindahan uang
+          (manual dari Card Catat Perpindahan Uang, DAN virtual hasil
+          terjemahan penjualan/pengeluaran). Setiap baris nampilin format
+          "Dari -> Ke" yang seragam, gak ada lagi badge 5 warna beda-beda
+          yang harus dihafal. Transaksi virtual ditandai "· otomatis" &
+          gak bisa diedit/dihapus (sumbernya di PosView/ExpenseView, bukan
+          di sini).
+          ========================================================================= */}
+      {activeTab === 'log' && (
         <div className="pb-12 max-w-4xl">
-          <div className="mb-6">
-            <h3 className="font-heading text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <Users className="w-5 h-5 text-accent-600 dark:text-accent-400" /> Log Kurir
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Semua jenis transaksi kurir: setor, hapus (write-off), ganti uang (reimburse), dan setor ke Owner.</p>
-          </div>
-
           <Card padding="none" className="overflow-hidden flex flex-col">
-            <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-              <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Riwayat Transaksi Kurir</h4>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Termasuk setoran manual, hapus setoran, ganti uang, & penutupan saldo lama otomatis.</p>
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+              <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <History className="w-3.5 h-3.5" /> Log Transaksi
+              </h4>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Semua perpindahan uang — manual & otomatis dari penjualan/pengeluaran.</p>
             </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[420px] overflow-y-auto custom-scrollbar">
-              {applySort(activeOnly(cashTransfers || []).filter(t => !isOwnerTransfer(t)), 'date-desc', { date: t => new Date(t.date) }).length === 0 ? (
-                <EmptyState size="sm" icon={<History className="w-8 h-8 opacity-30" />} title="Belum ada riwayat transaksi kurir." />
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {allTransactions.length === 0 ? (
+                <EmptyState size="sm" icon={<History className="w-8 h-8 opacity-30" />} title="Belum ada transaksi." />
               ) : (
-                applySort(activeOnly(cashTransfers || []).filter(t => !isOwnerTransfer(t)), 'date-desc', { date: t => new Date(t.date) }).map(t => {
-                  const meta = getCourierTransferMeta(t);
-                  const isNegativeAmount = (t.amount || 0) < 0;
+                [...allTransactions].sort((a, b) => new Date(b.date) - new Date(a.date)).map(t => {
+                  const fromMeta = getLocationMeta(t.from);
+                  const toMeta = getLocationMeta(t.to);
                   return (
-                    <div key={t.id} className="p-3 flex items-center justify-between gap-3 text-xs">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{t.employeeName}</p>
-                          <Badge variant={meta.badgeVariant}><span className="uppercase tracking-wider text-[10px]">{meta.label}</span></Badge>
+                    <div key={t.id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-bold ${fromMeta.chipClass}`}>{labelForLocation(t.from)}</span>
+                          <ArrowRight className="w-3 h-3 text-slate-300 dark:text-slate-600 shrink-0" />
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-bold ${toMeta.chipClass}`}>{labelForLocation(t.to)}</span>
+                          {t.isVirtual && <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">· otomatis</span>}
                         </div>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{t.note}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{t.note}</p>
                         <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(t.date).toLocaleString('id-ID')}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className={`font-black ${isNegativeAmount ? 'text-sky-600 dark:text-sky-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                          {formatRupiah(Math.abs(t.amount || 0))}
-                        </span>
-                        <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris transaksi ini">
-                          <Edit className="w-3.5 h-3.5" />
-                        </IconButton>
-                        <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris transaksi ini">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </IconButton>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </Card>
-
-          <Card padding="none" className="overflow-hidden flex flex-col mt-4">
-            <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-              <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Riwayat Setor ke Owner</h4>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Total: {formatRupiah(totalTransferredToOwner)}</p>
-            </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto custom-scrollbar">
-              {applySort(activeOnly(cashTransfers || []).filter(isOwnerTransfer), 'date-desc', { date: t => new Date(t.date) }).length === 0 ? (
-                <EmptyState size="sm" icon={<History className="w-8 h-8 opacity-30" />} title="Belum ada setoran ke Owner." />
-              ) : (
-                applySort(activeOnly(cashTransfers || []).filter(isOwnerTransfer), 'date-desc', { date: t => new Date(t.date) }).map(t => {
-                  const meta = getCourierTransferMeta(t);
-                  return (
-                    <div key={t.id} className="p-3 flex items-center justify-between gap-3 text-xs">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{t.note || 'Setor ke Owner'}</p>
-                          <Badge variant={meta.badgeVariant}><span className="uppercase tracking-wider text-[10px]">{meta.label}</span></Badge>
-                        </div>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(t.date).toLocaleString('id-ID')}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-black text-sky-600 dark:text-sky-400">{formatRupiah(t.amount)}</span>
-                        <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris setoran ini">
-                          <Edit className="w-3.5 h-3.5" />
-                        </IconButton>
-                        <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris setoran ini">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </IconButton>
+                        <span className="font-black text-sm text-slate-800 dark:text-slate-100">{formatRupiah(t.amount)}</span>
+                        {!t.isVirtual && (
+                          <>
+                            <IconButton variant="edit" onClick={() => handleOpenEditCourierTransfer(t)} title="Edit baris transaksi ini">
+                              <Edit className="w-3.5 h-3.5" />
+                            </IconButton>
+                            <IconButton variant="delete" onClick={() => handleDeleteCourierTransfer(t.id)} title="Hapus baris transaksi ini">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </IconButton>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -785,25 +823,6 @@ const ShiftView = () => {
         editActualCashInput={editActualCashInput}
         setEditActualCashInput={setEditActualCashInput}
         handleSaveEdit={handleSaveEdit}
-        depositTarget={depositTarget}
-        setDepositTarget={setDepositTarget}
-        partialDepositInput={partialDepositInput}
-        setPartialDepositInput={setPartialDepositInput}
-        courierBalances={courierBalances}
-        handleConfirmPartialDeposit={handleConfirmPartialDeposit}
-        isDepositSubmitting={isDepositSubmitting}
-        writeoffTarget={writeoffTarget}
-        setWriteoffTarget={setWriteoffTarget}
-        writeoffInput={writeoffInput}
-        setWriteoffInput={setWriteoffInput}
-        handleConfirmWriteoff={handleConfirmWriteoff}
-        isWriteoffSubmitting={isWriteoffSubmitting}
-        reimburseTarget={reimburseTarget}
-        setReimburseTarget={setReimburseTarget}
-        reimburseInput={reimburseInput}
-        setReimburseInput={setReimburseInput}
-        handleConfirmReimburse={handleConfirmReimburse}
-        isReimburseSubmitting={isReimburseSubmitting}
         editingTransfer={editingTransfer}
         setEditingTransfer={setEditingTransfer}
         editTransferAmountInput={editTransferAmountInput}
@@ -811,17 +830,32 @@ const ShiftView = () => {
         editTransferNoteInput={editTransferNoteInput}
         setEditTransferNoteInput={setEditTransferNoteInput}
         handleSaveCourierTransferEdit={handleSaveCourierTransferEdit}
-        isOwnerTransferOpen={isOwnerTransferOpen}
-        setIsOwnerTransferOpen={setIsOwnerTransferOpen}
-        ownerTransferInput={ownerTransferInput}
-        setOwnerTransferInput={setOwnerTransferInput}
-        ownerTransferNoteInput={ownerTransferNoteInput}
-        setOwnerTransferNoteInput={setOwnerTransferNoteInput}
-        handleConfirmOwnerTransfer={handleConfirmOwnerTransfer}
-        isOwnerTransferSubmitting={isOwnerTransferSubmitting}
       />
     </div>
   );
 };
+
+// Baris breakdown "Rincian Posisi Uang" — dipakai buat SEMUA lokasi
+// (Kasir/Dompet, tiap kurir, Owner) dengan tampilan yang seragam. `isDebt`
+// khusus dipakai kalau saldo kurir NEGATIF (nombokin belanja pakai duit
+// pribadi, belum diganti) — warnanya beda biar kelihatan itu bukan
+// "saldo positif kecil" tapi utang bisnis ke kurir tsb.
+function BreakdownRow({ label, value, colorClass, isDebt, formatRupiah }) {
+  // Fallback aman kalau formatRupiah kelewat gak di-pass dari pemanggil —
+  // daripada crash total (kejadian sebelumnya: 2 dari 3 pemanggilan lupa
+  // ngasih prop ini), tampilkan angka mentah dgn pemisah ribuan sederhana.
+  const format = formatRupiah || ((n) => `Rp ${Math.abs(Math.round(n || 0)).toLocaleString('id-ID')}`);
+  return (
+    <div className="flex items-center justify-between py-1">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${colorClass}`} />
+        <span className="text-xs text-slate-500 dark:text-slate-400 truncate">{label}</span>
+      </div>
+      <span className={`text-sm font-bold shrink-0 ml-2 ${isDebt ? 'text-accent-600 dark:text-accent-400' : 'text-slate-700 dark:text-slate-200'}`}>
+        {isDebt ? `Toko berutang ${format(Math.abs(value))}` : format(value)}
+      </span>
+    </div>
+  );
+}
 
 export default ShiftView;
