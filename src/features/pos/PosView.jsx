@@ -428,7 +428,7 @@ const PosView = () => {
 
             {/* ── FAB keranjang ───────────────────────────────────────────── */}
             <div
-                className="fixed right-6 short:!right-4 z-50 bottom-[--fab-bottom] short:!bottom-4"
+                className="fixed right-6 short:!right-4 z-50 bottom-[var(--fab-bottom)] short:!bottom-4"
                 style={{ '--fab-bottom': 'calc(4rem + env(safe-area-inset-bottom, 0px) + 1rem)' }}
             >
                 <button
