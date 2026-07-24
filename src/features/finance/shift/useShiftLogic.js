@@ -321,11 +321,15 @@ export function useShiftLogic() {
   //     direset) — uang yang masih di tangan kurir dari kemarin/shift
   //     lalu itu MEMANG masih nyangkut secara fisik sampai beneran
   //     disetor, gak peduli shift keberapa sekarang.
-  //   - Dompet: HARUS "pure hari ini" — gak boleh ada transaksi nyangkut
-  //     dari kemarin/hari-hari sebelumnya, BAHKAN kalau shift yang sama
-  //     kebawa nginep (belum ditutup). Begitu sebuah shift ditutup, uang
-  //     di laci itu "selesai" — dicatat sbg actualCash final di
-  //     shiftHistory, TIDAK nyambung ke shift berikutnya.
+  //   - Dompet: HARUS "murni per-shift" — gak boleh ada transaksi
+  //     nyangkut dari shift MANAPUN sebelumnya, termasuk transaksi yang
+  //     dicatat SISTEM sendiri (mis. closing transfer kurir saat tutup
+  //     shift) walau tanggalnya SAMA dengan shift yang baru dibuka.
+  //     Begitu sebuah shift ditutup, uang di laci itu "selesai" —
+  //     dicatat sbg actualCash final di shiftHistory, TIDAK nyambung ke
+  //     shift berikutnya SAMA SEKALI. Modal shift baru MURNI angka yang
+  //     diketik manual di form "Buka Dompet", titik — walau baru buka-
+  //     tutup-buka lagi dalam hitungan menit di hari yang sama.
   // BUG #1 YANG SEMPAT KEJADIAN: dompetBalance awalnya dihitung dari
   // allTransactions (SEMUA transaksi sepanjang sejarah aplikasi, gak
   // di-scope), sementara initialCash yang jadi openingBalance-nya cuma
@@ -334,30 +338,45 @@ export function useShiftLogic() {
   // angka jadi jutaan padahal shift baru buka dgn modal puluhan ribu.
   // Fix: dompetBalance HARUS pakai activeShiftTransactions (didefinisikan
   // di bawah), BUKAN allTransactions.
-  // BUG #2 YANG SEMPAT KEJADIAN: filter awalnya bandingin TIMESTAMP penuh
-  // (`new Date(t.date) >= new Date(currentShift.startTime)`), bukan
-  // TANGGAL. currentShift.startTime = jam PERSIS shift dibuka (mis.
-  // 09:53:27) — sedangkan expense yang dicatat lewat input tanggal manual
-  // (ExpenseView) jamnya default 00:00:00. Walau tanggalnya SAMA dengan
-  // hari ini, 00:00:00 < 09:53:27, jadi expense itu ke-filter KELUAR
-  // keliru — bikin "Pengeluaran Kasir" tampil Rp 0 walau ada banyak
-  // expense hari itu. Fix: bandingin TANGGAL KALENDER (toLocalDateString,
-  // pola yg sama dgn matchesDateFilter/closeStaleCourierBalances di file
-  // ini), bukan timestamp — jam berapapun expense dicatat, selama
-  // tanggalnya >= tanggal buka shift/hari ini, tetap kehitung.
+  // BUG #2 YANG SEMPAT KEJADIAN: filter sempat diubah jadi bandingin
+  // TANGGAL KALENDER doang (bukan timestamp presisi), buat ngatasin
+  // expense manual (ExpenseView) yang jamnya default 00:00:00. TAPI itu
+  // bikin BUG BARU: kalau kasir tutup shift lalu BUKA LAGI shift baru di
+  // HARI YANG SAMA (skenario testing cepat: tutup-buka berkali-kali
+  // dalam semenit), transaksi closing kurir yang baru DITULIS SISTEM
+  // (bertanggal "hari ini juga") ikut kehitung ke shift BARU — padahal
+  // itu milik shift LAMA yang sudah selesai. Modal shift baru jadi
+  // kebawa residu dari shift sebelumnya, padahal harusnya murni angka
+  // manual yang diketik ulang.
+  // FIX GABUNGAN: transaksi TERCATAT SISTEM (cashTransfers — selalu
+  // punya timestamp presisi asli, baik manual lewat card "Catat
+  // Perpindahan Uang" maupun otomatis dari closing shift) dibandingkan
+  // PRESISI (>= currentShift.startTime, jam-menit-detik) — supaya
+  // transaksi shift SEBELUMNYA gak ikut kehitung walau di hari sama.
+  // Transaksi VIRTUAL (isVirtual: true — hasil terjemahan expense/
+  // income/sales yang diinput via tanggal manual, rawan jam 00:00:00)
+  // tetap dibandingkan by TANGGAL KALENDER seperti sebelumnya, biar gak
+  // balik ke bug lama (expense hari ini ke-filter keluar keliru gara2
+  // jamnya 00:00 lebih awal dari jam buka shift).
   const activeShiftTransactions = useMemo(() => {
     if (!currentShift) return [];
+    const shiftStart = new Date(currentShift.startTime);
     const shiftStartDay = toLocalDateString(currentShift.startTime);
     const today = toLocalDateString();
-    // Batas bawah = tanggal yang PALING BARU antara hari buka shift dan
-    // hari ini (string "YYYY-MM-DD" aman dibandingkan leksikografis).
-    // Kasus normal (shift dibuka hari ini): shiftStartDay === today.
-    // Kasus shift kebawa nginep (isShiftCarriedOver true, dibuka
-    // kemarin/lebih lama): today > shiftStartDay, jadi transaksi
-    // kemarin-dst di shift yang sama ikut ke-exclude — Saldo Akhir tetap
-    // "pure hari ini" walau shift belum ditutup manual.
     const cutoffDay = shiftStartDay > today ? shiftStartDay : today;
-    return allTransactions.filter(t => toLocalDateString(t.date) >= cutoffDay);
+    return allTransactions.filter(t => {
+      if (t.isVirtual) {
+        // Expense/income/sales manual — bandingkan TANGGAL, bukan jam
+        // (jam sering 00:00:00 dari input tanggal, bukan waktu real).
+        return toLocalDateString(t.date) >= cutoffDay;
+      }
+      // Transaksi cashTransfers (manual ATAU otomatis/closing) — selalu
+      // punya timestamp asli (new Date() saat dicatat), jadi aman & WAJIB
+      // dibandingkan PRESIS ke jam buka shift. Ini yang mencegah
+      // transaksi closing shift SEBELUMNYA ikut kehitung ke shift BARU
+      // walau dicatat di hari yang sama.
+      return new Date(t.date) >= shiftStart;
+    });
   }, [allTransactions, currentShift]);
 
   const dompetBalance = useMemo(
