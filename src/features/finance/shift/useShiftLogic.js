@@ -239,9 +239,26 @@ export function useShiftLogic() {
   // porsi method:'Tunai' di splitDetails, dan expense filter
   // paymentMethod==='Tunai' (default 'Tunai' utk data lama tanpa field ini).
   //
-  // Pemasukan Non-Penjualan (`incomes`) BELUM diterjemahkan ke ledger
-  // ini (behavior sama seperti versi sebelumnya — baris "Pemasukan
-  // Non-Penjualan" di card dihitung terpisah, lihat shiftStats).
+  // Pemasukan Non-Penjualan (`incomes`) — SEKARANG diterjemahkan jadi
+  // transaksi virtual juga, sama seperti sales & expense di atas. HANYA
+  // porsi TUNAI yang masuk ledger (konsisten dgn aturan Non-Tunai di
+  // atas). `from` pakai LOCATION_CUSTOMER — bukan berarti "dari
+  // pelanggan", tapi lokasi ini memang didesain sebagai sumber netral
+  // buat transaksi virtual dari LUAR sistem cash internal (gak pernah
+  // dihitung saldonya di manapun — lihat cashHolders.js), jadi aman
+  // dipakai ulang di sini: income bukan dari kurir/Dompet/Owner manapun,
+  // dia genuinely uang baru yang masuk dari luar.
+  // BUG YANG SEMPAT KEJADIAN: incomes sebelumnya TIDAK pernah masuk sini
+  // — cuma dihitung terpisah (cashIncomeTotal di shiftStats) lalu
+  // ditambahkan manual ke shiftStats.expectedCash SAJA. Tapi dompetBalance
+  // (dipakai buat breakdown "Kasir (Dompet)" & "Saldo Akhir" di card
+  // Dompet Aktif — lihat ShiftView) TIDAK PERNAH menyertakan
+  // cashIncomeTotal itu. Akibatnya: baris "Pemasukan Non-Penjualan"
+  // kelihatan "+Rp sekian" di card, tapi angka itu gak pernah nambah ke
+  // Kasir/Saldo Akhir yang ditampilkan DI CARD YANG SAMA — cuma numpang
+  // lewat ke shiftStats.expectedCash (yang baru kepakai/kelihatan pas
+  // laporan tutup shift). Dua sumber angka berbeda buat hal yang
+  // seharusnya sama. Fix: masukkan ke ledger juga, satu sumber data.
   const virtualTransactions = useMemo(() => {
     const sales = [];
     activeOnly(salesHistory).forEach(order => {
@@ -285,8 +302,24 @@ export function useShiftLogic() {
         date: e.date,
         isVirtual: true,
       }));
-    return [...sales, ...exp];
-  }, [salesHistory, expenses]);
+
+    // Pemasukan Non-Penjualan — selalu masuk ke Dompet (income di toko
+    // ini gak punya konsep cashHolder/kurir, selalu dianggap langsung ke
+    // laci kasir). Cuma yang paymentMethod 'Tunai' yang masuk ledger.
+    const inc = activeOnly(incomes)
+      .filter(i => (i.paymentMethod || 'Tunai') === 'Tunai') // default 'Tunai' utk data lama tanpa field ini
+      .map(i => ({
+        id: `virtual-income-${i.id}`,
+        from: LOCATION_CUSTOMER,
+        to: LOCATION_DOMPET,
+        amount: i.amount || 0,
+        note: i.description || i.note || 'Pemasukan Non-Penjualan',
+        date: i.date,
+        isVirtual: true,
+      }));
+
+    return [...sales, ...exp, ...inc];
+  }, [salesHistory, expenses, incomes]);
 
   // Ledger LENGKAP (manual + virtual) — satu-satunya input buat
   // computeLocationBalance di seluruh modul Shift.
@@ -603,31 +636,32 @@ export function useShiftLogic() {
   const shiftStats = useMemo(() => {
     if (!currentShift) return null;
 
-    // Pemasukan Non-Penjualan (`incomes`) BELUM masuk ke ledger from/to
-    // (lihat catatan di virtualTransactions) — tetap dihitung terpisah
-    // di sini, dengan SCOPE TANGGAL yang sama dengan activeShiftTransactions
-    // (MAX antara hari buka shift dan hari ini) — bukan cuma hari buka
-    // shift doang. Tanpa clamp ke hari ini, shift yang kebawa nginep
-    // (isShiftCarriedOver) bakal ikut narik incomes dari kemarin, bug
-    // kelas yang sama dengan yang sudah difix di activeShiftTransactions.
-    const shiftStartDay = toLocalDateString(currentShift.startTime);
-    const today = toLocalDateString();
-    const cutoffDay = shiftStartDay > today ? shiftStartDay : today;
-    const cashIncomeTotal = activeOnly(incomes)
-      .filter(i => toLocalDateString(i.date) >= cutoffDay)
-      .reduce((s, i) => s + i.amount, 0);
+    // Pemasukan Non-Penjualan (`incomes`) SEKARANG sudah masuk ledger
+    // (lihat virtualTransactions) — jadi sudah otomatis ikut kehitung di
+    // dompetBalance lewat activeShiftTransactions. cashIncomeTotal di
+    // sini MURNI buat DISPLAY (baris "Pemasukan Non-Penjualan" di card),
+    // dihitung dari activeShiftTransactions yang SAMA (satu ledger, satu
+    // sumber), BUKAN filter terpisah dari incomes mentah — supaya angka
+    // ini dijamin konsisten dengan apa yang sudah ikut di dompetBalance.
+    const cashIncomeTotal = activeShiftTransactions
+      .filter(t => t.isVirtual && t.from === LOCATION_CUSTOMER && t.to === LOCATION_DOMPET && t.id?.startsWith('virtual-income-'))
+      .reduce((s, t) => s + t.amount, 0);
 
     const cashExpenseTotal = cashExpenseKasirTotal + cashExpenseKurirTotal;
 
-    // expectedCash (Saldo Akhir / laci kasir) = dompetBalance, yang
-    // sudah dihitung di atas lewat computeLocationBalance(LOCATION_DOMPET,
-    // allTransactions, initialCash) — SATU-SATUNYA rumus buat lokasi
-    // Dompet, sama persis dipakai buat baris "Kasir (Dompet)" di
-    // breakdown Rincian Posisi Uang. Bedanya cuma cashIncomeTotal
-    // (Pemasukan Non-Penjualan) yang belum masuk ledger, jadi ditambah
-    // manual di sini — SEKALI, di titik yang sama dgn dompetBalance,
-    // bukan titik terpisah yang bisa lupa disinkronkan.
-    const expectedCash = dompetBalance + cashIncomeTotal;
+    // expectedCash (Saldo Akhir / laci kasir) = dompetBalance MURNI,
+    // TANPA tambahan apapun lagi. incomes SUDAH masuk ledger (lihat
+    // virtualTransactions) jadi SUDAH otomatis tercermin di dompetBalance
+    // — menambahkannya lagi di sini bakal DOBEL HITUNG.
+    // BUG YANG SEMPAT KEJADIAN: dulu di titik ini expectedCash =
+    // dompetBalance + cashIncomeTotal, karena incomes BELUM masuk ledger
+    // sama sekali saat itu — jadi "Kasir (Dompet)"/"Saldo Akhir" di card
+    // Aktif (yang baca dompetBalance MURNI, TANPA cashIncomeTotal) gak
+    // pernah ikut naik walau baris "Pemasukan Non-Penjualan" kelihatan
+    // ada isinya — cuma numpang lewat ke expectedCash (baru kepakai di
+    // laporan tutup shift). Fix: incomes masuk ledger, expectedCash =
+    // dompetBalance apa adanya.
+    const expectedCash = dompetBalance;
 
     return {
       initialCash: currentShift.initialCash,
@@ -646,7 +680,7 @@ export function useShiftLogic() {
       totalCashBisnis: expectedCash + totalHeldByCouriers,
       expectedCash,
     };
-  }, [currentShift, incomes, dompetBalance, cashSalesTotal, cashExpenseKasirTotal, cashExpenseKurirTotal, cashHilangTotal, totalHeldByCouriers]);
+  }, [currentShift, activeShiftTransactions, dompetBalance, cashSalesTotal, cashExpenseKasirTotal, cashExpenseKurirTotal, cashHilangTotal, totalHeldByCouriers]);
 
   // Deteksi dompet yang kebawa nginap dari hari sebelumnya (kemungkinan kasir lupa nutup).
   // Sengaja pakai perbandingan TANGGAL, bukan jumlah jam, karena shift resto
