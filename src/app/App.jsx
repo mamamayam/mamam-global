@@ -1,7 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
-import { StatusBar, Style } from '@capacitor/status-bar';
-import { Capacitor } from '@capacitor/core';
 import { usePersistState } from '../hook/usePersistState';
 import { useOnlineStatus } from '../hook/useOnlineStatus';
 import { INITIAL_MENUS, INITIAL_VARIANT_GROUPS, INITIAL_CATEGORIES, INITIAL_RAW_MATERIALS } from '../data/initialData';
@@ -216,36 +214,6 @@ export default function App() {
 
   const [theme, setTheme, l23] = usePersistState('theme', 'light');
   const [colorTheme, setColorThemeState] = usePersistState('colorTheme', 'orange');
-
-  // ─── Status bar transparan edge-to-edge ─────────────────────────────────
-  // overlaysWebView(true): webview digambar DI BELAKANG status bar (bukan
-  // didorong ke bawahnya) — status bar jadi transparan, otomatis nyatu
-  // dengan apa pun yang ada di baliknya (Header bg-white/95 light,
-  // bg-slate-950/95 dark). Ini beda dari percobaan lama yang gagal: dulu
-  // edge-to-edge diaktifkan lewat windowTranslucentStatus di styles.xml
-  // (API lama, deprecated & gak reliable di targetSdk 35+/Android 15),
-  // yang bikin ikon jam/baterai jadi belang/samar. Sekarang edge-to-edge
-  // beneran diaktifkan lewat WindowCompat.setDecorFitsSystemWindows(false)
-  // di MainActivity.java (API modern) — jauh lebih stabil.
-  // Konten aman dari ketiban status bar karena AppLayout & Sidebar kasih
-  // padding-top sebesar env(safe-area-inset-top) (lihat AppLayout.jsx).
-  // Style ikon tetap ikut `theme`: Style.Dark (ikon gelap) di atas Header
-  // terang (light mode), Style.Light (ikon terang) di atas Header gelap
-  // (dark mode) — supaya jam/baterai/notifikasi selalu kontras & kebaca.
-  // Cuma jalan di native (Android/iOS); di browser biasa plugin ini no-op
-  // tapi dibungkus try/catch + cek platform biar aman.
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-    (async () => {
-      try {
-        await StatusBar.setOverlaysWebView({ overlay: true });
-        await StatusBar.setBackgroundColor({ color: '#00000000' });
-        await StatusBar.setStyle({ style: theme === 'dark' ? Style.Light : Style.Dark });
-      } catch (err) {
-        console.warn('StatusBar setup gagal (mungkin platform tidak didukung):', err);
-      }
-    })();
-  }, [theme]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-color-theme', colorTheme);

@@ -24,10 +24,7 @@ export default function Sidebar({
         <aside className={`fixed md:static short:!fixed inset-y-0 left-0 z-50 w-[268px] short:w-[240px] bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl md:bg-white md:dark:bg-slate-950 short:!bg-white/95 short:dark:!bg-slate-950/95 short:!backdrop-blur-xl border-r border-slate-100/60 dark:border-slate-900 transition-transform duration-400 ease-out flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 short:!-translate-x-full'}`}>
 
             {/* Header: Logo mark + Gradient Text */}
-            <div
-                className="pb-6 px-6 flex items-start justify-between shrink-0"
-                style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.75rem)' }}
-            >
+            <div className="pt-7 pb-6 px-6 flex items-start justify-between shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="relative shrink-0 w-11 h-11 rounded-2xl bg-gradient-to-br from-accent-500 to-accent-600 dark:from-accent-400 dark:to-accent-600 flex items-center justify-center shadow-[0_4px_14px_rgba(var(--color-accent-500),0.35)]">
                         <span className="font-heading font-black text-lg text-white">{initial}</span>

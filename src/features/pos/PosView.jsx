@@ -427,10 +427,7 @@ const PosView = () => {
             </div>
 
             {/* ── FAB keranjang ───────────────────────────────────────────── */}
-            <div
-                className="fixed right-6 short:!right-4 z-50 bottom-[var(--fab-bottom)] short:!bottom-4"
-                style={{ '--fab-bottom': 'calc(4rem + env(safe-area-inset-bottom, 0px) + 1rem)' }}
-            >
+            <div className="fixed bottom-24 short:!bottom-4 right-6 short:!right-4 z-50">
                 <button
                     onClick={() => setIsCartOpen(true)}
                     className="bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white rounded-full py-3 short:!py-2 px-5 short:!px-4 shadow-[0_10px_28px_rgba(var(--color-accent-500),0.4)] flex items-center gap-3 short:!gap-2 hover:-translate-y-0.5 hover:shadow-[0_14px_32px_rgba(var(--color-accent-500),0.45)] transition-all duration-300 active:scale-95"
@@ -583,7 +580,7 @@ const PosView = () => {
                         </div>
 
                         {/* Footer: Reset + Terapkan */}
-                        <div className="safe-bottom flex items-center gap-3 px-5 py-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
+                        <div className="flex items-center gap-3 px-5 py-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
                             <button
                                 onClick={handleResetFilter}
                                 className="flex-1 py-3 rounded-full border border-slate-200 dark:border-slate-700 font-bold text-sm text-slate-700 dark:text-slate-200 active:scale-95 transition-transform duration-200"

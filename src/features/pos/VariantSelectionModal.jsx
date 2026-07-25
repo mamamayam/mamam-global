@@ -148,7 +148,7 @@ const VariantSelectionModal = () => {
           })}
         </div>
 
-        <div className="safe-bottom p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
+        <div className="p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
           <button
             onClick={handleSave}
             disabled={!isSelectionValid}

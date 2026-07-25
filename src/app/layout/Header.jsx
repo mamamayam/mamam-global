@@ -15,10 +15,7 @@ export default function Header({
     salesHistory,
 }) {
     return (
-        <header
-            className="bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-b border-slate-100/60 dark:border-slate-900 h-16 short:h-12 flex items-center justify-between px-4 short:px-3 z-20 shadow-[0_4px_20px_rgba(0,0,0,0.02)] dark:shadow-none shrink-0 box-content"
-            style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-        >
+        <header className="bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-b border-slate-100/60 dark:border-slate-900 h-16 short:h-12 flex items-center justify-between px-4 short:px-3 z-20 shadow-[0_4px_20px_rgba(0,0,0,0.02)] dark:shadow-none shrink-0">
             <div className="flex items-center gap-3 short:gap-2">
                 <button
                     className="p-2.5 short:p-2 hover:bg-slate-100 dark:hover:bg-slate-900 active:scale-95 rounded-xl md:hidden short:!block text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-all duration-300"
