@@ -1,20 +1,18 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 // Menambahkan icon Save untuk mode edit pelanggan
-import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2, Save, RotateCcw, X, Search } from 'lucide-react';
+import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2, Save, X, Search } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import { Card, Input, Select, Button, EmptyState, BulkSelectBar } from '../../components/ui';
 import { useBulkSelect } from '../../hook/useBulkSelect';
+import { useRecycleBin } from '../../hook/useRecycleBin';
 
 const CustomerView = () => {
   // Ambil triggerConfirm dari AppContext (pola yang sama seperti di EmployeesView)
   const { customers, setCustomers, vouchers, setVouchers, claimsHistory, triggerAlert, triggerConfirm, formatRupiah } = useAppContext();
 
   const [customerSubTab, setCustomerSubTab] = useState('manage');
-  const [showTrashCustomers, setShowTrashCustomers] = useState(false);
-  const [showTrashVouchers, setShowTrashVouchers] = useState(false);
 
   /* ── Filter Tanggal untuk Riwayat Klaim Reward (tab Loyalitas) ── */
   const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
@@ -24,12 +22,10 @@ const CustomerView = () => {
   // State Search & Filter — Pelanggan
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerSort, setCustomerSort] = useState('name'); // name | points-desc | points-asc
-  const [isSelectingCustomers, setIsSelectingCustomers] = useState(false); // toggle mode "Pilih" utk bulk delete
 
   // State Search & Filter — Voucher
   const [voucherSearch, setVoucherSearch] = useState('');
   const [voucherFilterType, setVoucherFilterType] = useState('all'); // all | fixed | percent
-  const [isSelectingVouchers, setIsSelectingVouchers] = useState(false);
 
   // State Input Tambah Pelanggan Baru (form inline)
   const [newCustName, setNewCustName] = useState('');
@@ -48,6 +44,29 @@ const CustomerView = () => {
   const [newVoucherMinPurchase, setNewVoucherMinPurchase] = useState('');
   const [newVoucherQuota, setNewVoucherQuota] = useState('');
   const [editingVoucherId, setEditingVoucherId] = useState(null);
+
+  const {
+    isSelecting: isSelectingCustomers, setIsSelecting: setIsSelectingCustomers,
+    activeItems: activeCustomers,
+    handleDelete: softDeleteCustomer,
+    handleBulkSoftDelete: bulkSoftDeleteCustomers,
+  } = useRecycleBin(customers, setCustomers, {
+    tableKey: 'customers',
+    itemLabel: 'pelanggan',
+    triggerConfirm, triggerAlert,
+  });
+  const visibleCustomers = activeCustomers;
+
+  const {
+    isSelecting: isSelectingVouchers, setIsSelecting: setIsSelectingVouchers,
+    activeItems: visibleVouchers,
+    handleDelete: softDeleteVoucher,
+    handleBulkSoftDelete: bulkSoftDeleteVouchers,
+  } = useRecycleBin(vouchers, setVouchers, {
+    tableKey: 'vouchers',
+    itemLabel: 'voucher',
+    triggerConfirm, triggerAlert,
+  });
 
 
   // =========================================================================
@@ -78,25 +97,10 @@ const CustomerView = () => {
     handleCancelEditCustomer();
   };
 
-  // 2. Fungsi untuk Menghapus Pelanggan (DENGAN RE-FIX BINDING CALLBACK AGAR TIDAK LANGSUNG TERHAPUS)
+  // 2. Fungsi untuk Menghapus Pelanggan
   const handleDeleteCustomer = (id) => {
-    // Membungkus aksi penghapusan dalam callback ()=>{} supaya hanya berjalan setelah tombol OK ditekan
-    triggerConfirm('Pindahkan pelanggan ini ke Recycle Bin?', () => {
-      setCustomers(customers.map(c => c.id === id ? markDeleted(c) : c));
-      triggerAlert('Pelanggan dipindahkan ke Recycle Bin.');
+    softDeleteCustomer(id, () => {
       if (editingCustomerId === id) handleCancelEditCustomer();
-    });
-  };
-
-  const handleRestoreCustomer = (id) => {
-    setCustomers(customers.map(c => c.id === id ? restoreItem(c) : c));
-    triggerAlert('Pelanggan berhasil dikembalikan.');
-  };
-
-  const handlePermanentDeleteCustomer = (id) => {
-    triggerConfirm('Hapus PERMANEN pelanggan ini? Data riwayat poin mungkin kehilangan referensi nama. Tindakan ini tidak bisa dibatalkan.', () => {
-      setCustomers(customers.filter(c => c.id !== id));
-      triggerAlert('Pelanggan dihapus permanen.');
     });
   };
 
@@ -122,22 +126,8 @@ const CustomerView = () => {
   // =========================================================================
 
   const handleDeleteVoucher = (id) => {
-    triggerConfirm('Pindahkan voucher ini ke Recycle Bin?', () => {
-      setVouchers(vouchers.map(v => v.id === id ? markDeleted(v) : v));
-      triggerAlert('Voucher dipindahkan ke Recycle Bin.');
+    softDeleteVoucher(id, () => {
       if (editingVoucherId === id) handleCancelEdit();
-    });
-  };
-
-  const handleRestoreVoucher = (id) => {
-    setVouchers(vouchers.map(v => v.id === id ? restoreItem(v) : v));
-    triggerAlert('Voucher berhasil dikembalikan.');
-  };
-
-  const handlePermanentDeleteVoucher = (id) => {
-    triggerConfirm('Hapus PERMANEN voucher ini? Tindakan ini tidak bisa dibatalkan.', () => {
-      setVouchers(vouchers.filter(v => v.id !== id));
-      triggerAlert('Voucher dihapus permanen.');
     });
   };
 
@@ -192,7 +182,7 @@ const CustomerView = () => {
     }
   };
 
-  const loyalCustomers = useMemo(() => [...activeOnly(customers)].sort((a, b) => b.points - a.points), [customers]);
+  const loyalCustomers = useMemo(() => [...activeCustomers].sort((a, b) => b.points - a.points), [activeCustomers]);
 
   // Cek apakah tanggal klaim lolos filter aktif.
   // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
@@ -220,10 +210,6 @@ const CustomerView = () => {
     return claimsHistory.filter(claim => matchesDateFilter(claim.date));
   }, [claimsHistory, filterMode, filterStartDate, filterEndDate]);
 
-  // Daftar pelanggan & voucher yang sedang terlihat (sesuai mode Recycle Bin aktif)
-  const visibleCustomers = showTrashCustomers ? trashedOnly(customers) : activeOnly(customers);
-  const visibleVouchers = showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers);
-
   // Hasil filter search box + sort dropdown — Pelanggan
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
@@ -248,48 +234,12 @@ const CustomerView = () => {
   // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih" — Pelanggan (basis: hasil filter, bukan seluruh list)
   const { selectedIds: selectedCustomerIds, allSelected: allCustomersSelected, toggleOne: toggleSelectCustomer, toggleAll: toggleSelectAllCustomers, reset: resetCustomerSelection, count: customerSelectedCount } = useBulkSelect(filteredCustomers);
 
-  const handleBulkSoftDeleteCustomers = () => {
-    const ids = [...selectedCustomerIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Pindahkan ${ids.length} pelanggan terpilih ke Recycle Bin?`, () => {
-      setCustomers(customers.map(c => selectedCustomerIds.has(c.id) ? markDeleted(c) : c));
-      resetCustomerSelection();
-      triggerAlert('Pelanggan terpilih dipindahkan ke Recycle Bin.');
-    });
-  };
-
-  const handleBulkPermanentDeleteCustomers = () => {
-    const ids = [...selectedCustomerIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Hapus PERMANEN ${ids.length} pelanggan terpilih? Data riwayat poin mungkin kehilangan referensi nama. Tindakan ini tidak bisa dibatalkan.`, () => {
-      setCustomers(customers.filter(c => !selectedCustomerIds.has(c.id)));
-      resetCustomerSelection();
-      triggerAlert('Pelanggan terpilih dihapus permanen.');
-    });
-  };
+  const handleBulkSoftDeleteCustomers = () => bulkSoftDeleteCustomers([...selectedCustomerIds], resetCustomerSelection);
 
   // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih" — Voucher (basis: hasil filter, bukan seluruh list)
   const { selectedIds: selectedVoucherIds, allSelected: allVouchersSelected, toggleOne: toggleSelectVoucher, toggleAll: toggleSelectAllVouchers, reset: resetVoucherSelection, count: voucherSelectedCount } = useBulkSelect(filteredVouchers);
 
-  const handleBulkSoftDeleteVouchers = () => {
-    const ids = [...selectedVoucherIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Pindahkan ${ids.length} voucher terpilih ke Recycle Bin?`, () => {
-      setVouchers(vouchers.map(v => selectedVoucherIds.has(v.id) ? markDeleted(v) : v));
-      resetVoucherSelection();
-      triggerAlert('Voucher terpilih dipindahkan ke Recycle Bin.');
-    });
-  };
-
-  const handleBulkPermanentDeleteVouchers = () => {
-    const ids = [...selectedVoucherIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Hapus PERMANEN ${ids.length} voucher terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
-      setVouchers(vouchers.filter(v => !selectedVoucherIds.has(v.id)));
-      resetVoucherSelection();
-      triggerAlert('Voucher terpilih dihapus permanen.');
-    });
-  };
+  const handleBulkSoftDeleteVouchers = () => bulkSoftDeleteVouchers([...selectedVoucherIds], resetVoucherSelection);
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col min-h-0 relative animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
@@ -331,13 +281,7 @@ const CustomerView = () => {
             {/* ========================================= */}
             <Card padding="none" className="flex flex-col h-full min-h-[400px]">
               <div className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0 flex justify-between items-center">
-                <span>{showTrashCustomers ? 'Recycle Bin' : 'Data Pelanggan'}</span>
-                <button
-                  onClick={() => { setShowTrashCustomers(v => !v); resetCustomerSelection(); setIsSelectingCustomers(false); }}
-                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
-                >
-                  {showTrashCustomers ? 'Kembali' : `Recycle Bin (${trashedOnly(customers).length})`}
-                </button>
+                <span>Data Pelanggan</span>
               </div>
 
               {/* Toolbar: Search + Sort + Toggle Mode Pilih (Bulk Delete) */}
@@ -368,27 +312,25 @@ const CustomerView = () => {
                   {isSelectingCustomers ? 'Batal' : 'Pilih'}
                 </button>
               </div>
-              {!showTrashCustomers && (
-                <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <Input variant="muted" type="text" placeholder="Nama Pelanggan" className="font-semibold" value={newCustName} onChange={e => setNewCustName(e.target.value)} />
-                    </div>
-                    <div className="w-1/3">
-                      <Input variant="muted" type="text" placeholder="No. Whatsapp" value={newCustPhone} onChange={e => setNewCustNamePhone(e.target.value)} />
-                    </div>
-
-                    {/* Form inline ini khusus TAMBAH pelanggan baru; edit pelanggan dilakukan lewat popup di bawah */}
-                    <button
-                      onClick={handleSaveCustomer}
-                      className="px-4 py-2 text-white rounded-xl text-sm font-bold shadow-md hover:-translate-y-0.5 duration-300 transition-colors flex items-center justify-center bg-accent-600 dark:bg-accent-500 hover:bg-accent-700 dark:hover:bg-accent-600"
-                      title="Tambah Pelanggan"
-                    >
-                      <Plus className="w-5 h-5" />
-                    </button>
+              <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Input variant="muted" type="text" placeholder="Nama Pelanggan" className="font-semibold" value={newCustName} onChange={e => setNewCustName(e.target.value)} />
                   </div>
+                  <div className="w-1/3">
+                    <Input variant="muted" type="text" placeholder="No. Whatsapp" value={newCustPhone} onChange={e => setNewCustNamePhone(e.target.value)} />
+                  </div>
+
+                  {/* Form inline ini khusus TAMBAH pelanggan baru; edit pelanggan dilakukan lewat popup di bawah */}
+                  <button
+                    onClick={handleSaveCustomer}
+                    className="px-4 py-2 text-white rounded-xl text-sm font-bold shadow-md hover:-translate-y-0.5 duration-300 transition-colors flex items-center justify-center bg-accent-600 dark:bg-accent-500 hover:bg-accent-700 dark:hover:bg-accent-600"
+                    title="Tambah Pelanggan"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
                 </div>
-              )}
+              </div>
               <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-950/30 custom-scrollbar">
                 {isSelectingCustomers && filteredCustomers.length > 0 && (
                   <BulkSelectBar
@@ -396,7 +338,7 @@ const CustomerView = () => {
                     total={filteredCustomers.length}
                     allSelected={allCustomersSelected}
                     onToggleAll={toggleSelectAllCustomers}
-                    onDeleteSelected={showTrashCustomers ? handleBulkPermanentDeleteCustomers : handleBulkSoftDeleteCustomers}
+                    onDeleteSelected={handleBulkSoftDeleteCustomers}
                   />
                 )}
                 {filteredCustomers.map(c => (
@@ -419,49 +361,28 @@ const CustomerView = () => {
                     <div className="flex items-center gap-2">
                       <span className="bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-accent-100 dark:border-accent-500/20">{c.points} Poin</span>
 
-                      {showTrashCustomers ? (
-                        <>
-                          <button
-                            onClick={() => handleRestoreCustomer(c.id)}
-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
-                            title="Kembalikan"
-                          >
-                            <RotateCcw className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handlePermanentDeleteCustomer(c.id)}
-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
-                            title="Hapus Permanen"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          {/* Tambahan: Akses tombol Edit Pelanggan */}
-                          <button
-                            onClick={() => handleStartEditCustomer(c)}
-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
-                            title="Edit Pelanggan"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
+                      {/* Tambahan: Akses tombol Edit Pelanggan */}
+                      <button
+                        onClick={() => handleStartEditCustomer(c)}
+                        className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+                        title="Edit Pelanggan"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
 
-                          {/* Perbaikan Utama: onClick menggunakan Arrow Function agar tidak trigger instan */}
-                          <button
-                            onClick={() => handleDeleteCustomer(c.id)}
-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
-                            title="Hapus Pelanggan"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
+                      {/* Perbaikan Utama: onClick menggunakan Arrow Function agar tidak trigger instan */}
+                      <button
+                        onClick={() => handleDeleteCustomer(c.id)}
+                        className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
+                        title="Hapus Pelanggan"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 ))}
                 {filteredCustomers.length === 0 && (
-                  <EmptyState size="sm" title={customerSearch ? 'Pelanggan tidak ditemukan.' : (showTrashCustomers ? 'Recycle bin kosong.' : 'Belum ada pelanggan')} />
+                  <EmptyState size="sm" title={customerSearch ? 'Pelanggan tidak ditemukan.' : 'Belum ada pelanggan'} />
                 )}
               </div>
             </Card>
@@ -561,13 +482,7 @@ const CustomerView = () => {
           <Card padding="none" className="flex flex-col h-full min-h-[400px]">
             <div
               className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0 flex justify-between items-center">
-              <span>{showTrashVouchers ? 'Recycle Bin' : 'Voucher Diskon Aktif'}</span>
-              <button onClick={() => { setShowTrashVouchers(v => !v); resetVoucherSelection(); setIsSelectingVouchers(false); }}
-                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400
-      transition-colors"
-              >
-                {showTrashVouchers ? 'Kembali' : `Recycle Bin (${trashedOnly(vouchers).length})`}
-              </button>
+              <span>Voucher Diskon Aktif</span>
             </div>
 
             {/* Toolbar: Search + Filter Tipe Diskon + Toggle Mode Pilih (Bulk Delete) */}
@@ -599,61 +514,59 @@ const CustomerView = () => {
               </button>
             </div>
 
-            {!showTrashVouchers && (
-              <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-                <Input type="text" placeholder="KODE VOUCHER (Maks 10 huruf)" variant="muted"
-                  className="uppercase tracking-wider font-bold" value={newVoucherCode} maxLength={10} onChange={e =>
-                    setNewVoucherCode(e.target.value)}
-                />
+            <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+              <Input type="text" placeholder="KODE VOUCHER (Maks 10 huruf)" variant="muted"
+                className="uppercase tracking-wider font-bold" value={newVoucherCode} maxLength={10} onChange={e =>
+                  setNewVoucherCode(e.target.value)}
+              />
 
-                <div className="flex gap-2">
-                  <div className="w-1/3">
-                    <Select variant="muted" className="font-semibold" value={newVoucherType} onChange={e =>
-                      setNewVoucherType(e.target.value)}
-                    >
-                      <option value="fixed">Nominal (Rp)</option>
-                      <option value="percent">Persen (%)</option>
-                    </Select>
-                  </div>
-                  <div className="flex-1">
-                    <Input type="number" placeholder="Nilai Potongan" variant="muted"
-                      className="font-bold text-accent-600 dark:text-accent-400" value={newVoucherDiscount} onChange={e =>
-                        setNewVoucherDiscount(e.target.value)}
-                    />
-                  </div>
+              <div className="flex gap-2">
+                <div className="w-1/3">
+                  <Select variant="muted" className="font-semibold" value={newVoucherType} onChange={e =>
+                    setNewVoucherType(e.target.value)}
+                  >
+                    <option value="fixed">Nominal (Rp)</option>
+                    <option value="percent">Persen (%)</option>
+                  </Select>
                 </div>
-
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Input type="number" placeholder="Syarat Minimal Belanja (Opsional)" variant="muted"
-                      value={newVoucherMinPurchase} onChange={e => setNewVoucherMinPurchase(e.target.value)}
-                    />
-                  </div>
-                  <div className="w-1/3">
-                    <Input type="number" placeholder="Kuota" variant="muted" value={newVoucherQuota} onChange={e =>
-                      setNewVoucherQuota(e.target.value)}
-                      min="1"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-2 mt-1">
-                  <button onClick={handleAddVoucher} className={`flex-1 py-3 text-white rounded-xl text-sm font-bold shadow-md
-        transition-all duration-300 hover:-translate-y-0.5 flex items-center justify-center gap-2 ${editingVoucherId
-                      ? 'bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600'
-                      : 'bg-accent-600 dark:bg-accent-500 hover:bg-accent-700 dark:hover:bg-accent-600'}`}>
-                    <Ticket className="w-4 h-4" />
-                    {editingVoucherId ? 'Perbarui Voucher' : 'Simpan Voucher'}
-                  </button>
-
-                  {editingVoucherId && (
-                    <Button variant="secondary" onClick={handleCancelEdit}>
-                      Batal
-                    </Button>
-                  )}
+                <div className="flex-1">
+                  <Input type="number" placeholder="Nilai Potongan" variant="muted"
+                    className="font-bold text-accent-600 dark:text-accent-400" value={newVoucherDiscount} onChange={e =>
+                      setNewVoucherDiscount(e.target.value)}
+                  />
                 </div>
               </div>
-            )}
+
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Input type="number" placeholder="Syarat Minimal Belanja (Opsional)" variant="muted"
+                    value={newVoucherMinPurchase} onChange={e => setNewVoucherMinPurchase(e.target.value)}
+                  />
+                </div>
+                <div className="w-1/3">
+                  <Input type="number" placeholder="Kuota" variant="muted" value={newVoucherQuota} onChange={e =>
+                    setNewVoucherQuota(e.target.value)}
+                    min="1"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-1">
+                <button onClick={handleAddVoucher} className={`flex-1 py-3 text-white rounded-xl text-sm font-bold shadow-md
+      transition-all duration-300 hover:-translate-y-0.5 flex items-center justify-center gap-2 ${editingVoucherId
+                    ? 'bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600'
+                    : 'bg-accent-600 dark:bg-accent-500 hover:bg-accent-700 dark:hover:bg-accent-600'}`}>
+                  <Ticket className="w-4 h-4" />
+                  {editingVoucherId ? 'Perbarui Voucher' : 'Simpan Voucher'}
+                </button>
+
+                {editingVoucherId && (
+                  <Button variant="secondary" onClick={handleCancelEdit}>
+                    Batal
+                  </Button>
+                )}
+              </div>
+            </div>
 
             <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-950/30 custom-scrollbar">
               {isSelectingVouchers && filteredVouchers.length > 0 && (
@@ -662,7 +575,7 @@ const CustomerView = () => {
                   total={filteredVouchers.length}
                   allSelected={allVouchersSelected}
                   onToggleAll={toggleSelectAllVouchers}
-                  onDeleteSelected={showTrashVouchers ? handleBulkPermanentDeleteVouchers : handleBulkSoftDeleteVouchers}
+                  onDeleteSelected={handleBulkSoftDeleteVouchers}
                 />
               )}
               {filteredVouchers.map(v => (
@@ -693,47 +606,26 @@ const CustomerView = () => {
                       Diskon {v.discountType === 'percent' ? `${v.discountValue}%` : formatRupiah(v.discountValue)}
                     </span>
 
-                    {showTrashVouchers ? (
-                      <>
-                        <button onClick={() => handleRestoreVoucher(v.id)}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400
-            hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
-                          title="Kembalikan"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => handlePermanentDeleteVoucher(v.id)}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400
-            hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
-                          title="Hapus Permanen"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => handleStartEdit(v)}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400
-            hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
-                          title="Edit Voucher"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
+                    <button onClick={() => handleStartEdit(v)}
+                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400
+        hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+                      title="Edit Voucher"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
 
-                        <button onClick={() => handleDeleteVoucher(v.id)}
-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400
-            hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
-                          title="Hapus Voucher"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
+                    <button onClick={() => handleDeleteVoucher(v.id)}
+                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400
+        hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
+                      title="Hapus Voucher"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
               {filteredVouchers.length === 0 && (
-                <EmptyState size="sm" title={voucherSearch ? 'Voucher tidak ditemukan.' : (showTrashVouchers ? 'Recycle bin kosong.' : 'Belum ada voucher')} />
+                <EmptyState size="sm" title={voucherSearch ? 'Voucher tidak ditemukan.' : 'Belum ada voucher'} />
               )}
             </div>
           </Card>

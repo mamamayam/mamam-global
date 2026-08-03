@@ -1,5 +1,5 @@
 import { getSupabaseClient, getDeviceId, isSupabaseConfigured, withTimeout } from './syncClient';
-import { saveData, loadData } from './db';
+import { saveData, loadData, reviveDates } from './db';
 import { TRANSACTION_KEYS, CONFIG_KEYS, LIVE_STATE_KEYS, APP_CONFIG_KEYS } from './syncKeys';
 import { splitExpired } from '../utils/softDelete';
 
@@ -698,7 +698,16 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
           if (id) onTransactionDelete?.(tableKey, id);
         } else {
           const item = payload.new?.payload;
-          if (item) onTransactionUpsert?.(tableKey, item);
+          // FIX TANGGAL STRING: payload dari Supabase itu JSON mentah — field
+          // Date (misal `date` di savedBills, `startTime`/`endTime` di
+          // shiftHistory) masih berupa string di titik ini. reviveDates()
+          // sebelumnya HANYA kepanggil dari loadData() (db.js) pas app
+          // pertama mount — jalur realtime device-lain ini gak pernah lewat
+          // situ, jadi field Date-nya nyangkut sebagai string terus di
+          // React state sepanjang sesi (baru kebenerin kalau app di-restart
+          // dan reload ulang dari Dexie). Revive manual di sini biar
+          // konsisten dengan hasil loadData().
+          if (item) onTransactionUpsert?.(tableKey, reviveDates(tableKey, [item])[0]);
         }
       });
     }
@@ -715,7 +724,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
       // Merge di sini (bukan di App.jsx) supaya satu-satunya tempat yang
       // nentuin "gimana cara gabung data" ya cuma mergeValue() ini.
       const local = await loadData(key, undefined);
-      const merged = mergeValue(local, remoteValue);
+      const merged = reviveDates(key, mergeValue(local, remoteValue));
       await saveData(key, merged);
       onConfigUpdate?.(key, merged);
     });
@@ -755,7 +764,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
 
         const local = await loadData(tableKey, []);
         const remoteItems = (rows || []).map(r => r.payload);
-        const merged = mergeValue(Array.isArray(local) ? local : [], remoteItems);
+        const merged = reviveDates(tableKey, mergeValue(Array.isArray(local) ? local : [], remoteItems));
 
         if (JSON.stringify(local) !== JSON.stringify(merged)) {
           await saveData(tableKey, merged);
@@ -792,7 +801,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
 
         const local = await loadData(tableKey, []);
         const remoteItems = (rows || []).map(r => r.payload);
-        const merged = mergeValue(Array.isArray(local) ? local : [], remoteItems);
+        const merged = reviveDates(tableKey, mergeValue(Array.isArray(local) ? local : [], remoteItems));
 
         if (JSON.stringify(local) !== JSON.stringify(merged)) {
           await saveData(tableKey, merged);
@@ -815,7 +824,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
         } else {
           for (const row of rows || []) {
             const local = await loadData(row.key, undefined);
-            const merged = mergeValue(local, row.value);
+            const merged = reviveDates(row.key, mergeValue(local, row.value));
             if (JSON.stringify(local) !== JSON.stringify(merged)) {
               await saveData(row.key, merged);
               onConfigUpdate?.(row.key, merged);

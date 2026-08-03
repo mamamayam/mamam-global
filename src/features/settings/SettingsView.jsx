@@ -3,7 +3,7 @@ import { useAppContext } from '../../context/AppContext';
 import {
   Settings, Store, Save, ReceiptText, MapPin, Phone, Calculator,
   Bluetooth, BluetoothSearching, Unplug, CheckCircle, Sun, Moon, Palette,
-  ShieldAlert, ShieldCheck
+  ShieldAlert, ShieldCheck, Trash2, ChevronRight
 } from 'lucide-react';
 import { Alert, Button } from '../../components/ui';
 import { usePrinterStorage }     from '../../hook/usePrinterStorage';
@@ -53,7 +53,7 @@ const TextInput = ({ label, icon: Icon, placeholder, value, onChange, type = "te
 // KOMPONEN UTAMA SETTINGS VIEW
 // =========================================================================
 const SettingsView = () => {
-  const { storeSettings, setStoreSettings, theme, setTheme, colorTheme, setColorTheme } = useAppContext();
+  const { storeSettings, setStoreSettings, theme, setTheme, colorTheme, setColorTheme, setCurrentView, isAdminMode } = useAppContext();
 
   const [localSettings, setLocalSettings] = useState({
     storeName:    '',
@@ -451,6 +451,23 @@ const SettingsView = () => {
                 Pastikan printer sudah menyala dan di-pairing di pengaturan Android HP sebelum melakukan scan.
               </p>
             </div>
+
+            {isAdminMode && (
+              <button
+                type="button"
+                onClick={() => setCurrentView('recycleBin')}
+                className="w-full bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-center gap-3 hover:border-accent-300 dark:hover:border-accent-500/40 hover:bg-slate-50 dark:hover:bg-slate-800/50 active:scale-[0.99] transition-all duration-300 text-left"
+              >
+                <div className="w-10 h-10 rounded-xl bg-accent-50 dark:bg-accent-500/10 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5 text-accent-600 dark:text-accent-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Recycle Bin</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Lihat & pulihkan data yang terhapus dari Pemasukan, Pengeluaran, Pelanggan, dan lainnya</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-300 dark:text-slate-600 shrink-0" />
+              </button>
+            )}
 
           </div>
         </div>

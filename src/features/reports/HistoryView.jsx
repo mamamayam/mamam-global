@@ -1,12 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { X, History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw, ArrowUpDown, Eye, CreditCard } from 'lucide-react';
+import { X, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, ArrowUpDown, Eye, CreditCard } from 'lucide-react';
 import { formatRupiah } from '../../utils/formatters';
 import { useBulkSelect } from '../../hook/useBulkSelect';
 import { BulkSelectBar, Card, Button, DetailModal, SortModal } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
-import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
-import { pushTransactionDelete } from '../../storage/realtimeSync';
+import { useRecycleBin } from '../../hook/useRecycleBin';
 
 const HistoryView = () => {
     const { salesHistory, setSalesHistory, isAdminMode, setReceiptModal, triggerConfirm } = useAppContext();
@@ -22,9 +21,18 @@ const HistoryView = () => {
     // State khusus untuk rentang tanggal kustom
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
-    const [showTrash, setShowTrash] = useState(false);
     const [detailOrder, setDetailOrder] = useState(null);
-    const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
+
+    const {
+        isSelecting, setIsSelecting,
+        activeItems: visibleSalesHistory,
+        handleDelete,
+        handleBulkSoftDelete: bulkSoftDeleteHistory,
+    } = useRecycleBin(salesHistory, setSalesHistory, {
+        tableKey: 'salesHistory',
+        itemLabel: 'riwayat pesanan',
+        triggerConfirm,
+    });
 
     // Daftar opsi tab periode tanggal
     const filterTabs = [
@@ -43,9 +51,6 @@ const HistoryView = () => {
         { key: 'name-desc', label: 'Nama Pelanggan (Z-A)' },
         { key: 'type-asc', label: 'Tipe Order (A-Z)' },
     ];
-
-    // Sumber data sesuai mode: riwayat aktif, atau isi recycle bin
-    const visibleSalesHistory = showTrash ? trashedOnly(salesHistory) : activeOnly(salesHistory);
 
     // Mengambil daftar tipe order unik dari data riwayat untuk dropdown
     const uniqueOrderTypes = [...new Set(visibleSalesHistory.map(order => order.orderType).filter(Boolean))];
@@ -143,67 +148,14 @@ const HistoryView = () => {
 
     const { selectedIds, allSelected: allVisibleSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedHistory);
 
-    // Hapus Tunggal (Pindah ke Recycle Bin)
-    const handleDelete = (id) => {
-        triggerConfirm('Pindahkan riwayat pesanan ini ke Recycle Bin?', () => {
-            setSalesHistory(salesHistory.map(order => order.id === id ? markDeleted(order) : order));
-        });
-    };
-
-    // Hapus Banyak SEKALIGUS (Pindah ke Recycle Bin) -> INI FUNGSI BARU
-    const handleBulkSoftDelete = () => {
-        const ids = [...selectedIds];
-        if (ids.length === 0) return;
-        triggerConfirm(`Pindahkan ${ids.length} riwayat pesanan terpilih ke Recycle Bin?`, () => {
-            setSalesHistory(salesHistory.map(order => selectedIds.has(order.id) ? markDeleted(order) : order));
-            resetSelection();
-        });
-    };
-
-    // Hapus Banyak SEKALIGUS (Permanen di Recycle Bin)
-    const handleDeleteSelected = () => {
-        const ids = [...selectedIds];
-        if (ids.length === 0) return;
-        triggerConfirm(`Hapus PERMANEN ${ids.length} riwayat pesanan terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
-            setSalesHistory(salesHistory.filter(order => !selectedIds.has(order.id)));
-            ids.forEach(id => pushTransactionDelete('salesHistory', id).catch(err =>
-                console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
-            ));
-            resetSelection();
-        });
-    };
-
-    const handleRestore = (id) => {
-        setSalesHistory(salesHistory.map(order => order.id === id ? restoreItem(order) : order));
-    };
-
-    const handlePermanentDelete = (id) => {
-        triggerConfirm('Hapus PERMANEN riwayat pesanan ini? Tindakan ini tidak bisa dibatalkan.', () => {
-            setSalesHistory(salesHistory.filter(order => order.id !== id));
-            pushTransactionDelete('salesHistory', id).catch(err =>
-                console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
-            );
-        });
-    };
+    const handleBulkSoftDelete = () => bulkSoftDeleteHistory([...selectedIds], resetSelection);
 
     return (
         <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
 
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                {showTrash && (
-                    <span className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-3 py-1 rounded-full text-xs font-bold shrink-0">
-                        <History className="w-3.5 h-3.5" /> Recycle Bin
-                    </span>
-                )}
                 {isAdminMode && (
                     <div className="flex gap-2 lg:ml-auto">
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => { setShowTrash(v => !v); resetSelection(); setIsSelecting(false); }}
-                        >
-                            {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(salesHistory).length})`}
-                        </Button>
                         <Button
                             size="sm"
                             variant={isSelecting ? 'primary' : 'secondary'}
@@ -301,7 +253,7 @@ const HistoryView = () => {
             </div>
 
             {/* RINGKASAN OMSET PER METODE PEMBAYARAN */}
-            {!showTrash && paymentBreakdown.length > 0 && (
+            {paymentBreakdown.length > 0 && (
                 <Card className="flex flex-col gap-3 p-4 mb-6">
                     <div className="flex items-center gap-2">
                         <CreditCard className="w-4 h-4 text-slate-400 dark:text-slate-500" />
@@ -350,7 +302,7 @@ const HistoryView = () => {
                         allSelected={allVisibleSelected}
                         onToggleAll={toggleSelectAll}
                         // Fungsi dinamis: Kalau di Trash hapus permanen, kalau di luar Trash pindah ke Recycle Bin
-                        onDeleteSelected={showTrash ? handleDeleteSelected : handleBulkSoftDelete}
+                        onDeleteSelected={handleBulkSoftDelete}
                     />
                 </div>
             )}
@@ -398,22 +350,9 @@ const HistoryView = () => {
                                         <Receipt className="w-4 h-4" /> Struk
                                     </button>
 
-                                    {showTrash ? (
-                                        isAdminMode && (
-                                            <>
-                                                <button onClick={() => handleRestore(order.id)} className="p-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 rounded-xl transition-all duration-300 active:scale-95" title="Kembalikan">
-                                                    <RotateCcw className="w-4 h-4" />
-                                                </button>
-                                                <button onClick={() => handlePermanentDelete(order.id)} className="p-2 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-500/15 rounded-xl transition-all duration-300 active:scale-95" title="Hapus Permanen">
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </>
-                                        )
-                                    ) : (
-                                        <button onClick={() => handleDelete(order.id)} className="p-2 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-500/15 rounded-xl transition-all duration-300 active:scale-95" title="Hapus ke Recycle Bin">
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    )}
+                                    <button onClick={() => handleDelete(order.id)} className="p-2 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-500/15 rounded-xl transition-all duration-300 active:scale-95" title="Hapus ke Recycle Bin">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -421,8 +360,8 @@ const HistoryView = () => {
                 ) : (
                     <div className="col-span-full py-16 flex flex-col items-center justify-center text-center">
                         <Calendar className="w-12 h-12 text-slate-200 dark:text-slate-700 mb-3" />
-                        <h3 className="text-slate-600 dark:text-slate-300 font-bold mb-1">{showTrash ? 'Recycle bin kosong' : 'Tidak ada pesanan'}</h3>
-                        <p className="text-slate-400 dark:text-slate-500 text-sm">{showTrash ? 'Belum ada riwayat pesanan yang dihapus.' : 'Coba ubah rentang filter atau kata kunci pencarian.'}</p>
+                        <h3 className="text-slate-600 dark:text-slate-300 font-bold mb-1">Tidak ada pesanan</h3>
+                        <p className="text-slate-400 dark:text-slate-500 text-sm">Coba ubah rentang filter atau kata kunci pencarian.</p>
                     </div>
                 )}
             </div>

@@ -3,8 +3,9 @@ import { useAppContext } from '../../../context/AppContext';
 import { toLocalDateString, toLocalMonthString } from '../../../utils/formatters';
 import { Card, Button, Input, Select, IconButton, Badge, SegmentedControl, Alert, SortModal, BulkSelectBar } from '../../../components/ui';
 import CategoryModal from '../../../components/CategoryModal';
-import { activeOnly, trashedOnly, markDeleted } from '../../../utils/softDelete';
+import { activeOnly } from '../../../utils/softDelete';
 import { useBulkSelect } from '../../../hook/useBulkSelect';
+import { useRecycleBin } from '../../../hook/useRecycleBin';
 import {
   Wallet, Plus, Trash2, Save, History, Clock, Edit3, Settings2,
   ArrowUpDown, X, ChevronDown, ChevronRight, User,
@@ -70,12 +71,21 @@ const InputDailyTab = () => {
   const [additions, setAdditions] = useState([]);
   const [deductions, setDeductions] = useState([]);
   const [catModalType, setCatModalType] = useState(null);
-  const [showTrash, setShowTrash] = useState(false);
   const [dailySortKey, setDailySortKey] = useState('date-desc');
   const [isDailySortOpen, setIsDailySortOpen] = useState(false);
   const [expandedRecordId, setExpandedRecordId] = useState(null);
   const [collapsedEmployees, setCollapsedEmployees] = useState(new Set());
-  const [isSelecting, setIsSelecting] = useState(false);
+
+  const {
+    isSelecting, setIsSelecting,
+    activeItems: visibleDailyRecords,
+    handleDelete: handleSoftDeleteRecord,
+    handleBulkSoftDelete: bulkSoftDeleteRecords,
+  } = useRecycleBin(employeeDailyRecords, setEmployeeDailyRecords, {
+    tableKey: 'employeeDailyRecords',
+    itemLabel: 'data input',
+    triggerConfirm, triggerAlert,
+  });
 
   const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
   const [filterStartDate, setFilterStartDate] = useState('');
@@ -301,15 +311,7 @@ const InputDailyTab = () => {
   };
 
   const handleDeleteRecord = (rec) => {
-    if (showTrash) {
-      triggerConfirm('Apakah Anda yakin ingin menghapus permanen data ini? Tindakan ini tidak dapat dibatalkan.', () => {
-        setEmployeeDailyRecords(prev => prev.filter(r => r.id !== rec.id));
-        triggerAlert('Data berhasil dihapus secara permanen!');
-      });
-    } else {
-      setEmployeeDailyRecords(prev => prev.map(r => r.id === rec.id ? markDeleted(r) : r));
-      triggerAlert('Data berhasil dipindahkan ke Recycle Bin!');
-    }
+    handleSoftDeleteRecord(rec.id);
   };
 
   const handleOpenEdit = (rec) => {
@@ -472,7 +474,7 @@ const InputDailyTab = () => {
   const editingEmpName = editingRecord ? resolveEmployeeForRecord(editingRecord, employees)?.name : '';
 
   const groupedRecords = useMemo(() => {
-    const rawList = (showTrash ? trashedOnly(employeeDailyRecords) : activeOnly(employeeDailyRecords))
+    const rawList = visibleDailyRecords
       .filter(rec => matchesDateFilter(rec.dateStr));
     const groups = new Map();
     rawList.forEach(rec => {
@@ -495,30 +497,12 @@ const InputDailyTab = () => {
     }
 
     return grouped;
-  }, [employeeDailyRecords, showTrash, dailySortKey, employees, filterMode, filterStartDate, filterEndDate]);
+  }, [visibleDailyRecords, dailySortKey, employees, filterMode, filterStartDate, filterEndDate]);
 
   const allVisibleRecords = useMemo(() => groupedRecords.flatMap(g => g.records), [groupedRecords]);
   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(allVisibleRecords);
 
-  const handleBulkSoftDelete = () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Pindahkan ${ids.length} data input terpilih ke Recycle Bin?`, () => {
-      setEmployeeDailyRecords(prev => prev.map(r => selectedIds.has(r.id) ? markDeleted(r) : r));
-      resetSelection();
-      triggerAlert('Data terpilih dipindahkan ke Recycle Bin.');
-    });
-  };
-
-  const handleBulkPermanentDelete = () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Hapus PERMANEN ${ids.length} data input terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
-      setEmployeeDailyRecords(prev => prev.filter(r => !selectedIds.has(r.id)));
-      resetSelection();
-      triggerAlert('Data terpilih dihapus permanen.');
-    });
-  };
+  const handleBulkSoftDelete = () => bulkSoftDeleteRecords([...selectedIds], resetSelection);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full w-full min-w-0 animate-in fade-in slide-in-from-right-4 duration-300">
@@ -618,12 +602,9 @@ const InputDailyTab = () => {
         <div className="p-4 border-b border-slate-100 bg-slate-50 rounded-t-2xl space-y-3">
           <div className="flex flex-wrap gap-2 justify-between items-center">
             <h3 className="font-heading font-bold flex items-center gap-2 shrink-0">
-              <History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Input'}
+              <History className="w-4 h-4" /> Riwayat Input
             </h3>
             <div className="flex flex-wrap gap-2 min-w-0">
-              <button onClick={() => { setShowTrash(!showTrash); resetSelection(); setIsSelecting(false); }} className="text-xs font-bold text-slate-500 shrink-0">
-                {showTrash ? 'Kembali' : 'Recycle Bin'}
-              </button>
               <button
                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
                 className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors shrink-0 ${isSelecting ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}
@@ -636,34 +617,32 @@ const InputDailyTab = () => {
             </div>
           </div>
 
-          {!showTrash && (
-            <div className="flex flex-wrap items-center gap-2 min-w-0">
-              <Select value={filterMode} onChange={e => setFilterMode(e.target.value)} className="py-1.5 px-2 text-xs font-bold shrink-0">
-                <option value="hari-ini">Hari Ini</option>
-                <option value="kemarin">Kemarin</option>
-                <option value="bulan-ini">Bulan Ini</option>
-                <option value="semua">Semua</option>
-                <option value="tanggal-terpilih">Tanggal Terpilih</option>
-              </Select>
-              {filterMode === 'tanggal-terpilih' && (
-                <div className="flex items-center gap-1 flex-wrap min-w-0">
-                  <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} max={filterEndDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
-                  <span className="text-xs text-slate-400 shrink-0">-</span>
-                  <Input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} min={filterStartDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
-                </div>
-              )}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <Select value={filterMode} onChange={e => setFilterMode(e.target.value)} className="py-1.5 px-2 text-xs font-bold shrink-0">
+              <option value="hari-ini">Hari Ini</option>
+              <option value="kemarin">Kemarin</option>
+              <option value="bulan-ini">Bulan Ini</option>
+              <option value="semua">Semua</option>
+              <option value="tanggal-terpilih">Tanggal Terpilih</option>
+            </Select>
+            {filterMode === 'tanggal-terpilih' && (
+              <div className="flex items-center gap-1 flex-wrap min-w-0">
+                <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} max={filterEndDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
+                <span className="text-xs text-slate-400 shrink-0">-</span>
+                <Input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} min={filterStartDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
           {isSelecting && allVisibleRecords.length > 0 && (
-            <BulkSelectBar count={count} total={allVisibleRecords.length} allSelected={allSelected} onToggleAll={toggleSelectAll} onDeleteSelected={showTrash ? handleBulkPermanentDelete : handleBulkSoftDelete} />
+            <BulkSelectBar count={count} total={allVisibleRecords.length} allSelected={allSelected} onToggleAll={toggleSelectAll} onDeleteSelected={handleBulkSoftDelete} />
           )}
 
           {groupedRecords.length === 0 && (
             <p className="text-xs text-slate-400 text-center py-10">
-              {showTrash ? 'Recycle bin kosong.' : 'Belum ada riwayat input pada periode ini.'}
+              Belum ada riwayat input pada periode ini.
             </p>
           )}
 
@@ -747,10 +726,8 @@ const InputDailyTab = () => {
                               </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                              {!showTrash && (
-                                <IconButton variant="edit" onClick={() => handleOpenEdit(rec)} title="Edit Tambahan/Potongan"><Edit3 className="w-3.5 h-3.5" /></IconButton>
-                              )}
-                              <IconButton variant="delete" onClick={() => handleDeleteRecord(rec)} title={showTrash ? "Hapus Permanen" : "Hapus ke Recycle Bin"}>
+                              <IconButton variant="edit" onClick={() => handleOpenEdit(rec)} title="Edit Tambahan/Potongan"><Edit3 className="w-3.5 h-3.5" /></IconButton>
+                              <IconButton variant="delete" onClick={() => handleDeleteRecord(rec)} title="Hapus ke Recycle Bin">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </IconButton>
                               {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}

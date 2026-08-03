@@ -1,6 +1,5 @@
-import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown, AlertTriangle, Users, ArrowRight, ChevronDown } from 'lucide-react';
+import { Clock, FileText, History, Printer, Edit, Trash2, Share2, ArrowUpDown, AlertTriangle, Users, ArrowRight, ChevronDown } from 'lucide-react';
 import { isNativePlatform, printShiftNativeBluetooth } from '../../../library/printer';
-import { trashedOnly } from '../../../utils/softDelete';
 import { isCourierLocation } from '../../../utils/cashHolders';
 
 // Import komponen UI Design System
@@ -29,7 +28,7 @@ import ShiftModals from './ShiftModals';
 // form generik langsung di tab Aktif — lihat card "Catat Perpindahan Uang").
 const ShiftView = () => {
   const {
-    currentShift, shiftHistory, formatRupiah, storeSettings, isAdminMode, employees,
+    currentShift, formatRupiah, storeSettings, isAdminMode, employees,
 
     activeTab, setActiveTab,
 
@@ -68,14 +67,13 @@ const ShiftView = () => {
     filterMode, setFilterMode,
     filterStartDate, setFilterStartDate,
     filterEndDate, setFilterEndDate,
-    showTrash, setShowTrash,
     sortKey, setSortKey,
     isSortOpen, setIsSortOpen,
     isSelecting, setIsSelecting,
     filteredShiftHistory, sortedShiftHistory, rekapShiftStats,
     selectedIds, allSelected, toggleSelectOne, toggleSelectAll, resetSelection, count,
-    handleDeleteShift, handleRestoreShift, handlePermanentDeleteShift,
-    handleBulkSoftDeleteShift, handleBulkPermanentDeleteShift,
+    handleDeleteShift,
+    handleBulkSoftDeleteShift,
 
     allTransactions,
     handleDeleteCourierTransfer,
@@ -118,8 +116,8 @@ const ShiftView = () => {
           </div>
 
           <div className="space-y-1 text-xs mb-4 print:mb-2 print:text-black">
-            <div className="flex justify-between"><span>Buka:</span> <span>{closedShiftData.startTime.toLocaleString('id-ID')}</span></div>
-            <div className="flex justify-between"><span>Tutup:</span> <span>{closedShiftData.endTime.toLocaleString('id-ID')}</span></div>
+            <div className="flex justify-between"><span>Buka:</span> <span>{new Date(closedShiftData.startTime).toLocaleString('id-ID')}</span></div>
+            <div className="flex justify-between"><span>Tutup:</span> <span>{new Date(closedShiftData.endTime).toLocaleString('id-ID')}</span></div>
             {closedShiftData.openedByEmployeeName && (
               <div className="flex justify-between"><span>Kasir:</span> <span className="font-bold">{closedShiftData.openedByEmployeeName}</span></div>
             )}
@@ -328,7 +326,7 @@ const ShiftView = () => {
             <div className="relative z-10">
               <Badge variant="info" className="uppercase tracking-wider">Dompet Terbuka</Badge>
               <h3 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100 mt-4 mb-1">{currentShift.id}</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Waktu Buka: {currentShift.startTime.toLocaleString('id-ID')}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Waktu Buka: {new Date(currentShift.startTime).toLocaleString('id-ID')}</p>
               {currentShift.openedByEmployeeName && (
                 <p className="text-sm font-semibold text-accent-600 dark:text-accent-400 mt-1 flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5" /> {currentShift.openedByEmployeeName}
@@ -625,16 +623,8 @@ const ShiftView = () => {
         {/* --- DAFTAR RIWAYAT HARIAN SHIFT --- */}
         <Card padding="none" className="overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
-            <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">{showTrash ? 'Recycle Bin' : 'Daftar Penutupan Dompet'}</h4>
+            <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Daftar Penutupan Dompet</h4>
             <div className="flex items-center gap-3">
-              {isAdminMode && (
-                <button
-                  onClick={() => { setShowTrash(v => !v); resetSelection(); setIsSelecting(false); }}
-                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
-                >
-                  {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(shiftHistory).length})`}
-                </button>
-              )}
               <button
                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
                 className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all duration-300 active:scale-95 ${isSelecting ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
@@ -659,7 +649,7 @@ const ShiftView = () => {
                 total={sortedShiftHistory.length}
                 allSelected={allSelected}
                 onToggleAll={toggleSelectAll}
-                onDeleteSelected={showTrash ? handleBulkPermanentDeleteShift : handleBulkSoftDeleteShift}
+                onDeleteSelected={handleBulkSoftDeleteShift}
                 label="Pilih Semua"
               />
             </div>
@@ -669,8 +659,8 @@ const ShiftView = () => {
             {sortedShiftHistory.length === 0 ? (
               <EmptyState 
                 size="sm"
-                icon={showTrash ? <Trash2 className="w-10 h-10 opacity-30" /> : <Clock className="w-10 h-10 opacity-30" />} 
-                title={showTrash ? 'Recycle bin kosong.' : 'Tidak ada riwayat penutupan dompet pada periode ini'} 
+                icon={<Clock className="w-10 h-10 opacity-30" />} 
+                title="Tidak ada riwayat penutupan dompet pada periode ini" 
               />
             ) : (
               sortedShiftHistory.map((shift) => {
@@ -720,29 +710,14 @@ const ShiftView = () => {
                       </div>
 
                       <div className="flex gap-1 border-l border-slate-200 dark:border-slate-700 pl-4 ml-2">
-                        {showTrash ? (
-                          isAdminMode && (
-                            <>
-                              <IconButton variant="edit" onClick={() => handleRestoreShift(shift.id)} title="Kembalikan">
-                                <RotateCcw className="w-4 h-4" />
-                              </IconButton>
-                              <IconButton variant="delete" onClick={() => handlePermanentDeleteShift(shift.id)} title="Hapus Permanen">
-                                <Trash2 className="w-4 h-4" />
-                              </IconButton>
-                            </>
-                          )
-                        ) : (
-                          <>
-                            {isAdminMode && (
-                              <IconButton variant="edit" onClick={() => handleOpenEditModal(shift)}>
-                                <Edit className="w-4 h-4" />
-                              </IconButton>
-                            )}
-                            <IconButton variant="delete" onClick={() => handleDeleteShift(shift.id)}>
-                              <Trash2 className="w-4 h-4" />
-                            </IconButton>
-                          </>
+                        {isAdminMode && (
+                          <IconButton variant="edit" onClick={() => handleOpenEditModal(shift)}>
+                            <Edit className="w-4 h-4" />
+                          </IconButton>
                         )}
+                        <IconButton variant="delete" onClick={() => handleDeleteShift(shift.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </IconButton>
                         <IconButton 
                           variant="neutral" 
                           onClick={() => {

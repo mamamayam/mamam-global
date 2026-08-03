@@ -5,10 +5,11 @@ import { toPng, toBlob } from 'html-to-image';
 import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { generateUUID, toLocalMonthString, toLocalDateString } from '../../../utils/formatters';
-import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../../utils/softDelete';
-import { pushTransactionDelete, pushLiveState } from '../../../storage/realtimeSync';
+import { markDeleted, activeOnly } from '../../../utils/softDelete';
+import { pushLiveState } from '../../../storage/realtimeSync';
 import { applySort } from '../../../utils/sortUtils';
 import { useBulkSelect } from '../../../hook/useBulkSelect';
+import { useRecycleBin } from '../../../hook/useRecycleBin';
 import { getActiveCouriers } from '../../hrd/utils/payrollLogic';
 import {
   computeAllCourierBalances,
@@ -85,10 +86,19 @@ export function useShiftLogic() {
   const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
-  const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
-  const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
+
+  const {
+    isSelecting, setIsSelecting,
+    activeItems: visibleShiftHistory,
+    handleDelete: handleDeleteShift,
+    handleBulkSoftDelete: bulkSoftDeleteShift,
+  } = useRecycleBin(shiftHistory, setShiftHistory, {
+    tableKey: 'shiftHistory',
+    itemLabel: 'data dompet',
+    triggerConfirm, triggerAlert,
+  });
 
   // State utk Card "Catat Perpindahan Uang" — SATU form generik gantiin
   // 4 modal terpisah yang dulu ada (Setor/Hapus/Ganti Uang/Setor Owner).
@@ -853,13 +863,6 @@ export function useShiftLogic() {
     });
   };
 
-  const handleDeleteShift = (id) => {
-    triggerConfirm('Pindahkan data dompet ini ke Recycle Bin?', () => {
-      setShiftHistory(shiftHistory.map(shift => shift.id === id ? markDeleted(shift) : shift));
-      triggerAlert('Data dipindahkan ke Recycle Bin.');
-    });
-  };
-
   // Hapus 1 baris Log Transaksi (koreksi kalau kasir/admin salah catat) —
   // soft-delete konsisten sama pola recycle bin di seluruh app (activeOnly()
   // di tab Log Transaksi otomatis nyembunyiin ini). Beda dari shift, sengaja
@@ -903,23 +906,6 @@ export function useShiftLogic() {
     });
   };
 
-  const handleRestoreShift = (id) => {
-    setShiftHistory(shiftHistory.map(shift => shift.id === id ? restoreItem(shift) : shift));
-    triggerAlert('Data berhasil dikembalikan.');
-  };
-
-  const handlePermanentDeleteShift = (id) => {
-    triggerConfirm('Hapus PERMANEN data dompet ini? Tindakan ini tidak bisa dibatalkan.', () => {
-      setShiftHistory(shiftHistory.filter(shift => shift.id !== id));
-      // Langsung kirim delete ke Supabase saat ini juga, gak nunggu siklus
-      // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
-      pushTransactionDelete('shiftHistory', id).catch(err =>
-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
-      );
-      triggerAlert('Data dihapus permanen.');
-    });
-  };
-
   // Cek apakah tanggal shift (startTime) lolos filter aktif.
   // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
   // aman dibandingkan leksikografis tanpa perlu konversi ke Date/timestamp.
@@ -943,9 +929,8 @@ export function useShiftLogic() {
   };
 
   const filteredShiftHistory = useMemo(() => {
-    const source = showTrash ? trashedOnly(shiftHistory) : activeOnly(shiftHistory);
-    return source.filter(shift => matchesDateFilter(shift.startTime));
-  }, [shiftHistory, filterMode, filterStartDate, filterEndDate, showTrash]);
+    return visibleShiftHistory.filter(shift => matchesDateFilter(shift.startTime));
+  }, [visibleShiftHistory, filterMode, filterStartDate, filterEndDate]);
 
   // Urutkan hasil filter pakai sortKey terpilih (gak ngubah rekapShiftStats, cuma urutan tampil)
   const sortedShiftHistory = useMemo(() => applySort(filteredShiftHistory, sortKey, {
@@ -957,30 +942,7 @@ export function useShiftLogic() {
   // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih"
   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedShiftHistory);
 
-  // Hapus Banyak SEKALIGUS (Pindah ke Recycle Bin)
-  const handleBulkSoftDeleteShift = () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Pindahkan ${ids.length} data dompet terpilih ke Recycle Bin?`, () => {
-      setShiftHistory(shiftHistory.map(shift => selectedIds.has(shift.id) ? markDeleted(shift) : shift));
-      resetSelection();
-      triggerAlert('Data terpilih dipindahkan ke Recycle Bin.');
-    });
-  };
-
-  // Hapus Banyak SEKALIGUS (Permanen di Recycle Bin)
-  const handleBulkPermanentDeleteShift = () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Hapus PERMANEN ${ids.length} data dompet terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
-      setShiftHistory(shiftHistory.filter(shift => !selectedIds.has(shift.id)));
-      ids.forEach(id => pushTransactionDelete('shiftHistory', id).catch(err =>
-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
-      ));
-      resetSelection();
-      triggerAlert('Data terpilih dihapus permanen.');
-    });
-  };
+  const handleBulkSoftDeleteShift = () => bulkSoftDeleteShift([...selectedIds], resetSelection);
 
   const rekapShiftStats = useMemo(() => {
     let totalInitial = 0;
@@ -1053,18 +1015,17 @@ export function useShiftLogic() {
     editActiveInitialInput, setEditActiveInitialInput,
     handleSaveActiveInitial,
 
-    // Riwayat: filter, sort, trash, bulk select
+    // Riwayat: filter, sort, bulk select
     filterMode, setFilterMode,
     filterStartDate, setFilterStartDate,
     filterEndDate, setFilterEndDate,
-    showTrash, setShowTrash,
     sortKey, setSortKey,
     isSortOpen, setIsSortOpen,
     isSelecting, setIsSelecting,
     filteredShiftHistory, sortedShiftHistory, rekapShiftStats,
     selectedIds, allSelected, toggleSelectOne, toggleSelectAll, resetSelection, count,
-    handleDeleteShift, handleRestoreShift, handlePermanentDeleteShift,
-    handleBulkSoftDeleteShift, handleBulkPermanentDeleteShift,
+    handleDeleteShift,
+    handleBulkSoftDeleteShift,
 
     // Tab "Log Transaksi" — satu list gabungan (manual + virtual)
     allTransactions,

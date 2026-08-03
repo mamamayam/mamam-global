@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Users, Trash2, RotateCcw,
+  Users, Trash2,
   AlertTriangle, Camera, AlarmClock, X, PenLine,
   History, Search, Calendar, ChevronRight, Filter, ArrowUpDown,
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { toLocalDateString } from '../../utils/formatters';
-import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+import { activeOnly } from '../../utils/softDelete';
 import { isSupabaseConfigured } from '../../storage/syncClient';
-import { pushTransactionDelete } from '../../storage/realtimeSync';
 import {
   Card, Button, EmptyState, Badge, IconButton, Alert, SortModal, BulkSelectBar, Modal,
 } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
+import { useRecycleBin } from '../../hook/useRecycleBin';
 import { OVERTIME_THRESHOLD_MINUTES, WORK_END_MINUTES, calculateBolongMinutes } from './utils/payrollLogic';
 
 const AUTO_CLOSE_HOUR = 21; // Sistem mendeteksi kelalaian jika sudah lewat jam 21:00
@@ -121,7 +121,15 @@ export default function Attendance() {
   const [activeTab, setActiveTab] = useState('status');
 
   // History section
-  const [showHistoryTrash, setShowHistoryTrash] = useState(false);
+  const {
+    activeItems: visibleAttendanceLog,
+    handleDelete: handleDeleteRecord,
+    handleBulkSoftDelete: bulkSoftDeleteRecords,
+  } = useRecycleBin(attendanceLog, setAttendanceLog, {
+    tableKey: 'attendanceLog',
+    itemLabel: 'record absen',
+    triggerConfirm,
+  });
   const [dateFilter, setDateFilter] = useState('hari-ini');
   // NB: untuk filter "Tanggal Terpilih" — kalau customEndDate dibiarkan kosong,
   // filter otomatis jadi single-day (customStartDate aja). Kalau diisi dua-duanya,
@@ -403,7 +411,7 @@ export default function Attendance() {
   }, [attendanceLog]);
 
   const filteredLogs = useMemo(() => {
-    const baseLogSource = showHistoryTrash ? trashedOnly(attendanceLog) : activeOnly(attendanceLog);
+    const baseLogSource = visibleAttendanceLog;
 
     const now = new Date();
     const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -449,27 +457,7 @@ export default function Attendance() {
         type: r => r.type || '',
       }
     );
-  }, [attendanceLog, showHistoryTrash, dateFilter, customStartDate, customEndDate, typeFilter, empFilter, sortKey, searchTerm]);
-
-  const handleDeleteRecord = (id) =>
-    triggerConfirm('Pindahkan record absen ini ke Recycle Bin?', () => {
-      setAttendanceLog(prev => prev.map(r => r.id === id ? markDeleted(r) : r));
-    });
-
-  const handleRestoreRecord = (id) =>
-    setAttendanceLog(prev => prev.map(r => r.id === id ? restoreItem(r) : r));
-
-  const handlePermanentDeleteRecord = (id) => {
-    triggerConfirm(
-      'Hapus record absen ini secara permanen? Tindakan ini tidak bisa dibatalkan.',
-      () => {
-        setAttendanceLog(prev => prev.filter(r => r.id !== id));
-        pushTransactionDelete('attendanceLog', id).catch(err =>
-          console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
-        );
-      }
-    );
-  };
+  }, [visibleAttendanceLog, dateFilter, customStartDate, customEndDate, typeFilter, empFilter, sortKey, searchTerm]);
 
   // Daftar log yang benar-benar tampil di tabel (dibatasi 300 baris terbaru)
   const visibleLogs = filteredLogs.slice(0, 300);
@@ -477,26 +465,7 @@ export default function Attendance() {
   // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih"
   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(visibleLogs);
 
-  const handleBulkSoftDelete = () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Pindahkan ${ids.length} record absen terpilih ke Recycle Bin?`, () => {
-      setAttendanceLog(prev => prev.map(r => selectedIds.has(r.id) ? markDeleted(r) : r));
-      resetSelection();
-    });
-  };
-
-  const handleBulkPermanentDelete = () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Hapus PERMANEN ${ids.length} record absen terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
-      setAttendanceLog(prev => prev.filter(r => !selectedIds.has(r.id)));
-      ids.forEach(id => pushTransactionDelete('attendanceLog', id).catch(err =>
-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
-      ));
-      resetSelection();
-    });
-  };
+  const handleBulkSoftDelete = () => bulkSoftDeleteRecords([...selectedIds], resetSelection);
 
   const closeManualModal = () => {
     setEditEmployeeId(null);
@@ -538,8 +507,6 @@ export default function Attendance() {
 
   const fmtTime = (d) => new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
-
-  const trashedCount = useMemo(() => trashedOnly(attendanceLog).length, [attendanceLog]);
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-6">
@@ -750,16 +717,8 @@ export default function Attendance() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-sm text-slate-700 dark:text-slate-200 flex items-center gap-2">
             <History className="w-4 h-4" />
-            {showHistoryTrash ? 'Recycle Bin Log Absen' : 'Riwayat Log Absen'}
+            Riwayat Log Absen
           </h3>
-          {isAdminMode && (
-            <button
-              onClick={() => { setShowHistoryTrash(v => !v); resetSelection(); }}
-              className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-            >
-              {showHistoryTrash ? '← Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
-            </button>
-          )}
         </div>
 
         <Card className="flex items-center gap-2 overflow-x-auto scrollbar-hide mb-3 p-3">
@@ -857,7 +816,7 @@ export default function Attendance() {
               total={visibleLogs.length}
               allSelected={allSelected}
               onToggleAll={toggleSelectAll}
-              onDeleteSelected={showHistoryTrash ? handleBulkPermanentDelete : handleBulkSoftDelete}
+              onDeleteSelected={handleBulkSoftDelete}
             />
           </div>
         )}
@@ -867,10 +826,8 @@ export default function Attendance() {
             <EmptyState
               size="sm"
               icon={<History className="w-8 h-8" />}
-              title={showHistoryTrash ? 'Recycle bin kosong' : 'Tidak ada log ditemukan'}
-              description={showHistoryTrash
-                ? 'Belum ada record absen yang dihapus.'
-                : 'Coba ubah filter atau rentang tanggal.'}
+              title="Tidak ada log ditemukan"
+              description="Coba ubah filter atau rentang tanggal."
             />
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -922,32 +879,13 @@ export default function Attendance() {
                       {TYPE_LABEL[r.type]}
                     </Badge>
                     {isAdminMode && (
-                      showHistoryTrash ? (
-                        <>
-                          <IconButton
-                            variant="success" ghost
-                            title="Kembalikan"
-                            onClick={() => handleRestoreRecord(r.id)}
-                          >
-                            <RotateCcw className="w-4 h-4" />
-                          </IconButton>
-                          <IconButton
-                            variant="delete" ghost
-                            title="Hapus Permanen"
-                            onClick={() => handlePermanentDeleteRecord(r.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </IconButton>
-                        </>
-                      ) : (
-                        <IconButton
-                          variant="delete" ghost
-                          title="Hapus (pindah ke recycle bin)"
-                          onClick={() => handleDeleteRecord(r.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </IconButton>
-                      )
+                      <IconButton
+                        variant="delete" ghost
+                        title="Hapus (pindah ke recycle bin)"
+                        onClick={() => handleDeleteRecord(r.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </IconButton>
                     )}
                   </div>
                 </div>

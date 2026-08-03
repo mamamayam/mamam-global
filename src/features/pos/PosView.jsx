@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react';
-import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package, Star, X, SlidersHorizontal, LayoutGrid, List } from 'lucide-react';
+import { Search, Coffee, UtensilsCrossed, ShoppingCart, AlertCircle, Package, Star, X, Grid2x2, Grid3x3, List } from 'lucide-react';
 import CartDrawer from '../pos/CartDrawer';
 import PaymentModal from './PaymentModal';
 import VariantSelectionModal from './VariantSelectionModal';
@@ -53,66 +53,20 @@ const PosView = () => {
     const categoryTabsRef = useRef(null);
     const [gridVisible, setGridVisible] = useState(true);
 
-    // ─── Filter sheet (kategori, rentang harga, urutan, tampilan) ──────────
-    const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
-    const PRICE_PRESETS = [
-        { key: 'semua', label: 'Semua harga', max: null },
-        { key: 'under10', label: 'Di bawah 10rb', max: 10000 },
-        { key: 'under25', label: 'Di bawah 25rb', max: 25000 },
-        { key: 'under50', label: 'Di bawah 50rb', max: 50000 },
+    // ─── Mode tampilan grid: 2 kolom / 3 kolom / list ───────────────────────
+    const VIEW_MODES = [
+        { key: 'grid2', label: 'Grid 2 kolom', icon: Grid2x2 },
+        { key: 'grid3', label: 'Grid 3 kolom', icon: Grid3x3 },
+        { key: 'list', label: 'List', icon: List },
     ];
-    const PRICE_SLIDER_MAX = 100000;
-    const [pricePreset, setPricePreset] = useState('semua');
-    const [priceMax, setPriceMax] = useState(PRICE_SLIDER_MAX);
-    const SORT_OPTIONS = [
-        { key: 'default', label: 'Terlaris' },
-        { key: 'name_asc', label: 'Nama A-Z' },
-        { key: 'name_desc', label: 'Nama Z-A' },
-        { key: 'price_asc', label: 'Harga naik' },
-        { key: 'price_desc', label: 'Harga turun' },
-    ];
-    const [sortBy, setSortBy] = useState('default');
+    const [viewMode, setViewMode] = useState('grid2'); // 'grid2' | 'grid3' | 'list'
 
-    // Draft state di dalam sheet — biar perubahan cuma "ngefek" pas user
-    // pencet "Terapkan", bukan langsung nyaring grid tiap geser slider.
-    const [draftPricePreset, setDraftPricePreset] = useState(pricePreset);
-    const [draftPriceMax, setDraftPriceMax] = useState(priceMax);
-    const [draftSortBy, setDraftSortBy] = useState(sortBy);
-    const [draftViewMode, setDraftViewMode] = useState(viewMode);
-    const [draftCategory, setDraftCategory] = useState(selectedCategory);
-
-    const openFilterSheet = useCallback(() => {
-        setDraftPricePreset(pricePreset);
-        setDraftPriceMax(priceMax);
-        setDraftSortBy(sortBy);
-        setDraftViewMode(viewMode);
-        setDraftCategory(selectedCategory);
-        setIsFilterOpen(true);
-    }, [pricePreset, priceMax, sortBy, viewMode, selectedCategory]);
-
-    const handlePricePresetClick = useCallback((preset) => {
-        setDraftPricePreset(preset.key);
-        setDraftPriceMax(preset.max ?? PRICE_SLIDER_MAX);
+    const cycleViewMode = useCallback(() => {
+        setViewMode(prev => {
+            const idx = VIEW_MODES.findIndex(v => v.key === prev);
+            return VIEW_MODES[(idx + 1) % VIEW_MODES.length].key;
+        });
     }, []);
-
-    const handleResetFilter = useCallback(() => {
-        setDraftPricePreset('semua');
-        setDraftPriceMax(PRICE_SLIDER_MAX);
-        setDraftSortBy('default');
-        setDraftViewMode('grid');
-        setDraftCategory('Semua');
-    }, []);
-
-    const handleApplyFilter = useCallback(() => {
-        setPricePreset(draftPricePreset);
-        setPriceMax(draftPriceMax);
-        setSortBy(draftSortBy);
-        setViewMode(draftViewMode);
-        setSearchQuery('');
-        setSelectedCategory(draftCategory);
-        setIsFilterOpen(false);
-    }, [draftPricePreset, draftPriceMax, draftSortBy, draftViewMode, draftCategory, setSearchQuery, setSelectedCategory]);
 
     // ─── Statistik order (untuk favorit) ────────────────────────────────────
     const menuOrderCounts = useMemo(() => {
@@ -175,40 +129,13 @@ const PosView = () => {
             );
         }
 
-        if (priceMax < PRICE_SLIDER_MAX) {
-            result = result.filter(m => (m.price || 0) <= priceMax);
-        }
-
-        if (sortBy !== 'default') {
-            result = [...result].sort((a, b) => {
-                if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
-                if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
-                if (sortBy === 'price_asc') return (a.price || 0) - (b.price || 0);
-                if (sortBy === 'price_desc') return (b.price || 0) - (a.price || 0);
-                return 0;
-            });
-        } else if (!q && selectedCategory !== 'Favorit') {
+        if (!q && selectedCategory !== 'Favorit') {
             // "Terlaris" (default): urutkan berdasarkan jumlah order terbanyak
             result = [...result].sort((a, b) => (menuOrderCounts[b.id] || 0) - (menuOrderCounts[a.id] || 0));
         }
 
         return result;
-    }, [menus, favoriteMenus, selectedCategory, searchQuery, priceMax, sortBy, menuOrderCounts, PRICE_SLIDER_MAX]);
-
-    // Preview live count di dalam sheet filter, dihitung dari draft state
-    // (biar tombol "Terapkan (N)" nunjukin hasil SEBELUM di-apply)
-    const draftFilteredCount = useMemo(() => {
-        let result = draftCategory === 'Favorit' ? favoriteMenus : menus;
-        result = result.filter(m =>
-            draftCategory === 'Favorit' ||
-            draftCategory === 'Semua' ||
-            m.category === draftCategory
-        );
-        if (draftPriceMax < PRICE_SLIDER_MAX) {
-            result = result.filter(m => (m.price || 0) <= draftPriceMax);
-        }
-        return result.length;
-    }, [menus, favoriteMenus, draftCategory, draftPriceMax, PRICE_SLIDER_MAX]);
+    }, [menus, favoriteMenus, selectedCategory, searchQuery, menuOrderCounts]);
 
     // ─── Ganti kategori ─────────────────────────────────────────────────────
     const handleCategoryClick = useCallback((cat) => {
@@ -314,22 +241,17 @@ const PosView = () => {
                         )}
                     </div>
 
-                    {/* Tombol Filter (buka bottom sheet) */}
+                    {/* Tombol siklus tampilan: Grid 2 kolom → Grid 3 kolom → List */}
                     <button
-                        onClick={openFilterSheet}
+                        onClick={cycleViewMode}
                         className="shrink-0 rounded-full border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-500 dark:text-slate-400 p-3 short:!p-2 active:scale-95 transition-all duration-300"
-                        aria-label="Filter"
+                        aria-label={`Tampilan: ${VIEW_MODES.find(v => v.key === viewMode)?.label}`}
+                        title={VIEW_MODES.find(v => v.key === viewMode)?.label}
                     >
-                        <SlidersHorizontal size={18} className="short:!w-4 short:!h-4" />
-                    </button>
-
-                    {/* Tombol toggle Grid / List */}
-                    <button
-                        onClick={() => setViewMode(v => (v === 'grid' ? 'list' : 'grid'))}
-                        className="shrink-0 rounded-full border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-slate-500 dark:text-slate-400 p-3 short:!p-2 active:scale-95 transition-all duration-300"
-                        aria-label="Ganti tampilan grid/list"
-                    >
-                        {viewMode === 'grid' ? <List size={18} className="short:!w-4 short:!h-4" /> : <LayoutGrid size={18} className="short:!w-4 short:!h-4" />}
+                        {(() => {
+                            const Icon = VIEW_MODES.find(v => v.key === viewMode)?.icon || Grid2x2;
+                            return <Icon size={18} className="short:!w-4 short:!h-4" />;
+                        })()}
                     </button>
                 </div>
 
@@ -367,9 +289,12 @@ const PosView = () => {
                 onTouchEnd={handleTouchEnd}
             >
                 <div
-                    className={viewMode === 'grid'
-                        ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 short:!grid-cols-4 gap-4 short:gap-2"
-                        : "flex flex-col gap-3 short:gap-2"
+                    className={
+                        viewMode === 'grid2'
+                            ? "grid grid-cols-2 short:!grid-cols-4 gap-4 short:gap-2"
+                            : viewMode === 'grid3'
+                                ? "grid grid-cols-3 short:!grid-cols-4 gap-3 short:gap-2"
+                                : "flex flex-col gap-3 short:gap-2"
                     }
                     style={{
                         opacity: gridVisible ? 1 : 0,
@@ -387,13 +312,13 @@ const PosView = () => {
                             // Mode List: selalu horizontal (icon kiri, teks kanan), gak
                             // ngikutin breakpoint short: lagi.
                             className={`bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 cursor-pointer hover:shadow-md hover:-translate-y-0.5 hover:border-accent-200 dark:hover:border-accent-500/30 active:scale-95 transition-all duration-300 relative overflow-hidden group ${
-                                viewMode === 'grid'
+                                viewMode !== 'list'
                                     ? 'rounded-3xl short:rounded-xl p-4 md:p-4 short:!p-2 flex flex-col short:!flex-row items-center text-center short:!text-left'
                                     : 'rounded-2xl p-3 flex flex-row items-center text-left'
                             }`}
                         >
                             <div className={`bg-accent-50 dark:bg-accent-500/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-300 ${
-                                viewMode === 'grid'
+                                viewMode !== 'list'
                                     ? 'w-14 h-14 md:w-16 md:h-16 short:!w-9 short:!h-9 rounded-2xl short:!rounded-lg mb-2.5 md:mb-3 short:!mb-0 short:!mr-2'
                                     : 'w-12 h-12 rounded-xl mr-3'
                             }`}>
@@ -402,7 +327,7 @@ const PosView = () => {
                                     : <UtensilsCrossed className="w-6 h-6 md:w-8 md:h-8 short:!w-4 short:!h-4 text-accent-600 dark:text-accent-400" />
                                 }
                             </div>
-                            <div className={`min-w-0 flex-1 flex flex-col ${viewMode === 'grid' ? 'short:justify-center' : 'justify-center'}`}>
+                            <div className={`min-w-0 flex-1 flex flex-col ${viewMode !== 'list' ? 'short:justify-center' : 'justify-center'}`}>
                                 <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs md:text-sm short:!text-[11px] mb-1 short:!mb-0.5 leading-tight short:truncate">
                                     {menu.name}
                                 </h3>
@@ -446,157 +371,6 @@ const PosView = () => {
                     </div>
                 </button>
             </div>
-
-            {/* ── Bottom sheet Filter ─────────────────────────────────────── */}
-            {isFilterOpen && (
-                <div className="fixed inset-0 z-[60] flex items-end justify-center">
-                    <div
-                        className="absolute inset-0 bg-black/40 animate-in fade-in duration-200"
-                        onClick={() => setIsFilterOpen(false)}
-                    />
-                    <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col animate-in slide-in-from-bottom duration-300">
-                        {/* Grip handle */}
-                        <div className="flex justify-center pt-3 pb-1 shrink-0">
-                            <div className="w-10 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700" />
-                        </div>
-
-                        {/* Header */}
-                        <div className="flex items-center justify-between px-5 pb-3 shrink-0">
-                            <h2 className="font-heading font-bold text-lg text-slate-900 dark:text-slate-100">Filter</h2>
-                            <button
-                                onClick={() => setIsFilterOpen(false)}
-                                className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {/* Body scrollable */}
-                        <div className="flex-1 overflow-y-auto px-5 pb-4 space-y-6">
-                            {/* Kategori */}
-                            <div>
-                                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 mb-2.5">Kategori</h3>
-                                <div className="flex flex-wrap gap-2">
-                                    {tabs.map(cat => (
-                                        <button
-                                            key={cat}
-                                            onClick={() => setDraftCategory(cat)}
-                                            className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200 active:scale-95 ${
-                                                draftCategory === cat
-                                                    ? 'border-accent-500 text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-500/10'
-                                                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                                            }`}
-                                        >
-                                            {cat}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Rentang Harga */}
-                            <div>
-                                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 mb-2.5">Rentang Harga</h3>
-                                <div className="flex flex-wrap gap-2 mb-4">
-                                    {PRICE_PRESETS.map(preset => (
-                                        <button
-                                            key={preset.key}
-                                            onClick={() => handlePricePresetClick(preset)}
-                                            className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200 active:scale-95 ${
-                                                draftPricePreset === preset.key
-                                                    ? 'border-accent-500 text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-500/10'
-                                                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                                            }`}
-                                        >
-                                            {preset.label}
-                                        </button>
-                                    ))}
-                                </div>
-                                <input
-                                    type="range"
-                                    min={0}
-                                    max={PRICE_SLIDER_MAX}
-                                    step={1000}
-                                    value={draftPriceMax}
-                                    onChange={(e) => {
-                                        const val = Number(e.target.value);
-                                        setDraftPriceMax(val);
-                                        const matched = PRICE_PRESETS.find(p => p.max === val);
-                                        setDraftPricePreset(val >= PRICE_SLIDER_MAX ? 'semua' : (matched ? matched.key : 'custom'));
-                                    }}
-                                    className="w-full accent-accent-500 h-2 rounded-full cursor-pointer"
-                                />
-                                <div className="flex justify-between text-xs text-slate-400 dark:text-slate-500 font-medium mt-1.5">
-                                    <span>Rp 0</span>
-                                    <span>Rp {PRICE_SLIDER_MAX.toLocaleString('id-ID')}</span>
-                                </div>
-                            </div>
-
-                            {/* Urutkan */}
-                            <div>
-                                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 mb-2.5">Urutkan</h3>
-                                <div className="flex flex-wrap gap-2">
-                                    {SORT_OPTIONS.map(opt => (
-                                        <button
-                                            key={opt.key}
-                                            onClick={() => setDraftSortBy(opt.key)}
-                                            className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200 active:scale-95 ${
-                                                draftSortBy === opt.key
-                                                    ? 'border-accent-500 text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-500/10'
-                                                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                                            }`}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Tampilan */}
-                            <div>
-                                <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 mb-2.5">Tampilan</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={() => setDraftViewMode('grid')}
-                                        className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 font-semibold text-sm transition-all duration-200 active:scale-95 ${
-                                            draftViewMode === 'grid'
-                                                ? 'border-accent-500 text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-500/10'
-                                                : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
-                                        }`}
-                                    >
-                                        <LayoutGrid className="w-4 h-4" /> Grid
-                                    </button>
-                                    <button
-                                        onClick={() => setDraftViewMode('list')}
-                                        className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 font-semibold text-sm transition-all duration-200 active:scale-95 ${
-                                            draftViewMode === 'list'
-                                                ? 'border-accent-500 text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-500/10'
-                                                : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
-                                        }`}
-                                    >
-                                        <List className="w-4 h-4" /> List
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Footer: Reset + Terapkan */}
-                        <div className="flex items-center gap-3 px-5 py-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
-                            <button
-                                onClick={handleResetFilter}
-                                className="flex-1 py-3 rounded-full border border-slate-200 dark:border-slate-700 font-bold text-sm text-slate-700 dark:text-slate-200 active:scale-95 transition-transform duration-200"
-                            >
-                                Reset
-                            </button>
-                            <button
-                                onClick={handleApplyFilter}
-                                className="flex-[1.4] py-3 rounded-full bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 text-white font-bold text-sm shadow-[0_6px_18px_rgba(var(--color-accent-500),0.35)] active:scale-95 transition-transform duration-200"
-                            >
-                                Terapkan ({draftFilteredCount})
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             <CartDrawer />
             <PaymentModal />

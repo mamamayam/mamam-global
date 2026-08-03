@@ -1,13 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { History, Save, Trash2, TrendingDown, Pencil, X, Settings2, RotateCcw, ArrowUpDown } from 'lucide-react';
+import { History, Save, Trash2, TrendingDown, Pencil, X, Settings2, ArrowUpDown } from 'lucide-react';
 import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
 import CategoryModal from '../../components/CategoryModal';
 import { Button, Card, Input, Select, Badge, IconButton, EmptyState, SortModal, BulkSelectBar } from '../../components/ui';
 import { applySort } from '../../utils/sortUtils';
-import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
-import { pushTransactionDelete } from '../../storage/realtimeSync';
 import { useBulkSelect } from '../../hook/useBulkSelect';
+import { useRecycleBin } from '../../hook/useRecycleBin';
 import { getActiveCouriers } from '../../features/hrd/utils/payrollLogic';
 import { CASH_HOLDER_KASIR, makeCourierCashHolder, getCashHolder, cashHolderLabel } from '../../utils/cashHolders';
 
@@ -39,10 +38,19 @@ const ExpenseView = () => {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [showTrash, setShowTrash] = useState(false);
   const [sortKey, setSortKey] = useState('date-desc');
   const [isSortOpen, setIsSortOpen] = useState(false);
-  const [isSelecting, setIsSelecting] = useState(false);
+
+  const {
+    isSelecting, setIsSelecting,
+    activeItems: visibleExpenses,
+    handleDelete: handleDeleteExpense,
+    handleBulkSoftDelete: bulkSoftDeleteExpenses,
+  } = useRecycleBin(expenses, setExpenses, {
+    tableKey: 'expenses',
+    itemLabel: 'catatan pengeluaran',
+    triggerConfirm, triggerAlert,
+  });
 
   const matchesDateFilter = (date) => {
     const d = toLocalDateString(date);
@@ -66,10 +74,10 @@ const ExpenseView = () => {
   const couriers = useMemo(() => getActiveCouriers(employees), [employees]);
 
   const activeTotal = useMemo(() => {
-    return activeOnly(expenses)
+    return visibleExpenses
       .filter(inc => matchesDateFilter(inc.date))
       .reduce((s, e) => s + e.amount, 0);
-  }, [expenses, filterMode, filterStartDate, filterEndDate]);
+  }, [visibleExpenses, filterMode, filterStartDate, filterEndDate]);
 
   const [editingId, setEditingId] = useState(null);
 
@@ -145,28 +153,6 @@ const ExpenseView = () => {
     setCashHolderId(holder.type === 'kurir' ? holder.employeeId : 'kasir');
   };
 
-  const handleDeleteExpense = (id) => {
-    triggerConfirm('Apakah Anda yakin ingin menghapus catatan pengeluaran ini?', () => {
-      setExpenses(expenses.map(e => e.id === id ? markDeleted(e) : e));
-      triggerAlert('Catatan dipindahkan ke Recycle Bin.');
-    });
-  };
-
-  const handleRestoreExpense = (id) => {
-    setExpenses(expenses.map(e => e.id === id ? restoreItem(e) : e));
-    triggerAlert('Catatan berhasil dikembalikan.');
-  };
-
-  const handlePermanentDeleteExpense = (id) => {
-    triggerConfirm('Hapus PERMANEN catatan ini? Tindakan ini tidak bisa dibatalkan.', () => {
-      setExpenses(expenses.filter(e => e.id !== id));
-      pushTransactionDelete('expenses', id).catch(err =>
-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
-      );
-      triggerAlert('Catatan dihapus permanen.');
-    });
-  };
-
   const cancelEdit = () => {
     setEditingId(null);
     setAmount('');
@@ -177,17 +163,14 @@ const ExpenseView = () => {
   };
 
   const filteredExpenses = useMemo(() => {
-    return (showTrash ? trashedOnly(expenses) : activeOnly(expenses))
-      .filter(e => matchesDateFilter(e.date));
-  }, [expenses, showTrash, filterMode, filterStartDate, filterEndDate]);
+    return visibleExpenses.filter(e => matchesDateFilter(e.date));
+  }, [visibleExpenses, filterMode, filterStartDate, filterEndDate]);
 
   const sortedExpenses = useMemo(() => applySort(filteredExpenses, sortKey, {
     date: e => new Date(e.date),
     category: e => e.category || '',
     amount: e => e.amount || 0,
   }), [filteredExpenses, sortKey]);
-
-  const trashedCount = useMemo(() => trashedOnly(expenses).length, [expenses]);
 
   const sortOptions = [
     { key: 'date-desc', label: 'Terbaru Dulu' },
@@ -199,28 +182,7 @@ const ExpenseView = () => {
 
   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedExpenses);
 
-  const handleBulkSoftDelete = () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Pindahkan ${ids.length} catatan pengeluaran terpilih ke Recycle Bin?`, () => {
-      setExpenses(expenses.map(e => selectedIds.has(e.id) ? markDeleted(e) : e));
-      resetSelection();
-      triggerAlert('Catatan terpilih dipindahkan ke Recycle Bin.');
-    });
-  };
-
-  const handleBulkPermanentDelete = () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    triggerConfirm(`Hapus PERMANEN ${ids.length} catatan pengeluaran terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
-      setExpenses(expenses.filter(e => !selectedIds.has(e.id)));
-      ids.forEach(id => pushTransactionDelete('expenses', id).catch(err =>
-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
-      ));
-      resetSelection();
-      triggerAlert('Catatan terpilih dihapus permanen.');
-    });
-  };
+  const handleBulkSoftDelete = () => bulkSoftDeleteExpenses([...selectedIds], resetSelection);
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
@@ -345,56 +307,44 @@ const ExpenseView = () => {
 
         <Card padding="none" className="lg:col-span-2 flex flex-col h-[600px] w-full min-w-0">
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
-            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0"><History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Pengeluaran'}</h3>
+            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0"><History className="w-4 h-4" /> Riwayat Pengeluaran</h3>
             <div className="flex flex-wrap items-center gap-2 min-w-0">
-              {isAdminMode && (
-                <button
-                  onClick={() => { setShowTrash(v => !v); resetSelection(); setIsSelecting(false); }}
-                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors shrink-0"
-                >
-                  {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
-                </button>
-              )}
               <button
                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
                 className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all duration-300 active:scale-95 shrink-0 ${isSelecting ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
               >
                 {isSelecting ? 'Batal' : 'Pilih'}
               </button>
-              {!showTrash && (
-                <>
-                  <select
-                    value={filterMode}
-                    onChange={e => setFilterMode(e.target.value)}
-                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0"
-                  >
-                    <option value="hari-ini">Hari Ini</option>
-                    <option value="kemarin">Kemarin</option>
-                    <option value="bulan-ini">Bulan Ini</option>
-                    <option value="semua">Semua</option>
-                    <option value="tanggal-terpilih">Tanggal Terpilih</option>
-                  </select>
+              <select
+                value={filterMode}
+                onChange={e => setFilterMode(e.target.value)}
+                className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0"
+              >
+                <option value="hari-ini">Hari Ini</option>
+                <option value="kemarin">Kemarin</option>
+                <option value="bulan-ini">Bulan Ini</option>
+                <option value="semua">Semua</option>
+                <option value="tanggal-terpilih">Tanggal Terpilih</option>
+              </select>
 
-                  {filterMode === 'tanggal-terpilih' && (
-                    <div className="flex items-center gap-1 flex-wrap min-w-0">
-                      <input
-                        type="date"
-                        value={filterStartDate}
-                        onChange={e => setFilterStartDate(e.target.value)}
-                        max={filterEndDate || undefined}
-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
-                      />
-                      <span className="text-xs text-slate-400 shrink-0">-</span>
-                      <input
-                        type="date"
-                        value={filterEndDate}
-                        onChange={e => setFilterEndDate(e.target.value)}
-                        min={filterStartDate || undefined}
-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
-                      />
-                    </div>
-                  )}
-                </>
+              {filterMode === 'tanggal-terpilih' && (
+                <div className="flex items-center gap-1 flex-wrap min-w-0">
+                  <input
+                    type="date"
+                    value={filterStartDate}
+                    onChange={e => setFilterStartDate(e.target.value)}
+                    max={filterEndDate || undefined}
+                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
+                  />
+                  <span className="text-xs text-slate-400 shrink-0">-</span>
+                  <input
+                    type="date"
+                    value={filterEndDate}
+                    onChange={e => setFilterEndDate(e.target.value)}
+                    min={filterStartDate || undefined}
+                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
+                  />
+                </div>
               )}
               <button
                 type="button"
@@ -418,15 +368,15 @@ const ExpenseView = () => {
                 total={sortedExpenses.length}
                 allSelected={allSelected}
                 onToggleAll={toggleSelectAll}
-                onDeleteSelected={showTrash ? handleBulkPermanentDelete : handleBulkSoftDelete}
+                onDeleteSelected={handleBulkSoftDelete}
               />
             </div>
           )}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
             {sortedExpenses.length === 0 ? (
               <EmptyState
-                icon={showTrash ? <Trash2 className="w-12 h-12" /> : <TrendingDown className="w-12 h-12" />}
-                title={showTrash ? 'Recycle bin kosong.' : 'Belum ada pengeluaran pada periode ini.'}
+                icon={<TrendingDown className="w-12 h-12" />}
+                title="Belum ada pengeluaran pada periode ini."
                 className="h-full animate-in fade-in duration-300"
               />
             ) : (
@@ -465,29 +415,14 @@ const ExpenseView = () => {
                     <div className="flex items-center gap-2 shrink-0">
                       <p className="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-3 py-1.5 rounded-xl text-sm border border-red-100 dark:border-red-500/20">-{formatRupiah(exp.amount)}</p>
                       <div className="flex gap-1">
-                        {showTrash ? (
-                          isAdminMode && (
-                            <>
-                              <IconButton variant="edit" onClick={() => handleRestoreExpense(exp.id)} title="Kembalikan">
-                                <RotateCcw className="w-3.5 h-3.5" />
-                              </IconButton>
-                              <IconButton variant="delete" onClick={() => handlePermanentDeleteExpense(exp.id)} title="Hapus Permanen">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </IconButton>
-                            </>
-                          )
-                        ) : (
-                          <>
-                            {isAdminMode && (
-                              <IconButton variant="edit" onClick={() => handleEditClick(exp)} title="Edit Catatan">
-                                <Pencil className="w-3.5 h-3.5" />
-                              </IconButton>
-                            )}
-                            <IconButton variant="delete" onClick={() => handleDeleteExpense(exp.id)} title="Hapus Catatan">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </IconButton>
-                          </>
+                        {isAdminMode && (
+                          <IconButton variant="edit" onClick={() => handleEditClick(exp)} title="Edit Catatan">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </IconButton>
                         )}
+                        <IconButton variant="delete" onClick={() => handleDeleteExpense(exp.id)} title="Hapus Catatan">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </IconButton>
                       </div>
                     </div>
                   </div>

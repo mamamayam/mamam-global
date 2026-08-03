@@ -21,6 +21,7 @@ const BackupView        = lazy(() => import('../storage/BackupView'));
 const StockView         = lazy(() => import('../features/stock/StockView'));
 const AccountView       = lazy(() => import('../auth/AccountView'));
 const BalanceTab       = lazy(() => import('../features/balance/BalanceTab'));
+const RecycleBinView   = lazy(() => import('../features/settings/RecycleBinView'));
 
 const VIEWS = {
     beranda:     HomeView,
@@ -38,6 +39,7 @@ const VIEWS = {
     absensi:     Attendance,
     pengaturan:  SettingsView,
     backup:      BackupView,
+    recycleBin:  RecycleBinView,
     stok:        StockView,
     akun:        AccountView,
     labarugi:    BalanceTab,

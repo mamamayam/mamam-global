@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { usePosStore } from '../../store/usePosStore';
-import { activeOnly } from "../../utils/softDelete";
+import { markDeleted, activeOnly } from "../../utils/softDelete";
 import CustomerPickerModal from './CustomerPicker';
 import {
   ShoppingCart,
@@ -77,14 +77,18 @@ const CartDrawer = () => {
   };
 
   // ─── BILL TERSIMPAN: Batalkan & Lihat/Cetak ───────────────────────────
-  // Batalkan: hapus permanen dari savedBills (beda dari "Lanjut" yang
-  // narik bill itu balik ke cart aktif). Pakai triggerConfirm yang sudah
-  // ada — modal konfirmasi generik, gak bikin modal baru.
+  // Batalkan: soft-delete (markDeleted) — sama pola kayak cashTransfers di
+  // Dompet, BUKAN full recycle bin kayak salesHistory/expenses. Bill yang
+  // dibatalin cuma koreksi cepat (salah pesan, customer batal), bukan
+  // record yang biasanya mau di-audit ulang, jadi sengaja gak dikasih
+  // toggle "lihat sampah" tersendiri di sini. Tetep aman dari purgeExpired()
+  // (retensi 30 hari) kalau suatu saat butuh diaudit/direstore manual lewat
+  // Supabase. Beda dari "Lanjut" yang narik bill itu balik ke cart aktif.
   const handleCancelBill = (bill) => {
     triggerConfirm(
-      `Batalkan bill "${bill.customerName}" (${bill.cart.length} item)? Bill ini akan dihapus permanen dan tidak bisa dikembalikan.`,
+      `Batalkan bill "${bill.customerName}" (${bill.cart.length} item)?`,
       () => {
-        setSavedBills(savedBills.filter(b => b.id !== bill.id));
+        setSavedBills(savedBills.map(b => b.id === bill.id ? markDeleted(b) : b));
         triggerAlert('Bill berhasil dibatalkan.');
       }
     );
@@ -136,6 +140,8 @@ const CartDrawer = () => {
 
   if (!isCartOpen) return null;
 
+  const visibleSavedBills = activeOnly(savedBills);
+
   return (
     <div className="fixed inset-0 z-50 flex justify-center">
       <div className="absolute inset-0 bg-slate-500/40 dark:bg-slate-800/40 backdrop-blur-sm transition-opacity duration-300" onClick={() => setIsCartOpen(false)} />
@@ -162,17 +168,17 @@ const CartDrawer = () => {
             <div className="flex flex-col items-center justify-center h-full p-4">
               <ShoppingCart className="w-16 h-16 mb-4 opacity-20 text-slate-400 dark:text-slate-500" />
               <p className="text-slate-400 dark:text-slate-500 mb-6">Keranjang masih kosong</p>
-              {savedBills.length > 0 && (
+              {visibleSavedBills.length > 0 && (
                 <div className="w-full bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-300">
                   <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-3 text-sm">
-                    <Save className="w-4 h-4 text-accent-600 dark:text-accent-400" /> Bill Tersimpan ({savedBills.length})
+                    <Save className="w-4 h-4 text-accent-600 dark:text-accent-400" /> Bill Tersimpan ({visibleSavedBills.length})
                   </h3>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {savedBills.map(bill => (
+                    {visibleSavedBills.map(bill => (
                       <div key={bill.id} className="flex justify-between items-center p-3 border border-accent-100 dark:border-accent-500/20 rounded-xl bg-accent-50 dark:bg-accent-500/30">
                         <div>
                           <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{bill.customerName}</p>
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400">{bill.cart.length} Item • {bill.date.toLocaleTimeString('id-ID')}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400">{bill.cart.length} Item • {new Date(bill.date).toLocaleTimeString('id-ID')}</p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button onClick={() => handleCancelBill(bill)} title="Batalkan Bill" className="p-1.5 bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-500/25 transition-colors">

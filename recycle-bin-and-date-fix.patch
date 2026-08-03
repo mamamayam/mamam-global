@@ -1,0 +1,2440 @@
+diff --git a/src/app/AppRoutes.jsx b/src/app/AppRoutes.jsx
+index 5a2d7dd..cd3e726 100644
+--- a/src/app/AppRoutes.jsx
++++ b/src/app/AppRoutes.jsx
+@@ -21,6 +21,7 @@ const BackupView        = lazy(() => import('../storage/BackupView'));
+ const StockView         = lazy(() => import('../features/stock/StockView'));
+ const AccountView       = lazy(() => import('../auth/AccountView'));
+ const BalanceTab       = lazy(() => import('../features/balance/BalanceTab'));
++const RecycleBinView   = lazy(() => import('../features/settings/RecycleBinView'));
+ 
+ const VIEWS = {
+     beranda:     HomeView,
+@@ -38,6 +39,7 @@ const VIEWS = {
+     absensi:     Attendance,
+     pengaturan:  SettingsView,
+     backup:      BackupView,
++    recycleBin:  RecycleBinView,
+     stok:        StockView,
+     akun:        AccountView,
+     labarugi:    BalanceTab,
+diff --git a/src/features/customer/CustomerView.jsx b/src/features/customer/CustomerView.jsx
+index f3fa72e..d9c78fb 100644
+--- a/src/features/customer/CustomerView.jsx
++++ b/src/features/customer/CustomerView.jsx
+@@ -1,20 +1,18 @@
+ import React from 'react';
+ import { useAppContext } from '../../context/AppContext';
+ // Menambahkan icon Save untuk mode edit pelanggan
+-import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2, Save, RotateCcw, X, Search } from 'lucide-react';
++import { Users, Plus, Ticket, Award, CheckCircle2, Info, Pencil, Trash2, Save, X, Search } from 'lucide-react';
+ import { useState, useMemo } from 'react';
+-import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+ import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
+ import { Card, Input, Select, Button, EmptyState, BulkSelectBar } from '../../components/ui';
+ import { useBulkSelect } from '../../hook/useBulkSelect';
++import { useRecycleBin } from '../../hook/useRecycleBin';
+ 
+ const CustomerView = () => {
+   // Ambil triggerConfirm dari AppContext (pola yang sama seperti di EmployeesView)
+   const { customers, setCustomers, vouchers, setVouchers, claimsHistory, triggerAlert, triggerConfirm, formatRupiah } = useAppContext();
+ 
+   const [customerSubTab, setCustomerSubTab] = useState('manage');
+-  const [showTrashCustomers, setShowTrashCustomers] = useState(false);
+-  const [showTrashVouchers, setShowTrashVouchers] = useState(false);
+ 
+   /* ── Filter Tanggal untuk Riwayat Klaim Reward (tab Loyalitas) ── */
+   const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
+@@ -24,12 +22,10 @@ const CustomerView = () => {
+   // State Search & Filter — Pelanggan
+   const [customerSearch, setCustomerSearch] = useState('');
+   const [customerSort, setCustomerSort] = useState('name'); // name | points-desc | points-asc
+-  const [isSelectingCustomers, setIsSelectingCustomers] = useState(false); // toggle mode "Pilih" utk bulk delete
+ 
+   // State Search & Filter — Voucher
+   const [voucherSearch, setVoucherSearch] = useState('');
+   const [voucherFilterType, setVoucherFilterType] = useState('all'); // all | fixed | percent
+-  const [isSelectingVouchers, setIsSelectingVouchers] = useState(false);
+ 
+   // State Input Tambah Pelanggan Baru (form inline)
+   const [newCustName, setNewCustName] = useState('');
+@@ -49,6 +45,29 @@ const CustomerView = () => {
+   const [newVoucherQuota, setNewVoucherQuota] = useState('');
+   const [editingVoucherId, setEditingVoucherId] = useState(null);
+ 
++  const {
++    isSelecting: isSelectingCustomers, setIsSelecting: setIsSelectingCustomers,
++    activeItems: activeCustomers,
++    handleDelete: softDeleteCustomer,
++    handleBulkSoftDelete: bulkSoftDeleteCustomers,
++  } = useRecycleBin(customers, setCustomers, {
++    tableKey: 'customers',
++    itemLabel: 'pelanggan',
++    triggerConfirm, triggerAlert,
++  });
++  const visibleCustomers = activeCustomers;
++
++  const {
++    isSelecting: isSelectingVouchers, setIsSelecting: setIsSelectingVouchers,
++    activeItems: visibleVouchers,
++    handleDelete: softDeleteVoucher,
++    handleBulkSoftDelete: bulkSoftDeleteVouchers,
++  } = useRecycleBin(vouchers, setVouchers, {
++    tableKey: 'vouchers',
++    itemLabel: 'voucher',
++    triggerConfirm, triggerAlert,
++  });
++
+ 
+   // =========================================================================
+   // LOGIKA: KELOLA PELANGGAN (Adaptasi Pola Manajemen Karyawan)
+@@ -78,28 +97,13 @@ const CustomerView = () => {
+     handleCancelEditCustomer();
+   };
+ 
+-  // 2. Fungsi untuk Menghapus Pelanggan (DENGAN RE-FIX BINDING CALLBACK AGAR TIDAK LANGSUNG TERHAPUS)
++  // 2. Fungsi untuk Menghapus Pelanggan
+   const handleDeleteCustomer = (id) => {
+-    // Membungkus aksi penghapusan dalam callback ()=>{} supaya hanya berjalan setelah tombol OK ditekan
+-    triggerConfirm('Pindahkan pelanggan ini ke Recycle Bin?', () => {
+-      setCustomers(customers.map(c => c.id === id ? markDeleted(c) : c));
+-      triggerAlert('Pelanggan dipindahkan ke Recycle Bin.');
++    softDeleteCustomer(id, () => {
+       if (editingCustomerId === id) handleCancelEditCustomer();
+     });
+   };
+ 
+-  const handleRestoreCustomer = (id) => {
+-    setCustomers(customers.map(c => c.id === id ? restoreItem(c) : c));
+-    triggerAlert('Pelanggan berhasil dikembalikan.');
+-  };
+-
+-  const handlePermanentDeleteCustomer = (id) => {
+-    triggerConfirm('Hapus PERMANEN pelanggan ini? Data riwayat poin mungkin kehilangan referensi nama. Tindakan ini tidak bisa dibatalkan.', () => {
+-      setCustomers(customers.filter(c => c.id !== id));
+-      triggerAlert('Pelanggan dihapus permanen.');
+-    });
+-  };
+-
+   // 3. Fungsi untuk Membuka Popup Edit Pelanggan
+   const handleStartEditCustomer = (c) => {
+     setEditingCustomerId(c.id);
+@@ -122,25 +126,11 @@ const CustomerView = () => {
+   // =========================================================================
+ 
+   const handleDeleteVoucher = (id) => {
+-    triggerConfirm('Pindahkan voucher ini ke Recycle Bin?', () => {
+-      setVouchers(vouchers.map(v => v.id === id ? markDeleted(v) : v));
+-      triggerAlert('Voucher dipindahkan ke Recycle Bin.');
++    softDeleteVoucher(id, () => {
+       if (editingVoucherId === id) handleCancelEdit();
+     });
+   };
+ 
+-  const handleRestoreVoucher = (id) => {
+-    setVouchers(vouchers.map(v => v.id === id ? restoreItem(v) : v));
+-    triggerAlert('Voucher berhasil dikembalikan.');
+-  };
+-
+-  const handlePermanentDeleteVoucher = (id) => {
+-    triggerConfirm('Hapus PERMANEN voucher ini? Tindakan ini tidak bisa dibatalkan.', () => {
+-      setVouchers(vouchers.filter(v => v.id !== id));
+-      triggerAlert('Voucher dihapus permanen.');
+-    });
+-  };
+-
+   const handleStartEdit = (v) => {
+     setEditingVoucherId(v.id);
+     setNewVoucherCode(v.code);
+@@ -192,7 +182,7 @@ const CustomerView = () => {
+     }
+   };
+ 
+-  const loyalCustomers = useMemo(() => [...activeOnly(customers)].sort((a, b) => b.points - a.points), [customers]);
++  const loyalCustomers = useMemo(() => [...activeCustomers].sort((a, b) => b.points - a.points), [activeCustomers]);
+ 
+   // Cek apakah tanggal klaim lolos filter aktif.
+   // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
+@@ -220,10 +210,6 @@ const CustomerView = () => {
+     return claimsHistory.filter(claim => matchesDateFilter(claim.date));
+   }, [claimsHistory, filterMode, filterStartDate, filterEndDate]);
+ 
+-  // Daftar pelanggan & voucher yang sedang terlihat (sesuai mode Recycle Bin aktif)
+-  const visibleCustomers = showTrashCustomers ? trashedOnly(customers) : activeOnly(customers);
+-  const visibleVouchers = showTrashVouchers ? trashedOnly(vouchers) : activeOnly(vouchers);
+-
+   // Hasil filter search box + sort dropdown — Pelanggan
+   const filteredCustomers = useMemo(() => {
+     const q = customerSearch.trim().toLowerCase();
+@@ -248,48 +234,12 @@ const CustomerView = () => {
+   // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih" — Pelanggan (basis: hasil filter, bukan seluruh list)
+   const { selectedIds: selectedCustomerIds, allSelected: allCustomersSelected, toggleOne: toggleSelectCustomer, toggleAll: toggleSelectAllCustomers, reset: resetCustomerSelection, count: customerSelectedCount } = useBulkSelect(filteredCustomers);
+ 
+-  const handleBulkSoftDeleteCustomers = () => {
+-    const ids = [...selectedCustomerIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Pindahkan ${ids.length} pelanggan terpilih ke Recycle Bin?`, () => {
+-      setCustomers(customers.map(c => selectedCustomerIds.has(c.id) ? markDeleted(c) : c));
+-      resetCustomerSelection();
+-      triggerAlert('Pelanggan terpilih dipindahkan ke Recycle Bin.');
+-    });
+-  };
+-
+-  const handleBulkPermanentDeleteCustomers = () => {
+-    const ids = [...selectedCustomerIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Hapus PERMANEN ${ids.length} pelanggan terpilih? Data riwayat poin mungkin kehilangan referensi nama. Tindakan ini tidak bisa dibatalkan.`, () => {
+-      setCustomers(customers.filter(c => !selectedCustomerIds.has(c.id)));
+-      resetCustomerSelection();
+-      triggerAlert('Pelanggan terpilih dihapus permanen.');
+-    });
+-  };
++  const handleBulkSoftDeleteCustomers = () => bulkSoftDeleteCustomers([...selectedCustomerIds], resetCustomerSelection);
+ 
+   // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih" — Voucher (basis: hasil filter, bukan seluruh list)
+   const { selectedIds: selectedVoucherIds, allSelected: allVouchersSelected, toggleOne: toggleSelectVoucher, toggleAll: toggleSelectAllVouchers, reset: resetVoucherSelection, count: voucherSelectedCount } = useBulkSelect(filteredVouchers);
+ 
+-  const handleBulkSoftDeleteVouchers = () => {
+-    const ids = [...selectedVoucherIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Pindahkan ${ids.length} voucher terpilih ke Recycle Bin?`, () => {
+-      setVouchers(vouchers.map(v => selectedVoucherIds.has(v.id) ? markDeleted(v) : v));
+-      resetVoucherSelection();
+-      triggerAlert('Voucher terpilih dipindahkan ke Recycle Bin.');
+-    });
+-  };
+-
+-  const handleBulkPermanentDeleteVouchers = () => {
+-    const ids = [...selectedVoucherIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Hapus PERMANEN ${ids.length} voucher terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+-      setVouchers(vouchers.filter(v => !selectedVoucherIds.has(v.id)));
+-      resetVoucherSelection();
+-      triggerAlert('Voucher terpilih dihapus permanen.');
+-    });
+-  };
++  const handleBulkSoftDeleteVouchers = () => bulkSoftDeleteVouchers([...selectedVoucherIds], resetVoucherSelection);
+ 
+   return (
+     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col min-h-0 relative animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
+@@ -331,13 +281,7 @@ const CustomerView = () => {
+             {/* ========================================= */}
+             <Card padding="none" className="flex flex-col h-full min-h-[400px]">
+               <div className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0 flex justify-between items-center">
+-                <span>{showTrashCustomers ? 'Recycle Bin' : 'Data Pelanggan'}</span>
+-                <button
+-                  onClick={() => { setShowTrashCustomers(v => !v); resetCustomerSelection(); setIsSelectingCustomers(false); }}
+-                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
+-                >
+-                  {showTrashCustomers ? 'Kembali' : `Recycle Bin (${trashedOnly(customers).length})`}
+-                </button>
++                <span>Data Pelanggan</span>
+               </div>
+ 
+               {/* Toolbar: Search + Sort + Toggle Mode Pilih (Bulk Delete) */}
+@@ -368,27 +312,25 @@ const CustomerView = () => {
+                   {isSelectingCustomers ? 'Batal' : 'Pilih'}
+                 </button>
+               </div>
+-              {!showTrashCustomers && (
+-                <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+-                  <div className="flex gap-2">
+-                    <div className="flex-1">
+-                      <Input variant="muted" type="text" placeholder="Nama Pelanggan" className="font-semibold" value={newCustName} onChange={e => setNewCustName(e.target.value)} />
+-                    </div>
+-                    <div className="w-1/3">
+-                      <Input variant="muted" type="text" placeholder="No. Whatsapp" value={newCustPhone} onChange={e => setNewCustNamePhone(e.target.value)} />
+-                    </div>
+-
+-                    {/* Form inline ini khusus TAMBAH pelanggan baru; edit pelanggan dilakukan lewat popup di bawah */}
+-                    <button
+-                      onClick={handleSaveCustomer}
+-                      className="px-4 py-2 text-white rounded-xl text-sm font-bold shadow-md hover:-translate-y-0.5 duration-300 transition-colors flex items-center justify-center bg-accent-600 dark:bg-accent-500 hover:bg-accent-700 dark:hover:bg-accent-600"
+-                      title="Tambah Pelanggan"
+-                    >
+-                      <Plus className="w-5 h-5" />
+-                    </button>
++              <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
++                <div className="flex gap-2">
++                  <div className="flex-1">
++                    <Input variant="muted" type="text" placeholder="Nama Pelanggan" className="font-semibold" value={newCustName} onChange={e => setNewCustName(e.target.value)} />
++                  </div>
++                  <div className="w-1/3">
++                    <Input variant="muted" type="text" placeholder="No. Whatsapp" value={newCustPhone} onChange={e => setNewCustNamePhone(e.target.value)} />
+                   </div>
++
++                  {/* Form inline ini khusus TAMBAH pelanggan baru; edit pelanggan dilakukan lewat popup di bawah */}
++                  <button
++                    onClick={handleSaveCustomer}
++                    className="px-4 py-2 text-white rounded-xl text-sm font-bold shadow-md hover:-translate-y-0.5 duration-300 transition-colors flex items-center justify-center bg-accent-600 dark:bg-accent-500 hover:bg-accent-700 dark:hover:bg-accent-600"
++                    title="Tambah Pelanggan"
++                  >
++                    <Plus className="w-5 h-5" />
++                  </button>
+                 </div>
+-              )}
++              </div>
+               <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-950/30 custom-scrollbar">
+                 {isSelectingCustomers && filteredCustomers.length > 0 && (
+                   <BulkSelectBar
+@@ -396,7 +338,7 @@ const CustomerView = () => {
+                     total={filteredCustomers.length}
+                     allSelected={allCustomersSelected}
+                     onToggleAll={toggleSelectAllCustomers}
+-                    onDeleteSelected={showTrashCustomers ? handleBulkPermanentDeleteCustomers : handleBulkSoftDeleteCustomers}
++                    onDeleteSelected={handleBulkSoftDeleteCustomers}
+                   />
+                 )}
+                 {filteredCustomers.map(c => (
+@@ -419,49 +361,28 @@ const CustomerView = () => {
+                     <div className="flex items-center gap-2">
+                       <span className="bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-accent-100 dark:border-accent-500/20">{c.points} Poin</span>
+ 
+-                      {showTrashCustomers ? (
+-                        <>
+-                          <button
+-                            onClick={() => handleRestoreCustomer(c.id)}
+-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
+-                            title="Kembalikan"
+-                          >
+-                            <RotateCcw className="w-4 h-4" />
+-                          </button>
+-                          <button
+-                            onClick={() => handlePermanentDeleteCustomer(c.id)}
+-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
+-                            title="Hapus Permanen"
+-                          >
+-                            <Trash2 className="w-4 h-4" />
+-                          </button>
+-                        </>
+-                      ) : (
+-                        <>
+-                          {/* Tambahan: Akses tombol Edit Pelanggan */}
+-                          <button
+-                            onClick={() => handleStartEditCustomer(c)}
+-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+-                            title="Edit Pelanggan"
+-                          >
+-                            <Pencil className="w-4 h-4" />
+-                          </button>
+-
+-                          {/* Perbaikan Utama: onClick menggunakan Arrow Function agar tidak trigger instan */}
+-                          <button
+-                            onClick={() => handleDeleteCustomer(c.id)}
+-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
+-                            title="Hapus Pelanggan"
+-                          >
+-                            <Trash2 className="w-4 h-4" />
+-                          </button>
+-                        </>
+-                      )}
++                      {/* Tambahan: Akses tombol Edit Pelanggan */}
++                      <button
++                        onClick={() => handleStartEditCustomer(c)}
++                        className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
++                        title="Edit Pelanggan"
++                      >
++                        <Pencil className="w-4 h-4" />
++                      </button>
++
++                      {/* Perbaikan Utama: onClick menggunakan Arrow Function agar tidak trigger instan */}
++                      <button
++                        onClick={() => handleDeleteCustomer(c.id)}
++                        className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
++                        title="Hapus Pelanggan"
++                      >
++                        <Trash2 className="w-4 h-4" />
++                      </button>
+                     </div>
+                   </div>
+                 ))}
+                 {filteredCustomers.length === 0 && (
+-                  <EmptyState size="sm" title={customerSearch ? 'Pelanggan tidak ditemukan.' : (showTrashCustomers ? 'Recycle bin kosong.' : 'Belum ada pelanggan')} />
++                  <EmptyState size="sm" title={customerSearch ? 'Pelanggan tidak ditemukan.' : 'Belum ada pelanggan'} />
+                 )}
+               </div>
+             </Card>
+@@ -561,13 +482,7 @@ const CustomerView = () => {
+           <Card padding="none" className="flex flex-col h-full min-h-[400px]">
+             <div
+               className="p-4 border-b bg-slate-50 dark:bg-slate-950 rounded-t-2xl font-bold text-slate-800 dark:text-slate-100 shrink-0 flex justify-between items-center">
+-              <span>{showTrashVouchers ? 'Recycle Bin' : 'Voucher Diskon Aktif'}</span>
+-              <button onClick={() => { setShowTrashVouchers(v => !v); resetVoucherSelection(); setIsSelectingVouchers(false); }}
+-                className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400
+-      transition-colors"
+-              >
+-                {showTrashVouchers ? 'Kembali' : `Recycle Bin (${trashedOnly(vouchers).length})`}
+-              </button>
++              <span>Voucher Diskon Aktif</span>
+             </div>
+ 
+             {/* Toolbar: Search + Filter Tipe Diskon + Toggle Mode Pilih (Bulk Delete) */}
+@@ -599,61 +514,59 @@ const CustomerView = () => {
+               </button>
+             </div>
+ 
+-            {!showTrashVouchers && (
+-              <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+-                <Input type="text" placeholder="KODE VOUCHER (Maks 10 huruf)" variant="muted"
+-                  className="uppercase tracking-wider font-bold" value={newVoucherCode} maxLength={10} onChange={e =>
+-                    setNewVoucherCode(e.target.value)}
+-                />
++            <div className="p-4 space-y-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
++              <Input type="text" placeholder="KODE VOUCHER (Maks 10 huruf)" variant="muted"
++                className="uppercase tracking-wider font-bold" value={newVoucherCode} maxLength={10} onChange={e =>
++                  setNewVoucherCode(e.target.value)}
++              />
+ 
+-                <div className="flex gap-2">
+-                  <div className="w-1/3">
+-                    <Select variant="muted" className="font-semibold" value={newVoucherType} onChange={e =>
+-                      setNewVoucherType(e.target.value)}
+-                    >
+-                      <option value="fixed">Nominal (Rp)</option>
+-                      <option value="percent">Persen (%)</option>
+-                    </Select>
+-                  </div>
+-                  <div className="flex-1">
+-                    <Input type="number" placeholder="Nilai Potongan" variant="muted"
+-                      className="font-bold text-accent-600 dark:text-accent-400" value={newVoucherDiscount} onChange={e =>
+-                        setNewVoucherDiscount(e.target.value)}
+-                    />
+-                  </div>
++              <div className="flex gap-2">
++                <div className="w-1/3">
++                  <Select variant="muted" className="font-semibold" value={newVoucherType} onChange={e =>
++                    setNewVoucherType(e.target.value)}
++                  >
++                    <option value="fixed">Nominal (Rp)</option>
++                    <option value="percent">Persen (%)</option>
++                  </Select>
+                 </div>
++                <div className="flex-1">
++                  <Input type="number" placeholder="Nilai Potongan" variant="muted"
++                    className="font-bold text-accent-600 dark:text-accent-400" value={newVoucherDiscount} onChange={e =>
++                      setNewVoucherDiscount(e.target.value)}
++                  />
++                </div>
++              </div>
+ 
+-                <div className="flex gap-2">
+-                  <div className="flex-1">
+-                    <Input type="number" placeholder="Syarat Minimal Belanja (Opsional)" variant="muted"
+-                      value={newVoucherMinPurchase} onChange={e => setNewVoucherMinPurchase(e.target.value)}
+-                    />
+-                  </div>
+-                  <div className="w-1/3">
+-                    <Input type="number" placeholder="Kuota" variant="muted" value={newVoucherQuota} onChange={e =>
+-                      setNewVoucherQuota(e.target.value)}
+-                      min="1"
+-                    />
+-                  </div>
++              <div className="flex gap-2">
++                <div className="flex-1">
++                  <Input type="number" placeholder="Syarat Minimal Belanja (Opsional)" variant="muted"
++                    value={newVoucherMinPurchase} onChange={e => setNewVoucherMinPurchase(e.target.value)}
++                  />
++                </div>
++                <div className="w-1/3">
++                  <Input type="number" placeholder="Kuota" variant="muted" value={newVoucherQuota} onChange={e =>
++                    setNewVoucherQuota(e.target.value)}
++                    min="1"
++                  />
+                 </div>
++              </div>
+ 
+-                <div className="flex gap-2 mt-1">
+-                  <button onClick={handleAddVoucher} className={`flex-1 py-3 text-white rounded-xl text-sm font-bold shadow-md
+-        transition-all duration-300 hover:-translate-y-0.5 flex items-center justify-center gap-2 ${editingVoucherId
+-                      ? 'bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600'
+-                      : 'bg-accent-600 dark:bg-accent-500 hover:bg-accent-700 dark:hover:bg-accent-600'}`}>
+-                    <Ticket className="w-4 h-4" />
+-                    {editingVoucherId ? 'Perbarui Voucher' : 'Simpan Voucher'}
+-                  </button>
++              <div className="flex gap-2 mt-1">
++                <button onClick={handleAddVoucher} className={`flex-1 py-3 text-white rounded-xl text-sm font-bold shadow-md
++      transition-all duration-300 hover:-translate-y-0.5 flex items-center justify-center gap-2 ${editingVoucherId
++                    ? 'bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600'
++                    : 'bg-accent-600 dark:bg-accent-500 hover:bg-accent-700 dark:hover:bg-accent-600'}`}>
++                  <Ticket className="w-4 h-4" />
++                  {editingVoucherId ? 'Perbarui Voucher' : 'Simpan Voucher'}
++                </button>
+ 
+-                  {editingVoucherId && (
+-                    <Button variant="secondary" onClick={handleCancelEdit}>
+-                      Batal
+-                    </Button>
+-                  )}
+-                </div>
++                {editingVoucherId && (
++                  <Button variant="secondary" onClick={handleCancelEdit}>
++                    Batal
++                  </Button>
++                )}
+               </div>
+-            )}
++            </div>
+ 
+             <div className="flex-1 p-4 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-950/30 custom-scrollbar">
+               {isSelectingVouchers && filteredVouchers.length > 0 && (
+@@ -662,7 +575,7 @@ const CustomerView = () => {
+                   total={filteredVouchers.length}
+                   allSelected={allVouchersSelected}
+                   onToggleAll={toggleSelectAllVouchers}
+-                  onDeleteSelected={showTrashVouchers ? handleBulkPermanentDeleteVouchers : handleBulkSoftDeleteVouchers}
++                  onDeleteSelected={handleBulkSoftDeleteVouchers}
+                 />
+               )}
+               {filteredVouchers.map(v => (
+@@ -693,47 +606,26 @@ const CustomerView = () => {
+                       Diskon {v.discountType === 'percent' ? `${v.discountValue}%` : formatRupiah(v.discountValue)}
+                     </span>
+ 
+-                    {showTrashVouchers ? (
+-                      <>
+-                        <button onClick={() => handleRestoreVoucher(v.id)}
+-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400
+-            hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
+-                          title="Kembalikan"
+-                        >
+-                          <RotateCcw className="w-4 h-4" />
+-                        </button>
+-                        <button onClick={() => handlePermanentDeleteVoucher(v.id)}
+-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400
+-            hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
+-                          title="Hapus Permanen"
+-                        >
+-                          <Trash2 className="w-4 h-4" />
+-                        </button>
+-                      </>
+-                    ) : (
+-                      <>
+-                        <button onClick={() => handleStartEdit(v)}
+-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400
+-            hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+-                          title="Edit Voucher"
+-                        >
+-                          <Pencil className="w-4 h-4" />
+-                        </button>
+-
+-                        <button onClick={() => handleDeleteVoucher(v.id)}
+-                          className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400
+-            hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
+-                          title="Hapus Voucher"
+-                        >
+-                          <Trash2 className="w-4 h-4" />
+-                        </button>
+-                      </>
+-                    )}
++                    <button onClick={() => handleStartEdit(v)}
++                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400
++        hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
++                      title="Edit Voucher"
++                    >
++                      <Pencil className="w-4 h-4" />
++                    </button>
++
++                    <button onClick={() => handleDeleteVoucher(v.id)}
++                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400
++        hover:bg-accent-50 dark:hover:bg-accent-500/10 rounded-lg transition-colors"
++                      title="Hapus Voucher"
++                    >
++                      <Trash2 className="w-4 h-4" />
++                    </button>
+                   </div>
+                 </div>
+               ))}
+               {filteredVouchers.length === 0 && (
+-                <EmptyState size="sm" title={voucherSearch ? 'Voucher tidak ditemukan.' : (showTrashVouchers ? 'Recycle bin kosong.' : 'Belum ada voucher')} />
++                <EmptyState size="sm" title={voucherSearch ? 'Voucher tidak ditemukan.' : 'Belum ada voucher'} />
+               )}
+             </div>
+           </Card>
+diff --git a/src/features/finance/ExpenseView.jsx b/src/features/finance/ExpenseView.jsx
+index ffd9c9e..751ea4e 100644
+--- a/src/features/finance/ExpenseView.jsx
++++ b/src/features/finance/ExpenseView.jsx
+@@ -1,13 +1,12 @@
+ import React, { useState, useMemo } from 'react';
+ import { useAppContext } from '../../context/AppContext';
+-import { History, Save, Trash2, TrendingDown, Pencil, X, Settings2, RotateCcw, ArrowUpDown } from 'lucide-react';
++import { History, Save, Trash2, TrendingDown, Pencil, X, Settings2, ArrowUpDown } from 'lucide-react';
+ import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
+ import CategoryModal from '../../components/CategoryModal';
+ import { Button, Card, Input, Select, Badge, IconButton, EmptyState, SortModal, BulkSelectBar } from '../../components/ui';
+ import { applySort } from '../../utils/sortUtils';
+-import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+-import { pushTransactionDelete } from '../../storage/realtimeSync';
+ import { useBulkSelect } from '../../hook/useBulkSelect';
++import { useRecycleBin } from '../../hook/useRecycleBin';
+ import { getActiveCouriers } from '../../features/hrd/utils/payrollLogic';
+ import { CASH_HOLDER_KASIR, makeCourierCashHolder, getCashHolder, cashHolderLabel } from '../../utils/cashHolders';
+ 
+@@ -39,10 +38,19 @@ const ExpenseView = () => {
+   const [filterStartDate, setFilterStartDate] = useState('');
+   const [filterEndDate, setFilterEndDate] = useState('');
+   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+-  const [showTrash, setShowTrash] = useState(false);
+   const [sortKey, setSortKey] = useState('date-desc');
+   const [isSortOpen, setIsSortOpen] = useState(false);
+-  const [isSelecting, setIsSelecting] = useState(false);
++
++  const {
++    isSelecting, setIsSelecting,
++    activeItems: visibleExpenses,
++    handleDelete: handleDeleteExpense,
++    handleBulkSoftDelete: bulkSoftDeleteExpenses,
++  } = useRecycleBin(expenses, setExpenses, {
++    tableKey: 'expenses',
++    itemLabel: 'catatan pengeluaran',
++    triggerConfirm, triggerAlert,
++  });
+ 
+   const matchesDateFilter = (date) => {
+     const d = toLocalDateString(date);
+@@ -66,10 +74,10 @@ const ExpenseView = () => {
+   const couriers = useMemo(() => getActiveCouriers(employees), [employees]);
+ 
+   const activeTotal = useMemo(() => {
+-    return activeOnly(expenses)
++    return visibleExpenses
+       .filter(inc => matchesDateFilter(inc.date))
+       .reduce((s, e) => s + e.amount, 0);
+-  }, [expenses, filterMode, filterStartDate, filterEndDate]);
++  }, [visibleExpenses, filterMode, filterStartDate, filterEndDate]);
+ 
+   const [editingId, setEditingId] = useState(null);
+ 
+@@ -145,28 +153,6 @@ const ExpenseView = () => {
+     setCashHolderId(holder.type === 'kurir' ? holder.employeeId : 'kasir');
+   };
+ 
+-  const handleDeleteExpense = (id) => {
+-    triggerConfirm('Apakah Anda yakin ingin menghapus catatan pengeluaran ini?', () => {
+-      setExpenses(expenses.map(e => e.id === id ? markDeleted(e) : e));
+-      triggerAlert('Catatan dipindahkan ke Recycle Bin.');
+-    });
+-  };
+-
+-  const handleRestoreExpense = (id) => {
+-    setExpenses(expenses.map(e => e.id === id ? restoreItem(e) : e));
+-    triggerAlert('Catatan berhasil dikembalikan.');
+-  };
+-
+-  const handlePermanentDeleteExpense = (id) => {
+-    triggerConfirm('Hapus PERMANEN catatan ini? Tindakan ini tidak bisa dibatalkan.', () => {
+-      setExpenses(expenses.filter(e => e.id !== id));
+-      pushTransactionDelete('expenses', id).catch(err =>
+-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+-      );
+-      triggerAlert('Catatan dihapus permanen.');
+-    });
+-  };
+-
+   const cancelEdit = () => {
+     setEditingId(null);
+     setAmount('');
+@@ -177,9 +163,8 @@ const ExpenseView = () => {
+   };
+ 
+   const filteredExpenses = useMemo(() => {
+-    return (showTrash ? trashedOnly(expenses) : activeOnly(expenses))
+-      .filter(e => matchesDateFilter(e.date));
+-  }, [expenses, showTrash, filterMode, filterStartDate, filterEndDate]);
++    return visibleExpenses.filter(e => matchesDateFilter(e.date));
++  }, [visibleExpenses, filterMode, filterStartDate, filterEndDate]);
+ 
+   const sortedExpenses = useMemo(() => applySort(filteredExpenses, sortKey, {
+     date: e => new Date(e.date),
+@@ -187,8 +172,6 @@ const ExpenseView = () => {
+     amount: e => e.amount || 0,
+   }), [filteredExpenses, sortKey]);
+ 
+-  const trashedCount = useMemo(() => trashedOnly(expenses).length, [expenses]);
+-
+   const sortOptions = [
+     { key: 'date-desc', label: 'Terbaru Dulu' },
+     { key: 'date-asc', label: 'Terlama Dulu' },
+@@ -199,28 +182,7 @@ const ExpenseView = () => {
+ 
+   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedExpenses);
+ 
+-  const handleBulkSoftDelete = () => {
+-    const ids = [...selectedIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Pindahkan ${ids.length} catatan pengeluaran terpilih ke Recycle Bin?`, () => {
+-      setExpenses(expenses.map(e => selectedIds.has(e.id) ? markDeleted(e) : e));
+-      resetSelection();
+-      triggerAlert('Catatan terpilih dipindahkan ke Recycle Bin.');
+-    });
+-  };
+-
+-  const handleBulkPermanentDelete = () => {
+-    const ids = [...selectedIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Hapus PERMANEN ${ids.length} catatan pengeluaran terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+-      setExpenses(expenses.filter(e => !selectedIds.has(e.id)));
+-      ids.forEach(id => pushTransactionDelete('expenses', id).catch(err =>
+-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+-      ));
+-      resetSelection();
+-      triggerAlert('Catatan terpilih dihapus permanen.');
+-    });
+-  };
++  const handleBulkSoftDelete = () => bulkSoftDeleteExpenses([...selectedIds], resetSelection);
+ 
+   return (
+     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
+@@ -345,56 +307,44 @@ const ExpenseView = () => {
+ 
+         <Card padding="none" className="lg:col-span-2 flex flex-col h-[600px] w-full min-w-0">
+           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
+-            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0"><History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Pengeluaran'}</h3>
++            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0"><History className="w-4 h-4" /> Riwayat Pengeluaran</h3>
+             <div className="flex flex-wrap items-center gap-2 min-w-0">
+-              {isAdminMode && (
+-                <button
+-                  onClick={() => { setShowTrash(v => !v); resetSelection(); setIsSelecting(false); }}
+-                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors shrink-0"
+-                >
+-                  {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
+-                </button>
+-              )}
+               <button
+                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
+                 className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all duration-300 active:scale-95 shrink-0 ${isSelecting ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
+               >
+                 {isSelecting ? 'Batal' : 'Pilih'}
+               </button>
+-              {!showTrash && (
+-                <>
+-                  <select
+-                    value={filterMode}
+-                    onChange={e => setFilterMode(e.target.value)}
+-                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0"
+-                  >
+-                    <option value="hari-ini">Hari Ini</option>
+-                    <option value="kemarin">Kemarin</option>
+-                    <option value="bulan-ini">Bulan Ini</option>
+-                    <option value="semua">Semua</option>
+-                    <option value="tanggal-terpilih">Tanggal Terpilih</option>
+-                  </select>
+-
+-                  {filterMode === 'tanggal-terpilih' && (
+-                    <div className="flex items-center gap-1 flex-wrap min-w-0">
+-                      <input
+-                        type="date"
+-                        value={filterStartDate}
+-                        onChange={e => setFilterStartDate(e.target.value)}
+-                        max={filterEndDate || undefined}
+-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
+-                      />
+-                      <span className="text-xs text-slate-400 shrink-0">-</span>
+-                      <input
+-                        type="date"
+-                        value={filterEndDate}
+-                        onChange={e => setFilterEndDate(e.target.value)}
+-                        min={filterStartDate || undefined}
+-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
+-                      />
+-                    </div>
+-                  )}
+-                </>
++              <select
++                value={filterMode}
++                onChange={e => setFilterMode(e.target.value)}
++                className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0"
++              >
++                <option value="hari-ini">Hari Ini</option>
++                <option value="kemarin">Kemarin</option>
++                <option value="bulan-ini">Bulan Ini</option>
++                <option value="semua">Semua</option>
++                <option value="tanggal-terpilih">Tanggal Terpilih</option>
++              </select>
++
++              {filterMode === 'tanggal-terpilih' && (
++                <div className="flex items-center gap-1 flex-wrap min-w-0">
++                  <input
++                    type="date"
++                    value={filterStartDate}
++                    onChange={e => setFilterStartDate(e.target.value)}
++                    max={filterEndDate || undefined}
++                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
++                  />
++                  <span className="text-xs text-slate-400 shrink-0">-</span>
++                  <input
++                    type="date"
++                    value={filterEndDate}
++                    onChange={e => setFilterEndDate(e.target.value)}
++                    min={filterStartDate || undefined}
++                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
++                  />
++                </div>
+               )}
+               <button
+                 type="button"
+@@ -418,15 +368,15 @@ const ExpenseView = () => {
+                 total={sortedExpenses.length}
+                 allSelected={allSelected}
+                 onToggleAll={toggleSelectAll}
+-                onDeleteSelected={showTrash ? handleBulkPermanentDelete : handleBulkSoftDelete}
++                onDeleteSelected={handleBulkSoftDelete}
+               />
+             </div>
+           )}
+           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+             {sortedExpenses.length === 0 ? (
+               <EmptyState
+-                icon={showTrash ? <Trash2 className="w-12 h-12" /> : <TrendingDown className="w-12 h-12" />}
+-                title={showTrash ? 'Recycle bin kosong.' : 'Belum ada pengeluaran pada periode ini.'}
++                icon={<TrendingDown className="w-12 h-12" />}
++                title="Belum ada pengeluaran pada periode ini."
+                 className="h-full animate-in fade-in duration-300"
+               />
+             ) : (
+@@ -465,29 +415,14 @@ const ExpenseView = () => {
+                     <div className="flex items-center gap-2 shrink-0">
+                       <p className="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-3 py-1.5 rounded-xl text-sm border border-red-100 dark:border-red-500/20">-{formatRupiah(exp.amount)}</p>
+                       <div className="flex gap-1">
+-                        {showTrash ? (
+-                          isAdminMode && (
+-                            <>
+-                              <IconButton variant="edit" onClick={() => handleRestoreExpense(exp.id)} title="Kembalikan">
+-                                <RotateCcw className="w-3.5 h-3.5" />
+-                              </IconButton>
+-                              <IconButton variant="delete" onClick={() => handlePermanentDeleteExpense(exp.id)} title="Hapus Permanen">
+-                                <Trash2 className="w-3.5 h-3.5" />
+-                              </IconButton>
+-                            </>
+-                          )
+-                        ) : (
+-                          <>
+-                            {isAdminMode && (
+-                              <IconButton variant="edit" onClick={() => handleEditClick(exp)} title="Edit Catatan">
+-                                <Pencil className="w-3.5 h-3.5" />
+-                              </IconButton>
+-                            )}
+-                            <IconButton variant="delete" onClick={() => handleDeleteExpense(exp.id)} title="Hapus Catatan">
+-                              <Trash2 className="w-3.5 h-3.5" />
+-                            </IconButton>
+-                          </>
++                        {isAdminMode && (
++                          <IconButton variant="edit" onClick={() => handleEditClick(exp)} title="Edit Catatan">
++                            <Pencil className="w-3.5 h-3.5" />
++                          </IconButton>
+                         )}
++                        <IconButton variant="delete" onClick={() => handleDeleteExpense(exp.id)} title="Hapus Catatan">
++                          <Trash2 className="w-3.5 h-3.5" />
++                        </IconButton>
+                       </div>
+                     </div>
+                   </div>
+diff --git a/src/features/finance/IncomeView.jsx b/src/features/finance/IncomeView.jsx
+index aa9e714..ef5d1d6 100644
+--- a/src/features/finance/IncomeView.jsx
++++ b/src/features/finance/IncomeView.jsx
+@@ -1,13 +1,12 @@
+ import React, { useState, useMemo } from 'react';
+-import { TrendingUp, History, Save, Trash2, Pencil, X, Settings2, RotateCcw, ArrowUpDown } from 'lucide-react';
++import { TrendingUp, History, Save, Trash2, Pencil, X, Settings2, ArrowUpDown } from 'lucide-react';
+ import { useAppContext } from '../../context/AppContext';
+ import { toLocalDateString, toLocalMonthString } from '../../utils/formatters';
+ import CategoryModal from '../../components/CategoryModal';
+ import { Card, Input, Select, Badge, IconButton, EmptyState, Button, SortModal, BulkSelectBar } from '../../components/ui';
+ import { applySort } from '../../utils/sortUtils';
+-import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+-import { pushTransactionDelete } from '../../storage/realtimeSync';
+ import { useBulkSelect } from '../../hook/useBulkSelect';
++import { useRecycleBin } from '../../hook/useRecycleBin';
+ 
+ // Parse string "YYYY-MM-DD" dari <input type="date"> sebagai LOCAL midnight.
+ // PENTING: jangan pakai `new Date("YYYY-MM-DD")` langsung — JS selalu
+@@ -31,10 +30,19 @@ const IncomeView = () => {
+   const [filterStartDate, setFilterStartDate] = useState('');
+   const [filterEndDate, setFilterEndDate] = useState('');
+   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+-  const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
+   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
+   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
+-  const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
++
++  const {
++    isSelecting, setIsSelecting,
++    activeItems: visibleIncomes,
++    handleDelete: handleDeleteIncome,
++    handleBulkSoftDelete: bulkSoftDeleteIncomes,
++  } = useRecycleBin(incomes, setIncomes, {
++    tableKey: 'incomes',
++    itemLabel: 'catatan pemasukan',
++    triggerConfirm, triggerAlert,
++  });
+ 
+   // Cek apakah sebuah tanggal transaksi lolos filter aktif.
+   // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
+@@ -59,10 +67,10 @@ const IncomeView = () => {
+   };
+ 
+   const activeTotal = useMemo(() => {
+-    return activeOnly(incomes)
++    return visibleIncomes
+       .filter(inc => matchesDateFilter(inc.date))
+       .reduce((s, e) => s + e.amount, 0);
+-  }, [incomes, filterMode, filterStartDate, filterEndDate]);
++  }, [visibleIncomes, filterMode, filterStartDate, filterEndDate]);
+ 
+ 
+   // State pelacak data edit
+@@ -110,30 +118,6 @@ const IncomeView = () => {
+     setDateInput(toLocalDateString(inc.date));
+   };
+ 
+-  const handleDeleteIncome = (id) => {
+-    triggerConfirm('Apakah Anda yakin ingin menghapus catatan pemasukan ini?', () => {
+-      setIncomes(incomes.map(i => i.id === id ? markDeleted(i) : i));
+-      triggerAlert('Catatan dipindahkan ke Recycle Bin.');
+-    });
+-  };
+-
+-  const handleRestoreIncome = (id) => {
+-    setIncomes(incomes.map(i => i.id === id ? restoreItem(i) : i));
+-    triggerAlert('Catatan berhasil dikembalikan.');
+-  };
+-
+-  const handlePermanentDeleteIncome = (id) => {
+-    triggerConfirm('Hapus PERMANEN catatan ini? Tindakan ini tidak bisa dibatalkan.', () => {
+-      setIncomes(incomes.filter(i => i.id !== id));
+-      // Langsung kirim delete ke Supabase saat ini juga, gak nunggu siklus
+-      // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
+-      pushTransactionDelete('incomes', id).catch(err =>
+-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+-      );
+-      triggerAlert('Catatan dihapus permanen.');
+-    });
+-  };
+-
+   const cancelEdit = () => {
+     setEditingId(null);
+     setAmount('');
+@@ -142,9 +126,8 @@ const IncomeView = () => {
+   };
+ 
+   const filteredIncomes = useMemo(() => {
+-    return (showTrash ? trashedOnly(incomes) : activeOnly(incomes))
+-      .filter(inc => matchesDateFilter(inc.date));
+-  }, [incomes, showTrash, filterMode, filterStartDate, filterEndDate]);
++    return visibleIncomes.filter(inc => matchesDateFilter(inc.date));
++  }, [visibleIncomes, filterMode, filterStartDate, filterEndDate]);
+ 
+   // Urutkan hasil filter pakai sortKey terpilih
+   const sortedIncomes = useMemo(() => applySort(filteredIncomes, sortKey, {
+@@ -153,8 +136,6 @@ const IncomeView = () => {
+     amount: inc => inc.amount || 0,
+   }), [filteredIncomes, sortKey]);
+ 
+-  const trashedCount = useMemo(() => trashedOnly(incomes).length, [incomes]);
+-
+   const sortOptions = [
+     { key: 'date-desc', label: 'Terbaru Dulu' },
+     { key: 'date-asc', label: 'Terlama Dulu' },
+@@ -166,30 +147,7 @@ const IncomeView = () => {
+   // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih"
+   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedIncomes);
+ 
+-  // Hapus Banyak SEKALIGUS (Pindah ke Recycle Bin)
+-  const handleBulkSoftDelete = () => {
+-    const ids = [...selectedIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Pindahkan ${ids.length} catatan pemasukan terpilih ke Recycle Bin?`, () => {
+-      setIncomes(incomes.map(i => selectedIds.has(i.id) ? markDeleted(i) : i));
+-      resetSelection();
+-      triggerAlert('Catatan terpilih dipindahkan ke Recycle Bin.');
+-    });
+-  };
+-
+-  // Hapus Banyak SEKALIGUS (Permanen di Recycle Bin)
+-  const handleBulkPermanentDelete = () => {
+-    const ids = [...selectedIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Hapus PERMANEN ${ids.length} catatan pemasukan terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+-      setIncomes(incomes.filter(i => !selectedIds.has(i.id)));
+-      ids.forEach(id => pushTransactionDelete('incomes', id).catch(err =>
+-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+-      ));
+-      resetSelection();
+-      triggerAlert('Catatan terpilih dihapus permanen.');
+-    });
+-  };
++  const handleBulkSoftDelete = () => bulkSoftDeleteIncomes([...selectedIds], resetSelection);
+ 
+   return (
+     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
+@@ -257,56 +215,44 @@ const IncomeView = () => {
+ 
+         <Card padding="none" className="lg:col-span-2 flex flex-col h-[500px] w-full min-w-0">
+           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 justify-between items-center bg-slate-50 dark:bg-slate-950 rounded-t-2xl">
+-            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0"><History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Pemasukan'}</h3>
++            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0"><History className="w-4 h-4" /> Riwayat Pemasukan</h3>
+             <div className="flex flex-wrap items-center gap-2 min-w-0">
+-              {isAdminMode && (
+-                <button
+-                  onClick={() => { setShowTrash(v => !v); resetSelection(); setIsSelecting(false); }}
+-                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors shrink-0"
+-                >
+-                  {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
+-                </button>
+-              )}
+               <button
+                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
+                 className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all duration-300 active:scale-95 shrink-0 ${isSelecting ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
+               >
+                 {isSelecting ? 'Batal' : 'Pilih'}
+               </button>
+-              {!showTrash && (
+-                <>
+-                  <select
+-                    value={filterMode}
+-                    onChange={e => setFilterMode(e.target.value)}
+-                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0"
+-                  >
+-                    <option value="hari-ini">Hari Ini</option>
+-                    <option value="kemarin">Kemarin</option>
+-                    <option value="bulan-ini">Bulan Ini</option>
+-                    <option value="semua">Semua</option>
+-                    <option value="tanggal-terpilih">Tanggal Terpilih</option>
+-                  </select>
+-
+-                  {filterMode === 'tanggal-terpilih' && (
+-                    <div className="flex items-center gap-1 flex-wrap min-w-0">
+-                      <input
+-                        type="date"
+-                        value={filterStartDate}
+-                        onChange={e => setFilterStartDate(e.target.value)}
+-                        max={filterEndDate || undefined}
+-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
+-                      />
+-                      <span className="text-xs text-slate-400 shrink-0">-</span>
+-                      <input
+-                        type="date"
+-                        value={filterEndDate}
+-                        onChange={e => setFilterEndDate(e.target.value)}
+-                        min={filterStartDate || undefined}
+-                        className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
+-                      />
+-                    </div>
+-                  )}
+-                </>
++              <select
++                value={filterMode}
++                onChange={e => setFilterMode(e.target.value)}
++                className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0"
++              >
++                <option value="hari-ini">Hari Ini</option>
++                <option value="kemarin">Kemarin</option>
++                <option value="bulan-ini">Bulan Ini</option>
++                <option value="semua">Semua</option>
++                <option value="tanggal-terpilih">Tanggal Terpilih</option>
++              </select>
++
++              {filterMode === 'tanggal-terpilih' && (
++                <div className="flex items-center gap-1 flex-wrap min-w-0">
++                  <input
++                    type="date"
++                    value={filterStartDate}
++                    onChange={e => setFilterStartDate(e.target.value)}
++                    max={filterEndDate || undefined}
++                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
++                  />
++                  <span className="text-xs text-slate-400 shrink-0">-</span>
++                  <input
++                    type="date"
++                    value={filterEndDate}
++                    onChange={e => setFilterEndDate(e.target.value)}
++                    min={filterStartDate || undefined}
++                    className="p-1.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-accent-500/30 transition-all duration-200 shrink-0 min-w-0 max-w-[130px]"
++                  />
++                </div>
+               )}
+               <button
+                 type="button"
+@@ -330,15 +276,15 @@ const IncomeView = () => {
+                 total={sortedIncomes.length}
+                 allSelected={allSelected}
+                 onToggleAll={toggleSelectAll}
+-                onDeleteSelected={showTrash ? handleBulkPermanentDelete : handleBulkSoftDelete}
++                onDeleteSelected={handleBulkSoftDelete}
+               />
+             </div>
+           )}
+           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+             {sortedIncomes.length === 0 ? (
+               <EmptyState
+-                icon={showTrash ? <Trash2 className="w-12 h-12" /> : <TrendingUp className="w-12 h-12" />}
+-                title={showTrash ? 'Recycle bin kosong.' : 'Belum ada pemasukan pada periode ini.'}
++                icon={<TrendingUp className="w-12 h-12" />}
++                title="Belum ada pemasukan pada periode ini."
+                 className="h-full animate-in fade-in duration-300"
+               />
+             ) : (
+@@ -361,29 +307,14 @@ const IncomeView = () => {
+                   <div className="flex items-center gap-2 shrink-0">
+                     <p className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 rounded-xl text-sm border border-emerald-100 dark:border-emerald-500/20">+{formatRupiah(inc.amount)}</p>
+                     <div className="flex gap-1">
+-                      {showTrash ? (
+-                        isAdminMode && (
+-                          <>
+-                            <IconButton variant="edit" onClick={() => handleRestoreIncome(inc.id)} title="Kembalikan">
+-                              <RotateCcw className="w-3.5 h-3.5" />
+-                            </IconButton>
+-                            <IconButton variant="delete" onClick={() => handlePermanentDeleteIncome(inc.id)} title="Hapus Permanen">
+-                              <Trash2 className="w-3.5 h-3.5" />
+-                            </IconButton>
+-                          </>
+-                        )
+-                      ) : (
+-                        <>
+-                          {isAdminMode && (
+-                            <IconButton variant="edit" onClick={() => handleEditClick(inc)} title="Edit Catatan">
+-                              <Pencil className="w-3.5 h-3.5" />
+-                            </IconButton>
+-                          )}
+-                          <IconButton variant="delete" onClick={() => handleDeleteIncome(inc.id)} title="Hapus Catatan">
+-                            <Trash2 className="w-3.5 h-3.5" />
+-                          </IconButton>
+-                        </>
++                      {isAdminMode && (
++                        <IconButton variant="edit" onClick={() => handleEditClick(inc)} title="Edit Catatan">
++                          <Pencil className="w-3.5 h-3.5" />
++                        </IconButton>
+                       )}
++                      <IconButton variant="delete" onClick={() => handleDeleteIncome(inc.id)} title="Hapus Catatan">
++                        <Trash2 className="w-3.5 h-3.5" />
++                      </IconButton>
+                     </div>
+                   </div>
+                 </div>
+diff --git a/src/features/finance/shift/ShiftView.jsx b/src/features/finance/shift/ShiftView.jsx
+index c510012..809c48c 100644
+--- a/src/features/finance/shift/ShiftView.jsx
++++ b/src/features/finance/shift/ShiftView.jsx
+@@ -1,6 +1,5 @@
+-import { Clock, FileText, History, Printer, Edit, Trash2, Share2, RotateCcw, ArrowUpDown, AlertTriangle, Users, ArrowRight, ChevronDown } from 'lucide-react';
++import { Clock, FileText, History, Printer, Edit, Trash2, Share2, ArrowUpDown, AlertTriangle, Users, ArrowRight, ChevronDown } from 'lucide-react';
+ import { isNativePlatform, printShiftNativeBluetooth } from '../../../library/printer';
+-import { trashedOnly } from '../../../utils/softDelete';
+ import { isCourierLocation } from '../../../utils/cashHolders';
+ 
+ // Import komponen UI Design System
+@@ -29,7 +28,7 @@ import ShiftModals from './ShiftModals';
+ // form generik langsung di tab Aktif — lihat card "Catat Perpindahan Uang").
+ const ShiftView = () => {
+   const {
+-    currentShift, shiftHistory, formatRupiah, storeSettings, isAdminMode, employees,
++    currentShift, formatRupiah, storeSettings, isAdminMode, employees,
+ 
+     activeTab, setActiveTab,
+ 
+@@ -68,14 +67,13 @@ const ShiftView = () => {
+     filterMode, setFilterMode,
+     filterStartDate, setFilterStartDate,
+     filterEndDate, setFilterEndDate,
+-    showTrash, setShowTrash,
+     sortKey, setSortKey,
+     isSortOpen, setIsSortOpen,
+     isSelecting, setIsSelecting,
+     filteredShiftHistory, sortedShiftHistory, rekapShiftStats,
+     selectedIds, allSelected, toggleSelectOne, toggleSelectAll, resetSelection, count,
+-    handleDeleteShift, handleRestoreShift, handlePermanentDeleteShift,
+-    handleBulkSoftDeleteShift, handleBulkPermanentDeleteShift,
++    handleDeleteShift,
++    handleBulkSoftDeleteShift,
+ 
+     allTransactions,
+     handleDeleteCourierTransfer,
+@@ -118,8 +116,8 @@ const ShiftView = () => {
+           </div>
+ 
+           <div className="space-y-1 text-xs mb-4 print:mb-2 print:text-black">
+-            <div className="flex justify-between"><span>Buka:</span> <span>{closedShiftData.startTime.toLocaleString('id-ID')}</span></div>
+-            <div className="flex justify-between"><span>Tutup:</span> <span>{closedShiftData.endTime.toLocaleString('id-ID')}</span></div>
++            <div className="flex justify-between"><span>Buka:</span> <span>{new Date(closedShiftData.startTime).toLocaleString('id-ID')}</span></div>
++            <div className="flex justify-between"><span>Tutup:</span> <span>{new Date(closedShiftData.endTime).toLocaleString('id-ID')}</span></div>
+             {closedShiftData.openedByEmployeeName && (
+               <div className="flex justify-between"><span>Kasir:</span> <span className="font-bold">{closedShiftData.openedByEmployeeName}</span></div>
+             )}
+@@ -328,7 +326,7 @@ const ShiftView = () => {
+             <div className="relative z-10">
+               <Badge variant="info" className="uppercase tracking-wider">Dompet Terbuka</Badge>
+               <h3 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100 mt-4 mb-1">{currentShift.id}</h3>
+-              <p className="text-sm text-slate-500 dark:text-slate-400">Waktu Buka: {currentShift.startTime.toLocaleString('id-ID')}</p>
++              <p className="text-sm text-slate-500 dark:text-slate-400">Waktu Buka: {new Date(currentShift.startTime).toLocaleString('id-ID')}</p>
+               {currentShift.openedByEmployeeName && (
+                 <p className="text-sm font-semibold text-accent-600 dark:text-accent-400 mt-1 flex items-center gap-1.5">
+                   <Users className="w-3.5 h-3.5" /> {currentShift.openedByEmployeeName}
+@@ -625,16 +623,8 @@ const ShiftView = () => {
+         {/* --- DAFTAR RIWAYAT HARIAN SHIFT --- */}
+         <Card padding="none" className="overflow-hidden flex flex-col">
+           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
+-            <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">{showTrash ? 'Recycle Bin' : 'Daftar Penutupan Dompet'}</h4>
++            <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Daftar Penutupan Dompet</h4>
+             <div className="flex items-center gap-3">
+-              {isAdminMode && (
+-                <button
+-                  onClick={() => { setShowTrash(v => !v); resetSelection(); setIsSelecting(false); }}
+-                  className="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
+-                >
+-                  {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(shiftHistory).length})`}
+-                </button>
+-              )}
+               <button
+                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
+                 className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all duration-300 active:scale-95 ${isSelecting ? 'bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400' : 'text-slate-500 dark:text-slate-400 hover:text-accent-600 dark:hover:text-accent-400'}`}
+@@ -659,7 +649,7 @@ const ShiftView = () => {
+                 total={sortedShiftHistory.length}
+                 allSelected={allSelected}
+                 onToggleAll={toggleSelectAll}
+-                onDeleteSelected={showTrash ? handleBulkPermanentDeleteShift : handleBulkSoftDeleteShift}
++                onDeleteSelected={handleBulkSoftDeleteShift}
+                 label="Pilih Semua"
+               />
+             </div>
+@@ -669,8 +659,8 @@ const ShiftView = () => {
+             {sortedShiftHistory.length === 0 ? (
+               <EmptyState 
+                 size="sm"
+-                icon={showTrash ? <Trash2 className="w-10 h-10 opacity-30" /> : <Clock className="w-10 h-10 opacity-30" />} 
+-                title={showTrash ? 'Recycle bin kosong.' : 'Tidak ada riwayat penutupan dompet pada periode ini'} 
++                icon={<Clock className="w-10 h-10 opacity-30" />} 
++                title="Tidak ada riwayat penutupan dompet pada periode ini" 
+               />
+             ) : (
+               sortedShiftHistory.map((shift) => {
+@@ -720,29 +710,14 @@ const ShiftView = () => {
+                       </div>
+ 
+                       <div className="flex gap-1 border-l border-slate-200 dark:border-slate-700 pl-4 ml-2">
+-                        {showTrash ? (
+-                          isAdminMode && (
+-                            <>
+-                              <IconButton variant="edit" onClick={() => handleRestoreShift(shift.id)} title="Kembalikan">
+-                                <RotateCcw className="w-4 h-4" />
+-                              </IconButton>
+-                              <IconButton variant="delete" onClick={() => handlePermanentDeleteShift(shift.id)} title="Hapus Permanen">
+-                                <Trash2 className="w-4 h-4" />
+-                              </IconButton>
+-                            </>
+-                          )
+-                        ) : (
+-                          <>
+-                            {isAdminMode && (
+-                              <IconButton variant="edit" onClick={() => handleOpenEditModal(shift)}>
+-                                <Edit className="w-4 h-4" />
+-                              </IconButton>
+-                            )}
+-                            <IconButton variant="delete" onClick={() => handleDeleteShift(shift.id)}>
+-                              <Trash2 className="w-4 h-4" />
+-                            </IconButton>
+-                          </>
++                        {isAdminMode && (
++                          <IconButton variant="edit" onClick={() => handleOpenEditModal(shift)}>
++                            <Edit className="w-4 h-4" />
++                          </IconButton>
+                         )}
++                        <IconButton variant="delete" onClick={() => handleDeleteShift(shift.id)}>
++                          <Trash2 className="w-4 h-4" />
++                        </IconButton>
+                         <IconButton 
+                           variant="neutral" 
+                           onClick={() => {
+diff --git a/src/features/finance/shift/useShiftLogic.js b/src/features/finance/shift/useShiftLogic.js
+index a4afe69..d643a7d 100644
+--- a/src/features/finance/shift/useShiftLogic.js
++++ b/src/features/finance/shift/useShiftLogic.js
+@@ -5,10 +5,11 @@ import { toPng, toBlob } from 'html-to-image';
+ import { Share } from '@capacitor/share';
+ import { Filesystem, Directory } from '@capacitor/filesystem';
+ import { generateUUID, toLocalMonthString, toLocalDateString } from '../../../utils/formatters';
+-import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../../utils/softDelete';
+-import { pushTransactionDelete, pushLiveState } from '../../../storage/realtimeSync';
++import { markDeleted, activeOnly } from '../../../utils/softDelete';
++import { pushLiveState } from '../../../storage/realtimeSync';
+ import { applySort } from '../../../utils/sortUtils';
+ import { useBulkSelect } from '../../../hook/useBulkSelect';
++import { useRecycleBin } from '../../../hook/useRecycleBin';
+ import { getActiveCouriers } from '../../hrd/utils/payrollLogic';
+ import {
+   computeAllCourierBalances,
+@@ -85,10 +86,19 @@ export function useShiftLogic() {
+   const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
+   const [filterStartDate, setFilterStartDate] = useState('');
+   const [filterEndDate, setFilterEndDate] = useState('');
+-  const [showTrash, setShowTrash] = useState(false); // toggle: riwayat normal vs recycle bin
+   const [sortKey, setSortKey] = useState('date-desc'); // dipasangin ke applySort
+   const [isSortOpen, setIsSortOpen] = useState(false); // toggle buka SortModal
+-  const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
++
++  const {
++    isSelecting, setIsSelecting,
++    activeItems: visibleShiftHistory,
++    handleDelete: handleDeleteShift,
++    handleBulkSoftDelete: bulkSoftDeleteShift,
++  } = useRecycleBin(shiftHistory, setShiftHistory, {
++    tableKey: 'shiftHistory',
++    itemLabel: 'data dompet',
++    triggerConfirm, triggerAlert,
++  });
+ 
+   // State utk Card "Catat Perpindahan Uang" — SATU form generik gantiin
+   // 4 modal terpisah yang dulu ada (Setor/Hapus/Ganti Uang/Setor Owner).
+@@ -853,13 +863,6 @@ export function useShiftLogic() {
+     });
+   };
+ 
+-  const handleDeleteShift = (id) => {
+-    triggerConfirm('Pindahkan data dompet ini ke Recycle Bin?', () => {
+-      setShiftHistory(shiftHistory.map(shift => shift.id === id ? markDeleted(shift) : shift));
+-      triggerAlert('Data dipindahkan ke Recycle Bin.');
+-    });
+-  };
+-
+   // Hapus 1 baris Log Transaksi (koreksi kalau kasir/admin salah catat) —
+   // soft-delete konsisten sama pola recycle bin di seluruh app (activeOnly()
+   // di tab Log Transaksi otomatis nyembunyiin ini). Beda dari shift, sengaja
+@@ -903,23 +906,6 @@ export function useShiftLogic() {
+     });
+   };
+ 
+-  const handleRestoreShift = (id) => {
+-    setShiftHistory(shiftHistory.map(shift => shift.id === id ? restoreItem(shift) : shift));
+-    triggerAlert('Data berhasil dikembalikan.');
+-  };
+-
+-  const handlePermanentDeleteShift = (id) => {
+-    triggerConfirm('Hapus PERMANEN data dompet ini? Tindakan ini tidak bisa dibatalkan.', () => {
+-      setShiftHistory(shiftHistory.filter(shift => shift.id !== id));
+-      // Langsung kirim delete ke Supabase saat ini juga, gak nunggu siklus
+-      // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
+-      pushTransactionDelete('shiftHistory', id).catch(err =>
+-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+-      );
+-      triggerAlert('Data dihapus permanen.');
+-    });
+-  };
+-
+   // Cek apakah tanggal shift (startTime) lolos filter aktif.
+   // Perbandingan rentang tanggal pakai string "YYYY-MM-DD" langsung (toLocalDateString),
+   // aman dibandingkan leksikografis tanpa perlu konversi ke Date/timestamp.
+@@ -943,9 +929,8 @@ export function useShiftLogic() {
+   };
+ 
+   const filteredShiftHistory = useMemo(() => {
+-    const source = showTrash ? trashedOnly(shiftHistory) : activeOnly(shiftHistory);
+-    return source.filter(shift => matchesDateFilter(shift.startTime));
+-  }, [shiftHistory, filterMode, filterStartDate, filterEndDate, showTrash]);
++    return visibleShiftHistory.filter(shift => matchesDateFilter(shift.startTime));
++  }, [visibleShiftHistory, filterMode, filterStartDate, filterEndDate]);
+ 
+   // Urutkan hasil filter pakai sortKey terpilih (gak ngubah rekapShiftStats, cuma urutan tampil)
+   const sortedShiftHistory = useMemo(() => applySort(filteredShiftHistory, sortKey, {
+@@ -957,30 +942,7 @@ export function useShiftLogic() {
+   // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih"
+   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedShiftHistory);
+ 
+-  // Hapus Banyak SEKALIGUS (Pindah ke Recycle Bin)
+-  const handleBulkSoftDeleteShift = () => {
+-    const ids = [...selectedIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Pindahkan ${ids.length} data dompet terpilih ke Recycle Bin?`, () => {
+-      setShiftHistory(shiftHistory.map(shift => selectedIds.has(shift.id) ? markDeleted(shift) : shift));
+-      resetSelection();
+-      triggerAlert('Data terpilih dipindahkan ke Recycle Bin.');
+-    });
+-  };
+-
+-  // Hapus Banyak SEKALIGUS (Permanen di Recycle Bin)
+-  const handleBulkPermanentDeleteShift = () => {
+-    const ids = [...selectedIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Hapus PERMANEN ${ids.length} data dompet terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+-      setShiftHistory(shiftHistory.filter(shift => !selectedIds.has(shift.id)));
+-      ids.forEach(id => pushTransactionDelete('shiftHistory', id).catch(err =>
+-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+-      ));
+-      resetSelection();
+-      triggerAlert('Data terpilih dihapus permanen.');
+-    });
+-  };
++  const handleBulkSoftDeleteShift = () => bulkSoftDeleteShift([...selectedIds], resetSelection);
+ 
+   const rekapShiftStats = useMemo(() => {
+     let totalInitial = 0;
+@@ -1053,18 +1015,17 @@ export function useShiftLogic() {
+     editActiveInitialInput, setEditActiveInitialInput,
+     handleSaveActiveInitial,
+ 
+-    // Riwayat: filter, sort, trash, bulk select
++    // Riwayat: filter, sort, bulk select
+     filterMode, setFilterMode,
+     filterStartDate, setFilterStartDate,
+     filterEndDate, setFilterEndDate,
+-    showTrash, setShowTrash,
+     sortKey, setSortKey,
+     isSortOpen, setIsSortOpen,
+     isSelecting, setIsSelecting,
+     filteredShiftHistory, sortedShiftHistory, rekapShiftStats,
+     selectedIds, allSelected, toggleSelectOne, toggleSelectAll, resetSelection, count,
+-    handleDeleteShift, handleRestoreShift, handlePermanentDeleteShift,
+-    handleBulkSoftDeleteShift, handleBulkPermanentDeleteShift,
++    handleDeleteShift,
++    handleBulkSoftDeleteShift,
+ 
+     // Tab "Log Transaksi" — satu list gabungan (manual + virtual)
+     allTransactions,
+diff --git a/src/features/hrd/AttendanceView.jsx b/src/features/hrd/AttendanceView.jsx
+index 2392a99..c66d6ce 100644
+--- a/src/features/hrd/AttendanceView.jsx
++++ b/src/features/hrd/AttendanceView.jsx
+@@ -1,19 +1,19 @@
+ import React, { useState, useEffect, useMemo, useRef } from 'react';
+ import {
+-  Users, Trash2, RotateCcw,
++  Users, Trash2,
+   AlertTriangle, Camera, AlarmClock, X, PenLine,
+   History, Search, Calendar, ChevronRight, Filter, ArrowUpDown,
+ } from 'lucide-react';
+ import { useAppContext } from '../../context/AppContext';
+ import { toLocalDateString } from '../../utils/formatters';
+-import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
++import { activeOnly } from '../../utils/softDelete';
+ import { isSupabaseConfigured } from '../../storage/syncClient';
+-import { pushTransactionDelete } from '../../storage/realtimeSync';
+ import {
+   Card, Button, EmptyState, Badge, IconButton, Alert, SortModal, BulkSelectBar, Modal,
+ } from '../../components/ui';
+ import { applySort } from '../../utils/sortUtils';
+ import { useBulkSelect } from '../../hook/useBulkSelect';
++import { useRecycleBin } from '../../hook/useRecycleBin';
+ import { OVERTIME_THRESHOLD_MINUTES, WORK_END_MINUTES, calculateBolongMinutes } from './utils/payrollLogic';
+ 
+ const AUTO_CLOSE_HOUR = 21; // Sistem mendeteksi kelalaian jika sudah lewat jam 21:00
+@@ -121,7 +121,15 @@ export default function Attendance() {
+   const [activeTab, setActiveTab] = useState('status');
+ 
+   // History section
+-  const [showHistoryTrash, setShowHistoryTrash] = useState(false);
++  const {
++    activeItems: visibleAttendanceLog,
++    handleDelete: handleDeleteRecord,
++    handleBulkSoftDelete: bulkSoftDeleteRecords,
++  } = useRecycleBin(attendanceLog, setAttendanceLog, {
++    tableKey: 'attendanceLog',
++    itemLabel: 'record absen',
++    triggerConfirm,
++  });
+   const [dateFilter, setDateFilter] = useState('hari-ini');
+   // NB: untuk filter "Tanggal Terpilih" — kalau customEndDate dibiarkan kosong,
+   // filter otomatis jadi single-day (customStartDate aja). Kalau diisi dua-duanya,
+@@ -403,7 +411,7 @@ export default function Attendance() {
+   }, [attendanceLog]);
+ 
+   const filteredLogs = useMemo(() => {
+-    const baseLogSource = showHistoryTrash ? trashedOnly(attendanceLog) : activeOnly(attendanceLog);
++    const baseLogSource = visibleAttendanceLog;
+ 
+     const now = new Date();
+     const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+@@ -449,27 +457,7 @@ export default function Attendance() {
+         type: r => r.type || '',
+       }
+     );
+-  }, [attendanceLog, showHistoryTrash, dateFilter, customStartDate, customEndDate, typeFilter, empFilter, sortKey, searchTerm]);
+-
+-  const handleDeleteRecord = (id) =>
+-    triggerConfirm('Pindahkan record absen ini ke Recycle Bin?', () => {
+-      setAttendanceLog(prev => prev.map(r => r.id === id ? markDeleted(r) : r));
+-    });
+-
+-  const handleRestoreRecord = (id) =>
+-    setAttendanceLog(prev => prev.map(r => r.id === id ? restoreItem(r) : r));
+-
+-  const handlePermanentDeleteRecord = (id) => {
+-    triggerConfirm(
+-      'Hapus record absen ini secara permanen? Tindakan ini tidak bisa dibatalkan.',
+-      () => {
+-        setAttendanceLog(prev => prev.filter(r => r.id !== id));
+-        pushTransactionDelete('attendanceLog', id).catch(err =>
+-          console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+-        );
+-      }
+-    );
+-  };
++  }, [visibleAttendanceLog, dateFilter, customStartDate, customEndDate, typeFilter, empFilter, sortKey, searchTerm]);
+ 
+   // Daftar log yang benar-benar tampil di tabel (dibatasi 300 baris terbaru)
+   const visibleLogs = filteredLogs.slice(0, 300);
+@@ -477,26 +465,7 @@ export default function Attendance() {
+   // Bulk select untuk checkbox "Pilih Semua" & "Hapus Terpilih"
+   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(visibleLogs);
+ 
+-  const handleBulkSoftDelete = () => {
+-    const ids = [...selectedIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Pindahkan ${ids.length} record absen terpilih ke Recycle Bin?`, () => {
+-      setAttendanceLog(prev => prev.map(r => selectedIds.has(r.id) ? markDeleted(r) : r));
+-      resetSelection();
+-    });
+-  };
+-
+-  const handleBulkPermanentDelete = () => {
+-    const ids = [...selectedIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Hapus PERMANEN ${ids.length} record absen terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+-      setAttendanceLog(prev => prev.filter(r => !selectedIds.has(r.id)));
+-      ids.forEach(id => pushTransactionDelete('attendanceLog', id).catch(err =>
+-        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+-      ));
+-      resetSelection();
+-    });
+-  };
++  const handleBulkSoftDelete = () => bulkSoftDeleteRecords([...selectedIds], resetSelection);
+ 
+   const closeManualModal = () => {
+     setEditEmployeeId(null);
+@@ -539,8 +508,6 @@ export default function Attendance() {
+   const fmtTime = (d) => new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+   const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+ 
+-  const trashedCount = useMemo(() => trashedOnly(attendanceLog).length, [attendanceLog]);
+-
+   return (
+     <div className="flex-1 overflow-y-auto p-4 md:p-6">
+       {currentShift && isShiftCarriedOver && (
+@@ -750,16 +717,8 @@ export default function Attendance() {
+         <div className="flex items-center justify-between mb-3">
+           <h3 className="font-bold text-sm text-slate-700 dark:text-slate-200 flex items-center gap-2">
+             <History className="w-4 h-4" />
+-            {showHistoryTrash ? 'Recycle Bin Log Absen' : 'Riwayat Log Absen'}
++            Riwayat Log Absen
+           </h3>
+-          {isAdminMode && (
+-            <button
+-              onClick={() => { setShowHistoryTrash(v => !v); resetSelection(); }}
+-              className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+-            >
+-              {showHistoryTrash ? '← Kembali ke Riwayat' : `Recycle Bin (${trashedCount})`}
+-            </button>
+-          )}
+         </div>
+ 
+         <Card className="flex items-center gap-2 overflow-x-auto scrollbar-hide mb-3 p-3">
+@@ -857,7 +816,7 @@ export default function Attendance() {
+               total={visibleLogs.length}
+               allSelected={allSelected}
+               onToggleAll={toggleSelectAll}
+-              onDeleteSelected={showHistoryTrash ? handleBulkPermanentDelete : handleBulkSoftDelete}
++              onDeleteSelected={handleBulkSoftDelete}
+             />
+           </div>
+         )}
+@@ -867,10 +826,8 @@ export default function Attendance() {
+             <EmptyState
+               size="sm"
+               icon={<History className="w-8 h-8" />}
+-              title={showHistoryTrash ? 'Recycle bin kosong' : 'Tidak ada log ditemukan'}
+-              description={showHistoryTrash
+-                ? 'Belum ada record absen yang dihapus.'
+-                : 'Coba ubah filter atau rentang tanggal.'}
++              title="Tidak ada log ditemukan"
++              description="Coba ubah filter atau rentang tanggal."
+             />
+           ) : (
+             <div className="divide-y divide-slate-100 dark:divide-slate-800">
+@@ -922,32 +879,13 @@ export default function Attendance() {
+                       {TYPE_LABEL[r.type]}
+                     </Badge>
+                     {isAdminMode && (
+-                      showHistoryTrash ? (
+-                        <>
+-                          <IconButton
+-                            variant="success" ghost
+-                            title="Kembalikan"
+-                            onClick={() => handleRestoreRecord(r.id)}
+-                          >
+-                            <RotateCcw className="w-4 h-4" />
+-                          </IconButton>
+-                          <IconButton
+-                            variant="delete" ghost
+-                            title="Hapus Permanen"
+-                            onClick={() => handlePermanentDeleteRecord(r.id)}
+-                          >
+-                            <Trash2 className="w-4 h-4" />
+-                          </IconButton>
+-                        </>
+-                      ) : (
+-                        <IconButton
+-                          variant="delete" ghost
+-                          title="Hapus (pindah ke recycle bin)"
+-                          onClick={() => handleDeleteRecord(r.id)}
+-                        >
+-                          <Trash2 className="w-4 h-4" />
+-                        </IconButton>
+-                      )
++                      <IconButton
++                        variant="delete" ghost
++                        title="Hapus (pindah ke recycle bin)"
++                        onClick={() => handleDeleteRecord(r.id)}
++                      >
++                        <Trash2 className="w-4 h-4" />
++                      </IconButton>
+                     )}
+                   </div>
+                 </div>
+diff --git a/src/features/hrd/tabs/InputDailyTab.jsx b/src/features/hrd/tabs/InputDailyTab.jsx
+index 43e3573..1a39599 100644
+--- a/src/features/hrd/tabs/InputDailyTab.jsx
++++ b/src/features/hrd/tabs/InputDailyTab.jsx
+@@ -3,8 +3,9 @@ import { useAppContext } from '../../../context/AppContext';
+ import { toLocalDateString, toLocalMonthString } from '../../../utils/formatters';
+ import { Card, Button, Input, Select, IconButton, Badge, SegmentedControl, Alert, SortModal, BulkSelectBar } from '../../../components/ui';
+ import CategoryModal from '../../../components/CategoryModal';
+-import { activeOnly, trashedOnly, markDeleted } from '../../../utils/softDelete';
++import { activeOnly } from '../../../utils/softDelete';
+ import { useBulkSelect } from '../../../hook/useBulkSelect';
++import { useRecycleBin } from '../../../hook/useRecycleBin';
+ import {
+   Wallet, Plus, Trash2, Save, History, Clock, Edit3, Settings2,
+   ArrowUpDown, X, ChevronDown, ChevronRight, User,
+@@ -70,12 +71,21 @@ const InputDailyTab = () => {
+   const [additions, setAdditions] = useState([]);
+   const [deductions, setDeductions] = useState([]);
+   const [catModalType, setCatModalType] = useState(null);
+-  const [showTrash, setShowTrash] = useState(false);
+   const [dailySortKey, setDailySortKey] = useState('date-desc');
+   const [isDailySortOpen, setIsDailySortOpen] = useState(false);
+   const [expandedRecordId, setExpandedRecordId] = useState(null);
+   const [collapsedEmployees, setCollapsedEmployees] = useState(new Set());
+-  const [isSelecting, setIsSelecting] = useState(false);
++
++  const {
++    isSelecting, setIsSelecting,
++    activeItems: visibleDailyRecords,
++    handleDelete: handleSoftDeleteRecord,
++    handleBulkSoftDelete: bulkSoftDeleteRecords,
++  } = useRecycleBin(employeeDailyRecords, setEmployeeDailyRecords, {
++    tableKey: 'employeeDailyRecords',
++    itemLabel: 'data input',
++    triggerConfirm, triggerAlert,
++  });
+ 
+   const [filterMode, setFilterMode] = useState('hari-ini'); // 'hari-ini' | 'kemarin' | 'bulan-ini' | 'semua' | 'tanggal-terpilih'
+   const [filterStartDate, setFilterStartDate] = useState('');
+@@ -301,15 +311,7 @@ const InputDailyTab = () => {
+   };
+ 
+   const handleDeleteRecord = (rec) => {
+-    if (showTrash) {
+-      triggerConfirm('Apakah Anda yakin ingin menghapus permanen data ini? Tindakan ini tidak dapat dibatalkan.', () => {
+-        setEmployeeDailyRecords(prev => prev.filter(r => r.id !== rec.id));
+-        triggerAlert('Data berhasil dihapus secara permanen!');
+-      });
+-    } else {
+-      setEmployeeDailyRecords(prev => prev.map(r => r.id === rec.id ? markDeleted(r) : r));
+-      triggerAlert('Data berhasil dipindahkan ke Recycle Bin!');
+-    }
++    handleSoftDeleteRecord(rec.id);
+   };
+ 
+   const handleOpenEdit = (rec) => {
+@@ -472,7 +474,7 @@ const InputDailyTab = () => {
+   const editingEmpName = editingRecord ? resolveEmployeeForRecord(editingRecord, employees)?.name : '';
+ 
+   const groupedRecords = useMemo(() => {
+-    const rawList = (showTrash ? trashedOnly(employeeDailyRecords) : activeOnly(employeeDailyRecords))
++    const rawList = visibleDailyRecords
+       .filter(rec => matchesDateFilter(rec.dateStr));
+     const groups = new Map();
+     rawList.forEach(rec => {
+@@ -495,30 +497,12 @@ const InputDailyTab = () => {
+     }
+ 
+     return grouped;
+-  }, [employeeDailyRecords, showTrash, dailySortKey, employees, filterMode, filterStartDate, filterEndDate]);
++  }, [visibleDailyRecords, dailySortKey, employees, filterMode, filterStartDate, filterEndDate]);
+ 
+   const allVisibleRecords = useMemo(() => groupedRecords.flatMap(g => g.records), [groupedRecords]);
+   const { selectedIds, allSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(allVisibleRecords);
+ 
+-  const handleBulkSoftDelete = () => {
+-    const ids = [...selectedIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Pindahkan ${ids.length} data input terpilih ke Recycle Bin?`, () => {
+-      setEmployeeDailyRecords(prev => prev.map(r => selectedIds.has(r.id) ? markDeleted(r) : r));
+-      resetSelection();
+-      triggerAlert('Data terpilih dipindahkan ke Recycle Bin.');
+-    });
+-  };
+-
+-  const handleBulkPermanentDelete = () => {
+-    const ids = [...selectedIds];
+-    if (ids.length === 0) return;
+-    triggerConfirm(`Hapus PERMANEN ${ids.length} data input terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+-      setEmployeeDailyRecords(prev => prev.filter(r => !selectedIds.has(r.id)));
+-      resetSelection();
+-      triggerAlert('Data terpilih dihapus permanen.');
+-    });
+-  };
++  const handleBulkSoftDelete = () => bulkSoftDeleteRecords([...selectedIds], resetSelection);
+ 
+   return (
+     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full w-full min-w-0 animate-in fade-in slide-in-from-right-4 duration-300">
+@@ -618,12 +602,9 @@ const InputDailyTab = () => {
+         <div className="p-4 border-b border-slate-100 bg-slate-50 rounded-t-2xl space-y-3">
+           <div className="flex flex-wrap gap-2 justify-between items-center">
+             <h3 className="font-heading font-bold flex items-center gap-2 shrink-0">
+-              <History className="w-4 h-4" /> {showTrash ? 'Recycle Bin' : 'Riwayat Input'}
++              <History className="w-4 h-4" /> Riwayat Input
+             </h3>
+             <div className="flex flex-wrap gap-2 min-w-0">
+-              <button onClick={() => { setShowTrash(!showTrash); resetSelection(); setIsSelecting(false); }} className="text-xs font-bold text-slate-500 shrink-0">
+-                {showTrash ? 'Kembali' : 'Recycle Bin'}
+-              </button>
+               <button
+                 onClick={() => { if (isSelecting) resetSelection(); setIsSelecting(v => !v); }}
+                 className={`text-xs font-bold px-2 py-1 rounded-lg transition-colors shrink-0 ${isSelecting ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}
+@@ -636,34 +617,32 @@ const InputDailyTab = () => {
+             </div>
+           </div>
+ 
+-          {!showTrash && (
+-            <div className="flex flex-wrap items-center gap-2 min-w-0">
+-              <Select value={filterMode} onChange={e => setFilterMode(e.target.value)} className="py-1.5 px-2 text-xs font-bold shrink-0">
+-                <option value="hari-ini">Hari Ini</option>
+-                <option value="kemarin">Kemarin</option>
+-                <option value="bulan-ini">Bulan Ini</option>
+-                <option value="semua">Semua</option>
+-                <option value="tanggal-terpilih">Tanggal Terpilih</option>
+-              </Select>
+-              {filterMode === 'tanggal-terpilih' && (
+-                <div className="flex items-center gap-1 flex-wrap min-w-0">
+-                  <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} max={filterEndDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
+-                  <span className="text-xs text-slate-400 shrink-0">-</span>
+-                  <Input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} min={filterStartDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
+-                </div>
+-              )}
+-            </div>
+-          )}
++          <div className="flex flex-wrap items-center gap-2 min-w-0">
++            <Select value={filterMode} onChange={e => setFilterMode(e.target.value)} className="py-1.5 px-2 text-xs font-bold shrink-0">
++              <option value="hari-ini">Hari Ini</option>
++              <option value="kemarin">Kemarin</option>
++              <option value="bulan-ini">Bulan Ini</option>
++              <option value="semua">Semua</option>
++              <option value="tanggal-terpilih">Tanggal Terpilih</option>
++            </Select>
++            {filterMode === 'tanggal-terpilih' && (
++              <div className="flex items-center gap-1 flex-wrap min-w-0">
++                <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} max={filterEndDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
++                <span className="text-xs text-slate-400 shrink-0">-</span>
++                <Input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} min={filterStartDate || undefined} className="py-1.5 px-2 text-xs font-bold shrink-0 min-w-0 max-w-[130px]" />
++              </div>
++            )}
++          </div>
+         </div>
+ 
+         <div className="flex-1 overflow-y-auto p-3 space-y-3">
+           {isSelecting && allVisibleRecords.length > 0 && (
+-            <BulkSelectBar count={count} total={allVisibleRecords.length} allSelected={allSelected} onToggleAll={toggleSelectAll} onDeleteSelected={showTrash ? handleBulkPermanentDelete : handleBulkSoftDelete} />
++            <BulkSelectBar count={count} total={allVisibleRecords.length} allSelected={allSelected} onToggleAll={toggleSelectAll} onDeleteSelected={handleBulkSoftDelete} />
+           )}
+ 
+           {groupedRecords.length === 0 && (
+             <p className="text-xs text-slate-400 text-center py-10">
+-              {showTrash ? 'Recycle bin kosong.' : 'Belum ada riwayat input pada periode ini.'}
++              Belum ada riwayat input pada periode ini.
+             </p>
+           )}
+ 
+@@ -747,10 +726,8 @@ const InputDailyTab = () => {
+                               </div>
+                             </div>
+                             <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+-                              {!showTrash && (
+-                                <IconButton variant="edit" onClick={() => handleOpenEdit(rec)} title="Edit Tambahan/Potongan"><Edit3 className="w-3.5 h-3.5" /></IconButton>
+-                              )}
+-                              <IconButton variant="delete" onClick={() => handleDeleteRecord(rec)} title={showTrash ? "Hapus Permanen" : "Hapus ke Recycle Bin"}>
++                              <IconButton variant="edit" onClick={() => handleOpenEdit(rec)} title="Edit Tambahan/Potongan"><Edit3 className="w-3.5 h-3.5" /></IconButton>
++                              <IconButton variant="delete" onClick={() => handleDeleteRecord(rec)} title="Hapus ke Recycle Bin">
+                                 <Trash2 className="w-3.5 h-3.5" />
+                               </IconButton>
+                               {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+diff --git a/src/features/pos/CartDrawer.jsx b/src/features/pos/CartDrawer.jsx
+index 815f6c7..bd2fe9b 100644
+--- a/src/features/pos/CartDrawer.jsx
++++ b/src/features/pos/CartDrawer.jsx
+@@ -1,7 +1,7 @@
+ import { useState, useEffect } from "react";
+ import { useAppContext } from "../../context/AppContext";
+ import { usePosStore } from '../../store/usePosStore';
+-import { activeOnly } from "../../utils/softDelete";
++import { markDeleted, activeOnly } from "../../utils/softDelete";
+ import CustomerPickerModal from './CustomerPicker';
+ import {
+   ShoppingCart,
+@@ -77,14 +77,18 @@ const CartDrawer = () => {
+   };
+ 
+   // ─── BILL TERSIMPAN: Batalkan & Lihat/Cetak ───────────────────────────
+-  // Batalkan: hapus permanen dari savedBills (beda dari "Lanjut" yang
+-  // narik bill itu balik ke cart aktif). Pakai triggerConfirm yang sudah
+-  // ada — modal konfirmasi generik, gak bikin modal baru.
++  // Batalkan: soft-delete (markDeleted) — sama pola kayak cashTransfers di
++  // Dompet, BUKAN full recycle bin kayak salesHistory/expenses. Bill yang
++  // dibatalin cuma koreksi cepat (salah pesan, customer batal), bukan
++  // record yang biasanya mau di-audit ulang, jadi sengaja gak dikasih
++  // toggle "lihat sampah" tersendiri di sini. Tetep aman dari purgeExpired()
++  // (retensi 30 hari) kalau suatu saat butuh diaudit/direstore manual lewat
++  // Supabase. Beda dari "Lanjut" yang narik bill itu balik ke cart aktif.
+   const handleCancelBill = (bill) => {
+     triggerConfirm(
+-      `Batalkan bill "${bill.customerName}" (${bill.cart.length} item)? Bill ini akan dihapus permanen dan tidak bisa dikembalikan.`,
++      `Batalkan bill "${bill.customerName}" (${bill.cart.length} item)?`,
+       () => {
+-        setSavedBills(savedBills.filter(b => b.id !== bill.id));
++        setSavedBills(savedBills.map(b => b.id === bill.id ? markDeleted(b) : b));
+         triggerAlert('Bill berhasil dibatalkan.');
+       }
+     );
+@@ -136,6 +140,8 @@ const CartDrawer = () => {
+ 
+   if (!isCartOpen) return null;
+ 
++  const visibleSavedBills = activeOnly(savedBills);
++
+   return (
+     <div className="fixed inset-0 z-50 flex justify-center">
+       <div className="absolute inset-0 bg-slate-500/40 dark:bg-slate-800/40 backdrop-blur-sm transition-opacity duration-300" onClick={() => setIsCartOpen(false)} />
+@@ -162,17 +168,17 @@ const CartDrawer = () => {
+             <div className="flex flex-col items-center justify-center h-full p-4">
+               <ShoppingCart className="w-16 h-16 mb-4 opacity-20 text-slate-400 dark:text-slate-500" />
+               <p className="text-slate-400 dark:text-slate-500 mb-6">Keranjang masih kosong</p>
+-              {savedBills.length > 0 && (
++              {visibleSavedBills.length > 0 && (
+                 <div className="w-full bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-300">
+                   <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-3 text-sm">
+-                    <Save className="w-4 h-4 text-accent-600 dark:text-accent-400" /> Bill Tersimpan ({savedBills.length})
++                    <Save className="w-4 h-4 text-accent-600 dark:text-accent-400" /> Bill Tersimpan ({visibleSavedBills.length})
+                   </h3>
+                   <div className="space-y-2 max-h-60 overflow-y-auto">
+-                    {savedBills.map(bill => (
++                    {visibleSavedBills.map(bill => (
+                       <div key={bill.id} className="flex justify-between items-center p-3 border border-accent-100 dark:border-accent-500/20 rounded-xl bg-accent-50 dark:bg-accent-500/30">
+                         <div>
+                           <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{bill.customerName}</p>
+-                          <p className="text-[10px] text-slate-500 dark:text-slate-400">{bill.cart.length} Item • {bill.date.toLocaleTimeString('id-ID')}</p>
++                          <p className="text-[10px] text-slate-500 dark:text-slate-400">{bill.cart.length} Item • {new Date(bill.date).toLocaleTimeString('id-ID')}</p>
+                         </div>
+                         <div className="flex items-center gap-1.5 shrink-0">
+                           <button onClick={() => handleCancelBill(bill)} title="Batalkan Bill" className="p-1.5 bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-500/25 transition-colors">
+diff --git a/src/features/reports/HistoryView.jsx b/src/features/reports/HistoryView.jsx
+index 615db47..64210fc 100644
+--- a/src/features/reports/HistoryView.jsx
++++ b/src/features/reports/HistoryView.jsx
+@@ -1,12 +1,11 @@
+ import React, { useState, useMemo } from 'react';
+ import { useAppContext } from '../../context/AppContext';
+-import { X, History, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, RotateCcw, ArrowUpDown, Eye, CreditCard } from 'lucide-react';
++import { X, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, ArrowUpDown, Eye, CreditCard } from 'lucide-react';
+ import { formatRupiah } from '../../utils/formatters';
+ import { useBulkSelect } from '../../hook/useBulkSelect';
+ import { BulkSelectBar, Card, Button, DetailModal, SortModal } from '../../components/ui';
+ import { applySort } from '../../utils/sortUtils';
+-import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../../utils/softDelete';
+-import { pushTransactionDelete } from '../../storage/realtimeSync';
++import { useRecycleBin } from '../../hook/useRecycleBin';
+ 
+ const HistoryView = () => {
+     const { salesHistory, setSalesHistory, isAdminMode, setReceiptModal, triggerConfirm } = useAppContext();
+@@ -22,9 +21,18 @@ const HistoryView = () => {
+     // State khusus untuk rentang tanggal kustom
+     const [customStartDate, setCustomStartDate] = useState('');
+     const [customEndDate, setCustomEndDate] = useState('');
+-    const [showTrash, setShowTrash] = useState(false);
+     const [detailOrder, setDetailOrder] = useState(null);
+-    const [isSelecting, setIsSelecting] = useState(false); // toggle mode "Pilih" utk bulk delete
++
++    const {
++        isSelecting, setIsSelecting,
++        activeItems: visibleSalesHistory,
++        handleDelete,
++        handleBulkSoftDelete: bulkSoftDeleteHistory,
++    } = useRecycleBin(salesHistory, setSalesHistory, {
++        tableKey: 'salesHistory',
++        itemLabel: 'riwayat pesanan',
++        triggerConfirm,
++    });
+ 
+     // Daftar opsi tab periode tanggal
+     const filterTabs = [
+@@ -44,9 +52,6 @@ const HistoryView = () => {
+         { key: 'type-asc', label: 'Tipe Order (A-Z)' },
+     ];
+ 
+-    // Sumber data sesuai mode: riwayat aktif, atau isi recycle bin
+-    const visibleSalesHistory = showTrash ? trashedOnly(salesHistory) : activeOnly(salesHistory);
+-
+     // Mengambil daftar tipe order unik dari data riwayat untuk dropdown
+     const uniqueOrderTypes = [...new Set(visibleSalesHistory.map(order => order.orderType).filter(Boolean))];
+ 
+@@ -143,67 +148,14 @@ const HistoryView = () => {
+ 
+     const { selectedIds, allSelected: allVisibleSelected, toggleOne: toggleSelectOne, toggleAll: toggleSelectAll, reset: resetSelection, count } = useBulkSelect(sortedHistory);
+ 
+-    // Hapus Tunggal (Pindah ke Recycle Bin)
+-    const handleDelete = (id) => {
+-        triggerConfirm('Pindahkan riwayat pesanan ini ke Recycle Bin?', () => {
+-            setSalesHistory(salesHistory.map(order => order.id === id ? markDeleted(order) : order));
+-        });
+-    };
+-
+-    // Hapus Banyak SEKALIGUS (Pindah ke Recycle Bin) -> INI FUNGSI BARU
+-    const handleBulkSoftDelete = () => {
+-        const ids = [...selectedIds];
+-        if (ids.length === 0) return;
+-        triggerConfirm(`Pindahkan ${ids.length} riwayat pesanan terpilih ke Recycle Bin?`, () => {
+-            setSalesHistory(salesHistory.map(order => selectedIds.has(order.id) ? markDeleted(order) : order));
+-            resetSelection();
+-        });
+-    };
+-
+-    // Hapus Banyak SEKALIGUS (Permanen di Recycle Bin)
+-    const handleDeleteSelected = () => {
+-        const ids = [...selectedIds];
+-        if (ids.length === 0) return;
+-        triggerConfirm(`Hapus PERMANEN ${ids.length} riwayat pesanan terpilih? Tindakan ini tidak bisa dibatalkan.`, () => {
+-            setSalesHistory(salesHistory.filter(order => !selectedIds.has(order.id)));
+-            ids.forEach(id => pushTransactionDelete('salesHistory', id).catch(err =>
+-                console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+-            ));
+-            resetSelection();
+-        });
+-    };
+-
+-    const handleRestore = (id) => {
+-        setSalesHistory(salesHistory.map(order => order.id === id ? restoreItem(order) : order));
+-    };
+-
+-    const handlePermanentDelete = (id) => {
+-        triggerConfirm('Hapus PERMANEN riwayat pesanan ini? Tindakan ini tidak bisa dibatalkan.', () => {
+-            setSalesHistory(salesHistory.filter(order => order.id !== id));
+-            pushTransactionDelete('salesHistory', id).catch(err =>
+-                console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
+-            );
+-        });
+-    };
++    const handleBulkSoftDelete = () => bulkSoftDeleteHistory([...selectedIds], resetSelection);
+ 
+     return (
+         <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
+ 
+             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+-                {showTrash && (
+-                    <span className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-3 py-1 rounded-full text-xs font-bold shrink-0">
+-                        <History className="w-3.5 h-3.5" /> Recycle Bin
+-                    </span>
+-                )}
+                 {isAdminMode && (
+                     <div className="flex gap-2 lg:ml-auto">
+-                        <Button
+-                            size="sm"
+-                            variant="secondary"
+-                            onClick={() => { setShowTrash(v => !v); resetSelection(); setIsSelecting(false); }}
+-                        >
+-                            {showTrash ? 'Kembali ke Riwayat' : `Recycle Bin (${trashedOnly(salesHistory).length})`}
+-                        </Button>
+                         <Button
+                             size="sm"
+                             variant={isSelecting ? 'primary' : 'secondary'}
+@@ -301,7 +253,7 @@ const HistoryView = () => {
+             </div>
+ 
+             {/* RINGKASAN OMSET PER METODE PEMBAYARAN */}
+-            {!showTrash && paymentBreakdown.length > 0 && (
++            {paymentBreakdown.length > 0 && (
+                 <Card className="flex flex-col gap-3 p-4 mb-6">
+                     <div className="flex items-center gap-2">
+                         <CreditCard className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+@@ -350,7 +302,7 @@ const HistoryView = () => {
+                         allSelected={allVisibleSelected}
+                         onToggleAll={toggleSelectAll}
+                         // Fungsi dinamis: Kalau di Trash hapus permanen, kalau di luar Trash pindah ke Recycle Bin
+-                        onDeleteSelected={showTrash ? handleDeleteSelected : handleBulkSoftDelete}
++                        onDeleteSelected={handleBulkSoftDelete}
+                     />
+                 </div>
+             )}
+@@ -398,22 +350,9 @@ const HistoryView = () => {
+                                         <Receipt className="w-4 h-4" /> Struk
+                                     </button>
+ 
+-                                    {showTrash ? (
+-                                        isAdminMode && (
+-                                            <>
+-                                                <button onClick={() => handleRestore(order.id)} className="p-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 rounded-xl transition-all duration-300 active:scale-95" title="Kembalikan">
+-                                                    <RotateCcw className="w-4 h-4" />
+-                                                </button>
+-                                                <button onClick={() => handlePermanentDelete(order.id)} className="p-2 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-500/15 rounded-xl transition-all duration-300 active:scale-95" title="Hapus Permanen">
+-                                                    <Trash2 className="w-4 h-4" />
+-                                                </button>
+-                                            </>
+-                                        )
+-                                    ) : (
+-                                        <button onClick={() => handleDelete(order.id)} className="p-2 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-500/15 rounded-xl transition-all duration-300 active:scale-95" title="Hapus ke Recycle Bin">
+-                                            <Trash2 className="w-4 h-4" />
+-                                        </button>
+-                                    )}
++                                    <button onClick={() => handleDelete(order.id)} className="p-2 bg-accent-50 dark:bg-accent-500/10 text-accent-600 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-500/15 rounded-xl transition-all duration-300 active:scale-95" title="Hapus ke Recycle Bin">
++                                        <Trash2 className="w-4 h-4" />
++                                    </button>
+                                 </div>
+                             </div>
+                         </div>
+@@ -421,8 +360,8 @@ const HistoryView = () => {
+                 ) : (
+                     <div className="col-span-full py-16 flex flex-col items-center justify-center text-center">
+                         <Calendar className="w-12 h-12 text-slate-200 dark:text-slate-700 mb-3" />
+-                        <h3 className="text-slate-600 dark:text-slate-300 font-bold mb-1">{showTrash ? 'Recycle bin kosong' : 'Tidak ada pesanan'}</h3>
+-                        <p className="text-slate-400 dark:text-slate-500 text-sm">{showTrash ? 'Belum ada riwayat pesanan yang dihapus.' : 'Coba ubah rentang filter atau kata kunci pencarian.'}</p>
++                        <h3 className="text-slate-600 dark:text-slate-300 font-bold mb-1">Tidak ada pesanan</h3>
++                        <p className="text-slate-400 dark:text-slate-500 text-sm">Coba ubah rentang filter atau kata kunci pencarian.</p>
+                     </div>
+                 )}
+             </div>
+diff --git a/src/features/settings/RecycleBinView.jsx b/src/features/settings/RecycleBinView.jsx
+new file mode 100644
+index 0000000..82b6104
+--- /dev/null
++++ b/src/features/settings/RecycleBinView.jsx
+@@ -0,0 +1,204 @@
++import { useState } from 'react';
++import { useAppContext } from '../../context/AppContext';
++import { useRecycleBin } from '../../hook/useRecycleBin';
++import { resolveEmployeeForRecord } from '../hrd/utils/payrollLogic';
++import { IconButton } from '../../components/ui';
++import {
++  Trash2, RotateCcw, ChevronDown, ChevronRight, Inbox,
++  TrendingUp, TrendingDown, History, Users, Ticket, Fingerprint, Wallet, Clock,
++} from 'lucide-react';
++
++// employeeDailyRecords & savedBills & cashTransfers TIDAK muncul di sini:
++// employeeDailyRecords ada di kategori "Input Harian" di bawah, tapi
++// savedBills & cashTransfers sengaja gak dikasih Recycle Bin sama sekali
++// (soft-delete diam-diam, tier "koreksi cepat" — lihat CartDrawer.jsx &
++// useShiftLogic.js buat konteksnya).
++
++const ATTENDANCE_TYPE_LABEL = {
++  masuk: 'Absen Masuk',
++  keluar: 'Absen Keluar',
++  masuk_lagi: 'Masuk Lagi',
++  bolong: 'Bolong',
++  libur: 'Libur',
++};
++
++const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
++const fmtDateTime = (d) => new Date(d).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
++const fmtTime = (d) => new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
++
++const RecycleBinView = () => {
++  const {
++    incomes, setIncomes,
++    expenses, setExpenses,
++    salesHistory, setSalesHistory,
++    customers, setCustomers,
++    vouchers, setVouchers,
++    attendanceLog, setAttendanceLog,
++    employeeDailyRecords, setEmployeeDailyRecords,
++    shiftHistory, setShiftHistory,
++    employees,
++    triggerConfirm, triggerAlert, formatRupiah, isAdminMode,
++  } = useAppContext();
++
++  const [expandedKey, setExpandedKey] = useState(null);
++
++  const incomeBin = useRecycleBin(incomes, setIncomes, {
++    tableKey: 'incomes', itemLabel: 'catatan pemasukan', triggerConfirm, triggerAlert,
++  });
++  const expenseBin = useRecycleBin(expenses, setExpenses, {
++    tableKey: 'expenses', itemLabel: 'catatan pengeluaran', triggerConfirm, triggerAlert,
++  });
++  const historyBin = useRecycleBin(salesHistory, setSalesHistory, {
++    tableKey: 'salesHistory', itemLabel: 'riwayat pesanan', triggerConfirm, triggerAlert,
++  });
++  const customerBin = useRecycleBin(customers, setCustomers, {
++    tableKey: 'customers', itemLabel: 'pelanggan',
++    permanentDeleteWarning: 'Data riwayat poin mungkin kehilangan referensi nama.',
++    triggerConfirm, triggerAlert,
++  });
++  const voucherBin = useRecycleBin(vouchers, setVouchers, {
++    tableKey: 'vouchers', itemLabel: 'voucher', triggerConfirm, triggerAlert,
++  });
++  const attendanceBin = useRecycleBin(attendanceLog, setAttendanceLog, {
++    tableKey: 'attendanceLog', itemLabel: 'record absen', triggerConfirm, triggerAlert,
++  });
++  const dailyBin = useRecycleBin(employeeDailyRecords, setEmployeeDailyRecords, {
++    tableKey: 'employeeDailyRecords', itemLabel: 'data input', triggerConfirm, triggerAlert,
++  });
++  const shiftBin = useRecycleBin(shiftHistory, setShiftHistory, {
++    tableKey: 'shiftHistory', itemLabel: 'data dompet', triggerConfirm, triggerAlert,
++  });
++
++  const categories = [
++    {
++      key: 'incomes', label: 'Pemasukan', icon: TrendingUp, bin: incomeBin,
++      getTitle: (i) => i.category || 'Pemasukan',
++      getSubtitle: (i) => `${fmtDate(i.date)} • ${formatRupiah(i.amount)}`,
++    },
++    {
++      key: 'expenses', label: 'Pengeluaran', icon: TrendingDown, bin: expenseBin,
++      getTitle: (e) => e.category || 'Pengeluaran',
++      getSubtitle: (e) => `${fmtDate(e.date)} • ${formatRupiah(e.amount)}`,
++    },
++    {
++      key: 'salesHistory', label: 'Riwayat Pesanan', icon: History, bin: historyBin,
++      getTitle: (o) => o.customerName || o.orderNumber || 'Pesanan',
++      getSubtitle: (o) => `${fmtDateTime(o.date)} • ${formatRupiah(o.total)}`,
++    },
++    {
++      key: 'customers', label: 'Pelanggan', icon: Users, bin: customerBin,
++      getTitle: (c) => c.name || 'Pelanggan',
++      getSubtitle: (c) => c.phone || '-',
++    },
++    {
++      key: 'vouchers', label: 'Voucher', icon: Ticket, bin: voucherBin,
++      getTitle: (v) => v.code || 'Voucher',
++      getSubtitle: (v) => v.discountType === 'percent' ? `Diskon ${v.discountValue}%` : `Diskon ${formatRupiah(v.discountValue || 0)}`,
++    },
++    {
++      key: 'attendanceLog', label: 'Absensi', icon: Fingerprint, bin: attendanceBin,
++      getTitle: (r) => r.employeeName || 'Karyawan',
++      getSubtitle: (r) => `${ATTENDANCE_TYPE_LABEL[r.type] || r.type} • ${fmtDateTime(r.date)}`,
++    },
++    {
++      key: 'employeeDailyRecords', label: 'Input Harian', icon: Wallet, bin: dailyBin,
++      getTitle: (r) => resolveEmployeeForRecord(r, employees)?.name || 'Karyawan',
++      getSubtitle: (r) => fmtDate(r.date),
++    },
++    {
++      key: 'shiftHistory', label: 'Dompet / Shift', icon: Clock, bin: shiftBin,
++      getTitle: (s) => `Shift ${fmtDate(s.startTime)}`,
++      getSubtitle: (s) => `${fmtTime(s.startTime)} - ${fmtTime(s.endTime)}`,
++    },
++  ];
++
++  const totalCount = categories.reduce((sum, c) => sum + c.bin.trashedCount, 0);
++
++  if (!isAdminMode) {
++    return (
++      <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-slate-50 dark:bg-slate-950">
++        <Trash2 className="w-10 h-10 text-slate-300 dark:text-slate-700 mb-3" />
++        <p className="font-bold text-slate-600 dark:text-slate-300">Khusus Admin</p>
++        <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Recycle Bin cuma bisa diakses dalam mode Admin.</p>
++      </div>
++    );
++  }
++
++  return (
++    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto">
++      <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-4 py-4 flex items-center gap-3 shrink-0">
++        <h2 className="font-black text-xl text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-1">
++          <Trash2 className="w-6 h-6 text-accent-500" /> Recycle Bin
++        </h2>
++        {totalCount > 0 && (
++          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-full px-3 py-1">
++            {totalCount} item
++          </span>
++        )}
++      </div>
++
++      <div className="p-4">
++        {totalCount === 0 ? (
++          <div className="flex flex-col items-center justify-center text-center py-16 px-6 animate-in fade-in duration-300">
++            <Inbox className="w-12 h-12 text-slate-300 dark:text-slate-700 mb-3" />
++            <p className="font-bold text-slate-600 dark:text-slate-300">Recycle Bin kosong</p>
++            <p className="text-sm text-slate-400 dark:text-slate-500 mt-1 max-w-xs">
++              Data yang lu hapus dari Pemasukan, Pengeluaran, Pelanggan, dan lainnya bakal muncul di sini selama 30 hari sebelum kehapus otomatis.
++            </p>
++          </div>
++        ) : (
++          <div className="space-y-2">
++            {categories.map((cat) => {
++              const isOpen = expandedKey === cat.key;
++              const count = cat.bin.trashedCount;
++              const Icon = cat.icon;
++              return (
++                <div key={cat.key} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
++                  <button
++                    onClick={() => count > 0 && setExpandedKey(isOpen ? null : cat.key)}
++                    disabled={count === 0}
++                    className={`w-full flex items-center justify-between p-4 transition-colors ${count > 0 ? 'hover:bg-slate-50 dark:hover:bg-slate-800/50' : 'opacity-40 cursor-default'}`}
++                  >
++                    <div className="flex items-center gap-3">
++                      <Icon className="w-5 h-5 text-accent-600 dark:text-accent-400" />
++                      <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{cat.label}</span>
++                    </div>
++                    <div className="flex items-center gap-2">
++                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-full px-2.5 py-0.5 min-w-[1.75rem] text-center">
++                        {count}
++                      </span>
++                      {count > 0 && (isOpen ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />)}
++                    </div>
++                  </button>
++
++                  {isOpen && (
++                    <div className="border-t border-slate-100 dark:border-slate-800 divide-y divide-slate-50 dark:divide-slate-800/60 animate-in fade-in duration-200">
++                      {cat.bin.trashedItems.map((item) => (
++                        <div key={item.id} className="flex items-center justify-between gap-2 p-3.5">
++                          <div className="min-w-0">
++                            <p className="font-semibold text-sm text-slate-700 dark:text-slate-200 truncate">{cat.getTitle(item)}</p>
++                            <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{cat.getSubtitle(item)}</p>
++                          </div>
++                          <div className="flex items-center gap-1 shrink-0">
++                            <IconButton variant="edit" onClick={() => cat.bin.handleRestore(item.id)} title="Kembalikan">
++                              <RotateCcw className="w-3.5 h-3.5" />
++                            </IconButton>
++                            <IconButton variant="delete" onClick={() => cat.bin.handlePermanentDelete(item.id)} title="Hapus Permanen">
++                              <Trash2 className="w-3.5 h-3.5" />
++                            </IconButton>
++                          </div>
++                        </div>
++                      ))}
++                    </div>
++                  )}
++                </div>
++              );
++            })}
++          </div>
++        )}
++      </div>
++    </div>
++  );
++};
++
++export default RecycleBinView;
+diff --git a/src/features/settings/SettingsView.jsx b/src/features/settings/SettingsView.jsx
+index 766ac69..1673712 100644
+--- a/src/features/settings/SettingsView.jsx
++++ b/src/features/settings/SettingsView.jsx
+@@ -3,7 +3,7 @@ import { useAppContext } from '../../context/AppContext';
+ import {
+   Settings, Store, Save, ReceiptText, MapPin, Phone, Calculator,
+   Bluetooth, BluetoothSearching, Unplug, CheckCircle, Sun, Moon, Palette,
+-  ShieldAlert, ShieldCheck
++  ShieldAlert, ShieldCheck, Trash2, ChevronRight
+ } from 'lucide-react';
+ import { Alert, Button } from '../../components/ui';
+ import { usePrinterStorage }     from '../../hook/usePrinterStorage';
+@@ -53,7 +53,7 @@ const TextInput = ({ label, icon: Icon, placeholder, value, onChange, type = "te
+ // KOMPONEN UTAMA SETTINGS VIEW
+ // =========================================================================
+ const SettingsView = () => {
+-  const { storeSettings, setStoreSettings, theme, setTheme, colorTheme, setColorTheme } = useAppContext();
++  const { storeSettings, setStoreSettings, theme, setTheme, colorTheme, setColorTheme, setCurrentView, isAdminMode } = useAppContext();
+ 
+   const [localSettings, setLocalSettings] = useState({
+     storeName:    '',
+@@ -452,6 +452,23 @@ const SettingsView = () => {
+               </p>
+             </div>
+ 
++            {isAdminMode && (
++              <button
++                type="button"
++                onClick={() => setCurrentView('recycleBin')}
++                className="w-full bg-white dark:bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-center gap-3 hover:border-accent-300 dark:hover:border-accent-500/40 hover:bg-slate-50 dark:hover:bg-slate-800/50 active:scale-[0.99] transition-all duration-300 text-left"
++              >
++                <div className="w-10 h-10 rounded-xl bg-accent-50 dark:bg-accent-500/10 flex items-center justify-center shrink-0">
++                  <Trash2 className="w-5 h-5 text-accent-600 dark:text-accent-400" />
++                </div>
++                <div className="flex-1 min-w-0">
++                  <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100">Recycle Bin</h3>
++                  <p className="text-xs text-slate-500 dark:text-slate-400">Lihat & pulihkan data yang terhapus dari Pemasukan, Pengeluaran, Pelanggan, dan lainnya</p>
++                </div>
++                <ChevronRight className="w-5 h-5 text-slate-300 dark:text-slate-600 shrink-0" />
++              </button>
++            )}
++
+           </div>
+         </div>
+       </form>
+diff --git a/src/hook/useRecycleBin.js b/src/hook/useRecycleBin.js
+new file mode 100644
+index 0000000..08810d5
+--- /dev/null
++++ b/src/hook/useRecycleBin.js
+@@ -0,0 +1,103 @@
++import { useState, useMemo } from 'react';
++import { markDeleted, restoreItem, activeOnly, trashedOnly } from '../utils/softDelete';
++import { pushTransactionDelete } from '../storage/realtimeSync';
++
++function capitalize(str) {
++  return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
++}
++
++/**
++ * State + handler recycle-bin (soft-delete) yang polanya keulang sama
++ * persis di semua view transaksi (IncomeView, ExpenseView, CustomerView,
++ * AttendanceView, InputDailyTab, ShiftView, HistoryView). Ngurusin: toggle
++ * tampilan sampah, single/bulk soft-delete, restore, single/bulk hapus
++ * permanen (langsung push ke Supabase saat itu juga, gak nunggu auto-sync).
++ *
++ * SENGAJA GAK ngurusin: filter tambahan (rentang tanggal dll) & sorting —
++ * itu tetap di view masing-masing, nempel DI ATAS activeItems/trashedItems
++ * yang dikembalikan di sini. Juga gak ngurusin useBulkSelect (itu hook
++ * terpisah) — handler bulk di sini nerima `ids` dari luar.
++ *
++ * @param {Array} items - array state (misal `incomes`)
++ * @param {Function} setItems - setter-nya (misal `setIncomes`)
++ * @param {Object} opts
++ * @param {string} opts.tableKey - nama tabel Supabase, buat pushTransactionDelete (misal 'incomes')
++ * @param {string} opts.itemLabel - noun buat teks confirm/alert, huruf kecil (misal 'catatan pemasukan')
++ * @param {Function} opts.triggerConfirm
++ * @param {Function} opts.triggerAlert
++ */
++export function useRecycleBin(items, setItems, { tableKey, itemLabel, triggerConfirm, triggerAlert, permanentDeleteWarning = '' }) {
++  const warningSuffix = permanentDeleteWarning ? ` ${permanentDeleteWarning}` : '';
++  const [showTrash, setShowTrash] = useState(false);
++  const [isSelecting, setIsSelecting] = useState(false);
++
++  const activeItems = useMemo(() => activeOnly(items), [items]);
++  const trashedItems = useMemo(() => trashedOnly(items), [items]);
++  const trashedCount = trashedItems.length;
++  const visibleItems = showTrash ? trashedItems : activeItems;
++
++  // ── Single item — `onDone` opsional, dipanggil SETELAH aksi berhasil
++  // (setelah confirm buat delete/permanentDelete), buat efek samping
++  // spesifik-view kayak nutup popup edit kalau item yang dihapus lagi
++  // dibuka editnya ─────────────────────────────────────────────────────
++  const handleDelete = (id, onDone) => {
++    triggerConfirm(`Pindahkan ${itemLabel} ini ke Recycle Bin?`, () => {
++      setItems(items.map(it => it.id === id ? markDeleted(it) : it));
++      onDone?.();
++      triggerAlert?.(`${capitalize(itemLabel)} dipindahkan ke Recycle Bin.`);
++    });
++  };
++
++  const handleRestore = (id, onDone) => {
++    setItems(items.map(it => it.id === id ? restoreItem(it) : it));
++    onDone?.();
++    triggerAlert?.(`${capitalize(itemLabel)} berhasil dikembalikan.`);
++  };
++
++  const handlePermanentDelete = (id, onDone) => {
++    triggerConfirm(`Hapus PERMANEN ${itemLabel} ini?${warningSuffix} Tindakan ini tidak bisa dibatalkan.`, () => {
++      setItems(items.filter(it => it.id !== id));
++      // Langsung kirim delete ke Supabase saat ini juga, gak nunggu siklus
++      // auto-sync 15 menit & gak peduli toggle-nya nyala/mati.
++      pushTransactionDelete(tableKey, id).catch(err =>
++        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
++      );
++      onDone?.();
++      triggerAlert?.(`${capitalize(itemLabel)} dihapus permanen.`);
++    });
++  };
++
++  // ── Bulk — `ids` dari useBulkSelect (view yang manggil), `onDone`
++  // opsional buat resetSelection() SETELAH user konfirmasi (bukan pas
++  // klik), biar seleksi gak ke-reset kalau user Batal di modal confirm ──
++  const handleBulkSoftDelete = (ids, onDone) => {
++    const idSet = new Set(ids);
++    if (idSet.size === 0) return;
++    triggerConfirm(`Pindahkan ${idSet.size} ${itemLabel} terpilih ke Recycle Bin?`, () => {
++      setItems(items.map(it => idSet.has(it.id) ? markDeleted(it) : it));
++      onDone?.();
++      triggerAlert?.(`${capitalize(itemLabel)} terpilih dipindahkan ke Recycle Bin.`);
++    });
++  };
++
++  const handleBulkPermanentDelete = (ids, onDone) => {
++    const idSet = new Set(ids);
++    if (idSet.size === 0) return;
++    triggerConfirm(`Hapus PERMANEN ${idSet.size} ${itemLabel} terpilih?${warningSuffix} Tindakan ini tidak bisa dibatalkan.`, () => {
++      setItems(items.filter(it => !idSet.has(it.id)));
++      ids.forEach(id => pushTransactionDelete(tableKey, id).catch(err =>
++        console.warn('[recycle bin] gagal hapus permanen di cloud:', err?.message)
++      ));
++      onDone?.();
++      triggerAlert?.(`${capitalize(itemLabel)} terpilih dihapus permanen.`);
++    });
++  };
++
++  return {
++    showTrash, setShowTrash,
++    isSelecting, setIsSelecting,
++    activeItems, trashedItems, trashedCount, visibleItems,
++    handleDelete, handleRestore,
++    handlePermanentDelete, handleBulkSoftDelete, handleBulkPermanentDelete,
++  };
++}
+diff --git a/src/storage/realtimeSync.js b/src/storage/realtimeSync.js
+index 4637204..c15778f 100644
+--- a/src/storage/realtimeSync.js
++++ b/src/storage/realtimeSync.js
+@@ -1,5 +1,5 @@
+ import { getSupabaseClient, getDeviceId, isSupabaseConfigured, withTimeout } from './syncClient';
+-import { saveData, loadData } from './db';
++import { saveData, loadData, reviveDates } from './db';
+ import { TRANSACTION_KEYS, CONFIG_KEYS, LIVE_STATE_KEYS, APP_CONFIG_KEYS } from './syncKeys';
+ import { splitExpired } from '../utils/softDelete';
+ 
+@@ -698,7 +698,16 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
+           if (id) onTransactionDelete?.(tableKey, id);
+         } else {
+           const item = payload.new?.payload;
+-          if (item) onTransactionUpsert?.(tableKey, item);
++          // FIX TANGGAL STRING: payload dari Supabase itu JSON mentah — field
++          // Date (misal `date` di savedBills, `startTime`/`endTime` di
++          // shiftHistory) masih berupa string di titik ini. reviveDates()
++          // sebelumnya HANYA kepanggil dari loadData() (db.js) pas app
++          // pertama mount — jalur realtime device-lain ini gak pernah lewat
++          // situ, jadi field Date-nya nyangkut sebagai string terus di
++          // React state sepanjang sesi (baru kebenerin kalau app di-restart
++          // dan reload ulang dari Dexie). Revive manual di sini biar
++          // konsisten dengan hasil loadData().
++          if (item) onTransactionUpsert?.(tableKey, reviveDates(tableKey, [item])[0]);
+         }
+       });
+     }
+@@ -715,7 +724,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
+       // Merge di sini (bukan di App.jsx) supaya satu-satunya tempat yang
+       // nentuin "gimana cara gabung data" ya cuma mergeValue() ini.
+       const local = await loadData(key, undefined);
+-      const merged = mergeValue(local, remoteValue);
++      const merged = reviveDates(key, mergeValue(local, remoteValue));
+       await saveData(key, merged);
+       onConfigUpdate?.(key, merged);
+     });
+@@ -755,7 +764,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
+ 
+         const local = await loadData(tableKey, []);
+         const remoteItems = (rows || []).map(r => r.payload);
+-        const merged = mergeValue(Array.isArray(local) ? local : [], remoteItems);
++        const merged = reviveDates(tableKey, mergeValue(Array.isArray(local) ? local : [], remoteItems));
+ 
+         if (JSON.stringify(local) !== JSON.stringify(merged)) {
+           await saveData(tableKey, merged);
+@@ -792,7 +801,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
+ 
+         const local = await loadData(tableKey, []);
+         const remoteItems = (rows || []).map(r => r.payload);
+-        const merged = mergeValue(Array.isArray(local) ? local : [], remoteItems);
++        const merged = reviveDates(tableKey, mergeValue(Array.isArray(local) ? local : [], remoteItems));
+ 
+         if (JSON.stringify(local) !== JSON.stringify(merged)) {
+           await saveData(tableKey, merged);
+@@ -815,7 +824,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
+         } else {
+           for (const row of rows || []) {
+             const local = await loadData(row.key, undefined);
+-            const merged = mergeValue(local, row.value);
++            const merged = reviveDates(row.key, mergeValue(local, row.value));
+             if (JSON.stringify(local) !== JSON.stringify(merged)) {
+               await saveData(row.key, merged);
+               onConfigUpdate?.(row.key, merged);
