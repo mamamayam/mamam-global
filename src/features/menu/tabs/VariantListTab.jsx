@@ -1,77 +1,9 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { useAppContext } from "../../context/AppContext";
+import React, { useState, useMemo, useEffect } from "react";
+import { useAppContext } from "../../../context/AppContext";
 import { ChevronLeft, Plus, Edit3, Trash2, Settings2, Trash, GripVertical, ChevronDown, ChevronUp } from "lucide-react";
-import CategoryModal from "../../components/CategoryModal";
-import { Button, IconButton, Input, Select, EmptyState, Badge } from "../../components/ui";
-
-// ─── Hook drag & drop reorder ───
-function useDragReorder(onReorder) {
-  const [dragId, setDragId] = useState(null);
-  const [overId, setOverId] = useState(null);
-  const overIdRef = useRef(null);
-  const itemRefs = useRef({});
-
-  const registerRef = useCallback((id) => (el) => {
-    if (el) itemRefs.current[id] = el;
-    else delete itemRefs.current[id];
-  }, []);
-
-  const startDrag = useCallback((id) => (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    try { e.target.setPointerCapture?.(e.pointerId); } catch (_) {}
-    overIdRef.current = id;
-    setDragId(id);
-    setOverId(id);
-  }, []);
-
-  useEffect(() => {
-    if (dragId === null) return;
-    const getY = (e) => (e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY);
-    const handleMove = (e) => {
-      const y = getY(e);
-      if (y == null) return;
-      let closestId = null;
-      let closestDist = Infinity;
-      Object.entries(itemRefs.current).forEach(([id, el]) => {
-        if (!el) return;
-        const rect = el.getBoundingClientRect();
-        const mid = rect.top + rect.height / 2;
-        const dist = Math.abs(y - mid);
-        if (dist < closestDist) { closestDist = dist; closestId = id; }
-      });
-      if (closestId !== null && closestId !== overIdRef.current) {
-        overIdRef.current = closestId;
-        setOverId(closestId);
-      }
-    };
-    const finishDrag = () => {
-      const finalOverId = overIdRef.current;
-      if (dragId !== null && finalOverId !== null && dragId !== finalOverId) {
-        onReorder(dragId, finalOverId);
-      }
-      setDragId(null);
-      setOverId(null);
-      overIdRef.current = null;
-    };
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', finishDrag);
-    window.addEventListener('pointercancel', finishDrag);
-    return () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', finishDrag);
-      window.removeEventListener('pointercancel', finishDrag);
-    };
-  }, [dragId, onReorder]);
-
-  return { dragId, overId, registerRef, startDrag };
-}
-
-function getDragRowClass(isDragging, isDropTarget, baseClass, idleClass) {
-  if (isDragging) return `${baseClass} opacity-50 ring-2 ring-accent-400 z-10`;
-  if (isDropTarget) return `${baseClass} border-accent-400 bg-accent-50/60 dark:bg-accent-500/10`;
-  return `${baseClass} ${idleClass}`;
-}
+import CategoryModal from "../../../components/CategoryModal";
+import { Button, IconButton, Input, Select, EmptyState, Badge } from "../../../components/ui";
+import { useDragReorder, getDragRowClass } from "../../../hook/useDragReorder";
 
 // ─── Komponen Kelompok Kategori Varian ───
 const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete, categoryDrag }) => {
@@ -82,19 +14,19 @@ const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete,
   const isDropTargetCat = categoryDrag?.overId === category && categoryDrag?.dragId !== null && categoryDrag?.dragId !== category;
 
   return (
-    <div 
+    <div
       ref={categoryDrag?.registerRef(category)}
       className={getDragRowClass(
-        isDraggingCat, 
-        isDropTargetCat, 
-        "animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-2xl p-2 -mx-2 transition-all duration-300", 
+        isDraggingCat,
+        isDropTargetCat,
+        "animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-2xl p-2 -mx-2 transition-all duration-300",
         "border border-transparent hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
       )}
     >
       {/* --- Header Kategori --- */}
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2 mb-3">
         <div className="flex items-center gap-2">
-          <div 
+          <div
             onPointerDown={categoryDrag?.startDrag(category)}
             className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-accent-500 shrink-0 p-1 -ml-1 touch-none transition-colors duration-200"
             title="Tahan & geser untuk mengurutkan kategori"
@@ -104,7 +36,7 @@ const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete,
           <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
           <Badge variant="neutral">{groups.length} Grup</Badge>
         </div>
-        <button 
+        <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl hover:bg-accent-50 dark:hover:bg-accent-500/10 hover:text-accent-600 dark:hover:text-accent-400 active:scale-90 transition-all duration-300"
           title={isExpanded ? "Tutup Kategori" : "Buka Kategori"}
@@ -169,7 +101,7 @@ const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete,
   );
 };
 
-const VariantManagement = () => {
+const VariantListTab = () => {
   const {
     variantGroups, setVariantGroups, variantCategories, setVariantCategories,
     menus, setMenus, triggerAlert, triggerConfirm, formatRupiah
@@ -281,7 +213,7 @@ const VariantManagement = () => {
       const list = [...(prev || [])];
       const fromIdx = list.indexOf(draggedCat);
       const toIdx = list.indexOf(overCat);
-      if(fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
       const [moved] = list.splice(fromIdx, 1);
       list.splice(toIdx, 0, moved);
       return list;
@@ -462,4 +394,4 @@ const VariantManagement = () => {
   );
 };
 
-export default VariantManagement;
+export default VariantListTab;

@@ -1,0 +1,2562 @@
+diff --git a/src/app/App.jsx b/src/app/App.jsx
+index 32aab7f..8de47cd 100644
+--- a/src/app/App.jsx
++++ b/src/app/App.jsx
+@@ -30,7 +30,6 @@ import {
+   Clock,
+   Fingerprint,
+   History,
+-  Layers,
+   List,
+   RefreshCw,
+   Settings,
+@@ -1119,23 +1118,31 @@ export default function App() {
+ 
+   const menuItems = [
+ 
+-    { id: 'dompet', icon: Clock, label: 'Dompet Kasir' },
+-    { id: 'absensi', icon: Fingerprint, label: 'Absensi Karyawan' },
+-    { id: 'kasir', icon: ShoppingCart, label: 'Kasir Utama' },
+-    { id: 'riwayat', icon: History, label: 'Riwayat Pesanan' },
+-    { id: 'pemasukan', icon: TrendingUp, label: 'Pemasukan' },
+-    { id: 'pengeluaran', icon: TrendingDown, label: 'Pengeluaran' },
+-    { id: 'laporan', icon: BarChart3, label: 'Laporan & Profit' },
+-    { id: 'labarugi', icon: Scale, label: 'Laba Rugi' },
+-    { id: 'karyawan', icon: Briefcase, label: 'Manajemen Pegawai' },
+-    { id: 'menu', icon: List, label: 'Manajemen Menu' },
+-    { id: 'varian', icon: Layers, label: 'Manajemen Varian' },
+-    { id: 'hpp', icon: Calculator, label: 'Manajemen HPP' },
+-    { id: 'pelanggan', icon: Users, label: 'Pelanggan & Voucher' },
+-    { id: 'pengaturan', icon: Settings, label: 'Pengaturan Sistem' },
+-    { id: 'backup', icon: Download, label: 'Backup & Restore' },
+-    { id: 'stok', icon: Warehouse, label: 'Stok Opname' },
+-    { id: 'akun', icon: UserCog, label: 'Manajemen Akun' },
++    // Operasional Harian
++    { id: 'kasir', icon: ShoppingCart, label: 'Kasir Utama', category: 'Operasional Harian' },
++    { id: 'dompet', icon: Clock, label: 'Dompet Kasir', category: 'Operasional Harian' },
++    { id: 'riwayat', icon: History, label: 'Riwayat Pesanan', category: 'Operasional Harian' },
++    { id: 'absensi', icon: Fingerprint, label: 'Absensi Karyawan', category: 'Operasional Harian' },
++
++    // Keuangan
++    { id: 'pemasukan', icon: TrendingUp, label: 'Pemasukan', category: 'Keuangan' },
++    { id: 'pengeluaran', icon: TrendingDown, label: 'Pengeluaran', category: 'Keuangan' },
++    { id: 'laporan', icon: BarChart3, label: 'Laporan & Profit', category: 'Keuangan' },
++    { id: 'labarugi', icon: Scale, label: 'Laba Rugi', category: 'Keuangan' },
++
++    // Produk & Stok
++    { id: 'menu', icon: List, label: 'Manajemen Menu', category: 'Produk & Stok' },
++    { id: 'hpp', icon: Calculator, label: 'Manajemen HPP', category: 'Produk & Stok' },
++    { id: 'stok', icon: Warehouse, label: 'Stok Opname', category: 'Produk & Stok' },
++
++    // Pegawai & Pelanggan
++    { id: 'karyawan', icon: Briefcase, label: 'Manajemen Pegawai', category: 'Pegawai & Pelanggan' },
++    { id: 'pelanggan', icon: Users, label: 'Pelanggan & Voucher', category: 'Pegawai & Pelanggan' },
++
++    // Sistem
++    { id: 'pengaturan', icon: Settings, label: 'Pengaturan', category: 'Sistem' },
++    { id: 'backup', icon: Download, label: 'Backup & Restore', category: 'Sistem' },
++    { id: 'akun', icon: UserCog, label: 'Manajemen Akun', category: 'Sistem' },
+ 
+   ];
+ 
+diff --git a/src/app/AppRoutes.jsx b/src/app/AppRoutes.jsx
+index cd3e726..bda39a7 100644
+--- a/src/app/AppRoutes.jsx
++++ b/src/app/AppRoutes.jsx
+@@ -8,7 +8,6 @@ const ShiftView         = lazy(() => import('../features/finance/shift/ShiftView
+ const PosView           = lazy(() => import('../features/pos/PosView'));
+ const HistoryView       = lazy(() => import('../features/reports/HistoryView'));
+ const MenuManagement    = lazy(() => import('../features/menu/MenuMgmt'));
+-const VariantManagement = lazy(() => import('../features/menu/VariantMgmt'));
+ const HppView           = lazy(() => import('../features/hpp/HppView'));
+ const IncomeView        = lazy(() => import('../features/finance/IncomeView'));
+ const ExpenseView       = lazy(() => import('../features/finance/ExpenseView'));
+@@ -29,7 +28,6 @@ const VIEWS = {
+     kasir:       PosView,
+     riwayat:     HistoryView,
+     menu:        MenuManagement,
+-    varian:      VariantManagement,
+     hpp:         HppView,
+     pemasukan:   IncomeView,
+     pengeluaran: ExpenseView,
+diff --git a/src/app/layout/Sidebar.jsx b/src/app/layout/Sidebar.jsx
+index 7847719..f18c199 100644
+--- a/src/app/layout/Sidebar.jsx
++++ b/src/app/layout/Sidebar.jsx
+@@ -1,4 +1,4 @@
+-import React from "react";
++import React, { useMemo } from "react";
+ import { X, ShieldUser, ChevronRight, Sparkles } from "lucide-react";
+ import Button from '../../components/ui/Button';
+ import { useAppContext } from '../../context/AppContext';
+@@ -20,6 +20,24 @@ export default function Sidebar({
+     const appTagline = storeSettings?.appTagline || 'Ecosystem';
+     const initial = appName.trim().charAt(0).toUpperCase() || 'M';
+ 
++    // Kelompokkan menu per kategori (urutan kategori mengikuti kemunculan
++    // pertamanya di `visibleMenus`, yang sudah diurutkan per kategori di
++    // App.jsx — jadi cukup group-by di sini, tidak perlu daftar urutan
++    // kategori terpisah).
++    const groupedMenus = useMemo(() => {
++        const groups = [];
++        const idxByCategory = new Map();
++        visibleMenus.forEach(item => {
++            const cat = item.category || '';
++            if (!idxByCategory.has(cat)) {
++                idxByCategory.set(cat, groups.length);
++                groups.push({ category: cat, items: [] });
++            }
++            groups[idxByCategory.get(cat)].items.push(item);
++        });
++        return groups;
++    }, [visibleMenus]);
++
+     return (
+         <aside className={`fixed md:static short:!fixed inset-y-0 left-0 z-50 w-[268px] short:w-[240px] bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl md:bg-white md:dark:bg-slate-950 short:!bg-white/95 short:dark:!bg-slate-950/95 short:!backdrop-blur-xl border-r border-slate-100/60 dark:border-slate-900 transition-transform duration-400 ease-out flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 short:!-translate-x-full'}`}>
+ 
+@@ -63,31 +81,42 @@ export default function Sidebar({
+             )}
+ 
+             {/* Navigasi Menu: Spasi lega & Indikator Aktif yang Halus */}
+-            <nav className="flex-1 px-3 py-1 space-y-1 overflow-y-auto custom-scrollbar">
+-                {visibleMenus.map(item => {
+-                    const isActive = currentView === item.id;
+-                    return (
+-                        <button
+-                            key={item.id}
+-                            onClick={() => {
+-                                setCurrentView(item.id);
+-                                setIsSidebarOpen(false);
+-                            }}
+-                            className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-medium text-[13px] transition-all duration-300 group overflow-hidden
+-                                ${isActive
+-                                    ? 'text-white bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 shadow-[0_4px_16px_rgba(var(--color-accent-500),0.35)]'
+-                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50/80 dark:hover:bg-slate-900/50'
+-                                }`}
+-                        >
+-                            <item.icon className={`w-[18px] h-[18px] shrink-0 transition-transform duration-300 ${isActive ? 'scale-105' : 'group-hover:scale-110'}`} />
+-                            <span className="tracking-wide truncate">{item.label}</span>
++            <nav className="flex-1 px-3 py-1 overflow-y-auto custom-scrollbar">
++                {groupedMenus.map((group, idx) => (
++                    <div key={group.category || `group-${idx}`}>
++                        {group.category && (
++                            <p className={`px-4 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400/70 dark:text-slate-600 ${idx === 0 ? 'pt-1' : 'pt-4'}`}>
++                                {group.category}
++                            </p>
++                        )}
++                        <div className="space-y-1">
++                            {group.items.map(item => {
++                                const isActive = currentView === item.id;
++                                return (
++                                    <button
++                                        key={item.id}
++                                        onClick={() => {
++                                            setCurrentView(item.id);
++                                            setIsSidebarOpen(false);
++                                        }}
++                                        className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-medium text-[13px] transition-all duration-300 group overflow-hidden
++                                            ${isActive
++                                                ? 'text-white bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 shadow-[0_4px_16px_rgba(var(--color-accent-500),0.35)]'
++                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50/80 dark:hover:bg-slate-900/50'
++                                            }`}
++                                    >
++                                        <item.icon className={`w-[18px] h-[18px] shrink-0 transition-transform duration-300 ${isActive ? 'scale-105' : 'group-hover:scale-110'}`} />
++                                        <span className="tracking-wide truncate">{item.label}</span>
+ 
+-                            {isActive && (
+-                                <ChevronRight className="w-3.5 h-3.5 ml-auto shrink-0 opacity-80" />
+-                            )}
+-                        </button>
+-                    );
+-                })}
++                                        {isActive && (
++                                            <ChevronRight className="w-3.5 h-3.5 ml-auto shrink-0 opacity-80" />
++                                        )}
++                                    </button>
++                                );
++                            })}
++                        </div>
++                    </div>
++                ))}
+             </nav>
+ 
+             {/* Footer: Modern Button & Subtle Versioning */}
+diff --git a/src/features/balance/periodUtils.js b/src/features/balance/periodUtils.js
+index 8384152..eed280a 100644
+--- a/src/features/balance/periodUtils.js
++++ b/src/features/balance/periodUtils.js
+@@ -13,4 +13,12 @@ const BULAN_ID = [
+ export const formatPeriodLabel = (period) => {
+   const [y, m] = period.split('-').map(Number);
+   return `${BULAN_ID[m - 1]} ${y}`;
++};
++
++// "2026-07" -> "2026-06", "2026-01" -> "2025-12"
++export const getPreviousPeriod = (period) => {
++  const [y, m] = period.split('-').map(Number);
++  const prevMonth = m === 1 ? 12 : m - 1;
++  const prevYear = m === 1 ? y - 1 : y;
++  return `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+ };
+\ No newline at end of file
+diff --git a/src/features/balance/stockOpnameLogic.js b/src/features/balance/stockOpnameLogic.js
+index 4baf0c1..462e80c 100644
+--- a/src/features/balance/stockOpnameLogic.js
++++ b/src/features/balance/stockOpnameLogic.js
+@@ -1,340 +1,79 @@
+ // features/balance/stockOpnameLogic.js
+ //
+-// Sisi Stok Opname untuk laporan Laba Rugi (BalanceTab.jsx) — sebelumnya
+-// MOCK di BalanceSummaryTab.jsx, sekarang ambil data ASLI:
++// Stok Awal & Stok Akhir bulan buat Laba Rugi.
+ //
+-//   Stok Akhir bulan X  = valuasi checklist "stock_checklists" (tabel milik
+-//                          mamam-absensi, backend Supabase yang sama) yang
+-//                          SUBMITTED_AT-nya jatuh di bulan X, diambil yang
+-//                          PALING TERAKHIR di-submit (BUKAN filter pakai
+-//                          date_str checklist — date_str bisa menyesatkan
+-//                          karena mekanisme carry-over di mamam-absensi;
+-//                          lihat penjelasan lengkap di
+-//                          findLastSubmittedChecklistInMonth di bawah).
+-//                          Toko/karyawan libur berhari-hari di penghujung
+-//                          bulan (mis. libur Lebaran) tetap dapat data,
+-//                          selama ada minimal 1 checklist submitted bulan
+-//                          itu — lihat sourceDateStr di hasil generate
+-//                          untuk tahu tanggal checklist yang jadi sumber.
+-//                          Item-nya di-match ke rawMaterials (harga, milik
+-//                          mamam-global) by NAMA (case-insensitive, trim),
+-//                          lalu snapshot-nya disimpan permanen & terkunci
+-//                          ke tabel stock_opname_bulanan (lihat
+-//                          storage/supabase_stock_opname_migration.sql).
++// PERUBAHAN PENTING (lihat diskusi implementasi "Sidebar & Manajemen
++// Menu — refactor" untuk detail): sebelumnya modul ini generate lalu
++// MENGUNCI valuasi Stok Akhir ke tabel snapshot terpisah
++// (stock_opname_bulanan), dan Stok Awal bulan berjalan dibaca dari
++// snapshot bulan lalu itu. Sekarang keduanya dihitung LIVE langsung dari
++// stock_checklists tiap kali user menekan tombol generate — TIDAK ada
++// lagi tabel snapshot (stock_opname_bulanan sudah di-drop, lihat SQL
++// migrasi terlampir).
+ //
+-//   Stok Awal bulan X   = snapshot Stok Akhir bulan (X-1) yang sudah ada di
+-//                          stock_opname_bulanan. Kalau belum ada (mis. bulan
+-//                          pertama pakai fitur ini, belum ada histori sama
+-//                          sekali), Stok Awal = 0 + caller wajib tampilkan
+-//                          warning ke user (JANGAN diam-diam dianggap 0
+-//                          tanpa keterangan — itu bisa bikin owner salah
+-//                          baca HPP bulan pertama).
++// Konsekuensi dari desain ini, harap dipahami: karena tidak ada lagi
++// snapshot yang mengunci harga rawMaterials SAAT itu, generate ulang
++// utk bulan lalu akan pakai harga rawMaterials TERBARU (bukan harga
++// waktu pertama kali di-generate). Laba Rugi bulan lalu jadi bisa
++// berubah kalau di-generate ulang setelah harga bahan baku di-update.
++// Trade-off ini sengaja diambil demi kesederhanaan (1 sumber data,
++// tanpa lock table terpisah yang perlu dijaga konsistensinya).
+ //
+-// Kenapa dipisah dari balance.js: balance.js sengaja tidak tahu-menahu
+-// soal stok opname (lihat docblock computeBalance di sana) supaya tetap
+-// reusable. File ini yang jadi jembatan ke sumber data stok opname
+-// sesungguhnya, dipanggil dari BalanceSummaryTab.jsx.
+-
+-import { getSupabaseClient, getDeviceId } from '../../storage/syncClient';
+-
+-const CHECKLIST_TABLE = 'stock_checklists';
+-const STOCK_MASTER_CONFIG_KEY = 'stockMaster';
+-const SNAPSHOT_TABLE = 'stock_opname_bulanan';
+-
+-// Kolom JSONB dari Supabase-js biasanya sudah ke-parse otomatis jadi
+-// object/array JS, tapi kadang (tergantung driver/versi) masih string
+-// mentah — sama pola antisipasinya seperti parseJsonbField di
+-// mamam-absensi/src/stockChecklist.js, supaya tidak crash kalau itu terjadi.
+-function parseJsonbField(value, fallback) {
+-  if (value == null) return fallback;
+-  if (typeof value === 'string') {
+-    try {
+-      return JSON.parse(value);
+-    } catch {
+-      return fallback;
+-    }
+-  }
+-  return value;
+-}
+-
+-/** "YYYY-MM" -> "YYYY-MM" bulan sebelumnya. */
+-function previousPeriod(period) {
+-  const [y, m] = period.split('-').map(Number);
+-  const d = new Date(y, m - 2, 1); // m-2 karena Date bulan 0-indexed, mundur 1 bulan
+-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+-}
+-
+-function normalizeName(name) {
+-  return String(name || '').trim().toLowerCase();
++// Aturan default (bisa selalu ditimpa manual sebelum generate, lihat
++// BalanceSummaryTab.jsx):
++//   - Stok Awal Bulan X  disarankan dari checklist submitted terakhir
++//     yang tersedia di Bulan X-1 (Stok Awal = Stok Akhir bulan lalu).
++//   - Stok Akhir Bulan X disarankan dari checklist submitted terakhir
++//     yang tersedia DI Bulan X itu sendiri.
++
++import { getSupabaseClient } from '../../storage/syncClient';
++import { getPreviousPeriod } from './periodUtils';
++import {
++  fetchStockMaster,
++  valuateChecklist,
++  fetchChecklistByDate,
++  suggestLastSubmittedDateInMonth,
++} from '../stock/stockChecklistApi';
++
++/** Saran tanggal checklist utk Stok Akhir bulan `period` ("YYYY-MM"). */
++export async function suggestStokAkhirDate(period) {
++  return suggestLastSubmittedDateInMonth(period);
+ }
+ 
+-/**
+- * Ambil master kategori & item stock checklist (punya mamam-absensi,
+- * tabel app_config row key='stockMaster') — dibutuhkan untuk tahu nama &
+- * satuan tiap item, karena tabel stock_checklists sendiri cuma nyimpen
+- * { [itemId]: { qty, skipped } } tanpa nama.
+- */
+-async function fetchStockMaster(supabase) {
+-  const { data, error } = await supabase
+-    .from('app_config')
+-    .select('value')
+-    .eq('key', STOCK_MASTER_CONFIG_KEY)
+-    .maybeSingle();
+-
+-  if (error) throw error;
+-
+-  const value = data?.value;
+-  const categories = Array.isArray(value?.categories) ? value.categories : [];
+-  return { categories };
+-}
+-
+-/**
+- * Cari checklist stock_checklists yang SUBMITTED_AT-nya jatuh di bulan
+- * `period`, ambil yang PALING TERAKHIR di-submit — apa pun date_str-nya
+- * (BUKAN filter pakai date_str — lihat alasan penting di bawah).
+- *
+- * KENAPA FILTER PAKAI submitted_at, BUKAN date_str:
+- * Checklist di mamam-absensi punya mekanisme "carry-over" (lihat
+- * loadActiveChecklistFromServer di mamam-absensi/src/stockChecklist.js):
+- * kalau checklist BELUM di-share ke WhatsApp, dia TIDAK direset walau
+- * sudah ganti hari — key/date_str-nya TETAP tanggal SAAT checklist itu
+- * pertama kali dibuat, bukan tanggal saat akhirnya di-submit/di-share.
+- *
+- * Konkretnya: checklist yang mulai diisi 30 Juni tapi baru ditekan
+- * "Selesai Isi Checklist" + dibagikan tanggal 2 Juli akan tersimpan dengan
+- * date_str='2026-06-30', PADAHAL submitted_at-nya di Juli. Kalau kita
+- * filter pakai date_str, checklist ini akan KELEWAT saat generate Stok
+- * Akhir Juni (harusnya masuk, itu checklist terakhir bulan itu) DAN juga
+- * tidak akan pernah ketemu saat generate Juli (padahal secara waktu
+- * submit dia milik Juli). submitted_at adalah waktu sebenarnya checklist
+- * itu jadi valid sebagai data opname, jadi itu yang jadi patokan periode.
+- *
+- * Toko/karyawan bisa libur berhari-hari di akhir bulan (mis. libur
+- * Lebaran) — checklist submitted terakhir yang tersedia bulan itu, sejauh
+- * apa pun mundurnya dari tanggal akhir bulan, tetap jadi patokan stok
+- * opname paling valid yang ada. Lebih baik pakai data agak lama daripada
+- * gagal generate sama sekali.
+- */
+-async function findLastSubmittedChecklistInMonth(supabase, period) {
+-  // Batas bulan dalam bentuk timestamp ISO (submitted_at adalah timestamptz).
+-  // Pakai awal bulan berikutnya sebagai batas atas EKSKLUSIF supaya tidak
+-  // perlu tahu tanggal akhir bulan yang presisi sampai ke detik.
+-  const [y, m] = period.split('-').map(Number);
+-  const startOfMonthIso = new Date(y, m - 1, 1).toISOString();
+-  const startOfNextMonthIso = new Date(y, m, 1).toISOString();
+-
+-  // TODO(debug sementara — hapus setelah masalah "belum ada checklist
+-  // submitted" padahal ada data di Supabase ini selesai ditelusuri):
+-  console.log('[stockOpnameLogic] cari checklist submitted, period=', period,
+-    'range=', startOfMonthIso, '→', startOfNextMonthIso);
+-
+-  const { data, error } = await supabase
+-    .from(CHECKLIST_TABLE)
+-    .select('*')
+-    .gte('submitted_at', startOfMonthIso)
+-    .lt('submitted_at', startOfNextMonthIso)
+-    .order('submitted_at', { ascending: false })
+-    .limit(1);
+-
+-  console.log('[stockOpnameLogic] hasil query:', { data, error });
+-
+-  if (error) throw error;
+-  if (data && data.length > 0) {
+-    return { row: data[0], usedDateStr: data[0].date_str };
+-  }
+-
+-  return { row: null, usedDateStr: null };
+-}
+-
+-/**
+- * Valuasi 1 checklist mentah jadi bentuk snapshot { totalValue, itemCount,
+- * unmatchedCount, items, unmatchedItems } — match ke rawMaterials BY NAMA
+- * (case-insensitive, trim), karena item stock checklist (punya
+- * mamam-absensi) dan rawMaterials (punya mamam-global) adalah 2 sumber
+- * data terpisah tanpa foreign key bersama, cuma nama yang bisa disamakan.
+- *
+- * Item dengan qty kosong/null atau skipped=true TIDAK ikut dihitung (belum
+- * benar-benar diketahui sisa stoknya). Item dengan qty terisi tapi
+- * namanya tidak ketemu di rawMaterials masuk ke unmatchedItems (tidak ikut
+- * totalValue, supaya tidak diam-diam anggap harga 0 padahal sebenarnya
+- * belum ter-link — owner perlu tahu & rapikan Database Bahan Baku).
+- */
+-function valuateChecklist(checklistRow, master, rawMaterials) {
+-  const values = parseJsonbField(checklistRow.values, {});
+-  const rawByName = new Map(
+-    (rawMaterials || []).map(rm => [normalizeName(rm.name), rm])
+-  );
+-
+-  const items = [];
+-  const unmatchedItems = [];
+-
+-  for (const category of master.categories) {
+-    for (const it of category.items) {
+-      const v = values[it.id];
+-      if (!v || v.skipped) continue;
+-      if (v.qty === null || v.qty === '' || Number.isNaN(Number(v.qty))) continue;
+-
+-      const qty = Number(v.qty);
+-      const match = rawByName.get(normalizeName(it.name));
+-
+-      if (!match) {
+-        unmatchedItems.push({ name: it.name, qty, unit: it.unit || '' });
+-        continue;
+-      }
+-
+-      const priceSnapshot = Number(match.price) || 0;
+-      items.push({
+-        rawMaterialId: match.id,
+-        name: it.name,
+-        qty,
+-        unit: it.unit || '',
+-        priceSnapshot,
+-        subtotal: qty * priceSnapshot,
+-      });
+-    }
+-  }
+-
+-  const totalValue = items.reduce((sum, it) => sum + it.subtotal, 0);
+-
+-  return {
+-    totalValue,
+-    itemCount: items.length,
+-    unmatchedCount: unmatchedItems.length,
+-    items,
+-    unmatchedItems,
+-  };
++/** Saran tanggal checklist utk Stok Awal bulan `period` (= akhir bulan lalu). */
++export async function suggestStokAwalDate(period) {
++  return suggestLastSubmittedDateInMonth(getPreviousPeriod(period));
+ }
+ 
+ /**
+- * Ambil snapshot Stok Awal untuk 1 periode — yaitu snapshot Stok Akhir
+- * bulan SEBELUMNYA dari stock_opname_bulanan.
++ * Ambil & valuasi checklist PERSIS di tanggal `dateStr` — dipanggil saat
++ * user menekan tombol generate/ambil data (baik pakai tanggal saran
++ * maupun tanggal manual yang dia pilih sendiri). Live compute, tidak
++ * disimpan ke mana pun.
+  *
+- * Kalau belum pernah digenerate (bulan pertama pakai fitur ini / bulan
+- * lalu terlewat generate-nya), balikin totalValue: 0 dengan
+- * `available: false` supaya UI WAJIB menampilkan warning yang jelas —
+- * bukan diam-diam menganggap stok awal = 0 seolah itu angka valid.
++ * @throws {Error} kalau belum pilih tanggal atau tidak ada checklist di
++ *   tanggal itu — supaya UI bisa kasih tahu user dengan jelas, alih-alih
++ *   diam-diam menganggap stoknya 0.
+  */
+-export async function fetchStokAwal(period) {
+-  const supabase = await getSupabaseClient();
+-  if (!supabase) {
+-    return { available: false, period: previousPeriod(period), totalValue: 0, itemCount: 0, generatedAt: null };
+-  }
+-
+-  const prevPeriod = previousPeriod(period);
+-  const { data, error } = await supabase
+-    .from(SNAPSHOT_TABLE)
+-    .select('*')
+-    .eq('period', prevPeriod)
+-    .maybeSingle();
+-
+-  if (error) throw error;
+-
+-  if (!data) {
+-    return { available: false, period: prevPeriod, totalValue: 0, itemCount: 0, generatedAt: null };
++export async function computeStockSnapshot(dateStr, rawMaterials) {
++  if (!dateStr) {
++    throw new Error('Pilih tanggal checklist terlebih dahulu.');
+   }
+ 
+-  return {
+-    available: true,
+-    period: data.period,
+-    totalValue: Number(data.total_value) || 0,
+-    itemCount: data.item_count || 0,
+-    generatedAt: data.generated_at,
+-  };
+-}
+-
+-/**
+- * Ambil snapshot Stok Akhir untuk periode ini KALAU sudah pernah
+- * digenerate sebelumnya (mis. user reload halaman) — supaya tidak perlu
+- * generate ulang tiap buka tab. Balikin null kalau belum ada.
+- */
+-export async function fetchStokAkhirIfExists(period) {
+-  const supabase = await getSupabaseClient();
+-  if (!supabase) return null;
+-
+-  const { data, error } = await supabase
+-    .from(SNAPSHOT_TABLE)
+-    .select('*')
+-    .eq('period', period)
+-    .maybeSingle();
+-
+-  if (error) throw error;
+-  if (!data) return null;
+-
+-  return {
+-    period: data.period,
+-    totalValue: Number(data.total_value) || 0,
+-    itemCount: data.item_count || 0,
+-    unmatchedCount: data.unmatched_count || 0,
+-    items: parseJsonbField(data.items, []),
+-    unmatchedItems: parseJsonbField(data.unmatched_items, []),
+-    generatedAt: data.generated_at,
+-    sourceDateStr: data.source_date_str,
+-  };
+-}
+-
+-/**
+- * Generate & kunci snapshot Stok Akhir untuk 1 periode:
+- * 1. Cari checklist stock_checklists submitted terdekat ke akhir bulan.
+- * 2. Ambil master kategori/item (buat nama & satuan tiap item).
+- * 3. Valuasi pakai rawMaterials (harga saat ini, snapshot permanen).
+- * 4. Upsert ke stock_opname_bulanan (locked=true, immutable — generate
+- *    ulang di periode yang sama akan MENIMPA snapshot lama; ini disengaja
+- *    untuk kasus "generate lagi setelah rapikan nama bahan baku yang
+- *    belum ter-link", TAPI begitu bulan berikutnya sudah baca stok awal
+- *    dari snapshot ini, jangan generate ulang tanpa koordinasi karena
+- *    akan mengubah dasar perhitungan bulan berikutnya juga).
+- *
+- * Melempar error dengan pesan jelas kalau tidak ada checklist submitted
+- * sama sekali di sekitar akhir bulan itu — supaya UI bisa kasih tau user
+- * apa yang perlu dilakukan (isi & submit checklist di Mamam Absensi dulu),
+- * bukan diam-diam menyimpan snapshot kosong.
+- */
+-export async function generateStokAkhir(period, rawMaterials) {
+   const supabase = await getSupabaseClient();
+   if (!supabase) {
+-    throw new Error('Supabase belum terkonfigurasi — tidak bisa mengambil data stok opname.');
++    throw new Error('Koneksi Supabase belum siap, coba lagi sebentar.');
+   }
+ 
+-  const { row, usedDateStr } = await findLastSubmittedChecklistInMonth(supabase, period);
++  const [row, master] = await Promise.all([
++    fetchChecklistByDate(supabase, dateStr),
++    fetchStockMaster(supabase),
++  ]);
+ 
+   if (!row) {
+-    throw new Error(
+-      `Belum ada checklist stok opname yang di-submit sepanjang bulan ${period}. Isi & submit checklist di Mamam Absensi dulu, baru generate lagi di sini.`
+-    );
++    throw new Error(`Tidak ada checklist stok pada tanggal ${dateStr}. Pilih tanggal lain yang ada datanya.`);
+   }
+ 
+-  const master = await fetchStockMaster(supabase);
+-  const valuasi = valuateChecklist(row, master, rawMaterials);
+-
+-  const payload = {
+-    period,
+-    total_value: valuasi.totalValue,
+-    item_count: valuasi.itemCount,
+-    unmatched_count: valuasi.unmatchedCount,
+-    items: valuasi.items,
+-    unmatched_items: valuasi.unmatchedItems,
+-    source_date_str: usedDateStr,
+-    generated_at: new Date().toISOString(),
+-    generated_by: getDeviceId(),
+-    locked: true,
+-  };
+-
+-  const { data, error } = await supabase
+-    .from(SNAPSHOT_TABLE)
+-    .upsert(payload, { onConflict: 'period' })
+-    .select()
+-    .single();
+-
+-  if (error) throw error;
+-
+-  return {
+-    period: data.period,
+-    totalValue: Number(data.total_value) || 0,
+-    itemCount: data.item_count || 0,
+-    unmatchedCount: data.unmatched_count || 0,
+-    items: parseJsonbField(data.items, []),
+-    unmatchedItems: parseJsonbField(data.unmatched_items, []),
+-    generatedAt: data.generated_at,
+-    sourceDateStr: data.source_date_str,
+-  };
+-}
+\ No newline at end of file
++  const valuation = valuateChecklist(row, master, rawMaterials || []);
++  return { dateStr, ...valuation };
++}
+diff --git a/src/features/balance/tabs/BalanceSummaryTab.jsx b/src/features/balance/tabs/BalanceSummaryTab.jsx
+index a86576a..03d8ace 100644
+--- a/src/features/balance/tabs/BalanceSummaryTab.jsx
++++ b/src/features/balance/tabs/BalanceSummaryTab.jsx
+@@ -1,14 +1,14 @@
+-import React, { useState, useEffect, useMemo, useCallback } from 'react';
++import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+ import {
+   Scale, Warehouse, ShoppingCart, TrendingUp, Users,
+-  RefreshCw, AlertTriangle, Package, Receipt, Lock
++  RefreshCw, AlertTriangle, Package, Receipt
+ } from 'lucide-react';
+ import { formatRupiah } from '../../../utils/formatters';
+-import { Card, Button, Badge, EmptyState } from '../../../components/ui';
++import { Card, Button, EmptyState } from '../../../components/ui';
+ import { useAppContext } from '../../../context/AppContext';
+ import { getBalanceSummary } from '../balance';
+ import { formatPeriodLabel } from '../periodUtils';
+-import { fetchStokAwal, fetchStokAkhirIfExists, generateStokAkhir } from '../stockOpnameLogic';
++import { suggestStokAwalDate, suggestStokAkhirDate, computeStockSnapshot } from '../stockOpnameLogic';
+ 
+ const StatCard = ({ icon, label, value, tone = 'neutral', sub }) => {
+   const toneMap = {
+@@ -29,58 +29,172 @@ const StatCard = ({ icon, label, value, tone = 'neutral', sub }) => {
+   );
+ };
+ 
++// Kartu Stok Awal & Stok Akhir sekarang bentuknya sama persis (beda cuma
++// label) — keduanya date-picker + tombol "Ambil", bukan lagi 1 otomatis +
++// 1 manual seperti versi snapshot lama. Diekstrak jadi 1 komponen supaya
++// tidak duplikat.
++const StokDateCard = ({ label, dateStr, setDateStr, result, error, isGenerating, onGenerate }) => (
++  <Card padding="lg">
++    <div className="flex items-center gap-2 mb-3">
++      <Warehouse className="w-4 h-4 text-slate-400 dark:text-slate-500" />
++      <h3 className="font-heading font-bold text-sm text-slate-800 dark:text-slate-100">{label}</h3>
++    </div>
++
++    <div className="flex items-center gap-2 mb-3">
++      <input
++        type="date"
++        value={dateStr}
++        onChange={e => setDateStr(e.target.value)}
++        className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-accent-500"
++      />
++      <Button
++        size="sm"
++        variant={result ? 'secondary' : 'primary'}
++        icon={<RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />}
++        onClick={onGenerate}
++        disabled={isGenerating || !dateStr}
++        className="shrink-0"
++      >
++        {isGenerating ? 'Memuat...' : result ? 'Ulangi' : 'Ambil'}
++      </Button>
++    </div>
++
++    {error ? (
++      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2.5 py-1.5">
++        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
++        {error}
++      </div>
++    ) : !result ? (
++      <p className="text-xs text-slate-400 dark:text-slate-500">
++        {dateStr ? 'Belum diambil — tekan "Ambil" untuk menghitung.' : 'Belum ada checklist yang bisa disarankan, pilih tanggal manual.'}
++      </p>
++    ) : (
++      <>
++        <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-1">
++          {formatRupiah(result.totalValue)}
++        </p>
++        <p className="text-[11px] text-slate-400 dark:text-slate-500">
++          {result.itemCount} item &middot; dari checklist {result.dateStr}
++        </p>
++        {result.unmatchedCount > 0 && (
++          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2.5 py-1.5 mt-2">
++            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
++            {result.unmatchedCount} item belum ter-link ke Database Bahan Baku, tidak ikut terhitung
++          </div>
++        )}
++      </>
++    )}
++  </Card>
++);
++
+ // `period` ("YYYY-MM") diteruskan dari BalanceTab.jsx (shell) supaya
+ // filter periode tetap sinkron antara tab Ringkasan dan tab Rincian.
+ const BalanceSummaryTab = ({ period }) => {
+-  const { salesHistory, expenses, employeeDailyRecords, employees, rawMaterials, triggerAlert } = useAppContext();
++  const { salesHistory, expenses, employeeDailyRecords, employees, rawMaterials } = useAppContext();
+ 
+-  const [stokAwal, setStokAwal] = useState(null);       // { available, period, totalValue, itemCount, generatedAt } | null (masih loading)
+-  const [stokAkhir, setStokAkhir] = useState(null);      // snapshot lengkap | null (belum ada)
+-  const [isLoadingStok, setIsLoadingStok] = useState(true);
+-  const [isGenerating, setIsGenerating] = useState(false);
+-  const [loadError, setLoadError] = useState(null);
++  const [stokAwalDate, setStokAwalDate] = useState('');
++  const [stokAkhirDate, setStokAkhirDate] = useState('');
++  const [stokAwal, setStokAwal] = useState(null);     // hasil computeStockSnapshot | null (belum diambil)
++  const [stokAkhir, setStokAkhir] = useState(null);
++  const [awalError, setAwalError] = useState(null);
++  const [akhirError, setAkhirError] = useState(null);
++  const [isGeneratingAwal, setIsGeneratingAwal] = useState(false);
++  const [isGeneratingAkhir, setIsGeneratingAkhir] = useState(false);
+ 
+-  // Muat ulang Stok Awal (snapshot bulan lalu) & Stok Akhir (kalau sudah
+-  // pernah digenerate sebelumnya untuk periode ini) setiap `period` ganti.
+-  const loadStok = useCallback(async () => {
+-    setIsLoadingStok(true);
+-    setLoadError(null);
++  const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(true);
++  const [suggestionError, setSuggestionError] = useState(null);
++
++  // Race guard: setiap ganti `period`, epoch di-bump. loadSuggestions &
++  // kedua handleGenerate di bawah menangkap epoch saat mereka MULAI, lalu
++  // cek lagi SETELAH await selesai — kalau epoch udah beda (user keburu
++  // ganti bulan lagi sebelum request lama selesai), hasil yang telat itu
++  // DIBUANG, tidak menimpa state. Tanpa ini: ganti bulan cepat-cepat bisa
++  // bikin request lama (utk bulan sebelumnya) selesai belakangan dan
++  // nimpa data bulan yang sekarang lagi dilihat dengan angka yang salah.
++  const periodEpochRef = useRef(0);
++
++  // Setiap `period` ganti: muat SARAN tanggal (checklist terakhir yang
++  // tersedia) untuk Stok Awal (bulan lalu) & Stok Akhir (bulan ini), isi
++  // ke date-picker sebagai default. Ini cuma saran — user bisa timpa
++  // manual sebelum menekan "Ambil". Nilai stok hasil generate sebelumnya
++  // direset karena sudah tidak relevan untuk periode baru.
++  const loadSuggestions = useCallback(async () => {
++    const epoch = ++periodEpochRef.current;
++    setIsLoadingSuggestion(true);
++    setSuggestionError(null);
++    setStokAwal(null);
++    setStokAkhir(null);
++    setAwalError(null);
++    setAkhirError(null);
++    // Kalau ada generate yang masih in-flight dari periode sebelumnya,
++    // lepas status loading tombolnya sekarang — hasilnya bakal dibuang
++    // sendiri lewat pengecekan epoch begitu request itu selesai (lihat
++    // handleGenerateAwal/handleGenerateAkhir), tapi tombolnya gak perlu
++    // nunggu itu buat balik ke kondisi normal.
++    setIsGeneratingAwal(false);
++    setIsGeneratingAkhir(false);
+     try {
+-      const [awal, akhir] = await Promise.all([
+-        fetchStokAwal(period),
+-        fetchStokAkhirIfExists(period),
++      const [awalDate, akhirDate] = await Promise.all([
++        suggestStokAwalDate(period),
++        suggestStokAkhirDate(period),
+       ]);
+-      setStokAwal(awal);
+-      setStokAkhir(akhir);
++      if (periodEpochRef.current !== epoch) return; // period udah ganti lagi, buang hasil basi ini
++      setStokAwalDate(awalDate || '');
++      setStokAkhirDate(akhirDate || '');
+     } catch (err) {
+-      console.error('[BalanceSummaryTab] gagal memuat data stok opname:', err);
+-      setLoadError(err.message || 'Gagal memuat data stok opname.');
++      if (periodEpochRef.current !== epoch) return;
++      console.error('[BalanceSummaryTab] gagal memuat saran tanggal stok:', err);
++      setSuggestionError(err.message || 'Gagal memuat saran tanggal checklist.');
+     } finally {
+-      setIsLoadingStok(false);
++      if (periodEpochRef.current === epoch) setIsLoadingSuggestion(false);
+     }
+   }, [period]);
+ 
+   useEffect(() => {
+-    loadStok();
+-  }, [loadStok]);
++    loadSuggestions();
++  }, [loadSuggestions]);
++
++  const handleGenerateAwal = async () => {
++    const epoch = periodEpochRef.current; // snapshot, BUKAN di-bump — cuma baca epoch periode saat ini
++    setIsGeneratingAwal(true);
++    setAwalError(null);
++    try {
++      const result = await computeStockSnapshot(stokAwalDate, rawMaterials);
++      if (periodEpochRef.current !== epoch) return; // periode udah ganti selagi nunggu, buang hasil ini
++      setStokAwal(result);
++    } catch (err) {
++      if (periodEpochRef.current !== epoch) return;
++      console.error('[BalanceSummaryTab] gagal mengambil data stok awal:', err);
++      setAwalError(err.message || 'Gagal mengambil data stok awal.');
++      setStokAwal(null);
++    } finally {
++      if (periodEpochRef.current === epoch) setIsGeneratingAwal(false);
++    }
++  };
+ 
+-  const handleGenerate = async () => {
+-    setIsGenerating(true);
++  const handleGenerateAkhir = async () => {
++    const epoch = periodEpochRef.current;
++    setIsGeneratingAkhir(true);
++    setAkhirError(null);
+     try {
+-      const result = await generateStokAkhir(period, rawMaterials);
++      const result = await computeStockSnapshot(stokAkhirDate, rawMaterials);
++      if (periodEpochRef.current !== epoch) return;
+       setStokAkhir(result);
+     } catch (err) {
+-      console.error('[BalanceSummaryTab] gagal generate stok akhir:', err);
+-      triggerAlert?.(err.message || 'Gagal mengambil & generate data stok akhir.');
++      if (periodEpochRef.current !== epoch) return;
++      console.error('[BalanceSummaryTab] gagal mengambil data stok akhir:', err);
++      setAkhirError(err.message || 'Gagal mengambil data stok akhir.');
++      setStokAkhir(null);
+     } finally {
+-      setIsGenerating(false);
++      if (periodEpochRef.current === epoch) setIsGeneratingAkhir(false);
+     }
+   };
+ 
+   // Penghasilan (salesHistory), Belanja Bahan Baku/Biaya Operasional
+   // (expenses), dan Biaya Gaji (employeeDailyRecords + expenses kasbon)
+-  // dihitung dari data ASLI lewat balance.js. Stok Awal/Stok Akhir sekarang
+-  // juga data ASLI dari stockOpnameLogic.js (bukan mock lagi).
++  // dihitung dari data ASLI lewat balance.js. Stok Awal/Stok Akhir dari
++  // stockOpnameLogic.js (live compute dari stock_checklists, lihat catatan
++  // di file itu soal trade-off-nya).
+   const ringkasan = useMemo(() => {
+     return getBalanceSummary(salesHistory, expenses, employeeDailyRecords, employees, period, {
+       stokAwalValue: stokAwal?.totalValue || 0,
+@@ -89,28 +203,28 @@ const BalanceSummaryTab = ({ period }) => {
+   }, [salesHistory, expenses, employeeDailyRecords, employees, period, stokAwal, stokAkhir]);
+ 
+   // Hasil akhir (HPP/Laba Kotor/Laba Bersih) hanya ditampilkan kalau stok
+-  // akhir bulan ini SUDAH di-generate & dikunci — sebelum itu, HPP belum
+-  // punya makna (stok akhir belum diketahui).
++  // akhir bulan ini SUDAH diambil — sebelum itu, HPP belum punya makna
++  // (stok akhir belum diketahui).
+   const hasil = stokAkhir ? ringkasan : null;
+ 
+-  if (isLoadingStok) {
++  if (isLoadingSuggestion) {
+     return (
+       <Card padding="lg" className="flex items-center justify-center gap-2 text-slate-400 dark:text-slate-500 text-sm py-10">
+-        <RefreshCw className="w-4 h-4 animate-spin" /> Memuat data stok opname...
++        <RefreshCw className="w-4 h-4 animate-spin" /> Memuat saran tanggal stok opname...
+       </Card>
+     );
+   }
+ 
+-  if (loadError) {
++  if (suggestionError) {
+     return (
+       <Card padding="lg">
+         <EmptyState
+           icon={<AlertTriangle className="w-8 h-8 text-red-400" />}
+-          title="Gagal memuat data stok opname"
+-          description={loadError}
++          title="Gagal memuat saran tanggal stok opname"
++          description={suggestionError}
+         />
+         <div className="flex justify-center mt-3">
+-          <Button size="sm" icon={<RefreshCw className="w-3.5 h-3.5" />} onClick={loadStok}>
++          <Button size="sm" icon={<RefreshCw className="w-3.5 h-3.5" />} onClick={loadSuggestions}>
+             Coba Lagi
+           </Button>
+         </div>
+@@ -122,99 +236,27 @@ const BalanceSummaryTab = ({ period }) => {
+     <div>
+       {/* ── STOK AWAL vs STOK AKHIR ─────────────────────────────────────── */}
+       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+-
+-        {/* Stok Awal — otomatis dari snapshot bulan lalu (stock_opname_bulanan) */}
+-        <Card padding="lg">
+-          <div className="flex items-center justify-between mb-3">
+-            <div className="flex items-center gap-2">
+-              <Warehouse className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+-              <h3 className="font-heading font-bold text-sm text-slate-800 dark:text-slate-100">Stok Awal Bulan</h3>
+-            </div>
+-            {stokAwal?.available && (
+-              <Badge variant="neutral">Dari opname {stokAwal.period}</Badge>
+-            )}
+-          </div>
+-
+-          {!stokAwal?.available ? (
+-            <>
+-              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-1">
+-                {formatRupiah(0)}
+-              </p>
+-              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2.5 py-1.5">
+-                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+-                Belum ada snapshot stok opname bulan {stokAwal?.period}. Stok Awal dianggap Rp 0 — HPP bulan ini kemungkinan belum akurat sampai histori tersedia.
+-              </div>
+-            </>
+-          ) : (
+-            <>
+-              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-1">
+-                {formatRupiah(stokAwal.totalValue)}
+-              </p>
+-              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+-                {stokAwal.itemCount} item &middot; digenerate {new Date(stokAwal.generatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+-              </p>
+-            </>
+-          )}
+-        </Card>
+-
+-        {/* Stok Akhir — di-generate dari stock_checklists (mamam-absensi) */}
+-        <Card padding="lg" className={!stokAkhir ? 'border-dashed' : ''}>
+-          <div className="flex items-center justify-between mb-3">
+-            <div className="flex items-center gap-2">
+-              <Warehouse className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+-              <h3 className="font-heading font-bold text-sm text-slate-800 dark:text-slate-100">Stok Akhir Bulan</h3>
+-            </div>
+-            {stokAkhir && (
+-              <Badge variant="success" dot>
+-                <Lock className="w-2.5 h-2.5" /> Terkunci
+-              </Badge>
+-            )}
+-          </div>
+-
+-          {!stokAkhir ? (
+-            <div className="flex flex-col items-center text-center py-2 gap-3">
+-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+-                Belum ada snapshot untuk periode ini. Ambil data stok opname akhir bulan dari <span className="font-semibold">Mamam Absensi</span>.
+-              </p>
+-              <Button
+-                size="sm"
+-                icon={isGenerating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+-                onClick={handleGenerate}
+-                disabled={isGenerating}
+-              >
+-                {isGenerating ? 'Mengambil data...' : 'Ambil & Generate Stok Akhir'}
+-              </Button>
+-            </div>
+-          ) : (
+-            <>
+-              <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-1">
+-                {formatRupiah(stokAkhir.totalValue)}
+-              </p>
+-              <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
+-                {stokAkhir.itemCount} item &middot; dikunci {new Date(stokAkhir.generatedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+-                {stokAkhir.sourceDateStr && <> &middot; sumber checklist {stokAkhir.sourceDateStr}</>}
+-              </p>
+-              {stokAkhir.unmatchedCount > 0 && (
+-                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2.5 py-1.5 mb-2">
+-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+-                  {stokAkhir.unmatchedCount} item belum ter-link ke Database Bahan Baku, tidak ikut terhitung
+-                </div>
+-              )}
+-              <Button
+-                size="sm"
+-                variant="secondary"
+-                icon={isGenerating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+-                onClick={handleGenerate}
+-                disabled={isGenerating}
+-              >
+-                {isGenerating ? 'Mengambil data...' : 'Generate Ulang'}
+-              </Button>
+-            </>
+-          )}
+-        </Card>
++        <StokDateCard
++          label="Stok Awal Bulan"
++          dateStr={stokAwalDate}
++          setDateStr={setStokAwalDate}
++          result={stokAwal}
++          error={awalError}
++          isGenerating={isGeneratingAwal}
++          onGenerate={handleGenerateAwal}
++        />
++        <StokDateCard
++          label="Stok Akhir Bulan"
++          dateStr={stokAkhirDate}
++          setDateStr={setStokAkhirDate}
++          result={stokAkhir}
++          error={akhirError}
++          isGenerating={isGeneratingAkhir}
++          onGenerate={handleGenerateAkhir}
++        />
+       </div>
+ 
+-      {/* ── DETAIL ITEM STOK AKHIR (kalau sudah generate) ──────────────── */}
++      {/* ── DETAIL ITEM STOK AKHIR (kalau sudah diambil) ────────────────── */}
+       {stokAkhir && stokAkhir.items.length > 0 && (
+         <Card padding="none" className="overflow-hidden mb-6">
+           <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+@@ -258,7 +300,7 @@ const BalanceSummaryTab = ({ period }) => {
+             </h3>
+           </div>
+           <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-3">
+-            Nama item ini ada isian qty di checklist stok, tapi namanya tidak persis sama dengan nama bahan baku manapun di menu Bahan Baku — jadi tidak ikut dihitung ke HPP. Samakan nama lalu tekan "Generate Ulang" di atas.
++            Nama item ini ada isian qty di checklist stok, tapi namanya tidak persis sama dengan nama bahan baku manapun di menu Bahan Baku — jadi tidak ikut dihitung ke HPP. Samakan nama lalu tekan "Ulangi" di atas.
+           </p>
+           <ul className="text-sm text-slate-700 dark:text-slate-200 space-y-1">
+             {stokAkhir.unmatchedItems.map((it, idx) => (
+@@ -284,7 +326,7 @@ const BalanceSummaryTab = ({ period }) => {
+         <Card padding="lg">
+           <EmptyState
+             icon={<Scale className="w-8 h-8 text-slate-300" />}
+-            title="Generate stok akhir dulu untuk melihat hasil Laba Rugi"
++            title="Ambil data stok akhir dulu untuk melihat hasil Laba Rugi"
+           />
+         </Card>
+       ) : (
+@@ -322,4 +364,4 @@ const BalanceSummaryTab = ({ period }) => {
+   );
+ };
+ 
+-export default BalanceSummaryTab;
+\ No newline at end of file
++export default BalanceSummaryTab;
+diff --git a/src/features/menu/MenuMgmt.jsx b/src/features/menu/MenuMgmt.jsx
+index ece1ab3..aa97dcd 100644
+--- a/src/features/menu/MenuMgmt.jsx
++++ b/src/features/menu/MenuMgmt.jsx
+@@ -1,434 +1,40 @@
+-import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+-import { useAppContext } from "../../context/AppContext";
+-import { ChevronLeft, Plus, Edit3, Trash2, Settings2, Search, X, GripVertical, ChevronDown, ChevronUp } from "lucide-react";
+-import CategoryModal from "../../components/CategoryModal";
+-import { Card, Button, IconButton, Input, Select, EmptyState, Badge } from "../../components/ui";
+-
+-// ─── Hook drag & drop reorder (mouse + touch) ───
+-function useDragReorder(onReorder) {
+-  const [dragId, setDragId] = useState(null);
+-  const [overId, setOverId] = useState(null);
+-  const overIdRef = useRef(null);
+-  const itemRefs = useRef({});
+-
+-  const registerRef = useCallback((id) => (el) => {
+-    if (el) itemRefs.current[id] = el;
+-    else delete itemRefs.current[id];
+-  }, []);
+-
+-  const startDrag = useCallback((id) => (e) => {
+-    e.preventDefault();
+-    e.stopPropagation();
+-    try { e.target.setPointerCapture?.(e.pointerId); } catch (_) {}
+-    overIdRef.current = id;
+-    setDragId(id);
+-    setOverId(id);
+-  }, []);
+-
+-  useEffect(() => {
+-    if (dragId === null) return;
+-    const getY = (e) => (e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY);
+-    const handleMove = (e) => {
+-      const y = getY(e);
+-      if (y == null) return;
+-      let closestId = null;
+-      let closestDist = Infinity;
+-      Object.entries(itemRefs.current).forEach(([id, el]) => {
+-        if (!el) return;
+-        const rect = el.getBoundingClientRect();
+-        const mid = rect.top + rect.height / 2;
+-        const dist = Math.abs(y - mid);
+-        if (dist < closestDist) { closestDist = dist; closestId = id; }
+-      });
+-      if (closestId !== null && closestId !== overIdRef.current) {
+-        overIdRef.current = closestId;
+-        setOverId(closestId);
+-      }
+-    };
+-    const finishDrag = () => {
+-      const finalOverId = overIdRef.current;
+-      if (dragId !== null && finalOverId !== null && dragId !== finalOverId) {
+-        onReorder(dragId, finalOverId);
+-      }
+-      setDragId(null);
+-      setOverId(null);
+-      overIdRef.current = null;
+-    };
+-    window.addEventListener('pointermove', handleMove);
+-    window.addEventListener('pointerup', finishDrag);
+-    window.addEventListener('pointercancel', finishDrag);
+-    return () => {
+-      window.removeEventListener('pointermove', handleMove);
+-      window.removeEventListener('pointerup', finishDrag);
+-      window.removeEventListener('pointercancel', finishDrag);
+-    };
+-  }, [dragId, onReorder]);
+-
+-  return { dragId, overId, registerRef, startDrag };
+-}
+-
+-function getDragRowClass(isDragging, isDropTarget, baseClass, idleClass) {
+-  if (isDragging) return `${baseClass} opacity-50 ring-2 ring-accent-400 z-10`;
+-  if (isDropTarget) return `${baseClass} border-accent-400 bg-accent-50/60 dark:bg-accent-500/10`;
+-  return `${baseClass} ${idleClass}`;
+-}
+-
+-// ─── Komponen Kelompok Kategori Menu ───
+-const MenuCategorySection = ({ 
+-  category, 
+-  menus, 
+-  variantGroups, 
+-  onReorderItem, 
+-  onEdit, 
+-  onDelete, 
+-  formatRupiah, 
+-  categoryDrag, 
+-  isDragEnabled 
+-}) => {
+-  const [isExpanded, setIsExpanded] = useState(true);
+-  const itemDrag = useDragReorder(onReorderItem);
+-
+-  const isDraggingCat = categoryDrag?.dragId === category;
+-  const isDropTargetCat = categoryDrag?.overId === category && categoryDrag?.dragId !== null && categoryDrag?.dragId !== category;
++import React, { useState } from 'react';
++import { Button } from '../../components/ui';
++import MenuListTab from './tabs/MenuListTab';
++import VariantListTab from './tabs/VariantListTab';
++
++// Shell tipis: cuma nampung subtab switcher Menu/Varian (pola sama kayak
++// HppView.jsx & BalanceTab.jsx), supaya edit menu & varian gak perlu
++// pindah halaman/sidebar terpisah kayak sebelumnya — sekali buka
++// "Manajemen Menu", dua-duanya ada di sini tinggal ganti tab.
++//
++// Isi & logic CRUD sesungguhnya ada di tabs/MenuListTab.jsx dan
++// tabs/VariantListTab.jsx — dipindah apa adanya dari MenuMgmt.jsx &
++// VariantMgmt.jsx lama, TIDAK ada perubahan logic, cuma lokasi file.
++export default function MenuMgmt() {
++  const [activeTab, setActiveTab] = useState('menu');
+ 
+   return (
+-    <div 
+-      ref={categoryDrag?.registerRef(category)}
+-      className={getDragRowClass(
+-        isDraggingCat, 
+-        isDropTargetCat, 
+-        "animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-2xl p-2 -mx-2 transition-all duration-300", 
+-        "border border-transparent hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
+-      )}
+-    >
+-      {/* --- Header Kategori --- */}
+-      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2 mb-3">
+-        <div className="flex items-center gap-2">
+-          {isDragEnabled && (
+-            <div 
+-              onPointerDown={categoryDrag?.startDrag(category)}
+-              className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-accent-500 shrink-0 p-1 -ml-1 touch-none transition-colors duration-200"
+-              title="Tahan & geser untuk mengurutkan kategori"
+-            >
+-              <GripVertical className="w-5 h-5" />
+-            </div>
+-          )}
+-          <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
+-          <Badge variant="neutral">{menus.length} Item</Badge>
+-        </div>
+-        <button 
+-          onClick={() => setIsExpanded(!isExpanded)}
+-          className="p-1.5 text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 rounded-xl hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-90 transition-all duration-300"
+-          title={isExpanded ? "Tutup Kategori" : "Buka Kategori"}
+-        >
+-          {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+-        </button>
++    <div className="h-full w-full flex flex-col bg-slate-50 dark:bg-slate-950">
++      <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 px-4 md:px-6 pt-4 md:pt-6 pb-3 overflow-x-auto hide-scrollbar shrink-0">
++        {[
++          { key: 'menu', label: 'Menu' },
++          { key: 'varian', label: 'Varian' },
++        ].map(tab => (
++          <Button
++            key={tab.key}
++            variant={activeTab === tab.key ? 'primary' : 'secondary'}
++            onClick={() => setActiveTab(tab.key)}
++            className="whitespace-nowrap"
++          >
++            {tab.label}
++          </Button>
++        ))}
+       </div>
+ 
+-      {/* --- DAFTAR MENU RINGKAS --- */}
+-      {isExpanded && (
+-        <div className="flex flex-col gap-2">
+-          {menus.map((menu) => {
+-            const isDragging = itemDrag.dragId === menu.id;
+-            const isDropTarget = itemDrag.overId === menu.id && itemDrag.dragId !== null && itemDrag.dragId !== menu.id;
+-            
+-            return (
+-              <div 
+-                key={menu.id} 
+-                ref={itemDrag.registerRef(menu.id)}
+-                className={getDragRowClass(
+-                  isDragging,
+-                  isDropTarget,
+-                  "group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-2xl border shadow-sm transition-all duration-300 gap-3 sm:gap-4",
+-                  "border-slate-100 dark:border-slate-800 hover:border-accent-200 dark:hover:border-accent-500/30 hover:shadow-md"
+-                )}
+-              >
+-                {/* --- Info Kiri: Drag Handle, Nama, HPP, Varian --- */}
+-                <div className="flex items-start sm:items-center gap-2 flex-1 min-w-0">
+-                  {isDragEnabled && (
+-                    <div 
+-                      onPointerDown={itemDrag.startDrag(menu.id)}
+-                      className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-400 shrink-0 p-1 -ml-1 touch-none"
+-                    >
+-                      <GripVertical className="w-4 h-4" />
+-                    </div>
+-                  )}
+-
+-                  <div className="flex flex-col flex-1 min-w-0">
+-                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate mb-0.5">
+-                      {menu.name}
+-                    </h3>
+-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+-                      <span className="font-medium">HPP: {formatRupiah(menu.hpp || 0)}</span>
+-                      {menu.variantGroupIds?.length > 0 && (
+-                        <>
+-                          <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0"></span>
+-                          <span className="truncate">
+-                            Varian: {menu.variantGroupIds.map(vid => variantGroups.find(v => v.id === vid)?.name).filter(Boolean).join(', ')}
+-                          </span>
+-                        </>
+-                      )}
+-                    </div>
+-                  </div>
+-                </div>
+-
+-                {/* --- Info Kanan: Harga & Tombol Aksi --- */}
+-                <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 border-t border-slate-50 dark:border-slate-800/50 sm:border-0 pt-2 sm:pt-0">
+-                  <span className="font-bold text-accent-600 dark:text-accent-400 text-sm">
+-                    {formatRupiah(menu.price)}
+-                  </span>
+-                  <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+-                    <IconButton variant="edit" onClick={() => onEdit(menu)} title="Edit Menu">
+-                      <Edit3 className="w-4 h-4" />
+-                    </IconButton>
+-                    <IconButton variant="delete" onClick={() => onDelete(menu.id)} title="Hapus Menu">
+-                      <Trash2 className="w-4 h-4" />
+-                    </IconButton>
+-                  </div>
+-                </div>
+-              </div>
+-            );
+-          })}
+-        </div>
+-      )}
+-    </div>
+-  );
+-};
+-
+-const MenuManagement = () => {
+-  const {
+-    menus, setMenus, variantGroups, formatRupiah, triggerAlert,
+-    triggerConfirm, categories, setCategories, hppLibrary, setHppLibrary
+-  } = useAppContext();
+-
+-  const [searchQuery, setSearchQuery] = useState('');
+-  const [isEditing, setIsEditing] = useState(false);
+-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+-  const [formData, setFormData] = useState({
+-    id: '', name: '', price: '', hpp: '', category: categories[0] || 'Lainnya', variantGroupIds: []
+-  });
+-
+-  useEffect(() => {
+-    if (!menus || menus.length === 0) return;
+-    const externalCategories = [...new Set(menus.map(item => item.category).filter(Boolean))];
+-    setCategories(prevCategories => {
+-      const missingCategories = externalCategories.filter(cat => !prevCategories.includes(cat));
+-      if (missingCategories.length > 0) {
+-        return [...prevCategories, ...missingCategories];
+-      }
+-      return prevCategories;
+-    });
+-  }, [menus, setCategories]);
+-
+-  const handleSave = () => {
+-    if (!formData.name || formData.price === '' || formData.price < 0) {
+-      triggerAlert("Nama dan harga menu harus diisi dengan benar.");
+-      return;
+-    }
+-    const dataToSave = { ...formData, price: Number(formData.price), hpp: Number(formData.hpp || 0) };
+-    if (formData.id) {
+-      setMenus(menus.map(m => m.id === formData.id ? dataToSave : m));
+-    } else {
+-      setMenus([...menus, { ...dataToSave, id: `m${Date.now()}` }]);
+-    }
+-    setIsEditing(false);
+-  };
+-
+-  const handleDelete = (id) => {
+-    triggerConfirm("Yakin ingin menghapus menu ini?", () => setMenus(menus.filter(m => m.id !== id)));
+-  };
+-
+-  // Drag Reorder Menu Item (dalam kategori)
+-  const handleReorderMenu = (categoryName) => (draggedId, overId) => {
+-    setMenus(prev => {
+-      const list = [...prev];
+-      const categoryIds = list.filter(m => (m.category || 'Lainnya') === categoryName).map(m => m.id);
+-      const fromIdx = categoryIds.indexOf(draggedId);
+-      const toIdx = categoryIds.indexOf(overId);
+-      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return list;
+-
+-      const reorderedIds = [...categoryIds];
+-      const [movedId] = reorderedIds.splice(fromIdx, 1);
+-      reorderedIds.splice(toIdx, 0, movedId);
+-
+-      let cursor = 0;
+-      return list.map(m => {
+-        if ((m.category || 'Lainnya') !== categoryName) return m;
+-        const newId = reorderedIds[cursor++];
+-        return list.find(x => x.id === newId);
+-      });
+-    });
+-  };
+-
+-  // Drag Reorder Kategori
+-  const handleReorderCategory = (draggedCat, overCat) => {
+-    setCategories(prev => {
+-      const list = [...prev];
+-      const fromIdx = list.indexOf(draggedCat);
+-      const toIdx = list.indexOf(overCat);
+-      if(fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
+-      const [moved] = list.splice(fromIdx, 1);
+-      list.splice(toIdx, 0, moved);
+-      return list;
+-    });
+-  };
+-  const categoryDrag = useDragReorder(handleReorderCategory);
+-
+-  const groupedMenus = useMemo(() => {
+-    const groups = {};
+-    menus.forEach(menu => {
+-      const cat = menu.category || 'Lainnya';
+-      if (!groups[cat]) groups[cat] = [];
+-      groups[cat].push(menu);
+-    });
+-    return groups;
+-  }, [menus]);
+-
+-  // Urutkan kategori berdasarkan urutan di state 'categories' (mempertahankan hasil drag)
+-  const sortedCategoryKeys = useMemo(() => {
+-    const allCats = Object.keys(groupedMenus);
+-    const orderedCats = categories.filter(c => allCats.includes(c));
+-    const missingCats = allCats.filter(c => !orderedCats.includes(c));
+-    return [...orderedCats, ...missingCats];
+-  }, [categories, groupedMenus]);
+-
+-  if (isEditing) {
+-    // Form Edit / Tambah Menu - (Sama dengan aslinya, dipersingkat untuk render)
+-    return (
+-      <div className="p-4 md:p-6 bg-white dark:bg-slate-900 flex-1 animate-in fade-in slide-in-from-right-4 duration-300 h-full overflow-y-auto ease-out">
+-        <button onClick={() => setIsEditing(false)} className="mb-4 text-slate-500 dark:text-slate-400 flex items-center gap-2 hover:text-accent-600 dark:hover:text-accent-400 font-medium transition-all duration-300 active:scale-95">
+-          <ChevronLeft className="w-5 h-5" /> Kembali
+-        </button>
+-        <h2 className="font-heading text-2xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-br from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">
+-          {formData.id ? 'Edit Menu' : 'Tambah Menu Baru'}
+-        </h2>
+-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
+-          <div className="space-y-6">
+-            <Card className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Informasi Dasar</Card>
+-            <Input id="menuName" label="Nama Menu" type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Misal: Lumpia Semarang" />
+-            <div className="flex flex-col gap-1.5">
+-              <div className="flex items-center justify-between">
+-                <label htmlFor="menuCategory" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Kategori</label>
+-                <Button type="button" size="xs" variant="secondary" onClick={() => setIsCategoryModalOpen(true)} icon={<Settings2 className="w-3 h-3" />}>Kelola Kategori</Button>
+-              </div>
+-              <Select id="menuCategory" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+-                {categories.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+-                {!categories.includes(formData.category) && formData.category && (
+-                  <option value={formData.category}>{formData.category}</option>
+-                )}
+-              </Select>
+-            </div>
+-            <div className="grid grid-cols-2 gap-4">
+-              <Input id="menuPrice" label="Harga Jual" type="number" icon={<span className="font-bold">Rp</span>} value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="0" />
+-              <Input id="menuHpp" label="HPP / Modal" type="number" icon={<span className="font-bold">Rp</span>} value={formData.hpp} onChange={e => setFormData({ ...formData, hpp: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="0" />
+-            </div>
+-          </div>
+-          <div className="space-y-4">
+-            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Varian Terkait</h3>
+-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Pilih kategori varian yang berlaku untuk menu ini.</p>
+-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+-              {variantGroups.length === 0 ? (
+-                <p className="text-sm italic text-slate-400 dark:text-slate-500">Belum ada grup varian. Tambahkan di menu Library Varian.</p>
+-              ) : (
+-                variantGroups.map(vg => (
+-                  <label key={vg.id} className={`flex items-center gap-3 p-3 border rounded-2xl cursor-pointer transition-all duration-300 ${formData.variantGroupIds.includes(vg.id) ? 'bg-accent-50 dark:bg-accent-500/10 border-accent-200 dark:border-accent-500/30 shadow-sm' : 'bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900'}`}>
+-                    <input type="checkbox" className="w-5 h-5 accent-[#ea580c] dark:accent-[#f97316] cursor-pointer" checked={formData.variantGroupIds.includes(vg.id)} onChange={() => setFormData(prev => ({ ...prev, variantGroupIds: prev.variantGroupIds.includes(vg.id) ? prev.variantGroupIds.filter(id => id !== vg.id) : [...prev.variantGroupIds, vg.id] }))} />
+-                    <div className="flex-1">
+-                      <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{vg.name}</p>
+-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">{vg.options.map(o => o.name).join(', ')}</p>
+-                    </div>
+-                  </label>
+-                ))
+-              )}
+-            </div>
+-          </div>
+-        </div>
+-        <div className="max-w-4xl mt-8 pt-6 border-t border-slate-200 flex justify-end">
+-          <Button onClick={handleSave} size="lg" className="w-full md:w-auto">{formData.id ? 'Simpan Perubahan' : 'Tambah Menu'}</Button>
+-        </div>
+-        <CategoryModal
+-          isOpen={isCategoryModalOpen}
+-          onClose={() => setIsCategoryModalOpen(false)}
+-          title="Kelola Kategori Menu"
+-          categories={categories}
+-          setCategories={setCategories}
+-          triggerAlert={triggerAlert}
+-          triggerConfirm={triggerConfirm}
+-          onRename={(oldCat, newCat) => {
+-            const updatedMenus = menus.map(m => m.category === oldCat ? { ...m, category: newCat } : m);
+-            if (JSON.stringify(updatedMenus) !== JSON.stringify(menus)) setMenus(updatedMenus);
+-            if (formData.category === oldCat) setFormData(prev => ({ ...prev, category: newCat }));
+-            const updatedLibrary = hppLibrary.map(recipe => recipe.category === oldCat ? { ...recipe, category: newCat } : recipe);
+-            if (JSON.stringify(updatedLibrary) !== JSON.stringify(hppLibrary)) setHppLibrary(updatedLibrary);
+-          }}
+-          onDelete={(deletedCat) => {
+-            const updatedMenus = menus.map(m => m.category === deletedCat ? { ...m, category: 'Umum' } : m);
+-            if (JSON.stringify(updatedMenus) !== JSON.stringify(menus)) setMenus(updatedMenus);
+-            if (formData.category === deletedCat) setFormData(prev => ({ ...prev, category: 'Umum' }));
+-          }}
+-        />
+-      </div>
+-    );
+-  }
+-
+-  return (
+-    <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
+-      {/* Input Pencarian */}
+-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+-        <div className="relative w-full sm:w-72">
+-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
+-          <input
+-            type="text"
+-            placeholder="Cari nama menu atau kategori..."
+-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-300 text-sm"
+-            value={searchQuery}
+-            onChange={(e) => setSearchQuery(e.target.value)}
+-          />
+-          {searchQuery && (
+-            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 active:scale-90 transition-all duration-300"><X className="w-4 h-4" /></button>
+-          )}
+-        </div>
+-
+-        <Button icon={<Plus className="w-4 h-4" />} className="w-full sm:w-auto sm:ml-auto" onClick={() => {
+-          setFormData({ id: '', name: '', price: '', hpp: '', category: categories[0] || 'Lainnya', variantGroupIds: [] });
+-          setIsEditing(true);
+-        }}>Tambah Data Menu</Button>
+-      </div>
+-
+-      <div className="space-y-6 pb-10">
+-        {sortedCategoryKeys
+-          .filter(category => {
+-            if (!searchQuery) return true;
+-            const q = searchQuery.toLowerCase();
+-            return category.toLowerCase().includes(q) || groupedMenus[category].some(menu => menu.name.toLowerCase().includes(q));
+-          })
+-          .map(category => {
+-            const q = searchQuery.toLowerCase();
+-            const visibleMenus = (!searchQuery || category.toLowerCase().includes(q))
+-              ? groupedMenus[category]
+-              : groupedMenus[category].filter(menu => menu.name.toLowerCase().includes(q));
+-
+-            return (
+-              <MenuCategorySection
+-                key={category}
+-                category={category}
+-                menus={visibleMenus}
+-                variantGroups={variantGroups}
+-                onReorderItem={handleReorderMenu(category)}
+-                onEdit={(menu) => { setFormData(menu); setIsEditing(true); }}
+-                onDelete={handleDelete}
+-                formatRupiah={formatRupiah}
+-                categoryDrag={categoryDrag}
+-                isDragEnabled={!searchQuery} // Nonaktifkan drag & drop saat mencari
+-              />
+-            );
+-          })}
+-        {menus.length === 0 && (
+-          <EmptyState icon={<Plus className="w-8 h-8" />} title="Belum ada data menu" description="Tambah menu pertama untuk mulai menerima pesanan" action={<Button icon={<Plus className="w-4 h-4" />} onClick={() => setIsEditing(true)}>Tambah Menu Pertama</Button>} />
+-        )}
++      <div className="flex-1 min-h-0 flex flex-col">
++        {activeTab === 'menu' ? <MenuListTab /> : <VariantListTab />}
+       </div>
+     </div>
+   );
+-};
+-
+-export default MenuManagement;
+\ No newline at end of file
++}
+diff --git a/src/features/menu/tabs/MenuListTab.jsx b/src/features/menu/tabs/MenuListTab.jsx
+new file mode 100644
+index 0000000..7fa74c0
+--- /dev/null
++++ b/src/features/menu/tabs/MenuListTab.jsx
+@@ -0,0 +1,366 @@
++import React, { useState, useMemo, useEffect } from "react";
++import { useAppContext } from "../../../context/AppContext";
++import { ChevronLeft, Plus, Edit3, Trash2, Settings2, Search, X, GripVertical, ChevronDown, ChevronUp } from "lucide-react";
++import CategoryModal from "../../../components/CategoryModal";
++import { Card, Button, IconButton, Input, Select, EmptyState, Badge } from "../../../components/ui";
++import { useDragReorder, getDragRowClass } from "../../../hook/useDragReorder";
++
++// ─── Komponen Kelompok Kategori Menu ───
++const MenuCategorySection = ({
++  category,
++  menus,
++  variantGroups,
++  onReorderItem,
++  onEdit,
++  onDelete,
++  formatRupiah,
++  categoryDrag,
++  isDragEnabled
++}) => {
++  const [isExpanded, setIsExpanded] = useState(true);
++  const itemDrag = useDragReorder(onReorderItem);
++
++  const isDraggingCat = categoryDrag?.dragId === category;
++  const isDropTargetCat = categoryDrag?.overId === category && categoryDrag?.dragId !== null && categoryDrag?.dragId !== category;
++
++  return (
++    <div
++      ref={categoryDrag?.registerRef(category)}
++      className={getDragRowClass(
++        isDraggingCat,
++        isDropTargetCat,
++        "animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-2xl p-2 -mx-2 transition-all duration-300",
++        "border border-transparent hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
++      )}
++    >
++      {/* --- Header Kategori --- */}
++      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2 mb-3">
++        <div className="flex items-center gap-2">
++          {isDragEnabled && (
++            <div
++              onPointerDown={categoryDrag?.startDrag(category)}
++              className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-accent-500 shrink-0 p-1 -ml-1 touch-none transition-colors duration-200"
++              title="Tahan & geser untuk mengurutkan kategori"
++            >
++              <GripVertical className="w-5 h-5" />
++            </div>
++          )}
++          <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
++          <Badge variant="neutral">{menus.length} Item</Badge>
++        </div>
++        <button
++          onClick={() => setIsExpanded(!isExpanded)}
++          className="p-1.5 text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 rounded-xl hover:bg-accent-50 dark:hover:bg-accent-500/10 active:scale-90 transition-all duration-300"
++          title={isExpanded ? "Tutup Kategori" : "Buka Kategori"}
++        >
++          {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
++        </button>
++      </div>
++
++      {/* --- DAFTAR MENU RINGKAS --- */}
++      {isExpanded && (
++        <div className="flex flex-col gap-2">
++          {menus.map((menu) => {
++            const isDragging = itemDrag.dragId === menu.id;
++            const isDropTarget = itemDrag.overId === menu.id && itemDrag.dragId !== null && itemDrag.dragId !== menu.id;
++
++            return (
++              <div
++                key={menu.id}
++                ref={itemDrag.registerRef(menu.id)}
++                className={getDragRowClass(
++                  isDragging,
++                  isDropTarget,
++                  "group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-2xl border shadow-sm transition-all duration-300 gap-3 sm:gap-4",
++                  "border-slate-100 dark:border-slate-800 hover:border-accent-200 dark:hover:border-accent-500/30 hover:shadow-md"
++                )}
++              >
++                {/* --- Info Kiri: Drag Handle, Nama, HPP, Varian --- */}
++                <div className="flex items-start sm:items-center gap-2 flex-1 min-w-0">
++                  {isDragEnabled && (
++                    <div
++                      onPointerDown={itemDrag.startDrag(menu.id)}
++                      className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-400 shrink-0 p-1 -ml-1 touch-none"
++                    >
++                      <GripVertical className="w-4 h-4" />
++                    </div>
++                  )}
++
++                  <div className="flex flex-col flex-1 min-w-0">
++                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate mb-0.5">
++                      {menu.name}
++                    </h3>
++                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
++                      <span className="font-medium">HPP: {formatRupiah(menu.hpp || 0)}</span>
++                      {menu.variantGroupIds?.length > 0 && (
++                        <>
++                          <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0"></span>
++                          <span className="truncate">
++                            Varian: {menu.variantGroupIds.map(vid => variantGroups.find(v => v.id === vid)?.name).filter(Boolean).join(', ')}
++                          </span>
++                        </>
++                      )}
++                    </div>
++                  </div>
++                </div>
++
++                {/* --- Info Kanan: Harga & Tombol Aksi --- */}
++                <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 border-t border-slate-50 dark:border-slate-800/50 sm:border-0 pt-2 sm:pt-0">
++                  <span className="font-bold text-accent-600 dark:text-accent-400 text-sm">
++                    {formatRupiah(menu.price)}
++                  </span>
++                  <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
++                    <IconButton variant="edit" onClick={() => onEdit(menu)} title="Edit Menu">
++                      <Edit3 className="w-4 h-4" />
++                    </IconButton>
++                    <IconButton variant="delete" onClick={() => onDelete(menu.id)} title="Hapus Menu">
++                      <Trash2 className="w-4 h-4" />
++                    </IconButton>
++                  </div>
++                </div>
++              </div>
++            );
++          })}
++        </div>
++      )}
++    </div>
++  );
++};
++
++const MenuListTab = () => {
++  const {
++    menus, setMenus, variantGroups, formatRupiah, triggerAlert,
++    triggerConfirm, categories, setCategories, hppLibrary, setHppLibrary
++  } = useAppContext();
++
++  const [searchQuery, setSearchQuery] = useState('');
++  const [isEditing, setIsEditing] = useState(false);
++  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
++  const [formData, setFormData] = useState({
++    id: '', name: '', price: '', hpp: '', category: categories[0] || 'Lainnya', variantGroupIds: []
++  });
++
++  useEffect(() => {
++    if (!menus || menus.length === 0) return;
++    const externalCategories = [...new Set(menus.map(item => item.category).filter(Boolean))];
++    setCategories(prevCategories => {
++      const missingCategories = externalCategories.filter(cat => !prevCategories.includes(cat));
++      if (missingCategories.length > 0) {
++        return [...prevCategories, ...missingCategories];
++      }
++      return prevCategories;
++    });
++  }, [menus, setCategories]);
++
++  const handleSave = () => {
++    if (!formData.name || formData.price === '' || formData.price < 0) {
++      triggerAlert("Nama dan harga menu harus diisi dengan benar.");
++      return;
++    }
++    const dataToSave = { ...formData, price: Number(formData.price), hpp: Number(formData.hpp || 0) };
++    if (formData.id) {
++      setMenus(menus.map(m => m.id === formData.id ? dataToSave : m));
++    } else {
++      setMenus([...menus, { ...dataToSave, id: `m${Date.now()}` }]);
++    }
++    setIsEditing(false);
++  };
++
++  const handleDelete = (id) => {
++    triggerConfirm("Yakin ingin menghapus menu ini?", () => setMenus(menus.filter(m => m.id !== id)));
++  };
++
++  // Drag Reorder Menu Item (dalam kategori)
++  const handleReorderMenu = (categoryName) => (draggedId, overId) => {
++    setMenus(prev => {
++      const list = [...prev];
++      const categoryIds = list.filter(m => (m.category || 'Lainnya') === categoryName).map(m => m.id);
++      const fromIdx = categoryIds.indexOf(draggedId);
++      const toIdx = categoryIds.indexOf(overId);
++      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return list;
++
++      const reorderedIds = [...categoryIds];
++      const [movedId] = reorderedIds.splice(fromIdx, 1);
++      reorderedIds.splice(toIdx, 0, movedId);
++
++      let cursor = 0;
++      return list.map(m => {
++        if ((m.category || 'Lainnya') !== categoryName) return m;
++        const newId = reorderedIds[cursor++];
++        return list.find(x => x.id === newId);
++      });
++    });
++  };
++
++  // Drag Reorder Kategori
++  const handleReorderCategory = (draggedCat, overCat) => {
++    setCategories(prev => {
++      const list = [...prev];
++      const fromIdx = list.indexOf(draggedCat);
++      const toIdx = list.indexOf(overCat);
++      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
++      const [moved] = list.splice(fromIdx, 1);
++      list.splice(toIdx, 0, moved);
++      return list;
++    });
++  };
++  const categoryDrag = useDragReorder(handleReorderCategory);
++
++  const groupedMenus = useMemo(() => {
++    const groups = {};
++    menus.forEach(menu => {
++      const cat = menu.category || 'Lainnya';
++      if (!groups[cat]) groups[cat] = [];
++      groups[cat].push(menu);
++    });
++    return groups;
++  }, [menus]);
++
++  // Urutkan kategori berdasarkan urutan di state 'categories' (mempertahankan hasil drag)
++  const sortedCategoryKeys = useMemo(() => {
++    const allCats = Object.keys(groupedMenus);
++    const orderedCats = categories.filter(c => allCats.includes(c));
++    const missingCats = allCats.filter(c => !orderedCats.includes(c));
++    return [...orderedCats, ...missingCats];
++  }, [categories, groupedMenus]);
++
++  if (isEditing) {
++    // Form Edit / Tambah Menu - (Sama dengan aslinya, dipersingkat untuk render)
++    return (
++      <div className="p-4 md:p-6 bg-white dark:bg-slate-900 flex-1 animate-in fade-in slide-in-from-right-4 duration-300 h-full overflow-y-auto ease-out">
++        <button onClick={() => setIsEditing(false)} className="mb-4 text-slate-500 dark:text-slate-400 flex items-center gap-2 hover:text-accent-600 dark:hover:text-accent-400 font-medium transition-all duration-300 active:scale-95">
++          <ChevronLeft className="w-5 h-5" /> Kembali
++        </button>
++        <h2 className="font-heading text-2xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-br from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">
++          {formData.id ? 'Edit Menu' : 'Tambah Menu Baru'}
++        </h2>
++        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
++          <div className="space-y-6">
++            <Card className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Informasi Dasar</Card>
++            <Input id="menuName" label="Nama Menu" type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Misal: Lumpia Semarang" />
++            <div className="flex flex-col gap-1.5">
++              <div className="flex items-center justify-between">
++                <label htmlFor="menuCategory" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Kategori</label>
++                <Button type="button" size="xs" variant="secondary" onClick={() => setIsCategoryModalOpen(true)} icon={<Settings2 className="w-3 h-3" />}>Kelola Kategori</Button>
++              </div>
++              <Select id="menuCategory" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
++                {categories.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
++                {!categories.includes(formData.category) && formData.category && (
++                  <option value={formData.category}>{formData.category}</option>
++                )}
++              </Select>
++            </div>
++            <div className="grid grid-cols-2 gap-4">
++              <Input id="menuPrice" label="Harga Jual" type="number" icon={<span className="font-bold">Rp</span>} value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="0" />
++              <Input id="menuHpp" label="HPP / Modal" type="number" icon={<span className="font-bold">Rp</span>} value={formData.hpp} onChange={e => setFormData({ ...formData, hpp: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="0" />
++            </div>
++          </div>
++          <div className="space-y-4">
++            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 border-b pb-2">Varian Terkait</h3>
++            <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Pilih kategori varian yang berlaku untuk menu ini.</p>
++            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
++              {variantGroups.length === 0 ? (
++                <p className="text-sm italic text-slate-400 dark:text-slate-500">Belum ada grup varian. Tambahkan di tab Varian.</p>
++              ) : (
++                variantGroups.map(vg => (
++                  <label key={vg.id} className={`flex items-center gap-3 p-3 border rounded-2xl cursor-pointer transition-all duration-300 ${formData.variantGroupIds.includes(vg.id) ? 'bg-accent-50 dark:bg-accent-500/10 border-accent-200 dark:border-accent-500/30 shadow-sm' : 'bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900'}`}>
++                    <input type="checkbox" className="w-5 h-5 accent-[#ea580c] dark:accent-[#f97316] cursor-pointer" checked={formData.variantGroupIds.includes(vg.id)} onChange={() => setFormData(prev => ({ ...prev, variantGroupIds: prev.variantGroupIds.includes(vg.id) ? prev.variantGroupIds.filter(id => id !== vg.id) : [...prev.variantGroupIds, vg.id] }))} />
++                    <div className="flex-1">
++                      <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{vg.name}</p>
++                      <p className="text-[10px] text-slate-500 dark:text-slate-400">{vg.options.map(o => o.name).join(', ')}</p>
++                    </div>
++                  </label>
++                ))
++              )}
++            </div>
++          </div>
++        </div>
++        <div className="max-w-4xl mt-8 pt-6 border-t border-slate-200 flex justify-end">
++          <Button onClick={handleSave} size="lg" className="w-full md:w-auto">{formData.id ? 'Simpan Perubahan' : 'Tambah Menu'}</Button>
++        </div>
++        <CategoryModal
++          isOpen={isCategoryModalOpen}
++          onClose={() => setIsCategoryModalOpen(false)}
++          title="Kelola Kategori Menu"
++          categories={categories}
++          setCategories={setCategories}
++          triggerAlert={triggerAlert}
++          triggerConfirm={triggerConfirm}
++          onRename={(oldCat, newCat) => {
++            const updatedMenus = menus.map(m => m.category === oldCat ? { ...m, category: newCat } : m);
++            if (JSON.stringify(updatedMenus) !== JSON.stringify(menus)) setMenus(updatedMenus);
++            if (formData.category === oldCat) setFormData(prev => ({ ...prev, category: newCat }));
++            const updatedLibrary = hppLibrary.map(recipe => recipe.category === oldCat ? { ...recipe, category: newCat } : recipe);
++            if (JSON.stringify(updatedLibrary) !== JSON.stringify(hppLibrary)) setHppLibrary(updatedLibrary);
++          }}
++          onDelete={(deletedCat) => {
++            const updatedMenus = menus.map(m => m.category === deletedCat ? { ...m, category: 'Umum' } : m);
++            if (JSON.stringify(updatedMenus) !== JSON.stringify(menus)) setMenus(updatedMenus);
++            if (formData.category === deletedCat) setFormData(prev => ({ ...prev, category: 'Umum' }));
++          }}
++        />
++      </div>
++    );
++  }
++
++  return (
++    <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
++      {/* Input Pencarian */}
++      <div className="flex flex-col sm:flex-row gap-3 mb-6">
++        <div className="relative w-full sm:w-72">
++          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
++          <input
++            type="text"
++            placeholder="Cari nama menu atau kategori..."
++            className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-300 text-sm"
++            value={searchQuery}
++            onChange={(e) => setSearchQuery(e.target.value)}
++          />
++          {searchQuery && (
++            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 active:scale-90 transition-all duration-300"><X className="w-4 h-4" /></button>
++          )}
++        </div>
++
++        <Button icon={<Plus className="w-4 h-4" />} className="w-full sm:w-auto sm:ml-auto" onClick={() => {
++          setFormData({ id: '', name: '', price: '', hpp: '', category: categories[0] || 'Lainnya', variantGroupIds: [] });
++          setIsEditing(true);
++        }}>Tambah Data Menu</Button>
++      </div>
++
++      <div className="space-y-6 pb-10">
++        {sortedCategoryKeys
++          .filter(category => {
++            if (!searchQuery) return true;
++            const q = searchQuery.toLowerCase();
++            return category.toLowerCase().includes(q) || groupedMenus[category].some(menu => menu.name.toLowerCase().includes(q));
++          })
++          .map(category => {
++            const q = searchQuery.toLowerCase();
++            const visibleMenus = (!searchQuery || category.toLowerCase().includes(q))
++              ? groupedMenus[category]
++              : groupedMenus[category].filter(menu => menu.name.toLowerCase().includes(q));
++
++            return (
++              <MenuCategorySection
++                key={category}
++                category={category}
++                menus={visibleMenus}
++                variantGroups={variantGroups}
++                onReorderItem={handleReorderMenu(category)}
++                onEdit={(menu) => { setFormData(menu); setIsEditing(true); }}
++                onDelete={handleDelete}
++                formatRupiah={formatRupiah}
++                categoryDrag={categoryDrag}
++                isDragEnabled={!searchQuery} // Nonaktifkan drag & drop saat mencari
++              />
++            );
++          })}
++        {menus.length === 0 && (
++          <EmptyState icon={<Plus className="w-8 h-8" />} title="Belum ada data menu" description="Tambah menu pertama untuk mulai menerima pesanan" action={<Button icon={<Plus className="w-4 h-4" />} onClick={() => setIsEditing(true)}>Tambah Menu Pertama</Button>} />
++        )}
++      </div>
++    </div>
++  );
++};
++
++export default MenuListTab;
+diff --git a/src/features/menu/VariantMgmt.jsx b/src/features/menu/tabs/VariantListTab.jsx
+similarity index 87%
+rename from src/features/menu/VariantMgmt.jsx
+rename to src/features/menu/tabs/VariantListTab.jsx
+index fc89554..41fe57f 100644
+--- a/src/features/menu/VariantMgmt.jsx
++++ b/src/features/menu/tabs/VariantListTab.jsx
+@@ -1,77 +1,9 @@
+-import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+-import { useAppContext } from "../../context/AppContext";
++import React, { useState, useMemo, useEffect } from "react";
++import { useAppContext } from "../../../context/AppContext";
+ import { ChevronLeft, Plus, Edit3, Trash2, Settings2, Trash, GripVertical, ChevronDown, ChevronUp } from "lucide-react";
+-import CategoryModal from "../../components/CategoryModal";
+-import { Button, IconButton, Input, Select, EmptyState, Badge } from "../../components/ui";
+-
+-// ─── Hook drag & drop reorder ───
+-function useDragReorder(onReorder) {
+-  const [dragId, setDragId] = useState(null);
+-  const [overId, setOverId] = useState(null);
+-  const overIdRef = useRef(null);
+-  const itemRefs = useRef({});
+-
+-  const registerRef = useCallback((id) => (el) => {
+-    if (el) itemRefs.current[id] = el;
+-    else delete itemRefs.current[id];
+-  }, []);
+-
+-  const startDrag = useCallback((id) => (e) => {
+-    e.preventDefault();
+-    e.stopPropagation();
+-    try { e.target.setPointerCapture?.(e.pointerId); } catch (_) {}
+-    overIdRef.current = id;
+-    setDragId(id);
+-    setOverId(id);
+-  }, []);
+-
+-  useEffect(() => {
+-    if (dragId === null) return;
+-    const getY = (e) => (e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY);
+-    const handleMove = (e) => {
+-      const y = getY(e);
+-      if (y == null) return;
+-      let closestId = null;
+-      let closestDist = Infinity;
+-      Object.entries(itemRefs.current).forEach(([id, el]) => {
+-        if (!el) return;
+-        const rect = el.getBoundingClientRect();
+-        const mid = rect.top + rect.height / 2;
+-        const dist = Math.abs(y - mid);
+-        if (dist < closestDist) { closestDist = dist; closestId = id; }
+-      });
+-      if (closestId !== null && closestId !== overIdRef.current) {
+-        overIdRef.current = closestId;
+-        setOverId(closestId);
+-      }
+-    };
+-    const finishDrag = () => {
+-      const finalOverId = overIdRef.current;
+-      if (dragId !== null && finalOverId !== null && dragId !== finalOverId) {
+-        onReorder(dragId, finalOverId);
+-      }
+-      setDragId(null);
+-      setOverId(null);
+-      overIdRef.current = null;
+-    };
+-    window.addEventListener('pointermove', handleMove);
+-    window.addEventListener('pointerup', finishDrag);
+-    window.addEventListener('pointercancel', finishDrag);
+-    return () => {
+-      window.removeEventListener('pointermove', handleMove);
+-      window.removeEventListener('pointerup', finishDrag);
+-      window.removeEventListener('pointercancel', finishDrag);
+-    };
+-  }, [dragId, onReorder]);
+-
+-  return { dragId, overId, registerRef, startDrag };
+-}
+-
+-function getDragRowClass(isDragging, isDropTarget, baseClass, idleClass) {
+-  if (isDragging) return `${baseClass} opacity-50 ring-2 ring-accent-400 z-10`;
+-  if (isDropTarget) return `${baseClass} border-accent-400 bg-accent-50/60 dark:bg-accent-500/10`;
+-  return `${baseClass} ${idleClass}`;
+-}
++import CategoryModal from "../../../components/CategoryModal";
++import { Button, IconButton, Input, Select, EmptyState, Badge } from "../../../components/ui";
++import { useDragReorder, getDragRowClass } from "../../../hook/useDragReorder";
+ 
+ // ─── Komponen Kelompok Kategori Varian ───
+ const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete, categoryDrag }) => {
+@@ -82,19 +14,19 @@ const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete,
+   const isDropTargetCat = categoryDrag?.overId === category && categoryDrag?.dragId !== null && categoryDrag?.dragId !== category;
+ 
+   return (
+-    <div 
++    <div
+       ref={categoryDrag?.registerRef(category)}
+       className={getDragRowClass(
+-        isDraggingCat, 
+-        isDropTargetCat, 
+-        "animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-2xl p-2 -mx-2 transition-all duration-300", 
++        isDraggingCat,
++        isDropTargetCat,
++        "animate-in fade-in slide-in-from-bottom-2 duration-300 rounded-2xl p-2 -mx-2 transition-all duration-300",
+         "border border-transparent hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
+       )}
+     >
+       {/* --- Header Kategori --- */}
+       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2 mb-3">
+         <div className="flex items-center gap-2">
+-          <div 
++          <div
+             onPointerDown={categoryDrag?.startDrag(category)}
+             className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-accent-500 shrink-0 p-1 -ml-1 touch-none transition-colors duration-200"
+             title="Tahan & geser untuk mengurutkan kategori"
+@@ -104,7 +36,7 @@ const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete,
+           <span className="font-heading text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{category}</span>
+           <Badge variant="neutral">{groups.length} Grup</Badge>
+         </div>
+-        <button 
++        <button
+           onClick={() => setIsExpanded(!isExpanded)}
+           className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl hover:bg-accent-50 dark:hover:bg-accent-500/10 hover:text-accent-600 dark:hover:text-accent-400 active:scale-90 transition-all duration-300"
+           title={isExpanded ? "Tutup Kategori" : "Buka Kategori"}
+@@ -169,7 +101,7 @@ const VariantCategorySection = ({ category, groups, onReorder, onEdit, onDelete,
+   );
+ };
+ 
+-const VariantManagement = () => {
++const VariantListTab = () => {
+   const {
+     variantGroups, setVariantGroups, variantCategories, setVariantCategories,
+     menus, setMenus, triggerAlert, triggerConfirm, formatRupiah
+@@ -281,7 +213,7 @@ const VariantManagement = () => {
+       const list = [...(prev || [])];
+       const fromIdx = list.indexOf(draggedCat);
+       const toIdx = list.indexOf(overCat);
+-      if(fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
++      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
+       const [moved] = list.splice(fromIdx, 1);
+       list.splice(toIdx, 0, moved);
+       return list;
+@@ -462,4 +394,4 @@ const VariantManagement = () => {
+   );
+ };
+ 
+-export default VariantManagement;
+\ No newline at end of file
++export default VariantListTab;
+diff --git a/src/features/stock/StockView.jsx b/src/features/stock/StockView.jsx
+index cb2e69b..c8ee41c 100644
+--- a/src/features/stock/StockView.jsx
++++ b/src/features/stock/StockView.jsx
+@@ -1,25 +1,179 @@
+-import React from 'react'
+-import { Warehouse } from 'lucide-react'
++import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
++import { Warehouse, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
++import { Card, Badge, EmptyState, Button, PageHeader } from '../../components/ui';
++import { useAppContext } from '../../context/AppContext';
++import { formatRupiah, toLocalMonthString, toLocalDateString } from '../../utils/formatters';
++import { formatPeriodLabel } from '../balance/periodUtils';
++import { getSupabaseClient } from '../../storage/syncClient';
++import { fetchStockMaster, fetchChecklistsInMonth, valuateChecklist } from './stockChecklistApi';
+ 
++// Stok Opname — browse hasil checklist stok bulanan (punya mamam-absensi,
++// tabel stock_checklists) dengan rincian per hari. Beda dari tab Ringkasan
++// di Laba Rugi (yang cuma ambil 1 titik valuasi buat Stok Awal/Akhir),
++// di sini SEMUA hari yang ada checklist-nya ditampilkan sekaligus untuk
++// dilihat historinya — tidak menyimpan/mengunci apa pun, murni baca &
++// valuasi live pakai harga rawMaterials saat ini.
+ const StockView = () => {
+-    return (
+-        <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col items-center justify-center h-full animate-in fade-in zoom-in-95 duration-300">
+-            <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-lg border border-slate-100 dark:border-slate-800 text-center max-w-md w-full">
+-                <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-full flex items-center justify-center mx-auto mb-6">
+-                    <Warehouse className="w-10 h-10" />
+-                </div>
+-                <h2 className="font-heading text-2xl font-black text-slate-800 dark:text-slate-100 mb-3">Stok Opname</h2>
+-                <div className="bg-accent-50 dark:bg-accent-500/10 border border-orange-100 dark:border-orange-500/20 rounded-xl p-4 mb-6">
+-                    <p className="text-accent-800 dark:text-accent-300 text-sm font-medium leading-relaxed">
+-                        Fitur Stock Opname belum tersedia pada versi ini.
+-                    </p>
+-                </div>
+-                <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">
+-                    Fitur ini sedang dalam tahap persiapan dan akan segera hadir
+-                </p>
+-            </div>
++  const { rawMaterials } = useAppContext();
++  const [period, setPeriod] = useState(toLocalMonthString());
++  const [isLoading, setIsLoading] = useState(true);
++  const [error, setError] = useState(null);
++  const [dailyRows, setDailyRows] = useState([]); // [{ dateStr, valuation: {...}|null }], terbaru duluan
++  const [expandedDate, setExpandedDate] = useState(null);
++
++  // Race guard: `load` bisa ke-trigger ulang bukan cuma karena `period`
++  // ganti, tapi juga kalau `rawMaterials` berubah (mis. device lain
++  // update harga bahan baku lewat realtime sync selagi view ini kebuka).
++  // Kalau request lama belum selesai pas trigger baru datang, hasil lama
++  // yang telat resolve HARUS dibuang, bukan menimpa data yang lebih baru.
++  const loadEpochRef = useRef(0);
++
++  const load = useCallback(async () => {
++    const epoch = ++loadEpochRef.current;
++    setIsLoading(true);
++    setError(null);
++    setExpandedDate(null);
++    try {
++      const supabase = await getSupabaseClient();
++      if (!supabase) throw new Error('Koneksi Supabase belum siap, coba lagi sebentar.');
++
++      const [checklists, master] = await Promise.all([
++        fetchChecklistsInMonth(supabase, period),
++        fetchStockMaster(supabase),
++      ]);
++      if (loadEpochRef.current !== epoch) return; // ada trigger baru selagi nunggu, buang hasil basi ini
++
++      const byDate = new Map(checklists.map(row => [row.date_str, row]));
++
++      const [y, m] = period.split('-').map(Number);
++      const daysInMonth = new Date(y, m, 0).getDate();
++      const isCurrentMonth = period === toLocalMonthString();
++      // Untuk bulan berjalan, jangan tampilkan hari-hari yang belum
++      // kejadian (tanggal setelah hari ini) — pasti belum ada checklist.
++      const lastDay = isCurrentMonth ? Number(toLocalDateString().slice(8, 10)) : daysInMonth;
++
++      const rows = [];
++      for (let d = 1; d <= lastDay; d++) {
++        const dateStr = `${period}-${String(d).padStart(2, '0')}`;
++        const row = byDate.get(dateStr);
++        rows.push({
++          dateStr,
++          valuation: row ? valuateChecklist(row, master, rawMaterials || []) : null,
++        });
++      }
++      setDailyRows(rows.reverse()); // terbaru di atas, lebih enak di-scroll dari HP
++    } catch (err) {
++      if (loadEpochRef.current !== epoch) return;
++      console.error('[StockView] gagal memuat data stok opname bulanan:', err);
++      setError(err.message || 'Gagal memuat data stok opname.');
++    } finally {
++      if (loadEpochRef.current === epoch) setIsLoading(false);
++    }
++  }, [period, rawMaterials]);
++
++  useEffect(() => {
++    load();
++  }, [load]);
++
++  const summary = useMemo(() => {
++    const filled = dailyRows.filter(r => r.valuation).length;
++    return { totalDays: dailyRows.length, filledDays: filled };
++  }, [dailyRows]);
++
++  return (
++    <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
++      <PageHeader
++        title="Stok Opname"
++        subtitle={!isLoading && !error ? `${summary.filledDays} dari ${summary.totalDays} hari ada checklist tersubmit \u2014 ${formatPeriodLabel(period)}` : formatPeriodLabel(period)}
++        icon={<Warehouse className="w-6 h-6" />}
++        action={
++          <input
++            type="month"
++            value={period}
++            onChange={e => setPeriod(e.target.value)}
++            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-accent-500"
++          />
++        }
++      />
++
++      {isLoading ? (
++        <Card padding="lg" className="flex items-center justify-center gap-2 text-slate-400 dark:text-slate-500 text-sm py-10">
++          <RefreshCw className="w-4 h-4 animate-spin" /> Memuat data stok opname...
++        </Card>
++      ) : error ? (
++        <Card padding="lg">
++          <EmptyState icon={<AlertTriangle className="w-8 h-8 text-red-400" />} title="Gagal memuat data stok opname" description={error} />
++          <div className="flex justify-center mt-3">
++            <Button size="sm" icon={<RefreshCw className="w-3.5 h-3.5" />} onClick={load}>Coba Lagi</Button>
++          </div>
++        </Card>
++      ) : dailyRows.length === 0 ? (
++        <EmptyState icon={<Calendar className="w-8 h-8" />} title="Belum ada hari untuk ditampilkan" description="Pilih bulan lain." />
++      ) : (
++        <div className="space-y-2 pb-10">
++          {dailyRows.map(({ dateStr, valuation }) => {
++            const isExpanded = expandedDate === dateStr;
++            return (
++              <Card key={dateStr} padding="none" className="overflow-hidden">
++                <button
++                  onClick={() => valuation && setExpandedDate(isExpanded ? null : dateStr)}
++                  className={`w-full flex items-center justify-between gap-3 p-3.5 text-left ${valuation ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50' : 'cursor-default'} transition-colors duration-200`}
++                >
++                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-wrap">
++                    <span className="font-bold text-sm text-slate-800 dark:text-slate-100 shrink-0">
++                      {new Date(`${dateStr}T00:00:00`).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })}
++                    </span>
++                    {valuation ? (
++                      <Badge variant="success">{valuation.itemCount} item</Badge>
++                    ) : (
++                      <Badge variant="neutral">Tidak ada checklist</Badge>
++                    )}
++                    {valuation?.unmatchedCount > 0 && (
++                      <Badge variant="warning">{valuation.unmatchedCount} belum ter-link</Badge>
++                    )}
++                  </div>
++                  <div className="flex items-center gap-2 shrink-0">
++                    {valuation && <span className="font-bold text-sm text-slate-800 dark:text-slate-100">{formatRupiah(valuation.totalValue)}</span>}
++                    {valuation && (isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />)}
++                  </div>
++                </button>
++
++                {isExpanded && valuation && (
++                  <div className="border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
++                    <table className="w-full text-left border-collapse">
++                      <thead>
++                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
++                          <th className="p-3 font-bold">Bahan</th>
++                          <th className="p-3 font-bold">Qty</th>
++                          <th className="p-3 font-bold text-right">Subtotal</th>
++                        </tr>
++                      </thead>
++                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
++                        {valuation.items.map(it => (
++                          <tr key={it.rawMaterialId}>
++                            <td className="p-3 font-bold text-slate-800 dark:text-slate-100">{it.name}</td>
++                            <td className="p-3 text-slate-600 dark:text-slate-300">{it.qty} {it.unit}</td>
++                            <td className="p-3 text-right font-bold text-slate-800 dark:text-slate-100">{formatRupiah(it.subtotal)}</td>
++                          </tr>
++                        ))}
++                        {valuation.unmatchedItems.map((it, idx) => (
++                          <tr key={`u${idx}`} className="bg-amber-50/50 dark:bg-amber-500/5">
++                            <td className="p-3 font-bold text-amber-700 dark:text-amber-400">{it.name} <span className="font-normal text-[10px]">(belum ter-link)</span></td>
++                            <td className="p-3 text-amber-700 dark:text-amber-400">{it.qty} {it.unit}</td>
++                            <td className="p-3 text-right text-amber-700 dark:text-amber-400">&mdash;</td>
++                          </tr>
++                        ))}
++                      </tbody>
++                    </table>
++                  </div>
++                )}
++              </Card>
++            );
++          })}
+         </div>
+-    );
++      )}
++    </div>
++  );
+ };
+ 
+-export default StockView;
+\ No newline at end of file
++export default StockView;
+diff --git a/src/features/stock/stockChecklistApi.js b/src/features/stock/stockChecklistApi.js
+new file mode 100644
+index 0000000..1a80982
+--- /dev/null
++++ b/src/features/stock/stockChecklistApi.js
+@@ -0,0 +1,209 @@
++// features/stock/stockChecklistApi.js
++//
++// Akses data mentah ke tabel `stock_checklists` (punya app mamam-absensi,
++// backend Supabase yang sama) + valuasinya terhadap rawMaterials
++// (punya mamam-global). Dipakai bareng oleh:
++//   - features/stock/StockView.jsx      (Stok Opname: browse bulanan + rincian per hari)
++//   - features/balance/stockOpnameLogic.js (Laba Rugi: Stok Awal & Stok Akhir bulan)
++//
++// Sebelumnya logic ini cuma ada di stockOpnameLogic.js. Dipindah ke sini
++// (tanpa ubah logic valuasinya) supaya gak duplikat waktu StockView.jsx
++// dibangun.
++
++import { getSupabaseClient } from '../../storage/syncClient';
++
++export const CHECKLIST_TABLE = 'stock_checklists';
++const STOCK_MASTER_CONFIG_KEY = 'stockMaster';
++
++// Kolom JSONB dari Supabase-js biasanya sudah ke-parse otomatis jadi
++// object/array JS, tapi kadang (tergantung driver/versi) masih string
++// mentah — sama pola antisipasinya seperti parseJsonbField di
++// mamam-absensi/src/stockChecklist.js, supaya tidak crash kalau itu terjadi.
++export function parseJsonbField(value, fallback) {
++  if (value == null) return fallback;
++  if (typeof value === 'string') {
++    try {
++      return JSON.parse(value);
++    } catch {
++      return fallback;
++    }
++  }
++  return value;
++}
++
++export function normalizeName(name) {
++  return String(name || '').trim().toLowerCase();
++}
++
++/**
++ * Ambil master kategori & item stock checklist (punya mamam-absensi,
++ * tabel app_config row key='stockMaster') — dibutuhkan untuk tahu nama &
++ * satuan tiap item, karena tabel stock_checklists sendiri cuma nyimpen
++ * { [itemId]: { qty, skipped } } tanpa nama.
++ */
++export async function fetchStockMaster(supabase) {
++  const { data, error } = await supabase
++    .from('app_config')
++    .select('value')
++    .eq('key', STOCK_MASTER_CONFIG_KEY)
++    .maybeSingle();
++
++  if (error) throw error;
++
++  const value = data?.value;
++  const categories = Array.isArray(value?.categories) ? value.categories : [];
++  return { categories };
++}
++
++/**
++ * Valuasi 1 checklist mentah jadi bentuk snapshot { totalValue, itemCount,
++ * unmatchedCount, items, unmatchedItems } — match ke rawMaterials BY NAMA
++ * (case-insensitive, trim), karena item stock checklist (punya
++ * mamam-absensi) dan rawMaterials (punya mamam-global) adalah 2 sumber
++ * data terpisah tanpa foreign key bersama, cuma nama yang bisa disamakan.
++ *
++ * Item dengan qty kosong/null atau skipped=true TIDAK ikut dihitung (belum
++ * benar-benar diketahui sisa stoknya). Item dengan qty terisi tapi
++ * namanya tidak ketemu di rawMaterials masuk ke unmatchedItems (tidak ikut
++ * totalValue, supaya tidak diam-diam anggap harga 0 padahal sebenarnya
++ * belum ter-link — owner perlu tahu & rapikan Database Bahan Baku).
++ */
++export function valuateChecklist(checklistRow, master, rawMaterials) {
++  const values = parseJsonbField(checklistRow.values, {});
++  const rawByName = new Map(
++    (rawMaterials || []).map(rm => [normalizeName(rm.name), rm])
++  );
++
++  const items = [];
++  const unmatchedItems = [];
++
++  for (const category of master.categories) {
++    for (const it of category.items) {
++      const v = values[it.id];
++      if (!v || v.skipped) continue;
++      if (v.qty === null || v.qty === '' || Number.isNaN(Number(v.qty))) continue;
++
++      const qty = Number(v.qty);
++      const match = rawByName.get(normalizeName(it.name));
++
++      if (!match) {
++        unmatchedItems.push({ name: it.name, qty, unit: it.unit || '' });
++        continue;
++      }
++
++      const priceSnapshot = Number(match.price) || 0;
++      items.push({
++        rawMaterialId: match.id,
++        name: it.name,
++        qty,
++        unit: it.unit || '',
++        priceSnapshot,
++        subtotal: qty * priceSnapshot,
++      });
++    }
++  }
++
++  const totalValue = items.reduce((sum, it) => sum + it.subtotal, 0);
++
++  return {
++    totalValue,
++    itemCount: items.length,
++    unmatchedCount: unmatchedItems.length,
++    items,
++    unmatchedItems,
++  };
++}
++
++/**
++ * Cari checklist yang SUBMITTED_AT-nya jatuh di bulan `period` ("YYYY-MM"),
++ * ambil yang PALING TERAKHIR di-submit — apa pun date_str-nya (BUKAN
++ * filter pakai date_str — lihat alasan penting di bawah).
++ *
++ * KENAPA FILTER PAKAI submitted_at, BUKAN date_str:
++ * Checklist di mamam-absensi punya mekanisme "carry-over" (lihat
++ * loadActiveChecklistFromServer di mamam-absensi/src/stockChecklist.js):
++ * kalau checklist BELUM di-share ke WhatsApp, dia TIDAK direset walau
++ * sudah ganti hari — key/date_str-nya TETAP tanggal SAAT checklist itu
++ * pertama kali dibuat, bukan tanggal saat akhirnya di-submit/di-share.
++ * submitted_at adalah waktu sebenarnya checklist itu jadi valid sebagai
++ * data opname, jadi itu yang jadi patokan periode saat mencari "checklist
++ * terakhir bulan ini" (dipakai untuk SARAN tanggal Stok Akhir).
++ *
++ * Toko/karyawan bisa libur berhari-hari di akhir bulan (mis. libur
++ * Lebaran) — checklist submitted terakhir yang tersedia bulan itu, sejauh
++ * apa pun mundurnya dari tanggal akhir bulan, tetap jadi saran paling
++ * valid. Owner tetap bisa timpa saran ini dengan tanggal manual lain.
++ */
++export async function findLastSubmittedChecklistInMonth(supabase, period) {
++  const [y, m] = period.split('-').map(Number);
++  const startOfMonthIso = new Date(y, m - 1, 1).toISOString();
++  const startOfNextMonthIso = new Date(y, m, 1).toISOString();
++
++  const { data, error } = await supabase
++    .from(CHECKLIST_TABLE)
++    .select('*')
++    .gte('submitted_at', startOfMonthIso)
++    .lt('submitted_at', startOfNextMonthIso)
++    .order('submitted_at', { ascending: false })
++    .limit(1);
++
++  if (error) throw error;
++  if (data && data.length > 0) {
++    return { row: data[0], dateStr: data[0].date_str };
++  }
++  return { row: null, dateStr: null };
++}
++
++/**
++ * Saran tanggal (date_str) untuk dipakai sebagai default di date-picker —
++ * bungkus tipis di atas findLastSubmittedChecklistInMonth, cuma balikin
++ * date_str-nya (atau null kalau belum ada checklist submitted bulan itu).
++ * Ini SARAN doang — user tetap bisa timpa manual sebelum generate.
++ */
++export async function suggestLastSubmittedDateInMonth(period) {
++  const supabase = await getSupabaseClient();
++  if (!supabase) return null;
++  const { dateStr } = await findLastSubmittedChecklistInMonth(supabase, period);
++  return dateStr;
++}
++
++/**
++ * Ambil 1 checklist PERSIS di tanggal `dateStr` ("YYYY-MM-DD") — dipakai
++ * waktu user sudah pilih tanggal (baik dari saran otomatis maupun input
++ * manual) dan menekan tombol generate/ambil data. Match EXACT ke
++ * date_str (bukan submitted_at) karena di titik ini user sudah secara
++ * eksplisit memilih "checklist hari ini", jadi harus persis, tidak
++ * disubstitusi diam-diam ke tanggal terdekat.
++ */
++export async function fetchChecklistByDate(supabase, dateStr) {
++  const { data, error } = await supabase
++    .from(CHECKLIST_TABLE)
++    .select('*')
++    .eq('date_str', dateStr)
++    .order('submitted_at', { ascending: false })
++    .limit(1)
++    .maybeSingle();
++
++  if (error) throw error;
++  return data || null;
++}
++
++/**
++ * Ambil SEMUA checklist yang date_str-nya jatuh di bulan `period`
++ * ("YYYY-MM"), urut tanggal naik — dipakai StockView.jsx untuk rincian
++ * per hari. Beda dari findLastSubmittedChecklistInMonth (yang cuma
++ * ambil 1 checklist terakhir buat kebutuhan Laba Rugi), di sini
++ * dikelompokkan per date_str karena tujuannya BROWSING histori harian,
++ * bukan menentukan 1 titik valuasi.
++ */
++export async function fetchChecklistsInMonth(supabase, period) {
++  const { data, error } = await supabase
++    .from(CHECKLIST_TABLE)
++    .select('*')
++    .gte('date_str', `${period}-01`)
++    .lte('date_str', `${period}-31`)
++    .order('date_str', { ascending: true });
++
++  if (error) throw error;
++  return data || [];
++}
+diff --git a/src/hook/useDragReorder.js b/src/hook/useDragReorder.js
+new file mode 100644
+index 0000000..89e4e59
+--- /dev/null
++++ b/src/hook/useDragReorder.js
+@@ -0,0 +1,72 @@
++import { useState, useRef, useCallback, useEffect } from "react";
++
++// ─── Hook drag & drop reorder (mouse + touch) ───
++// Diekstrak dari MenuMgmt.jsx & VariantMgmt.jsx — sebelumnya duplikat
++// byte-identical di kedua file (~70 baris), sekarang shared di sini.
++export function useDragReorder(onReorder) {
++  const [dragId, setDragId] = useState(null);
++  const [overId, setOverId] = useState(null);
++  const overIdRef = useRef(null);
++  const itemRefs = useRef({});
++
++  const registerRef = useCallback((id) => (el) => {
++    if (el) itemRefs.current[id] = el;
++    else delete itemRefs.current[id];
++  }, []);
++
++  const startDrag = useCallback((id) => (e) => {
++    e.preventDefault();
++    e.stopPropagation();
++    try { e.target.setPointerCapture?.(e.pointerId); } catch { /* setPointerCapture tidak didukung di elemen/browser ini, aman diabaikan */ }
++    overIdRef.current = id;
++    setDragId(id);
++    setOverId(id);
++  }, []);
++
++  useEffect(() => {
++    if (dragId === null) return;
++    const getY = (e) => (e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY);
++    const handleMove = (e) => {
++      const y = getY(e);
++      if (y == null) return;
++      let closestId = null;
++      let closestDist = Infinity;
++      Object.entries(itemRefs.current).forEach(([id, el]) => {
++        if (!el) return;
++        const rect = el.getBoundingClientRect();
++        const mid = rect.top + rect.height / 2;
++        const dist = Math.abs(y - mid);
++        if (dist < closestDist) { closestDist = dist; closestId = id; }
++      });
++      if (closestId !== null && closestId !== overIdRef.current) {
++        overIdRef.current = closestId;
++        setOverId(closestId);
++      }
++    };
++    const finishDrag = () => {
++      const finalOverId = overIdRef.current;
++      if (dragId !== null && finalOverId !== null && dragId !== finalOverId) {
++        onReorder(dragId, finalOverId);
++      }
++      setDragId(null);
++      setOverId(null);
++      overIdRef.current = null;
++    };
++    window.addEventListener('pointermove', handleMove);
++    window.addEventListener('pointerup', finishDrag);
++    window.addEventListener('pointercancel', finishDrag);
++    return () => {
++      window.removeEventListener('pointermove', handleMove);
++      window.removeEventListener('pointerup', finishDrag);
++      window.removeEventListener('pointercancel', finishDrag);
++    };
++  }, [dragId, onReorder]);
++
++  return { dragId, overId, registerRef, startDrag };
++}
++
++export function getDragRowClass(isDragging, isDropTarget, baseClass, idleClass) {
++  if (isDragging) return `${baseClass} opacity-50 ring-2 ring-accent-400 z-10`;
++  if (isDropTarget) return `${baseClass} border-accent-400 bg-accent-50/60 dark:bg-accent-500/10`;
++  return `${baseClass} ${idleClass}`;
++}
+diff --git a/src/storage/syncClient.js b/src/storage/syncClient.js
+index 1a6a6a2..ac0210e 100644
+--- a/src/storage/syncClient.js
++++ b/src/storage/syncClient.js
+@@ -15,6 +15,7 @@
+ // (lihat storage/supabase_auth_migration.sql).
+ 
+ let _client = null;
++let _clientInitPromise = null;
+ let _authReadyPromise = null;
+ 
+ // ── TIMEOUT HELPER — dipakai di file ini & realtimeSync.js ─────────────────
+@@ -78,16 +79,38 @@ function ensureAuthSession(client) {
+  */
+ export async function getSupabaseClient() {
+   if (!_client) {
+-    const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
+-    const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
+-    if (!SUPABASE_URL || !SUPABASE_KEY) return null;
++    // RACE GUARD: kalau 2+ pemanggil sama-sama nemu `_client` masih null
++    // (mis. beberapa view mount bareng pas app baru dibuka) dan gak ada
++    // penjagaan ini, masing-masing bakal jalanin createClient()-nya
++    // SENDIRI-SENDIRI selagi nunggu `await import(...)` di bawah — hasil
++    // akhirnya cuma 1 yang kepakai (assignment terakhir yang menang), tapi
++    // yang lain jadi client Supabase "yatim" yang sempet setup koneksi
++    // realtime sendiri lalu dibuang percuma. Sama polanya kayak
++    // _authReadyPromise di ensureAuthSession() di bawah: cache PROMISE
++    // in-flight-nya (bukan cuma hasil akhirnya), supaya pemanggil yang
++    // datang belakangan ikut nunggu promise yang SAMA, bukan mulai proses baru.
++    if (!_clientInitPromise) {
++      _clientInitPromise = (async () => {
++        try {
++          const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
++          const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
++          if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+ 
+-    const { createClient } = await import('@supabase/supabase-js');
+-    _client = createClient(SUPABASE_URL, SUPABASE_KEY, {
+-      realtime: {
+-        params: { eventsPerSecond: 10 },
+-      },
+-    });
++          const { createClient } = await import('@supabase/supabase-js');
++          return createClient(SUPABASE_URL, SUPABASE_KEY, {
++            realtime: {
++              params: { eventsPerSecond: 10 },
++            },
++          });
++        } catch (err) {
++          console.warn('[supabase] gagal inisialisasi client, akan dicoba lagi di pemanggilan berikutnya:', err.message);
++          _clientInitPromise = null; // jangan cache kegagalan selamanya — biar bisa di-retry
++          throw err;
++        }
++      })();
++    }
++    _client = await _clientInitPromise;
++    if (!_client) return null; // env var belum diset — jangan lanjut ke ensureAuthSession
+   }
+ 
+   await ensureAuthSession(_client);

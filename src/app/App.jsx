@@ -30,7 +30,6 @@ import {
   Clock,
   Fingerprint,
   History,
-  Layers,
   List,
   RefreshCw,
   Settings,
@@ -1119,23 +1118,31 @@ export default function App() {
 
   const menuItems = [
 
-    { id: 'dompet', icon: Clock, label: 'Dompet Kasir' },
-    { id: 'absensi', icon: Fingerprint, label: 'Absensi Karyawan' },
-    { id: 'kasir', icon: ShoppingCart, label: 'Kasir Utama' },
-    { id: 'riwayat', icon: History, label: 'Riwayat Pesanan' },
-    { id: 'pemasukan', icon: TrendingUp, label: 'Pemasukan' },
-    { id: 'pengeluaran', icon: TrendingDown, label: 'Pengeluaran' },
-    { id: 'laporan', icon: BarChart3, label: 'Laporan & Profit' },
-    { id: 'labarugi', icon: Scale, label: 'Laba Rugi' },
-    { id: 'karyawan', icon: Briefcase, label: 'Manajemen Pegawai' },
-    { id: 'menu', icon: List, label: 'Manajemen Menu' },
-    { id: 'varian', icon: Layers, label: 'Manajemen Varian' },
-    { id: 'hpp', icon: Calculator, label: 'Manajemen HPP' },
-    { id: 'pelanggan', icon: Users, label: 'Pelanggan & Voucher' },
-    { id: 'pengaturan', icon: Settings, label: 'Pengaturan Sistem' },
-    { id: 'backup', icon: Download, label: 'Backup & Restore' },
-    { id: 'stok', icon: Warehouse, label: 'Stok Opname' },
-    { id: 'akun', icon: UserCog, label: 'Manajemen Akun' },
+    // Operasional Harian
+    { id: 'kasir', icon: ShoppingCart, label: 'Kasir Utama', category: 'Operasional Harian' },
+    { id: 'dompet', icon: Clock, label: 'Dompet Kasir', category: 'Operasional Harian' },
+    { id: 'riwayat', icon: History, label: 'Riwayat Pesanan', category: 'Operasional Harian' },
+    { id: 'absensi', icon: Fingerprint, label: 'Absensi Karyawan', category: 'Operasional Harian' },
+
+    // Keuangan
+    { id: 'pemasukan', icon: TrendingUp, label: 'Pemasukan', category: 'Keuangan' },
+    { id: 'pengeluaran', icon: TrendingDown, label: 'Pengeluaran', category: 'Keuangan' },
+    { id: 'laporan', icon: BarChart3, label: 'Laporan & Profit', category: 'Keuangan' },
+    { id: 'labarugi', icon: Scale, label: 'Laba Rugi', category: 'Keuangan' },
+
+    // Produk & Stok
+    { id: 'menu', icon: List, label: 'Manajemen Menu', category: 'Produk & Stok' },
+    { id: 'hpp', icon: Calculator, label: 'Manajemen HPP', category: 'Produk & Stok' },
+    { id: 'stok', icon: Warehouse, label: 'Stok Opname', category: 'Produk & Stok' },
+
+    // Pegawai & Pelanggan
+    { id: 'karyawan', icon: Briefcase, label: 'Manajemen Pegawai', category: 'Pegawai & Pelanggan' },
+    { id: 'pelanggan', icon: Users, label: 'Pelanggan & Voucher', category: 'Pegawai & Pelanggan' },
+
+    // Sistem
+    { id: 'pengaturan', icon: Settings, label: 'Pengaturan', category: 'Sistem' },
+    { id: 'backup', icon: Download, label: 'Backup & Restore', category: 'Sistem' },
+    { id: 'akun', icon: UserCog, label: 'Manajemen Akun', category: 'Sistem' },
 
   ];
 

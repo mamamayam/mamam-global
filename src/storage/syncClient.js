@@ -15,6 +15,7 @@
 // (lihat storage/supabase_auth_migration.sql).
 
 let _client = null;
+let _clientInitPromise = null;
 let _authReadyPromise = null;
 
 // ── TIMEOUT HELPER — dipakai di file ini & realtimeSync.js ─────────────────
@@ -78,16 +79,38 @@ function ensureAuthSession(client) {
  */
 export async function getSupabaseClient() {
   if (!_client) {
-    const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
-    const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
-    if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+    // RACE GUARD: kalau 2+ pemanggil sama-sama nemu `_client` masih null
+    // (mis. beberapa view mount bareng pas app baru dibuka) dan gak ada
+    // penjagaan ini, masing-masing bakal jalanin createClient()-nya
+    // SENDIRI-SENDIRI selagi nunggu `await import(...)` di bawah — hasil
+    // akhirnya cuma 1 yang kepakai (assignment terakhir yang menang), tapi
+    // yang lain jadi client Supabase "yatim" yang sempet setup koneksi
+    // realtime sendiri lalu dibuang percuma. Sama polanya kayak
+    // _authReadyPromise di ensureAuthSession() di bawah: cache PROMISE
+    // in-flight-nya (bukan cuma hasil akhirnya), supaya pemanggil yang
+    // datang belakangan ikut nunggu promise yang SAMA, bukan mulai proses baru.
+    if (!_clientInitPromise) {
+      _clientInitPromise = (async () => {
+        try {
+          const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
+          const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
+          if (!SUPABASE_URL || !SUPABASE_KEY) return null;
 
-    const { createClient } = await import('@supabase/supabase-js');
-    _client = createClient(SUPABASE_URL, SUPABASE_KEY, {
-      realtime: {
-        params: { eventsPerSecond: 10 },
-      },
-    });
+          const { createClient } = await import('@supabase/supabase-js');
+          return createClient(SUPABASE_URL, SUPABASE_KEY, {
+            realtime: {
+              params: { eventsPerSecond: 10 },
+            },
+          });
+        } catch (err) {
+          console.warn('[supabase] gagal inisialisasi client, akan dicoba lagi di pemanggilan berikutnya:', err.message);
+          _clientInitPromise = null; // jangan cache kegagalan selamanya — biar bisa di-retry
+          throw err;
+        }
+      })();
+    }
+    _client = await _clientInitPromise;
+    if (!_client) return null; // env var belum diset — jangan lanjut ke ensureAuthSession
   }
 
   await ensureAuthSession(_client);

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { X, ShieldUser, ChevronRight, Sparkles } from "lucide-react";
 import Button from '../../components/ui/Button';
 import { useAppContext } from '../../context/AppContext';
@@ -19,6 +19,24 @@ export default function Sidebar({
     const appName = storeSettings?.appName || 'MAMAM AYAM';
     const appTagline = storeSettings?.appTagline || 'Ecosystem';
     const initial = appName.trim().charAt(0).toUpperCase() || 'M';
+
+    // Kelompokkan menu per kategori (urutan kategori mengikuti kemunculan
+    // pertamanya di `visibleMenus`, yang sudah diurutkan per kategori di
+    // App.jsx — jadi cukup group-by di sini, tidak perlu daftar urutan
+    // kategori terpisah).
+    const groupedMenus = useMemo(() => {
+        const groups = [];
+        const idxByCategory = new Map();
+        visibleMenus.forEach(item => {
+            const cat = item.category || '';
+            if (!idxByCategory.has(cat)) {
+                idxByCategory.set(cat, groups.length);
+                groups.push({ category: cat, items: [] });
+            }
+            groups[idxByCategory.get(cat)].items.push(item);
+        });
+        return groups;
+    }, [visibleMenus]);
 
     return (
         <aside className={`fixed md:static short:!fixed inset-y-0 left-0 z-50 w-[268px] short:w-[240px] bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl md:bg-white md:dark:bg-slate-950 short:!bg-white/95 short:dark:!bg-slate-950/95 short:!backdrop-blur-xl border-r border-slate-100/60 dark:border-slate-900 transition-transform duration-400 ease-out flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 short:!-translate-x-full'}`}>
@@ -63,31 +81,42 @@ export default function Sidebar({
             )}
 
             {/* Navigasi Menu: Spasi lega & Indikator Aktif yang Halus */}
-            <nav className="flex-1 px-3 py-1 space-y-1 overflow-y-auto custom-scrollbar">
-                {visibleMenus.map(item => {
-                    const isActive = currentView === item.id;
-                    return (
-                        <button
-                            key={item.id}
-                            onClick={() => {
-                                setCurrentView(item.id);
-                                setIsSidebarOpen(false);
-                            }}
-                            className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-medium text-[13px] transition-all duration-300 group overflow-hidden
-                                ${isActive
-                                    ? 'text-white bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 shadow-[0_4px_16px_rgba(var(--color-accent-500),0.35)]'
-                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50/80 dark:hover:bg-slate-900/50'
-                                }`}
-                        >
-                            <item.icon className={`w-[18px] h-[18px] shrink-0 transition-transform duration-300 ${isActive ? 'scale-105' : 'group-hover:scale-110'}`} />
-                            <span className="tracking-wide truncate">{item.label}</span>
+            <nav className="flex-1 px-3 py-1 overflow-y-auto custom-scrollbar">
+                {groupedMenus.map((group, idx) => (
+                    <div key={group.category || `group-${idx}`}>
+                        {group.category && (
+                            <p className={`px-4 pb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400/70 dark:text-slate-600 ${idx === 0 ? 'pt-1' : 'pt-4'}`}>
+                                {group.category}
+                            </p>
+                        )}
+                        <div className="space-y-1">
+                            {group.items.map(item => {
+                                const isActive = currentView === item.id;
+                                return (
+                                    <button
+                                        key={item.id}
+                                        onClick={() => {
+                                            setCurrentView(item.id);
+                                            setIsSidebarOpen(false);
+                                        }}
+                                        className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-medium text-[13px] transition-all duration-300 group overflow-hidden
+                                            ${isActive
+                                                ? 'text-white bg-gradient-to-r from-accent-600 to-accent-500 dark:from-accent-500 dark:to-accent-600 shadow-[0_4px_16px_rgba(var(--color-accent-500),0.35)]'
+                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50/80 dark:hover:bg-slate-900/50'
+                                            }`}
+                                    >
+                                        <item.icon className={`w-[18px] h-[18px] shrink-0 transition-transform duration-300 ${isActive ? 'scale-105' : 'group-hover:scale-110'}`} />
+                                        <span className="tracking-wide truncate">{item.label}</span>
 
-                            {isActive && (
-                                <ChevronRight className="w-3.5 h-3.5 ml-auto shrink-0 opacity-80" />
-                            )}
-                        </button>
-                    );
-                })}
+                                        {isActive && (
+                                            <ChevronRight className="w-3.5 h-3.5 ml-auto shrink-0 opacity-80" />
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ))}
             </nav>
 
             {/* Footer: Modern Button & Subtle Versioning */}

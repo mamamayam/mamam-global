@@ -8,7 +8,6 @@ const ShiftView         = lazy(() => import('../features/finance/shift/ShiftView
 const PosView           = lazy(() => import('../features/pos/PosView'));
 const HistoryView       = lazy(() => import('../features/reports/HistoryView'));
 const MenuManagement    = lazy(() => import('../features/menu/MenuMgmt'));
-const VariantManagement = lazy(() => import('../features/menu/VariantMgmt'));
 const HppView           = lazy(() => import('../features/hpp/HppView'));
 const IncomeView        = lazy(() => import('../features/finance/IncomeView'));
 const ExpenseView       = lazy(() => import('../features/finance/ExpenseView'));
@@ -29,7 +28,6 @@ const VIEWS = {
     kasir:       PosView,
     riwayat:     HistoryView,
     menu:        MenuManagement,
-    varian:      VariantManagement,
     hpp:         HppView,
     pemasukan:   IncomeView,
     pengeluaran: ExpenseView,
