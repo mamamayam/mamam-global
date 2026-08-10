@@ -1,0 +1,2116 @@
+diff --git a/src/app/App.jsx b/src/app/App.jsx
+index 8de47cd..fc0894a 100644
+--- a/src/app/App.jsx
++++ b/src/app/App.jsx
+@@ -15,6 +15,7 @@ import BottomNav from '../app/layout/BottomNav';
+ import ReceiptModal from '../features/pos/ReceiptModal';
+ import { toLocalDateString } from '../utils/formatters';
+ import { activeOnly } from '../utils/softDelete';
++import { computeAvailableMaterials } from '../utils/hppUtils';
+ import { registerPushNotifications } from '../storage/pushNotifications';
+ import {
+   getEmployeeStatus, computeAttendanceFromLogs,
+@@ -172,6 +173,11 @@ export default function App() {
+   const [semiFinished, setSemiFinished, l7, setSemiFinishedRemote] = usePersistState('semiFinished', [], { syncMode: 'config', syncReadyPromise });
+   const [categories, setCategories, l8, setCategoriesRemote] = usePersistState('categories', INITIAL_CATEGORIES, { syncMode: 'config', syncReadyPromise });
+   const [editingRecipe, setEditingRecipe] = useState(null);
++  // Koreksi Stok Opname (Patch 3) — layer TERPISAH dari stock_checklists
++  // (yang datanya punya mamam-absensi & dibaca read-only). Owner override
++  // qty per (tanggal, rawMaterialId) di sini tanpa nyentuh data checklist
++  // asli karyawan sama sekali — lihat stockChecklistApi.js: valuateChecklist.
++  const [stockOpnameCorrections, setStockOpnameCorrections] = usePersistState('stockOpnameCorrections', [], { syncMode: 'config', syncReadyPromise });
+ 
+   // --- KEUANGAN ---
+   const [expenseCategories, setExpenseCategories, l9, setExpenseCategoriesRemote] = usePersistState('expenseCategories', ['Belanja', 'Biaya', 'Kasbon Karyawan', 'Lain-lain'], { syncMode: 'config', syncReadyPromise });
+@@ -969,34 +975,13 @@ export default function App() {
+ 
+   const printReceipt = () => window.print();
+ 
+-  // LIVE MATERIALS POOL (RAW + PREP)
+-  const availableMaterials = useMemo(() => {
+-    const prepsAsMaterials = semiFinished.map(prep => {
+-      // 1. Hitung total biaya bahan mentah yang masuk ke Prep berdasarkan harga pasar live
+-      const totalIngCost = prep.ingredients.reduce((sum, ing) => {
+-        const rm = rawMaterials.find(r => r.id === ing.rawMaterialId);
+-        const currentPrice = rm ? rm.price : (ing.snapshotPrice || 0);
+-        return sum + (currentPrice * ing.qtyUsedFraction);
+-      }, 0);
+-
+-      // 2. Tambahkan cost labor & overhead dari Prep
+-      const totalBatchCost = totalIngCost + (Number(prep.laborCost) || 0) + (Number(prep.overheadCost) || 0);
+-
+-      // 3. Bagi dengan yield untuk dapat Harga per Satuan
+-      const costPerUnit = totalBatchCost / Math.max(1, Number(prep.yieldQty) || 1);
+-
+-      return {
+-        id: prep.id,
+-        name: `${prep.name} [Prep]`, // Kasih penanda
+-        unit: prep.resultUnit,
+-        price: costPerUnit,
+-        isPrep: true,
+-        lastUpdated: prep.lastUpdated || new Date()
+-      };
+-    });
+-
+-    return [...rawMaterials, ...prepsAsMaterials];
+-  }, [rawMaterials, semiFinished]);
++  // LIVE MATERIALS POOL (RAW + PREP) — logic sebenarnya ada di
++  // computeAvailableMaterials (hppUtils.js), dipakai bareng oleh HppView.jsx
++  // (provider terpisah yang sebelumnya punya salinan logic ini sendiri).
++  const availableMaterials = useMemo(
++    () => computeAvailableMaterials(rawMaterials, semiFinished),
++    [rawMaterials, semiFinished]
++  );
+ 
+   // Membungkus semua props di Context Value
+   const contextValue = {
+@@ -1066,6 +1051,7 @@ export default function App() {
+     hppLibrary, setHppLibrary,
+     rawMaterials, setRawMaterials,
+     semiFinished, setSemiFinished,
++    stockOpnameCorrections, setStockOpnameCorrections,
+ 
+     // Categories
+     categories, setCategories,
+diff --git a/src/features/balance/stockOpnameLogic.js b/src/features/balance/stockOpnameLogic.js
+index 462e80c..0e47d08 100644
+--- a/src/features/balance/stockOpnameLogic.js
++++ b/src/features/balance/stockOpnameLogic.js
+@@ -55,7 +55,7 @@ export async function suggestStokAwalDate(period) {
+  *   tanggal itu — supaya UI bisa kasih tahu user dengan jelas, alih-alih
+  *   diam-diam menganggap stoknya 0.
+  */
+-export async function computeStockSnapshot(dateStr, rawMaterials) {
++export async function computeStockSnapshot(dateStr, rawMaterials, corrections = []) {
+   if (!dateStr) {
+     throw new Error('Pilih tanggal checklist terlebih dahulu.');
+   }
+@@ -74,6 +74,6 @@ export async function computeStockSnapshot(dateStr, rawMaterials) {
+     throw new Error(`Tidak ada checklist stok pada tanggal ${dateStr}. Pilih tanggal lain yang ada datanya.`);
+   }
+ 
+-  const valuation = valuateChecklist(row, master, rawMaterials || []);
++  const valuation = valuateChecklist(row, master, rawMaterials || [], corrections);
+   return { dateStr, ...valuation };
+ }
+diff --git a/src/features/balance/tabs/BalanceSummaryTab.jsx b/src/features/balance/tabs/BalanceSummaryTab.jsx
+index 03d8ace..d07e1ae 100644
+--- a/src/features/balance/tabs/BalanceSummaryTab.jsx
++++ b/src/features/balance/tabs/BalanceSummaryTab.jsx
+@@ -82,6 +82,12 @@ const StokDateCard = ({ label, dateStr, setDateStr, result, error, isGenerating,
+             {result.unmatchedCount} item belum ter-link ke Database Bahan Baku, tidak ikut terhitung
+           </div>
+         )}
++        {result.unitMismatchCount > 0 && (
++          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2.5 py-1.5 mt-2">
++            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
++            {result.unitMismatchCount} item satuannya gak bisa dipastikan, tidak ikut terhitung — cek di tab Stok Opname
++          </div>
++        )}
+       </>
+     )}
+   </Card>
+@@ -90,7 +96,7 @@ const StokDateCard = ({ label, dateStr, setDateStr, result, error, isGenerating,
+ // `period` ("YYYY-MM") diteruskan dari BalanceTab.jsx (shell) supaya
+ // filter periode tetap sinkron antara tab Ringkasan dan tab Rincian.
+ const BalanceSummaryTab = ({ period }) => {
+-  const { salesHistory, expenses, employeeDailyRecords, employees, rawMaterials } = useAppContext();
++  const { salesHistory, expenses, employeeDailyRecords, employees, rawMaterials, stockOpnameCorrections } = useAppContext();
+ 
+   const [stokAwalDate, setStokAwalDate] = useState('');
+   const [stokAkhirDate, setStokAkhirDate] = useState('');
+@@ -159,7 +165,7 @@ const BalanceSummaryTab = ({ period }) => {
+     setIsGeneratingAwal(true);
+     setAwalError(null);
+     try {
+-      const result = await computeStockSnapshot(stokAwalDate, rawMaterials);
++      const result = await computeStockSnapshot(stokAwalDate, rawMaterials, stockOpnameCorrections);
+       if (periodEpochRef.current !== epoch) return; // periode udah ganti selagi nunggu, buang hasil ini
+       setStokAwal(result);
+     } catch (err) {
+@@ -177,7 +183,7 @@ const BalanceSummaryTab = ({ period }) => {
+     setIsGeneratingAkhir(true);
+     setAkhirError(null);
+     try {
+-      const result = await computeStockSnapshot(stokAkhirDate, rawMaterials);
++      const result = await computeStockSnapshot(stokAkhirDate, rawMaterials, stockOpnameCorrections);
+       if (periodEpochRef.current !== epoch) return;
+       setStokAkhir(result);
+     } catch (err) {
+diff --git a/src/features/hpp/HppView.jsx b/src/features/hpp/HppView.jsx
+index ec55628..964e6b6 100644
+--- a/src/features/hpp/HppView.jsx
++++ b/src/features/hpp/HppView.jsx
+@@ -4,6 +4,7 @@ import { usePersistState } from '../../hook/usePersistState';
+ import CategoryModal from '../../components/CategoryModal';
+ import { Button } from '../../components/ui';
+ import { INITIAL_RAW_MATERIALS } from '../../data/initialData';
++import { computeAvailableMaterials } from '../../utils/hppUtils';
+ 
+ // Import Tabs
+ import BahanBakuView from './tabs/BahanBakuView';
+@@ -37,30 +38,12 @@ export default function HppView() {
+     // Modals
+     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+ 
+-    // LIVE MATERIALS POOL (RAW + PREP)
+-    const availableMaterials = useMemo(() => {
+-        const prepsAsMaterials = semiFinished.map(prep => {
+-            const totalIngCost = prep.ingredients.reduce((sum, ing) => {
+-                const rm = rawMaterials.find(r => r.id === ing.rawMaterialId);
+-                const currentPrice = rm ? rm.price : (ing.snapshotPrice || 0);
+-                return sum + (currentPrice * ing.qtyUsedFraction);
+-            }, 0);
+-
+-            const totalBatchCost = totalIngCost + (Number(prep.laborCost) || 0) + (Number(prep.overheadCost) || 0);
+-            const costPerUnit = totalBatchCost / Math.max(1, Number(prep.yieldQty) || 1);
+-
+-            return {
+-                id: prep.id,
+-                name: `${prep.name} [Prep]`,
+-                unit: prep.resultUnit,
+-                price: costPerUnit,
+-                isPrep: true,
+-                lastUpdated: prep.lastUpdated || new Date()
+-            };
+-        });
+-
+-        return [...rawMaterials, ...prepsAsMaterials];
+-    }, [rawMaterials, semiFinished]);
++    // LIVE MATERIALS POOL (RAW + PREP) — sumber tunggalnya di
++    // computeAvailableMaterials (hppUtils.js), dipakai bareng App.jsx.
++    const availableMaterials = useMemo(
++        () => computeAvailableMaterials(rawMaterials, semiFinished),
++        [rawMaterials, semiFinished]
++    );
+ 
+     const contextValue = {
+         rawMaterials, setRawMaterials,
+diff --git a/src/features/hpp/tabs/BahanBakuView.jsx b/src/features/hpp/tabs/BahanBakuView.jsx
+index 275b00c..2acdac1 100644
+--- a/src/features/hpp/tabs/BahanBakuView.jsx
++++ b/src/features/hpp/tabs/BahanBakuView.jsx
+@@ -4,7 +4,9 @@ import { formatRupiah } from '../../../utils/formatters';
+ import { Card, Button, IconButton, EmptyState, Input, SortModal } from '../../../components/ui';
+ import { applySort } from '../../../utils/sortUtils';
+ import { markDeleted, activeOnly } from '../../../utils/softDelete';
+-import { Plus, X, Search, Clock, Edit3, Trash2, Save, ArrowUpDown } from 'lucide-react';
++import { hasBaseUnit, formatBaseUnit } from '../../../utils/unitConversion';
++import UnitMigrationModal from './UnitMigrationModal';
++import { Plus, X, Search, Clock, Edit3, Trash2, Save, ArrowUpDown, Ruler } from 'lucide-react';
+ 
+ const BahanBakuView = () => {
+     const { rawMaterials, setRawMaterials, triggerAlert, triggerConfirm } = useAppContext();
+@@ -13,6 +15,7 @@ const BahanBakuView = () => {
+     const [searchQuery, setSearchQuery] = useState('');
+     const [sortKey, setSortKey] = useState('name-asc');
+     const [isSortOpen, setIsSortOpen] = useState(false);
++    const [isMigrationOpen, setIsMigrationOpen] = useState(false);
+ 
+     const sortOptions = [
+         { key: 'name-asc', label: 'Nama (A-Z)' },
+@@ -59,6 +62,7 @@ const BahanBakuView = () => {
+     };
+ 
+     const activeMaterials = activeOnly(rawMaterials);
++    const incompleteUnitCount = activeMaterials.filter(rm => !hasBaseUnit(rm)).length;
+     const filteredMaterials = activeMaterials.filter(rm => rm.name.toLowerCase().includes(searchQuery.toLowerCase()));
+ 
+     const sortedMaterials = applySort(filteredMaterials, sortKey, {
+@@ -69,6 +73,24 @@ const BahanBakuView = () => {
+ 
+     return (
+         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out relative">
++            {activeMaterials.length > 0 && (
++                <Card
++                    variant={incompleteUnitCount > 0 ? 'muted' : 'default'}
++                    padding="md"
++                    className={`flex items-center justify-between gap-3 flex-wrap ${incompleteUnitCount > 0 ? 'border border-amber-200 dark:border-amber-500/30' : ''}`}
++                >
++                    <div className="flex items-center gap-2 min-w-0">
++                        <Ruler className={`w-4 h-4 shrink-0 ${incompleteUnitCount > 0 ? 'text-amber-500' : 'text-emerald-500'}`} />
++                        <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 truncate">
++                            {incompleteUnitCount > 0
++                                ? `${incompleteUnitCount} dari ${activeMaterials.length} bahan belum punya Satuan Dasar (Gram/ml/Pcs)`
++                                : 'Semua bahan sudah punya Satuan Dasar'}
++                        </p>
++                    </div>
++                    <Button size="sm" variant="ghost" onClick={() => setIsMigrationOpen(true)}>Atur Satuan Dasar</Button>
++                </Card>
++            )}
++
+             <div className="flex flex-col sm:flex-row gap-3">
+                 <div className="relative w-full sm:w-72">
+                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
+@@ -108,13 +130,14 @@ const BahanBakuView = () => {
+                                 <th className="p-4 font-bold">Nama Bahan</th>
+                                 <th className="p-4 font-bold">Satuan</th>
+                                 <th className="p-4 font-bold">Harga Pasar Saat Ini</th>
++                                <th className="p-4 font-bold">Satuan Dasar</th>
+                                 <th className="p-4 font-bold">Log Update</th>
+                                 <th className="p-4 font-bold text-center">Aksi</th>
+                             </tr>
+                         </thead>
+                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+                             {sortedMaterials.length === 0 ? (
+-                                <tr><td colSpan="5"><EmptyState size="sm" title="Belum ada data bahan baku" /></td></tr>
++                                <tr><td colSpan="6"><EmptyState size="sm" title="Belum ada data bahan baku" /></td></tr>
+                             ) : (
+                                 sortedMaterials.map((rm) => {
+                                     const isUpdatedToday = rm.lastUpdated && new Date(rm.lastUpdated).toDateString() === new Date().toDateString();
+@@ -123,6 +146,15 @@ const BahanBakuView = () => {
+                                             <td className="p-4 font-bold text-slate-800 dark:text-slate-100 group-hover:text-accent-600 transition-colors">{rm.name}</td>
+                                             <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">{rm.unit}</td>
+                                             <td className="p-4 font-black text-accent-600 dark:text-accent-400">{formatRupiah(rm.price)}</td>
++                                            <td className="p-4">
++                                                {hasBaseUnit(rm) ? (
++                                                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
++                                                        {formatRupiah(rm.basePrice)} / {formatBaseUnit(rm.baseUnit)}
++                                                    </span>
++                                                ) : (
++                                                    <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Belum diset</span>
++                                                )}
++                                            </td>
+                                             <td className="p-4">
+                                                 <div className="flex items-center gap-1.5">
+                                                     <Clock className={`w-3.5 h-3.5 ${isUpdatedToday ? 'text-emerald-500' : 'text-slate-400'}`} />
+@@ -189,6 +221,7 @@ const BahanBakuView = () => {
+             )}
+ 
+             <SortModal isOpen={isSortOpen} onClose={() => setIsSortOpen(false)} value={sortKey} onChange={setSortKey} options={sortOptions} />
++            <UnitMigrationModal isOpen={isMigrationOpen} onClose={() => setIsMigrationOpen(false)} />
+         </div>
+     );
+ };
+diff --git a/src/features/hpp/tabs/BahanSetengahJadiView.jsx b/src/features/hpp/tabs/BahanSetengahJadiView.jsx
+index 30f030e..aa61d4a 100644
+--- a/src/features/hpp/tabs/BahanSetengahJadiView.jsx
++++ b/src/features/hpp/tabs/BahanSetengahJadiView.jsx
+@@ -1,12 +1,22 @@
+ import React, { useState, useMemo } from 'react';
+-import { getIngredientCost } from '../../../utils/hppUtils';
+ import { useAppContext } from '../../../context/AppContext';
+ import { formatRupiah } from '../../../utils/formatters';
+-import { Card, Button, IconButton, EmptyState, Input, Badge, SortModal } from '../../../components/ui';
++import { Card, Button, IconButton, EmptyState, Input, Select, Badge, SortModal } from '../../../components/ui';
+ import { applySort } from '../../../utils/sortUtils';
+ import { markDeleted, activeOnly } from '../../../utils/softDelete';
++import { hasBaseUnit, formatBaseUnit, convertQtyToBaseUnit, BASE_UNITS, BASE_UNIT_LABELS } from '../../../utils/unitConversion';
+ import { Plus, X, Search, Edit3, Trash2, Save, ArrowUpDown } from 'lucide-react';
+ 
++const emptyIngredient = () => ({ id: Date.now() + Math.random(), rawMaterialId: '', name: '', baseUnit: '', qty: '1', needsAttention: false });
++
++// qty SELALU dalam baseUnit bahan mentahnya -> tinggal qty * basePrice, gak
++// ada tabel konversi lagi (lihat unitConversion.js).
++const ingredientCost = (ing, materials) => {
++    const material = materials.find(m => m.id === ing.rawMaterialId);
++    const price = material ? (material.basePrice || 0) : 0;
++    return price * (Number(ing.qty) || 0);
++};
++
+ const BahanSetengahJadiView = () => {
+     const { rawMaterials, semiFinished, setSemiFinished, triggerAlert, triggerConfirm, availableMaterials } = useAppContext();
+     const [isEditing, setIsEditing] = useState(false);
+@@ -20,7 +30,11 @@ const BahanSetengahJadiView = () => {
+     const [yieldQty, setYieldQty] = useState('');
+     const [laborCost, setLaborCost] = useState('');
+     const [overheadCost, setOverheadCost] = useState('');
+-    const [ingredients, setIngredients] = useState([{ id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
++    const [ingredients, setIngredients] = useState([emptyIngredient()]);
++
++    const activeRawMaterials = useMemo(() => activeOnly(rawMaterials), [rawMaterials]);
++    const usableRawMaterials = activeRawMaterials.filter(hasBaseUnit);
++    const pendingMaterialsCount = activeRawMaterials.length - usableRawMaterials.length;
+ 
+     const sortOptions = [
+         { key: 'name-asc', label: 'Nama Prep (A-Z)' },
+@@ -31,45 +45,95 @@ const BahanSetengahJadiView = () => {
+         { key: 'lastUpdated-asc', label: 'Lama Diupdate' },
+     ];
+ 
+-    const handleAddIngredient = () => setIngredients([...ingredients, { id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
+-    const handleRemoveIngredient = (id) => setIngredients(ingredients.length > 1 ? ingredients.filter(ing => ing.id !== id) : [{ id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
+-    const handleIngredientChange = (id, field, value) => setIngredients(ingredients.map(ing => ing.id === id ? { ...ing, [field]: value } : ing));
++    const handleAddIngredient = () => setIngredients([...ingredients, emptyIngredient()]);
++    const handleRemoveIngredient = (id) => setIngredients(ingredients.length > 1 ? ingredients.filter(ing => ing.id !== id) : [emptyIngredient()]);
++
++    const handleSelectMaterial = (id, materialName) => {
++        const matched = usableRawMaterials.find(r => r.name === materialName);
++        setIngredients(ingredients.map(ing => ing.id === id ? {
++            ...ing,
++            name: materialName,
++            rawMaterialId: matched ? matched.id : '',
++            baseUnit: matched ? matched.baseUnit : '',
++            qty: '1',
++            needsAttention: false,
++        } : ing));
++    };
++
++    const handleQtyChange = (id, value) => setIngredients(ingredients.map(ing => ing.id === id ? { ...ing, qty: value } : ing));
+ 
++    // Buka Edit prep lama -> ini jadi titik migrasi alaminya: ingredient yang
++    // masih bentuk lama (recipeQtyUsed+recipeUnit) dicoba di-convert otomatis
++    // ke Satuan Dasar bahan mentahnya (kalau bahannya udah di-Patch-1-in).
++    // Yang gak bisa dipastikan konversinya ditandai `needsAttention` biar
++    // user cek manual sebelum Simpan — gak ada yang diam-diam ditebak.
+     const handleEdit = (prep) => {
+         setPrepId(prep.id);
+         setPrepName(prep.name);
+-        setResultUnit(prep.resultUnit);
++        setResultUnit(BASE_UNITS.includes(prep.resultUnit) ? prep.resultUnit : '');
+         setYieldQty(String(prep.yieldQty));
+         setLaborCost(prep.laborCost ? String(prep.laborCost) : '');
+         setOverheadCost(prep.overheadCost ? String(prep.overheadCost) : '');
+ 
+         const mappedIngredients = prep.ingredients.map((ing, idx) => {
+-            const dbMaterial = rawMaterials.find(r => r.id === ing.rawMaterialId);
++            const material = activeRawMaterials.find(r => r.id === ing.rawMaterialId);
++
++            if (ing.qty !== undefined) {
++                return {
++                    id: Date.now() + idx,
++                    rawMaterialId: ing.rawMaterialId,
++                    name: material ? material.name : (ing.name || 'Bahan'),
++                    baseUnit: material ? material.baseUnit : ing.baseUnit,
++                    qty: String(ing.qty),
++                    needsAttention: !material,
++                };
++            }
++
++            if (material && hasBaseUnit(material)) {
++                const convertedQty = ing.recipeUnit
++                    ? convertQtyToBaseUnit(ing.recipeQtyUsed, ing.recipeUnit, material.baseUnit, material.checklistUnitOverride)
++                    : null;
++                return {
++                    id: Date.now() + idx,
++                    rawMaterialId: material.id,
++                    name: material.name,
++                    baseUnit: material.baseUnit,
++                    qty: (convertedQty !== null && !Number.isNaN(convertedQty)) ? String(Math.round(convertedQty * 100) / 100) : '',
++                    needsAttention: convertedQty === null || Number.isNaN(convertedQty),
++                };
++            }
++
+             return {
+                 id: Date.now() + idx,
+-                name: dbMaterial ? dbMaterial.name : 'Bahan',
+-                unit: dbMaterial ? dbMaterial.unit : ing.unit,
+-                price: dbMaterial ? String(dbMaterial.price) : String(ing.snapshotPrice),
+-                qtyUsed: ing.recipeQtyUsed !== undefined ? String(ing.recipeQtyUsed) : '1',
+-                recipeUnit: ing.recipeUnit || ing.unit
++                rawMaterialId: material ? material.id : '',
++                name: material ? material.name : (ing.name || 'Bahan'),
++                baseUnit: '',
++                qty: '',
++                needsAttention: true,
+             };
+         });
+-        setIngredients(mappedIngredients.length > 0 ? mappedIngredients : [{ id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
++
++        setIngredients(mappedIngredients.length > 0 ? mappedIngredients : [emptyIngredient()]);
++        if (mappedIngredients.some(i => i.needsAttention)) {
++            triggerAlert('Sebagian bahan di prep ini ditandai kuning — cek/isi ulang jumlahnya (satuan lama gak bisa dikonversi otomatis).');
++        }
+         setIsEditing(true);
+     };
+ 
+     const resetForm = () => {
+         setPrepId(''); setPrepName(''); setResultUnit(''); setYieldQty(''); setLaborCost(''); setOverheadCost('');
+-        setIngredients([{ id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
++        setIngredients([emptyIngredient()]);
+         setIsEditing(false);
+     };
+ 
++    const totalIngredientCost = useMemo(() => ingredients.reduce((sum, item) => sum + ingredientCost(item, activeRawMaterials), 0), [ingredients, activeRawMaterials]);
++
+     const handleSave = () => {
+         if (!prepName.trim()) return triggerAlert('Nama Bahan Prep wajib diisi!');
+-        if (!resultUnit.trim()) return triggerAlert('Satuan Hasil wajib diisi! (Misal: Gram, Porsi)');
++        if (!resultUnit) return triggerAlert('Satuan Hasil wajib dipilih!');
+         if (!yieldQty || Number(yieldQty) <= 0) return triggerAlert('Jumlah Hasil harus lebih dari 0!');
+-        const hasEmptyIngredient = ingredients.some(ing => !ing.name.trim() || !ing.price || Number(ing.price) < 0);
+-        if (hasEmptyIngredient) return triggerAlert('Lengkapi data seluruh Bahan Baku yang digunakan!');
++        const hasEmptyIngredient = ingredients.some(ing => !ing.rawMaterialId || ing.qty === '' || Number(ing.qty) < 0);
++        if (hasEmptyIngredient) return triggerAlert('Lengkapi data seluruh Bahan Mentah yang digunakan!');
+ 
+         const newPrep = {
+             id: prepId || `prep-${Date.now()}`,
+@@ -79,16 +143,13 @@ const BahanSetengahJadiView = () => {
+             laborCost: Number(laborCost) || 0,
+             overheadCost: Number(overheadCost) || 0,
+             ingredients: ingredients.map(ing => {
+-                const match = rawMaterials.find(r => r.name.toLowerCase() === ing.name.toLowerCase());
+-                const cost = getIngredientCost(ing);
+-                const basePrice = Number(ing.price) || 0;
++                const material = activeRawMaterials.find(r => r.id === ing.rawMaterialId);
+                 return {
+-                    rawMaterialId: match ? match.id : `rm-custom-${Date.now()}`,
+-                    qtyUsedFraction: basePrice > 0 ? (cost / basePrice) : 0,
+-                    snapshotPrice: basePrice,
+-                    recipeQtyUsed: Number(ing.qtyUsed) || 1,
+-                    recipeUnit: ing.recipeUnit || ing.unit,
+-                    unit: ing.unit
++                    rawMaterialId: ing.rawMaterialId,
++                    name: material ? material.name : ing.name,
++                    baseUnit: material ? material.baseUnit : ing.baseUnit,
++                    qty: Number(ing.qty) || 0,
++                    snapshotBasePrice: material ? (material.basePrice || 0) : 0,
+                 };
+             }),
+             lastUpdated: new Date()
+@@ -110,10 +171,8 @@ const BahanSetengahJadiView = () => {
+         });
+     };
+ 
+-    const totalIngredientCost = useMemo(() => ingredients.reduce((sum, item) => sum + getIngredientCost(item), 0), [ingredients]);
+     const livePrepCostPerUnit = (totalIngredientCost + (Number(laborCost) || 0) + (Number(overheadCost) || 0)) / Math.max(1, Number(yieldQty) || 1);
+ 
+-    const activeRawMaterials = activeOnly(rawMaterials);
+     const activePreps = activeOnly(availableMaterials);
+     const filteredPreps = activePreps.filter(m => m.isPrep && m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+     const sortedPreps = applySort(filteredPreps, sortKey, {
+@@ -176,7 +235,7 @@ const BahanSetengahJadiView = () => {
+                                     return (
+                                         <tr key={prep.id} className="hover:bg-slate-50 dark:hover:bg-slate-950 transition-colors group">
+                                             <td className="p-4 font-bold text-slate-800 dark:text-slate-100 group-hover:text-accent-600 transition-colors">{prep.name.replace(' [Prep]', '')} <Badge variant="orange" size="sm" className="ml-2">PREP</Badge></td>
+-                                            <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">{prep.unit}</td>
++                                            <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">{formatBaseUnit(prep.unit)}</td>
+                                             <td className="p-4 font-black text-emerald-600 dark:text-emerald-400">{formatRupiah(prep.price)}</td>
+                                             <td className="p-4 text-slate-500 font-medium text-sm">
+                                                 {prep.lastUpdated ? new Date(prep.lastUpdated).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+@@ -208,7 +267,7 @@ const BahanSetengahJadiView = () => {
+                             </div>
+                             <IconButton variant="neutral" className="rounded-full" onClick={resetForm}><X className="w-5 h-5" /></IconButton>
+                         </div>
+-                        
++
+                         {/* BODY SCROLLABLE */}
+                         <div className="flex-1 overflow-y-auto p-5 lg:p-8">
+                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+@@ -216,52 +275,48 @@ const BahanSetengahJadiView = () => {
+                                 <div className="lg:col-span-8 space-y-8">
+                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                                         <Input label="Nama Prep" type="text" value={prepName} onChange={e => setPrepName(e.target.value)} placeholder="Misal: Bumbu Merah" />
+-                                        <Input label="Satuan Hasil" type="text" value={resultUnit} onChange={e => setResultUnit(e.target.value)} placeholder="Misal: Gram, Liter" />
++                                        <Select label="Satuan Hasil" value={resultUnit} onChange={e => setResultUnit(e.target.value)}>
++                                            <option value="">Pilih...</option>
++                                            {BASE_UNITS.map(u => <option key={u} value={u}>{BASE_UNIT_LABELS[u]}</option>)}
++                                        </Select>
+                                         <Input label="Jumlah Hasil" type="number" value={yieldQty} onChange={e => setYieldQty(e.target.value)} placeholder="0" />
+                                     </div>
+ 
+                                     <div>
+-                                        <label className="block text-sm font-bold text-slate-800 dark:text-slate-100 mb-4 border-b pb-2">Komposisi Bahan Mentah:</label>
++                                        <div className="flex items-center justify-between border-b pb-2 mb-4 flex-wrap gap-2">
++                                            <label className="block text-sm font-bold text-slate-800 dark:text-slate-100">Komposisi Bahan Mentah:</label>
++                                            {pendingMaterialsCount > 0 && (
++                                                <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">{pendingMaterialsCount} bahan belum ada Satuan Dasar</span>
++                                            )}
++                                        </div>
+                                         <div className="space-y-4">
+                                             {ingredients.map((ing, index) => (
+-                                                <div key={ing.id} className="grid grid-cols-12 gap-3 items-center border-b border-slate-200 dark:border-slate-700 pb-5 md:pb-0 md:border-none last:border-0 last:pb-0">
+-                                                    <div className="col-span-12 md:col-span-4">
++                                                <div key={ing.id} className={`grid grid-cols-12 gap-3 items-center border-b border-slate-200 dark:border-slate-700 pb-5 md:pb-0 md:border-none last:border-0 last:pb-0 ${ing.needsAttention ? 'rounded-xl bg-amber-50 dark:bg-amber-500/10 p-2 -mx-2' : ''}`}>
++                                                    <div className="col-span-12 md:col-span-5">
+                                                         {index === 0 && <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Nama Bahan Mentah</label>}
+                                                         <select
+                                                             className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 text-sm transition-all duration-200"
+                                                             value={ing.name}
+-                                                            onChange={e => {
+-                                                                const val = e.target.value;
+-                                                                const matched = activeRawMaterials.find(r => r.name === val);
+-                                                                if (matched) setIngredients(ingredients.map(i => i.id === ing.id ? { ...i, name: val, unit: matched.unit, price: String(matched.price), recipeUnit: matched.unit, qtyUsed: '1' } : i));
+-                                                                else handleIngredientChange(ing.id, 'name', val);
+-                                                            }}
++                                                            onChange={e => handleSelectMaterial(ing.id, e.target.value)}
+                                                         >
+                                                             <option value="" disabled>-- Pilih Bahan --</option>
+-                                                            {activeRawMaterials.map(rm => <option key={rm.id} value={rm.name}>{rm.name}</option>)}
++                                                            {usableRawMaterials.map(rm => <option key={rm.id} value={rm.name}>{rm.name}</option>)}
+                                                         </select>
++                                                        {ing.needsAttention && <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-1">Perlu dicek / pilih ulang bahannya</p>}
+                                                     </div>
+-                                                    <div className="col-span-12 sm:col-span-4 md:col-span-3">
+-                                                        {index === 0 && <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Harga</label>}
+-                                                        <div className="p-2.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm text-slate-600 font-bold truncate border border-slate-200 dark:border-slate-700">
+-                                                            {formatRupiah(ing.price)} / {ing.unit || '-'}
+-                                                        </div>
++                                                    <div className="col-span-6 md:col-span-3">
++                                                        {index === 0 && <label className="block text-xs font-bold text-slate-500 mb-2 uppercase text-center">Jumlah</label>}
++                                                        <input type="number" step="any" className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-center" value={ing.qty} onChange={e => handleQtyChange(ing.id, e.target.value)} placeholder="0" />
+                                                     </div>
+-                                                    <div className="col-span-6 sm:col-span-2 md:col-span-2">
+-                                                        {index === 0 && <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Jml & Satuan</label>}
+-                                                        <div className="flex gap-1">
+-                                                            <input type="number" className="w-12 p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-center" value={ing.qtyUsed} onChange={e => handleIngredientChange(ing.id, 'qtyUsed', e.target.value)} />
+-                                                            <select className="flex-1 p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm" value={ing.recipeUnit || ing.unit} onChange={e => handleIngredientChange(ing.id, 'recipeUnit', e.target.value)}>
+-                                                                <option value={ing.unit}>{ing.unit || 'Sat'}</option>
+-                                                                <option value="Gram">Gram</option><option value="ml">ml</option>
+-                                                            </select>
+-                                                        </div>
++                                                    <div className="col-span-6 md:col-span-1 text-center">
++                                                        {index === 0 && <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Satuan</label>}
++                                                        <span className="inline-block px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300">{formatBaseUnit(ing.baseUnit)}</span>
+                                                     </div>
+-                                                    <div className="col-span-10 sm:col-span-3 md:col-span-2">
++                                                    <div className="col-span-8 md:col-span-2">
+                                                         {index === 0 && <label className="block text-xs font-bold text-slate-500 mb-2 text-center uppercase">Biaya</label>}
+-                                                        <div className="p-2.5 bg-accent-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/30 rounded-xl text-sm text-accent-700 dark:text-accent-300 font-bold text-center truncate">{formatRupiah(getIngredientCost(ing))}</div>
++                                                        <div className="p-2.5 bg-accent-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/30 rounded-xl text-sm text-accent-700 dark:text-accent-300 font-bold text-center truncate">{formatRupiah(ingredientCost(ing, activeRawMaterials))}</div>
+                                                     </div>
+-                                                    <div className={`col-span-2 sm:col-span-1 md:col-span-1 flex justify-center ${index === 0 ? 'md:pt-6' : ''}`}>
++                                                    <div className="col-span-4 md:col-span-1 flex justify-center">
+                                                         <button onClick={() => handleRemoveIngredient(ing.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 active:scale-90 rounded-xl transition-all duration-300"><Trash2 className="w-4 h-4" /></button>
+                                                     </div>
+                                                 </div>
+@@ -284,10 +339,10 @@ const BahanSetengahJadiView = () => {
+                                         <div className="flex justify-between text-slate-400"><span>Biaya Produksi:</span><span className="font-bold text-white">{formatRupiah(Number(laborCost) + Number(overheadCost))}</span></div>
+                                         <div className="h-px bg-slate-700 my-2"></div>
+                                         <div className="flex justify-between items-center text-slate-300"><span>Total 1 Batch:</span><span className="font-bold text-accent-400">{formatRupiah(totalIngredientCost + Number(laborCost) + Number(overheadCost))}</span></div>
+-                                        <div className="flex justify-between items-center text-slate-300"><span>Yield:</span><span className="font-bold text-accent-400 bg-accent-950/50 px-2 py-0.5 rounded-lg border border-accent-500/40">{yieldQty || 0} {resultUnit || 'Unit'}</span></div>
++                                        <div className="flex justify-between items-center text-slate-300"><span>Yield:</span><span className="font-bold text-accent-400 bg-accent-950/50 px-2 py-0.5 rounded-lg border border-accent-500/40">{yieldQty || 0} {formatBaseUnit(resultUnit)}</span></div>
+                                     </div>
+                                     <div className="bg-slate-800 p-4 rounded-xl text-center mt-6 border border-slate-700 shadow-inner">
+-                                        <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">HPP per {resultUnit || 'Satuan'}</span>
++                                        <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">HPP per {formatBaseUnit(resultUnit) || 'Satuan'}</span>
+                                         <span className="block text-3xl font-heading font-black text-emerald-400">{formatRupiah(livePrepCostPerUnit)}</span>
+                                     </div>
+                                 </div>
+@@ -307,4 +362,4 @@ const BahanSetengahJadiView = () => {
+     );
+ };
+ 
+-export default BahanSetengahJadiView;
+\ No newline at end of file
++export default BahanSetengahJadiView;
+diff --git a/src/features/hpp/tabs/KalkulatorHppView.jsx b/src/features/hpp/tabs/KalkulatorHppView.jsx
+index ec5c70a..7e409ba 100644
+--- a/src/features/hpp/tabs/KalkulatorHppView.jsx
++++ b/src/features/hpp/tabs/KalkulatorHppView.jsx
+@@ -1,10 +1,22 @@
+ import React, { useState, useMemo } from 'react';
+-import { getIngredientCost } from '../../../utils/hppUtils';
+ import { useAppContext } from '../../../context/AppContext';
+ import { formatRupiah } from '../../../utils/formatters';
+ import { Card, Button, Input, Select, EmptyState } from '../../../components/ui';
+ import { activeOnly } from '../../../utils/softDelete';
+-import { Calculator, Plus, Trash2, Save, HelpCircle, Edit3 } from 'lucide-react';
++import { hasBaseUnit, formatBaseUnit, convertQtyToBaseUnit } from '../../../utils/unitConversion';
++import { Calculator, Plus, Trash2, Save, HelpCircle, Edit3, Sparkles } from 'lucide-react';
++
++const emptyIngredient = () => ({ id: Date.now() + Math.random(), rawMaterialId: '', name: '', baseUnit: '', qty: '1', needsAttention: false });
++
++// Biaya 1 baris ingredient versi baru — tinggal qty * basePrice, gak ada lagi
++// tabel konversi (lihat unitConversion.js untuk kenapa). qty SELALU dalam
++// baseUnit bahan itu sendiri (gram/ml/pcs), gak ada satuan lain yang bisa
++// dipilih di baris resep -> gak ada lagi ruang buat salah convert.
++const ingredientCost = (ing, materials) => {
++    const material = materials.find(m => m.id === ing.rawMaterialId);
++    const price = material ? (material.basePrice || 0) : 0;
++    return price * (Number(ing.qty) || 0);
++};
+ 
+ const KalkulatorHppView = () => {
+     const {
+@@ -17,52 +29,99 @@ const KalkulatorHppView = () => {
+     const [productName, setProductName] = useState('');
+     const [category, setCategory] = useState(categories[0] || 'Uncategorized');
+     const [yieldQty, setYieldQty] = useState('');
+-    const [ingredients, setIngredients] = useState([
+-        { id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }
+-    ]);
++    const [ingredients, setIngredients] = useState([emptyIngredient()]);
+     const [laborCost, setLaborCost] = useState('');
+     const [overheadCost, setOverheadCost] = useState('');
+     const [marginPercent, setMarginPercent] = useState(35);
+     const [manualPrice, setManualPrice] = useState('');
+     const [showResult, setShowResult] = useState(false);
+ 
+-    const handleAddIngredient = () => setIngredients([...ingredients, { id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
+-    const handleRemoveIngredient = (id) => setIngredients(ingredients.length > 1 ? ingredients.filter(ing => ing.id !== id) : [{ id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
++    const activeAvailableMaterials = useMemo(() => activeOnly(availableMaterials), [availableMaterials]);
++    const usableMaterials = activeAvailableMaterials.filter(hasBaseUnit);
++    const pendingMaterialsCount = activeAvailableMaterials.length - usableMaterials.length;
++
++    const handleAddIngredient = () => setIngredients([...ingredients, emptyIngredient()]);
++    const handleRemoveIngredient = (id) => setIngredients(ingredients.length > 1 ? ingredients.filter(ing => ing.id !== id) : [emptyIngredient()]);
++
++    const handleSelectMaterial = (id, materialName) => {
++        const matched = usableMaterials.find(m => m.name === materialName);
++        setIngredients(ingredients.map(ing => ing.id === id ? {
++            ...ing,
++            name: materialName,
++            rawMaterialId: matched ? matched.id : '',
++            baseUnit: matched ? matched.baseUnit : '',
++            qty: '1',
++            needsAttention: false,
++        } : ing));
++    };
+ 
+-    const handleIngredientChange = (id, field, value) => {
+-        setIngredients(ingredients.map(ing => ing.id === id ? { ...ing, [field]: value } : ing));
++    const handleQtyChange = (id, value) => {
++        setIngredients(ingredients.map(ing => ing.id === id ? { ...ing, qty: value } : ing));
+     };
+ 
+     const handleReset = () => {
+         setProductName('');
+         setCategory(categories[0] || 'Uncategorized');
+-        setIngredients([{ id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
++        setIngredients([emptyIngredient()]);
+         setLaborCost(''); setOverheadCost(''); setYieldQty(''); setMarginPercent(35); setManualPrice('');
+         setShowResult(false);
+     };
+ 
++    // Resep dengan nama yang sama persis udah ada di Library -> tawarin muat
++    // & konversi otomatis komposisinya, biar gak perlu ngetik ulang dari nol
++    // pas migrasi ke sistem Satuan Dasar. Angka HASIL konversi tetep harus
++    // dicek user sebelum Simpan (bukan langsung dipercaya buta).
++    const existingMatch = useMemo(
++        () => hppLibrary.find(item => item.name.trim().toLowerCase() === productName.trim().toLowerCase() && productName.trim()),
++        [hppLibrary, productName]
++    );
++
++    const handleLoadFromExisting = () => {
++        if (!existingMatch) return;
++        const converted = existingMatch.ingredients.map(oldIng => {
++            const material = usableMaterials.find(m => m.id === oldIng.rawMaterialId)
++                || usableMaterials.find(m => m.name.toLowerCase() === (oldIng.name || '').toLowerCase());
++
++            if (!material) {
++                return { id: Date.now() + Math.random(), rawMaterialId: '', name: oldIng.name || '', baseUnit: '', qty: '', needsAttention: true };
++            }
++
++            // Ingredient yang sebelumnya udah v2 (punya `qty` langsung) -> tinggal pakai lagi.
++            // Yang masih bentuk lama -> convert dari recipeQtyUsed+recipeUnit yang kesimpen.
++            let qty = null;
++            if (oldIng.qty !== undefined) {
++                qty = Number(oldIng.qty);
++            } else if (oldIng.recipeUnit) {
++                qty = convertQtyToBaseUnit(oldIng.recipeQtyUsed, oldIng.recipeUnit, material.baseUnit, material.checklistUnitOverride);
++            }
++
++            return {
++                id: Date.now() + Math.random(),
++                rawMaterialId: material.id,
++                name: material.name,
++                baseUnit: material.baseUnit,
++                qty: qty !== null && qty !== undefined && !Number.isNaN(qty) ? String(Math.round(qty * 100) / 100) : '',
++                needsAttention: qty === null || qty === undefined || Number.isNaN(qty),
++            };
++        });
++        setIngredients(converted.length > 0 ? converted : [emptyIngredient()]);
++        triggerAlert('Komposisi lama dimuat & dikonversi ke Satuan Dasar. Cek lagi angkanya sebelum simpan, terutama baris yang ditandai.');
++    };
++
+     const handleCalculate = () => {
+         if (!productName.trim()) return triggerAlert('Nama Produk wajib diisi!');
+-        const hasEmptyIngredient = ingredients.some(ing => !ing.name.trim() || !ing.price || Number(ing.price) < 0);
+-        if (hasEmptyIngredient) return triggerAlert('Lengkapi data seluruh Bahan!');
++        const hasEmptyIngredient = ingredients.some(ing => !ing.rawMaterialId || ing.qty === '' || Number(ing.qty) < 0);
++        if (hasEmptyIngredient) return triggerAlert('Lengkapi seluruh Bahan (pilih bahan & isi jumlahnya)!');
+         if (!yieldQty || Number(yieldQty) <= 0) return triggerAlert('Jumlah Produk (Unit) harus lebih dari 0!');
+         setShowResult(true);
+     };
+ 
+-    const totalWeight = useMemo(() => {
+-        return ingredients.reduce((sum, item) => {
+-            let qty = Number(item.qtyUsed) || 0;
+-            let unit = (item.recipeUnit || item.unit || '').toLowerCase().trim();
+-            const isWeightOrVolume = ['kg', 'gram', 'g', 'liter', 'l', 'ml', 'mili', 'sdm', 'sdt'].includes(unit);
+-            if (!isWeightOrVolume) return sum;
+-            if (unit === 'kg' || unit === 'liter' || unit === 'l') qty *= 1000;
+-            if (unit === 'sdm') qty *= 15;
+-            if (unit === 'sdt') qty *= 5;
+-            return sum + qty;
+-        }, 0);
+-    }, [ingredients]);
+-
+-    const totalIngredientCost = useMemo(() => ingredients.reduce((sum, item) => sum + getIngredientCost(item), 0), [ingredients]);
++    // Total berat & volume dipisah tegas (bukan digabung kayak sistem lama)
++    // karena gram & ml emang 2 dimensi fisik yang beda -> lebih jujur/akurat.
++    const totalGram = useMemo(() => ingredients.filter(i => i.baseUnit === 'gram').reduce((s, i) => s + (Number(i.qty) || 0), 0), [ingredients]);
++    const totalMl = useMemo(() => ingredients.filter(i => i.baseUnit === 'ml').reduce((s, i) => s + (Number(i.qty) || 0), 0), [ingredients]);
++
++    const totalIngredientCost = useMemo(() => ingredients.reduce((sum, item) => sum + ingredientCost(item, activeAvailableMaterials), 0), [ingredients, activeAvailableMaterials]);
+     const yld = Math.max(1, Number(yieldQty) || 1);
+     const materialCostPerUnit = totalIngredientCost / yld;
+     const lbrCost = Number(laborCost) || 0;
+@@ -81,16 +140,13 @@ const KalkulatorHppView = () => {
+             name: productName,
+             category,
+             ingredients: ingredients.map(ing => {
+-                const match = availableMaterials.find(r => r.name.toLowerCase() === ing.name.toLowerCase());
+-                const cost = getIngredientCost(ing);
+-                const basePrice = Number(ing.price) || 0;
++                const material = activeAvailableMaterials.find(m => m.id === ing.rawMaterialId);
+                 return {
+-                    rawMaterialId: match ? match.id : `rm-custom-${Date.now()}`,
+-                    qtyUsed: basePrice > 0 ? (cost / basePrice) : 0,
+-                    snapshotPrice: basePrice,
+-                    recipeQtyUsed: Number(ing.qtyUsed) || 1,
+-                    recipeUnit: ing.recipeUnit || ing.unit,
+-                    unit: ing.unit
++                    rawMaterialId: ing.rawMaterialId,
++                    name: material ? material.name : ing.name,
++                    baseUnit: material ? material.baseUnit : ing.baseUnit,
++                    qty: Number(ing.qty) || 0,
++                    snapshotBasePrice: material ? (material.basePrice || 0) : 0,
+                 };
+             }),
+             laborCost: lbrCost,
+@@ -118,8 +174,6 @@ const KalkulatorHppView = () => {
+         }
+     };
+ 
+-    const activeAvailableMaterials = activeOnly(availableMaterials);
+-
+     return (
+         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
+             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+@@ -128,6 +182,12 @@ const KalkulatorHppView = () => {
+                         <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg">Informasi Produk</h4>
+                         <div className="space-y-5">
+                             <Input label="Nama Produk Final" type="text" value={productName} onChange={e => setProductName(e.target.value)} placeholder="Contoh: Es Teh" />
++                            {existingMatch && (
++                                <div className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-2xl border border-accent-200 dark:border-accent-500/30 bg-accent-50 dark:bg-accent-500/10">
++                                    <p className="text-xs font-semibold text-accent-700 dark:text-accent-300">Resep "{existingMatch.name}" udah ada di Library.</p>
++                                    <Button size="xs" variant="ghost" icon={<Sparkles className="w-3.5 h-3.5" />} onClick={handleLoadFromExisting}>Muat &amp; Konversi Otomatis</Button>
++                                </div>
++                            )}
+                             <div>
+                                 <div className="flex justify-between items-center mb-2">
+                                     <label className="block text-sm font-bold text-slate-600 dark:text-slate-300">Kategori</label>
+@@ -142,47 +202,41 @@ const KalkulatorHppView = () => {
+                     </Card>
+ 
+                     <Card padding="lg" className="space-y-5">
+-                        <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg flex items-center gap-2"><span>🛒</span> Komposisi Bahan & Satuan Pakai</h4>
++                        <div className="flex items-center justify-between flex-wrap gap-2">
++                            <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg flex items-center gap-2"><span>🛒</span> Komposisi Bahan</h4>
++                            {pendingMaterialsCount > 0 && (
++                                <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">{pendingMaterialsCount} bahan belum bisa dipilih (belum ada Satuan Dasar di Bahan Baku)</span>
++                            )}
++                        </div>
+                         <div className="space-y-4">
+                             {ingredients.map((ing, index) => (
+-                                <div key={ing.id} className="grid grid-cols-12 gap-3 items-center border-b border-slate-100 dark:border-slate-800 pb-4 md:pb-0 md:border-none">
+-                                    <div className="col-span-12 md:col-span-3">
++                                <div key={ing.id} className={`grid grid-cols-12 gap-3 items-center border-b border-slate-100 dark:border-slate-800 pb-4 md:pb-0 md:border-none ${ing.needsAttention ? 'rounded-xl bg-amber-50 dark:bg-amber-500/10 p-2 -mx-2' : ''}`}>
++                                    <div className="col-span-12 md:col-span-5">
+                                         {index === 0 && <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nama Bahan</label>}
+                                         <select
+                                             className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 text-sm transition-all duration-200"
+                                             value={ing.name}
+-                                            onChange={e => {
+-                                                const val = e.target.value;
+-                                                const matched = activeAvailableMaterials.find(r => r.name === val);
+-                                                if (matched) setIngredients(ingredients.map(i => i.id === ing.id ? { ...i, name: val, unit: matched.unit, price: String(matched.price), recipeUnit: matched.unit, qtyUsed: '1' } : i));
+-                                                else handleIngredientChange(ing.id, 'name', val);
+-                                            }}
++                                            onChange={e => handleSelectMaterial(ing.id, e.target.value)}
+                                         >
+                                             <option value="" disabled>-- Pilih Bahan --</option>
+-                                            <optgroup label="Bahan Baku Pasar">{activeAvailableMaterials.filter(m => !m.isPrep).map(rm => <option key={rm.id} value={rm.name}>{rm.name}</option>)}</optgroup>
+-                                            <optgroup label="Bahan Prep">{activeAvailableMaterials.filter(m => m.isPrep).map(prep => <option key={prep.id} value={prep.name}>{prep.name}</option>)}</optgroup>
++                                            <optgroup label="Bahan Baku Pasar">{usableMaterials.filter(m => !m.isPrep).map(rm => <option key={rm.id} value={rm.name}>{rm.name}</option>)}</optgroup>
++                                            <optgroup label="Bahan Prep">{usableMaterials.filter(m => m.isPrep).map(prep => <option key={prep.id} value={prep.name}>{prep.name}</option>)}</optgroup>
+                                         </select>
++                                        {ing.needsAttention && <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-1">Perlu dicek / pilih ulang bahannya</p>}
+                                     </div>
+-                                    <div className="col-span-12 sm:col-span-4 md:col-span-3">
+-                                        {index === 0 && <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Harga</label>}
+-                                        <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold border border-slate-200 dark:border-slate-700 truncate">{formatRupiah(ing.price)} / {ing.unit || '-'}</div>
++                                    <div className="col-span-6 md:col-span-3">
++                                        {index === 0 && <label className="block text-xs font-bold text-slate-500 text-center uppercase mb-2">Jumlah</label>}
++                                        <input type="number" step="any" className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-center" value={ing.qty} onChange={e => handleQtyChange(ing.id, e.target.value)} placeholder="0" />
+                                     </div>
+-                                    <div className="col-span-6 sm:col-span-2 md:col-span-1">
+-                                        {index === 0 && <label className="block text-xs font-bold text-slate-500 text-center uppercase mb-2">Jml</label>}
+-                                        <input type="number" step="any" className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-center" value={ing.qtyUsed} onChange={e => handleIngredientChange(ing.id, 'qtyUsed', e.target.value)} />
+-                                    </div>
+-                                    <div className="col-span-6 sm:col-span-2 md:col-span-2">
++                                    <div className="col-span-6 md:col-span-1 text-center">
+                                         {index === 0 && <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Satuan</label>}
+-                                        <select className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm" value={ing.recipeUnit || ing.unit} onChange={e => handleIngredientChange(ing.id, 'recipeUnit', e.target.value)}>
+-                                            <option value={ing.unit}>{ing.unit || 'Satuan'}</option>
+-                                            <option value="Gram">Gram</option><option value="ml">ml</option><option value="Pcs">Pcs</option><option value="Sdm">Sdm</option><option value="Sdt">Sdt</option>
+-                                        </select>
++                                        <span className="inline-block px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300">{formatBaseUnit(ing.baseUnit)}</span>
+                                     </div>
+-                                    <div className="col-span-10 sm:col-span-3 md:col-span-2">
++                                    <div className="col-span-8 md:col-span-2">
+                                         {index === 0 && <label className="block text-xs font-bold text-slate-500 text-center uppercase mb-2">Biaya</label>}
+-                                        <div className="p-3 bg-accent-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/30 rounded-xl text-sm text-accent-700 dark:text-accent-300 font-bold text-center truncate">{formatRupiah(getIngredientCost(ing))}</div>
++                                        <div className="p-3 bg-accent-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/30 rounded-xl text-sm text-accent-700 dark:text-accent-300 font-bold text-center truncate">{formatRupiah(ingredientCost(ing, activeAvailableMaterials))}</div>
+                                     </div>
+-                                    <div className={`col-span-2 sm:col-span-1 md:col-span-1 flex justify-center ${index === 0 ? 'md:pt-8' : ''}`}>
++                                    <div className="col-span-4 md:col-span-1 flex justify-center">
+                                         <button onClick={() => handleRemoveIngredient(ing.id)} className="p-2.5 text-slate-400 hover:text-accent-500 hover:bg-accent-50 rounded-xl"><Trash2 className="w-5 h-5" /></button>
+                                     </div>
+                                 </div>
+@@ -190,9 +244,9 @@ const KalkulatorHppView = () => {
+                         </div>
+                         <Button variant="ghost" icon={<Plus className="w-4 h-4" />} onClick={handleAddIngredient}>Tambah Komposisi</Button>
+                         <div className="bg-accent-50 dark:bg-accent-500/10 p-5 rounded-2xl border border-accent-200 dark:border-accent-500/30 flex flex-col gap-3 text-sm mt-5">
+-                            <div className="flex justify-between items-center border-b border-accent-200/60 dark:border-accent-500/20 pb-3"><span className="font-bold">Total Berat/Vol:</span><span className="font-black text-accent-900 dark:text-accent-200">{totalWeight} Gram/ml</span></div>
+-                            <div className="flex justify-between items-center border-b border-accent-200/60 dark:border-accent-500/20 pb-3"><span className="font-bold">Total Biaya Komposisi:</span><span className="font-black text-accent-900 dark:text-accent-200">{formatRupiah(totalIngredientCost)}</span></div>
+-                            <div className="flex justify-between items-center"><span className="font-black">HPP Bahan per Gram/ml:</span><span className="font-black text-accent-600 dark:text-accent-400">{formatRupiah(totalWeight > 0 ? totalIngredientCost / totalWeight : 0)}</span></div>
++                            {totalGram > 0 && <div className="flex justify-between items-center border-b border-accent-200/60 dark:border-accent-500/20 pb-3"><span className="font-bold">Total Berat:</span><span className="font-black text-accent-900 dark:text-accent-200">{totalGram} Gram</span></div>}
++                            {totalMl > 0 && <div className="flex justify-between items-center border-b border-accent-200/60 dark:border-accent-500/20 pb-3"><span className="font-bold">Total Volume:</span><span className="font-black text-accent-900 dark:text-accent-200">{totalMl} ml</span></div>}
++                            <div className="flex justify-between items-center"><span className="font-black">Total Biaya Komposisi:</span><span className="font-black text-accent-600 dark:text-accent-400">{formatRupiah(totalIngredientCost)}</span></div>
+                         </div>
+                     </Card>
+ 
+@@ -233,10 +287,16 @@ const KalkulatorHppView = () => {
+                                 <div className="flex justify-between items-center text-sm text-slate-400">
+                                     <span>Total HPP (Satu Resep Penuh):</span><span className="font-bold text-white">{formatRupiah(totalHppPerUnit * yld)}</span>
+                                 </div>
+-                                {totalWeight > 0 && (
++                                {totalGram > 0 && (
++                                    <div className="flex justify-between items-center text-sm text-slate-300 pt-2 border-t border-slate-700">
++                                        <span className="font-bold">Total HPP per Gram:</span>
++                                        <span className="font-black text-accent-400 bg-accent-950/50 px-2 py-1 rounded-lg border border-accent-500/50">{formatRupiah((totalHppPerUnit * yld) / totalGram)}</span>
++                                    </div>
++                                )}
++                                {totalMl > 0 && (
+                                     <div className="flex justify-between items-center text-sm text-slate-300 pt-2 border-t border-slate-700">
+-                                        <span className="font-bold">Total HPP per Gram/ml:</span>
+-                                        <span className="font-black text-accent-400 bg-accent-950/50 px-2 py-1 rounded-lg border border-accent-500/50">{formatRupiah((totalHppPerUnit * yld) / totalWeight)}</span>
++                                        <span className="font-bold">Total HPP per ml:</span>
++                                        <span className="font-black text-accent-400 bg-accent-950/50 px-2 py-1 rounded-lg border border-accent-500/50">{formatRupiah((totalHppPerUnit * yld) / totalMl)}</span>
+                                     </div>
+                                 )}
+                             </Card>
+@@ -292,4 +352,4 @@ const KalkulatorHppView = () => {
+     );
+ };
+ 
+-export default KalkulatorHppView;
+\ No newline at end of file
++export default KalkulatorHppView;
+diff --git a/src/features/hpp/tabs/LibraryHppView.jsx b/src/features/hpp/tabs/LibraryHppView.jsx
+index 25f4722..68d07fe 100644
+--- a/src/features/hpp/tabs/LibraryHppView.jsx
++++ b/src/features/hpp/tabs/LibraryHppView.jsx
+@@ -1,6 +1,6 @@
+ import React, { useState, useMemo, useEffect } from 'react';
+ import { useAppContext } from '../../../context/AppContext';
+-import { getIngredientCost } from '../../../utils/hppUtils';
++import { computeLiveIngredientsCost } from '../../../utils/hppUtils';
+ import { formatRupiah } from '../../../utils/formatters';
+ import { Card, Button, IconButton, EmptyState, Badge, SortModal } from '../../../components/ui';
+ import { applySort } from '../../../utils/sortUtils';
+@@ -45,11 +45,7 @@ const LibraryHppView = () => {
+         if (!editingRecipeLocal) return;
+         
+         // Hitung ulang berdasarkan input di Modal
+-        const liveIngredientCost = editingRecipeLocal.ingredients.reduce((sum, ing) => {
+-            const liveMaterial = availableMaterials.find(rm => rm.id === ing.rawMaterialId);
+-            const currentPrice = liveMaterial ? liveMaterial.price : ing.snapshotPrice;
+-            return sum + (currentPrice * ing.qtyUsed);
+-        }, 0);
++        const liveIngredientCost = computeLiveIngredientsCost(editingRecipeLocal.ingredients, availableMaterials);
+ 
+         const materialCostPerUnit = editingRecipeLocal.yieldQty > 0 ? (liveIngredientCost / editingRecipeLocal.yieldQty) : 0;
+         const totalHpp = materialCostPerUnit + (editingRecipeLocal.laborCost || 0) + (editingRecipeLocal.overheadCost || 0);
+@@ -75,11 +71,7 @@ const LibraryHppView = () => {
+ 
+     const libraryWithLiveCalc = useMemo(() => {
+         const enriched = activeLibrary.map(recipe => {
+-            const liveIngredientCost = recipe.ingredients.reduce((sum, ing) => {
+-                const liveMaterial = availableMaterials.find(rm => rm.id === ing.rawMaterialId);
+-                const currentPrice = liveMaterial ? liveMaterial.price : ing.snapshotPrice;
+-                return sum + (currentPrice * ing.qtyUsed);
+-            }, 0);
++            const liveIngredientCost = computeLiveIngredientsCost(recipe.ingredients, availableMaterials);
+ 
+             const liveMaterialPerUnit = recipe.yieldQty > 0 ? (liveIngredientCost / recipe.yieldQty) : 0;
+             const liveHpp = liveMaterialPerUnit + (recipe.laborCost || 0) + (recipe.overheadCost || 0);
+@@ -110,11 +102,7 @@ const LibraryHppView = () => {
+     let modalActualProfitPercent = 0;
+ 
+     if (editingRecipeLocal) {
+-        const liveIngredientCost = editingRecipeLocal.ingredients.reduce((sum, ing) => {
+-            const liveMaterial = availableMaterials.find(rm => rm.id === ing.rawMaterialId);
+-            const currentPrice = liveMaterial ? liveMaterial.price : ing.snapshotPrice;
+-            return sum + (currentPrice * ing.qtyUsed);
+-        }, 0);
++        const liveIngredientCost = computeLiveIngredientsCost(editingRecipeLocal.ingredients, availableMaterials);
+         const materialCostPerUnit = editingRecipeLocal.yieldQty > 0 ? (liveIngredientCost / editingRecipeLocal.yieldQty) : 0;
+         modalLiveHpp = materialCostPerUnit + (editingRecipeLocal.laborCost || 0) + (editingRecipeLocal.overheadCost || 0);
+         
+diff --git a/src/features/hpp/tabs/UnitMigrationModal.jsx b/src/features/hpp/tabs/UnitMigrationModal.jsx
+new file mode 100644
+index 0000000..c8589c3
+--- /dev/null
++++ b/src/features/hpp/tabs/UnitMigrationModal.jsx
+@@ -0,0 +1,265 @@
++import React, { useState, useEffect, useMemo } from 'react';
++import { X, Search, Plus, Ruler, CheckCircle2 } from 'lucide-react';
++import { useAppContext } from '../../../context/AppContext';
++import { formatRupiah } from '../../../utils/formatters';
++import { Card, Button, Badge, Input, Select, IconButton, EmptyState } from '../../../components/ui';
++import { activeOnly } from '../../../utils/softDelete';
++import { BASE_UNITS, BASE_UNIT_LABELS, suggestBaseUnitAndPrice, formatBaseUnit } from '../../../utils/unitConversion';
++
++// Migrasi Satuan — satu-satunya tempat buat ngisi/ngedit baseUnit & basePrice
++// tiap rawMaterial (dipakai baik migrasi data lama MAUPUN bahan yang baru
++// ditambah lewat Tambah Bahan Baku, karena keduanya bakal muncul di sini
++// selama baseUnit-nya masih kosong — lihat banner status di BahanBakuView).
++//
++// Kenapa terpisah dari modal Tambah/Edit Bahan Baku: biar cuma ada SATU
++// tempat yang tau cara nyaranin/nge-parse satuan (gampang di-maintain), dan
++// biar review-nya bisa sekaligus lihat semua bahan (bukan satu-satu buka
++// modal edit bergantian).
++//
++// Alur: draft lokal (belum kesimpen) diisi dari basePrice/baseUnit yang
++// SUDAH ada, atau dari suggestBaseUnitAndPrice() kalau belum ada — user bisa
++// koreksi apa aja sebelum tekan "Terapkan Semua". unit/price LAMA di
++// rawMaterials tidak disentuh sama sekali (0 resiko ke kalkulasi yang lagi
++// jalan sekarang, sesuai prinsip Patch 1).
++//
++// PENTING soal urutan Hook: semua Hook (useState/useEffect/useMemo) WAJIB
++// dipanggil sebelum early-return `if (!isOpen)` di bawah — kalau ada Hook
++// yang nyelip SETELAH early-return itu, urutan pemanggilan Hook jadi beda
++// antara render "modal terbuka" vs "modal tertutup" dan React akan error.
++const UnitMigrationModal = ({ isOpen, onClose }) => {
++  const { rawMaterials, setRawMaterials, triggerAlert } = useAppContext();
++  const [draft, setDraft] = useState({});
++  const [searchQuery, setSearchQuery] = useState('');
++
++  const activeMaterials = useMemo(() => activeOnly(rawMaterials), [rawMaterials]);
++
++  // Sengaja cuma re-init draft pas modal DIBUKA (bukan tiap `rawMaterials`
++  // berubah) — supaya draft yang lagi direview/diketik user gak diam-diam
++  // ke-reset kalau device lain kebetulan sync perubahan harga selagi modal
++  // ini terbuka. Nutup lalu buka lagi modalnya akan re-sync dari data terbaru.
++  useEffect(() => {
++    if (!isOpen) return;
++    const initial = {};
++    activeOnly(rawMaterials).forEach(rm => {
++      const already = rm.baseUnit && (rm.basePrice !== null && rm.basePrice !== undefined);
++      const suggestion = already ? null : suggestBaseUnitAndPrice(rm.unit, rm.price);
++      initial[rm.id] = {
++        baseUnit: already ? rm.baseUnit : (suggestion.baseUnit || ''),
++        basePrice: already
++          ? String(rm.basePrice)
++          : (suggestion.basePrice !== null ? String(Math.round(suggestion.basePrice * 100) / 100) : ''),
++        checklistUnitOverride: rm.checklistUnitOverride || [],
++      };
++    });
++    setDraft(initial);
++    setSearchQuery('');
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [isOpen]);
++
++  const isRowComplete = (id) => {
++    const d = draft[id];
++    return !!d && !!d.baseUnit && d.basePrice !== '' && !Number.isNaN(Number(d.basePrice));
++  };
++
++  const visibleMaterials = useMemo(() => {
++    const filtered = activeMaterials.filter(rm => rm.name.toLowerCase().includes(searchQuery.toLowerCase()));
++    // Yang belum lengkap duluan — paling butuh perhatian user duluan.
++    return [...filtered].sort((a, b) => {
++      const aDone = isRowComplete(a.id);
++      const bDone = isRowComplete(b.id);
++      if (aDone !== bDone) return aDone ? 1 : -1;
++      return a.name.localeCompare(b.name, 'id');
++    });
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [activeMaterials, searchQuery, draft]);
++
++  const completedCount = activeMaterials.filter(rm => isRowComplete(rm.id)).length;
++
++  if (!isOpen) return null;
++
++  const updateDraft = (id, patch) => {
++    setDraft(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
++  };
++
++  const addOverrideRow = (id) => {
++    setDraft(prev => ({
++      ...prev,
++      [id]: { ...prev[id], checklistUnitOverride: [...(prev[id]?.checklistUnitOverride || []), { label: '', factor: '' }] },
++    }));
++  };
++
++  const updateOverrideRow = (id, idx, patch) => {
++    setDraft(prev => {
++      const rows = [...(prev[id]?.checklistUnitOverride || [])];
++      rows[idx] = { ...rows[idx], ...patch };
++      return { ...prev, [id]: { ...prev[id], checklistUnitOverride: rows } };
++    });
++  };
++
++  const removeOverrideRow = (id, idx) => {
++    setDraft(prev => {
++      const rows = (prev[id]?.checklistUnitOverride || []).filter((_, i) => i !== idx);
++      return { ...prev, [id]: { ...prev[id], checklistUnitOverride: rows } };
++    });
++  };
++
++  const handleApply = () => {
++    setRawMaterials(rawMaterials.map(rm => {
++      const d = draft[rm.id];
++      if (!d) return rm;
++
++      const basePriceNum = d.basePrice !== '' ? Number(d.basePrice) : null;
++      const cleanOverrides = (d.checklistUnitOverride || [])
++        .filter(o => o.label && o.label.trim() && Number(o.factor) > 0)
++        .map(o => ({ label: o.label.trim(), factor: Number(o.factor) }));
++
++      return {
++        ...rm,
++        baseUnit: d.baseUnit || null,
++        basePrice: (d.baseUnit && basePriceNum !== null && !Number.isNaN(basePriceNum)) ? basePriceNum : null,
++        checklistUnitOverride: cleanOverrides,
++      };
++    }));
++    triggerAlert('Satuan dasar berhasil disimpan.');
++    onClose();
++  };
++
++  return (
++    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-200">
++      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[95vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
++        {/* HEADER */}
++        <div className="flex justify-between items-start gap-3 p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50">
++          <div className="min-w-0">
++            <h3 className="font-heading font-black text-lg text-slate-800 dark:text-slate-100 uppercase tracking-tight flex items-center gap-2">
++              <Ruler className="w-5 h-5 text-accent-500 shrink-0" /> Migrasi Satuan Dasar
++            </h3>
++            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
++              {completedCount} dari {activeMaterials.length} bahan sudah punya Satuan Dasar &middot; harga selalu per 1 Gram / ml / Pcs.
++            </p>
++          </div>
++          <IconButton variant="neutral" className="rounded-full shrink-0" onClick={onClose}><X className="w-5 h-5" /></IconButton>
++        </div>
++
++        {/* SEARCH */}
++        <div className="px-5 pt-4">
++          <div className="relative">
++            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
++            <input
++              type="text"
++              placeholder="Cari bahan..."
++              className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent transition-all duration-300 text-sm"
++              value={searchQuery}
++              onChange={e => setSearchQuery(e.target.value)}
++            />
++          </div>
++        </div>
++
++        {/* BODY SCROLLABLE */}
++        <div className="flex-1 overflow-y-auto p-5 space-y-3">
++          {visibleMaterials.length === 0 ? (
++            <EmptyState size="sm" title="Tidak ada bahan yang cocok" />
++          ) : (
++            visibleMaterials.map(rm => {
++              const d = draft[rm.id] || { baseUnit: '', basePrice: '', checklistUnitOverride: [] };
++              const done = isRowComplete(rm.id);
++
++              return (
++                <Card key={rm.id} variant="muted" padding="md" className="space-y-3">
++                  <div className="flex items-start justify-between gap-2">
++                    <div className="min-w-0">
++                      <p className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{rm.name}</p>
++                      <p className="text-[11px] text-slate-400 dark:text-slate-500">
++                        Sebelumnya: {rm.unit || '(satuan kosong)'} &middot; {formatRupiah(rm.price)}
++                      </p>
++                    </div>
++                    <Badge variant={done ? 'success' : 'warning'} size="sm" className="shrink-0">
++                      {done ? 'Siap' : 'Perlu diisi'}
++                    </Badge>
++                  </div>
++
++                  <div className="grid grid-cols-2 gap-2">
++                    <Select
++                      label="Satuan Dasar"
++                      value={d.baseUnit}
++                      onChange={e => updateDraft(rm.id, { baseUnit: e.target.value })}
++                    >
++                      <option value="">Pilih...</option>
++                      {BASE_UNITS.map(u => <option key={u} value={u}>{BASE_UNIT_LABELS[u]}</option>)}
++                    </Select>
++                    <Input
++                      label={`Harga / ${formatBaseUnit(d.baseUnit)}`}
++                      type="number"
++                      step="any"
++                      value={d.basePrice}
++                      onChange={e => updateDraft(rm.id, { basePrice: e.target.value })}
++                      placeholder="0"
++                    />
++                  </div>
++
++                  {done && (
++                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
++                      <CheckCircle2 className="w-3.5 h-3.5" /> = {formatRupiah(Number(d.basePrice))} / {formatBaseUnit(d.baseUnit)}
++                    </p>
++                  )}
++
++                  <details className="text-xs">
++                    <summary className="cursor-pointer font-semibold text-slate-500 dark:text-slate-400 select-none">
++                      Alias satuan checklist (opsional){(d.checklistUnitOverride || []).length > 0 ? ` \u00b7 ${d.checklistUnitOverride.length}` : ''}
++                    </summary>
++                    <div className="mt-2 space-y-2">
++                      <p className="text-slate-400 dark:text-slate-500 leading-relaxed">
++                        Isi kalau di checklist stok bahan ini kadang ditulis pakai satuan gak standar (misal "Pouch"). 1 satuan itu = berapa {formatBaseUnit(d.baseUnit) || 'Satuan Dasar'}?
++                      </p>
++                      {(d.checklistUnitOverride || []).map((o, idx) => (
++                        <div key={idx} className="flex gap-2 items-center">
++                          <input
++                            className="flex-1 min-w-0 p-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
++                            placeholder="Misal: Pouch"
++                            value={o.label}
++                            onChange={e => updateOverrideRow(rm.id, idx, { label: e.target.value })}
++                          />
++                          <span className="text-slate-400 shrink-0">=</span>
++                          <input
++                            type="number"
++                            className="w-20 shrink-0 p-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
++                            placeholder="900"
++                            value={o.factor}
++                            onChange={e => updateOverrideRow(rm.id, idx, { factor: e.target.value })}
++                          />
++                          <button
++                            type="button"
++                            onClick={() => removeOverrideRow(rm.id, idx)}
++                            className="p-1.5 text-slate-400 hover:text-accent-500 shrink-0"
++                          >
++                            <X className="w-3.5 h-3.5" />
++                          </button>
++                        </div>
++                      ))}
++                      <button
++                        type="button"
++                        onClick={() => addOverrideRow(rm.id)}
++                        className="text-accent-600 dark:text-accent-400 font-semibold text-xs flex items-center gap-1"
++                      >
++                        <Plus className="w-3 h-3" /> Tambah alias
++                      </button>
++                    </div>
++                  </details>
++                </Card>
++              );
++            })
++          )}
++        </div>
++
++        {/* FOOTER */}
++        <div className="p-5 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 bg-slate-50 dark:bg-slate-950/50">
++          <Button variant="secondary" onClick={onClose}>Batal</Button>
++          <Button variant="success" icon={<CheckCircle2 className="w-4 h-4" />} onClick={handleApply}>
++            Terapkan Semua
++          </Button>
++        </div>
++      </div>
++    </div>
++  );
++};
++
++export default UnitMigrationModal;
+diff --git a/src/features/stock/StockCorrectionModal.jsx b/src/features/stock/StockCorrectionModal.jsx
+new file mode 100644
+index 0000000..5901de3
+--- /dev/null
++++ b/src/features/stock/StockCorrectionModal.jsx
+@@ -0,0 +1,165 @@
++import React, { useState, useEffect, useMemo } from 'react';
++import { X, Save, Trash2, PencilLine } from 'lucide-react';
++import { Button, Input, Select, IconButton } from '../../components/ui';
++import { formatRupiah } from '../../utils/formatters';
++import { activeOnly, markDeleted } from '../../utils/softDelete';
++import { hasBaseUnit, formatBaseUnit } from '../../utils/unitConversion';
++import { findActiveCorrection } from './stockChecklistApi';
++
++// Koreksi Stok Opname — SATU-SATUNYA cara owner "mengedit" nilai Stok
++// Opname dari mamam-global, TANPA nyentuh tabel stock_checklists (data
++// mentah karyawan, punya mamam-absensi) sama sekali. Koreksi disimpan
++// terpisah, dicek duluan sama valuateChecklist sebelum fallback ke
++// checklist asli — lihat stockChecklistApi.js.
++//
++// "Hapus" koreksi = soft-delete (markDeleted) -> otomatis balik ke nilai
++// checklist asli (atau ke status unmatched/unit-mismatch apa adanya) tanpa
++// pernah kehilangan histori kalau ternyata kepencet gak sengaja.
++//
++// prefill (opsional): { rawMaterialId, name } — dipakai waktu modal dibuka
++// dari baris item yang SUDAH diketahui bahannya (matched / unit-mismatch).
++// Kalau kosong, user pilih sendiri dari dropdown (mis. buat item unmatched,
++// atau nambah koreksi baru yang gak ada di checklist hari itu sama sekali).
++const StockCorrectionModal = ({ isOpen, onClose, dateStr, rawMaterials, corrections, setCorrections, prefill, triggerAlert, triggerConfirm }) => {
++  const [rawMaterialId, setRawMaterialId] = useState('');
++  const [qty, setQty] = useState('');
++  const [note, setNote] = useState('');
++
++  const usableMaterials = useMemo(
++    () => activeOnly(rawMaterials || []).filter(hasBaseUnit).sort((a, b) => a.name.localeCompare(b.name, 'id')),
++    [rawMaterials]
++  );
++
++  const existing = useMemo(
++    () => (rawMaterialId ? findActiveCorrection(corrections, dateStr, rawMaterialId) : null),
++    [corrections, dateStr, rawMaterialId]
++  );
++
++  // Reset/prefill pas modal DIBUKA aja (bukan tiap `corrections` berubah),
++  // pola sama kayak UnitMigrationModal — hindari form yang lagi diisi user
++  // ke-reset diam-diam kalau ada sync masuk dari device lain.
++  useEffect(() => {
++    if (!isOpen) return;
++    const initialId = prefill?.rawMaterialId || '';
++    setRawMaterialId(initialId);
++    const activeExisting = initialId ? findActiveCorrection(corrections, dateStr, initialId) : null;
++    setQty(activeExisting ? String(activeExisting.qty) : '');
++    setNote(activeExisting ? (activeExisting.note || '') : '');
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [isOpen]);
++
++  if (!isOpen) return null;
++
++  const selectedMaterial = usableMaterials.find(m => m.id === rawMaterialId);
++
++  const handleMaterialChange = (id) => {
++    setRawMaterialId(id);
++    const activeExisting = findActiveCorrection(corrections, dateStr, id);
++    setQty(activeExisting ? String(activeExisting.qty) : '');
++    setNote(activeExisting ? (activeExisting.note || '') : '');
++  };
++
++  const handleSave = () => {
++    if (!rawMaterialId) return triggerAlert('Pilih bahan yang mau dikoreksi dulu.');
++    if (qty === '' || Number.isNaN(Number(qty)) || Number(qty) < 0) return triggerAlert('Isi jumlah yang benar (angka, minimal 0).');
++
++    const now = new Date().toISOString();
++
++    if (existing) {
++      setCorrections(corrections.map(c => c.id === existing.id ? { ...c, qty: Number(qty), note: note.trim(), updatedAt: now } : c));
++      triggerAlert('Koreksi berhasil diperbarui.');
++    } else {
++      const newCorrection = {
++        id: `soc-${Date.now()}`,
++        dateStr,
++        rawMaterialId,
++        qty: Number(qty),
++        note: note.trim(),
++        createdAt: now,
++        updatedAt: now,
++        deletedAt: null,
++      };
++      setCorrections([...(corrections || []), newCorrection]);
++      triggerAlert('Koreksi berhasil disimpan.');
++    }
++    onClose();
++  };
++
++  const handleRevert = () => {
++    if (!existing) return;
++    triggerConfirm('Hapus koreksi ini? Nilai akan balik ke hasil checklist asli (atau status semula kalau item ini tadinya belum ter-link).', () => {
++      setCorrections(corrections.map(c => c.id === existing.id ? markDeleted(c) : c));
++      triggerAlert('Koreksi dihapus, nilai kembali ke data asli.');
++      onClose();
++    });
++  };
++
++  return (
++    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-200">
++      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
++        <div className="flex justify-between items-start gap-3 p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50">
++          <div className="min-w-0">
++            <h3 className="font-heading font-black text-lg text-slate-800 dark:text-slate-100 uppercase tracking-tight flex items-center gap-2">
++              <PencilLine className="w-5 h-5 text-accent-500 shrink-0" /> Koreksi Stok Opname
++            </h3>
++            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Tanggal {dateStr}. Data checklist asli karyawan tetap tersimpan apa adanya.</p>
++          </div>
++          <IconButton variant="neutral" className="rounded-full shrink-0" onClick={onClose}><X className="w-5 h-5" /></IconButton>
++        </div>
++
++        <div className="p-5 space-y-4">
++          <Select
++            label="Bahan"
++            value={rawMaterialId}
++            onChange={e => handleMaterialChange(e.target.value)}
++            disabled={!!prefill?.rawMaterialId}
++          >
++            <option value="">-- Pilih Bahan --</option>
++            {usableMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
++          </Select>
++          {!hasBaseUnit(selectedMaterial) && rawMaterialId === '' && (
++            <p className="text-[11px] text-slate-400 dark:text-slate-500">Cuma bahan yang udah punya Satuan Dasar yang bisa dikoreksi (atur di Bahan Baku &rarr; Atur Satuan Dasar).</p>
++          )}
++
++          <Input
++            label={selectedMaterial ? `Jumlah Sebenarnya (${formatBaseUnit(selectedMaterial.baseUnit)})` : 'Jumlah Sebenarnya'}
++            type="number"
++            step="any"
++            value={qty}
++            onChange={e => setQty(e.target.value)}
++            placeholder="0"
++            disabled={!rawMaterialId}
++          />
++          {selectedMaterial && qty !== '' && !Number.isNaN(Number(qty)) && (
++            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold -mt-2">
++              = {formatRupiah(Number(qty) * (selectedMaterial.basePrice || 0))}
++            </p>
++          )}
++
++          <div>
++            <label className="block text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Catatan (opsional)</label>
++            <textarea
++              className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 text-sm transition-all duration-200"
++              rows={2}
++              value={note}
++              onChange={e => setNote(e.target.value)}
++              placeholder="Misal: karyawan salah tulis satuan, sudah dicek ulang fisik"
++            />
++          </div>
++        </div>
++
++        <div className="p-5 border-t border-slate-100 dark:border-slate-800 flex justify-between gap-3 bg-slate-50 dark:bg-slate-950/50">
++          {existing ? (
++            <Button variant="ghost" icon={<Trash2 className="w-4 h-4" />} onClick={handleRevert}>Hapus Koreksi</Button>
++          ) : <span />}
++          <div className="flex gap-3">
++            <Button variant="secondary" onClick={onClose}>Batal</Button>
++            <Button variant="success" icon={<Save className="w-4 h-4" />} onClick={handleSave}>Simpan</Button>
++          </div>
++        </div>
++      </div>
++    </div>
++  );
++};
++
++export default StockCorrectionModal;
+diff --git a/src/features/stock/StockView.jsx b/src/features/stock/StockView.jsx
+index c8ee41c..91ea385 100644
+--- a/src/features/stock/StockView.jsx
++++ b/src/features/stock/StockView.jsx
+@@ -1,31 +1,40 @@
+ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+-import { Warehouse, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
+-import { Card, Badge, EmptyState, Button, PageHeader } from '../../components/ui';
++import { Warehouse, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, Calendar, PencilLine, Plus, Trash2 } from 'lucide-react';
++import { Card, Badge, EmptyState, Button, PageHeader, IconButton } from '../../components/ui';
+ import { useAppContext } from '../../context/AppContext';
+ import { formatRupiah, toLocalMonthString, toLocalDateString } from '../../utils/formatters';
+ import { formatPeriodLabel } from '../balance/periodUtils';
+ import { getSupabaseClient } from '../../storage/syncClient';
++import { markDeleted } from '../../utils/softDelete';
+ import { fetchStockMaster, fetchChecklistsInMonth, valuateChecklist } from './stockChecklistApi';
++import StockCorrectionModal from './StockCorrectionModal';
+ 
+ // Stok Opname — browse hasil checklist stok bulanan (punya mamam-absensi,
+-// tabel stock_checklists) dengan rincian per hari. Beda dari tab Ringkasan
+-// di Laba Rugi (yang cuma ambil 1 titik valuasi buat Stok Awal/Akhir),
+-// di sini SEMUA hari yang ada checklist-nya ditampilkan sekaligus untuk
+-// dilihat historinya — tidak menyimpan/mengunci apa pun, murni baca &
+-// valuasi live pakai harga rawMaterials saat ini.
++// tabel stock_checklists) dengan rincian per hari + koreksi manual (punya
++// mamam-global sendiri, tabel app_config key='stockOpnameCorrections').
++// Beda dari tab Ringkasan di Laba Rugi (yang cuma ambil 1 titik valuasi
++// buat Stok Awal/Akhir), di sini SEMUA hari yang ada checklist-nya
++// ditampilkan sekaligus untuk dilihat historinya.
++//
++// Data mentah (`rawChecklists`/`master`) dipisah dari hasil valuasi
++// (`dailyRows`) SENGAJA: fetch jaringan cuma perlu diulang kalau `period`
++// ganti, sementara valuasi (yang gampang & murah dihitung ulang di client)
++// otomatis refresh tiap `rawMaterials` ATAU `stockOpnameCorrections`
++// berubah — tanpa perlu fetch ulang ke server tiap kali user nyimpen 1
++// koreksi.
+ const StockView = () => {
+-  const { rawMaterials } = useAppContext();
++  const { rawMaterials, stockOpnameCorrections, setStockOpnameCorrections, triggerAlert, triggerConfirm } = useAppContext();
+   const [period, setPeriod] = useState(toLocalMonthString());
+   const [isLoading, setIsLoading] = useState(true);
+   const [error, setError] = useState(null);
+-  const [dailyRows, setDailyRows] = useState([]); // [{ dateStr, valuation: {...}|null }], terbaru duluan
++  const [rawChecklists, setRawChecklists] = useState([]);
++  const [master, setMaster] = useState({ categories: [] });
+   const [expandedDate, setExpandedDate] = useState(null);
++  const [correctionTarget, setCorrectionTarget] = useState(null); // { dateStr, prefill } | null -> modal terbuka kalau diisi
+ 
+-  // Race guard: `load` bisa ke-trigger ulang bukan cuma karena `period`
+-  // ganti, tapi juga kalau `rawMaterials` berubah (mis. device lain
+-  // update harga bahan baku lewat realtime sync selagi view ini kebuka).
+-  // Kalau request lama belum selesai pas trigger baru datang, hasil lama
+-  // yang telat resolve HARUS dibuang, bukan menimpa data yang lebih baru.
++  // Race guard: `load` bisa ke-trigger ulang kalau `period` ganti sebelum
++  // request sebelumnya selesai. Request lama yang telat resolve HARUS
++  // dibuang, bukan menimpa data yang lebih baru.
+   const loadEpochRef = useRef(0);
+ 
+   const load = useCallback(async () => {
+@@ -37,31 +46,14 @@ const StockView = () => {
+       const supabase = await getSupabaseClient();
+       if (!supabase) throw new Error('Koneksi Supabase belum siap, coba lagi sebentar.');
+ 
+-      const [checklists, master] = await Promise.all([
++      const [checklists, fetchedMaster] = await Promise.all([
+         fetchChecklistsInMonth(supabase, period),
+         fetchStockMaster(supabase),
+       ]);
+       if (loadEpochRef.current !== epoch) return; // ada trigger baru selagi nunggu, buang hasil basi ini
+ 
+-      const byDate = new Map(checklists.map(row => [row.date_str, row]));
+-
+-      const [y, m] = period.split('-').map(Number);
+-      const daysInMonth = new Date(y, m, 0).getDate();
+-      const isCurrentMonth = period === toLocalMonthString();
+-      // Untuk bulan berjalan, jangan tampilkan hari-hari yang belum
+-      // kejadian (tanggal setelah hari ini) — pasti belum ada checklist.
+-      const lastDay = isCurrentMonth ? Number(toLocalDateString().slice(8, 10)) : daysInMonth;
+-
+-      const rows = [];
+-      for (let d = 1; d <= lastDay; d++) {
+-        const dateStr = `${period}-${String(d).padStart(2, '0')}`;
+-        const row = byDate.get(dateStr);
+-        rows.push({
+-          dateStr,
+-          valuation: row ? valuateChecklist(row, master, rawMaterials || []) : null,
+-        });
+-      }
+-      setDailyRows(rows.reverse()); // terbaru di atas, lebih enak di-scroll dari HP
++      setRawChecklists(checklists);
++      setMaster(fetchedMaster);
+     } catch (err) {
+       if (loadEpochRef.current !== epoch) return;
+       console.error('[StockView] gagal memuat data stok opname bulanan:', err);
+@@ -69,17 +61,45 @@ const StockView = () => {
+     } finally {
+       if (loadEpochRef.current === epoch) setIsLoading(false);
+     }
+-  }, [period, rawMaterials]);
++  }, [period]);
+ 
+   useEffect(() => {
+     load();
+   }, [load]);
+ 
++  // Valuasi murni client-side dari data yang udah di-fetch -> refresh
++  // otomatis & instan tiap rawMaterials (harga/Satuan Dasar berubah) atau
++  // stockOpnameCorrections (koreksi baru disimpan/dihapus) berubah, tanpa
++  // fetch ulang ke server.
++  const dailyRows = useMemo(() => {
++    if (rawChecklists.length === 0 && !master.categories?.length) return [];
++
++    const byDate = new Map(rawChecklists.map(row => [row.date_str, row]));
++    const [y, m] = period.split('-').map(Number);
++    const daysInMonth = new Date(y, m, 0).getDate();
++    const isCurrentMonth = period === toLocalMonthString();
++    const lastDay = isCurrentMonth ? Number(toLocalDateString().slice(8, 10)) : daysInMonth;
++
++    const rows = [];
++    for (let d = 1; d <= lastDay; d++) {
++      const dateStr = `${period}-${String(d).padStart(2, '0')}`;
++      const row = byDate.get(dateStr);
++      rows.push({
++        dateStr,
++        valuation: row ? valuateChecklist(row, master, rawMaterials || [], stockOpnameCorrections) : null,
++      });
++    }
++    return rows.reverse(); // terbaru di atas, lebih enak di-scroll dari HP
++  }, [rawChecklists, master, period, rawMaterials, stockOpnameCorrections]);
++
+   const summary = useMemo(() => {
+     const filled = dailyRows.filter(r => r.valuation).length;
+     return { totalDays: dailyRows.length, filledDays: filled };
+   }, [dailyRows]);
+ 
++  const openCorrectionModal = (dateStr, prefill = null) => setCorrectionTarget({ dateStr, prefill });
++  const closeCorrectionModal = () => setCorrectionTarget(null);
++
+   return (
+     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
+       <PageHeader
+@@ -131,6 +151,9 @@ const StockView = () => {
+                     {valuation?.unmatchedCount > 0 && (
+                       <Badge variant="warning">{valuation.unmatchedCount} belum ter-link</Badge>
+                     )}
++                    {valuation?.unitMismatchCount > 0 && (
++                      <Badge variant="warning">{valuation.unitMismatchCount} satuan gak cocok</Badge>
++                    )}
+                   </div>
+                   <div className="flex items-center gap-2 shrink-0">
+                     {valuation && <span className="font-bold text-sm text-slate-800 dark:text-slate-100">{formatRupiah(valuation.totalValue)}</span>}
+@@ -139,32 +162,66 @@ const StockView = () => {
+                 </button>
+ 
+                 {isExpanded && valuation && (
+-                  <div className="border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
+-                    <table className="w-full text-left border-collapse">
+-                      <thead>
+-                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
+-                          <th className="p-3 font-bold">Bahan</th>
+-                          <th className="p-3 font-bold">Qty</th>
+-                          <th className="p-3 font-bold text-right">Subtotal</th>
+-                        </tr>
+-                      </thead>
+-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+-                        {valuation.items.map(it => (
+-                          <tr key={it.rawMaterialId}>
+-                            <td className="p-3 font-bold text-slate-800 dark:text-slate-100">{it.name}</td>
+-                            <td className="p-3 text-slate-600 dark:text-slate-300">{it.qty} {it.unit}</td>
+-                            <td className="p-3 text-right font-bold text-slate-800 dark:text-slate-100">{formatRupiah(it.subtotal)}</td>
+-                          </tr>
+-                        ))}
+-                        {valuation.unmatchedItems.map((it, idx) => (
+-                          <tr key={`u${idx}`} className="bg-amber-50/50 dark:bg-amber-500/5">
+-                            <td className="p-3 font-bold text-amber-700 dark:text-amber-400">{it.name} <span className="font-normal text-[10px]">(belum ter-link)</span></td>
+-                            <td className="p-3 text-amber-700 dark:text-amber-400">{it.qty} {it.unit}</td>
+-                            <td className="p-3 text-right text-amber-700 dark:text-amber-400">&mdash;</td>
++                  <div className="border-t border-slate-100 dark:border-slate-800">
++                    <div className="overflow-x-auto">
++                      <table className="w-full text-left border-collapse">
++                        <thead>
++                          <tr className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
++                            <th className="p-3 font-bold">Bahan</th>
++                            <th className="p-3 font-bold">Qty</th>
++                            <th className="p-3 font-bold text-right">Subtotal</th>
++                            <th className="p-3 font-bold text-center">Koreksi</th>
+                           </tr>
+-                        ))}
+-                      </tbody>
+-                    </table>
++                        </thead>
++                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
++                          {valuation.items.map(it => (
++                            <tr key={it.rawMaterialId} className={it.isCorrected ? 'bg-accent-50/40 dark:bg-accent-500/5' : ''}>
++                              <td className="p-3 font-bold text-slate-800 dark:text-slate-100">
++                                {it.name} {it.isCorrected && <Badge variant="orange" size="sm" className="ml-1.5">Terkoreksi</Badge>}
++                              </td>
++                              <td className="p-3 text-slate-600 dark:text-slate-300">{it.qty} {it.unit}</td>
++                              <td className="p-3 text-right font-bold text-slate-800 dark:text-slate-100">{formatRupiah(it.subtotal)}</td>
++                              <td className="p-3 text-center">
++                                <IconButton variant="edit" ghost onClick={() => openCorrectionModal(dateStr, { rawMaterialId: it.rawMaterialId, name: it.name })}>
++                                  <PencilLine className="w-3.5 h-3.5" />
++                                </IconButton>
++                              </td>
++                            </tr>
++                          ))}
++                          {valuation.unmatchedItems.map((it, idx) => (
++                            <tr key={`u${idx}`} className="bg-amber-50/50 dark:bg-amber-500/5">
++                              <td className="p-3 font-bold text-amber-700 dark:text-amber-400">{it.name} <span className="font-normal text-[10px]">(belum ter-link)</span></td>
++                              <td className="p-3 text-amber-700 dark:text-amber-400">{it.qty} {it.unit}</td>
++                              <td className="p-3 text-right text-amber-700 dark:text-amber-400">&mdash;</td>
++                              <td className="p-3 text-center">
++                                <IconButton variant="edit" ghost onClick={() => openCorrectionModal(dateStr, null)}>
++                                  <PencilLine className="w-3.5 h-3.5" />
++                                </IconButton>
++                              </td>
++                            </tr>
++                          ))}
++                          {valuation.unitMismatchItems.map((it, idx) => (
++                            <tr key={`m${idx}`} className="bg-amber-50/50 dark:bg-amber-500/5">
++                              <td className="p-3 font-bold text-amber-700 dark:text-amber-400">
++                                {it.name} <span className="font-normal text-[10px]">(satuan "{it.unit || '-'}" gak cocok{it.materialBaseUnit ? ` dgn Satuan Dasar (${it.materialBaseUnit})` : ', bahan belum ada Satuan Dasar'})</span>
++                              </td>
++                              <td className="p-3 text-amber-700 dark:text-amber-400">{it.qty} {it.unit}</td>
++                              <td className="p-3 text-right text-amber-700 dark:text-amber-400">&mdash;</td>
++                              <td className="p-3 text-center">
++                                <IconButton variant="edit" ghost onClick={() => openCorrectionModal(dateStr, { rawMaterialId: it.rawMaterialId, name: it.name })}>
++                                  <PencilLine className="w-3.5 h-3.5" />
++                                </IconButton>
++                              </td>
++                            </tr>
++                          ))}
++                        </tbody>
++                      </table>
++                    </div>
++                    <div className="p-3 border-t border-slate-100 dark:border-slate-800">
++                      <Button size="xs" variant="ghost" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => openCorrectionModal(dateStr, null)}>
++                        Tambah Koreksi
++                      </Button>
++                    </div>
+                   </div>
+                 )}
+               </Card>
+@@ -172,6 +229,18 @@ const StockView = () => {
+           })}
+         </div>
+       )}
++
++      <StockCorrectionModal
++        isOpen={!!correctionTarget}
++        onClose={closeCorrectionModal}
++        dateStr={correctionTarget?.dateStr}
++        prefill={correctionTarget?.prefill}
++        rawMaterials={rawMaterials}
++        corrections={stockOpnameCorrections}
++        setCorrections={setStockOpnameCorrections}
++        triggerAlert={triggerAlert}
++        triggerConfirm={triggerConfirm}
++      />
+     </div>
+   );
+ };
+diff --git a/src/features/stock/stockChecklistApi.js b/src/features/stock/stockChecklistApi.js
+index 1a80982..699c676 100644
+--- a/src/features/stock/stockChecklistApi.js
++++ b/src/features/stock/stockChecklistApi.js
+@@ -2,8 +2,10 @@
+ //
+ // Akses data mentah ke tabel `stock_checklists` (punya app mamam-absensi,
+ // backend Supabase yang sama) + valuasinya terhadap rawMaterials
+-// (punya mamam-global). Dipakai bareng oleh:
+-//   - features/stock/StockView.jsx      (Stok Opname: browse bulanan + rincian per hari)
++// (punya mamam-global), dioverride opsional oleh stockOpnameCorrections
++// (juga punya mamam-global, lihat App.jsx & valuateChecklist di bawah).
++// Dipakai bareng oleh:
++//   - features/stock/StockView.jsx      (Stok Opname: browse bulanan + rincian per hari + koreksi)
+ //   - features/balance/stockOpnameLogic.js (Laba Rugi: Stok Awal & Stok Akhir bulan)
+ //
+ // Sebelumnya logic ini cuma ada di stockOpnameLogic.js. Dipindah ke sini
+@@ -11,6 +13,7 @@
+ // dibangun.
+ 
+ import { getSupabaseClient } from '../../storage/syncClient';
++import { hasBaseUnit, convertQtyToBaseUnit, formatBaseUnit } from '../../utils/unitConversion';
+ 
+ export const CHECKLIST_TABLE = 'stock_checklists';
+ const STOCK_MASTER_CONFIG_KEY = 'stockMaster';
+@@ -35,6 +38,11 @@ export function normalizeName(name) {
+   return String(name || '').trim().toLowerCase();
+ }
+ 
++/** Cari koreksi AKTIF (belum di-soft-delete) buat kombinasi (dateStr, rawMaterialId) tertentu, atau null kalau belum ada. */
++export function findActiveCorrection(corrections, dateStr, rawMaterialId) {
++  return (corrections || []).find(c => !c.deletedAt && c.dateStr === dateStr && c.rawMaterialId === rawMaterialId) || null;
++}
++
+ /**
+  * Ambil master kategori & item stock checklist (punya mamam-absensi,
+  * tabel app_config row key='stockMaster') — dibutuhkan untuk tahu nama &
+@@ -57,60 +65,134 @@ export async function fetchStockMaster(supabase) {
+ 
+ /**
+  * Valuasi 1 checklist mentah jadi bentuk snapshot { totalValue, itemCount,
+- * unmatchedCount, items, unmatchedItems } — match ke rawMaterials BY NAMA
+- * (case-insensitive, trim), karena item stock checklist (punya
+- * mamam-absensi) dan rawMaterials (punya mamam-global) adalah 2 sumber
+- * data terpisah tanpa foreign key bersama, cuma nama yang bisa disamakan.
++ * unmatchedCount, unitMismatchCount, items, unmatchedItems, unitMismatchItems }.
++ * Match ke rawMaterials BY NAMA (case-insensitive, trim), karena item stock
++ * checklist (punya mamam-absensi) dan rawMaterials (punya mamam-global)
++ * adalah 2 sumber data terpisah tanpa foreign key bersama.
++ *
++ * Setelah Patch 3, sebuah item bisa gagal dihitung karena 2 alasan berbeda
++ * (dipisah biar owner tau persis harus benerin apa & di mana):
++ *   - unmatchedItems: NAMA item gak ketemu di rawMaterials sama sekali.
++ *   - unitMismatchItems: NAMA ketemu, tapi satuan checklist item itu gak
++ *     bisa dipastikan konversinya ke baseUnit rawMaterial itu (rawMaterial
++ *     belum diisi Satuan Dasar-nya di Migrasi Satuan, ATAU satuannya gak
++ *     dikenal & gak ada alias di checklistUnitOverride bahan itu).
++ * Keduanya SENGAJA tidak ikut totalValue (dianggap 0), bukan ditebak.
+  *
+- * Item dengan qty kosong/null atau skipped=true TIDAK ikut dihitung (belum
+- * benar-benar diketahui sisa stoknya). Item dengan qty terisi tapi
+- * namanya tidak ketemu di rawMaterials masuk ke unmatchedItems (tidak ikut
+- * totalValue, supaya tidak diam-diam anggap harga 0 padahal sebenarnya
+- * belum ter-link — owner perlu tahu & rapikan Database Bahan Baku).
++ * `corrections` (opsional, array stockOpnameCorrections milik mamam-global
++ * sendiri — lihat App.jsx): override manual owner per (dateStr,
++ * rawMaterialId), SELALU menang di atas apa pun hasil checklist asli untuk
++ * kombinasi itu. Ini jalan keluarnya biar Stok Opname "bisa diedit" tanpa
++ * mamam-global perlu nulis ke tabel stock_checklists (punya mamam-absensi)
++ * sama sekali — data karyawan asli tetap utuh sebagai audit trail.
+  */
+-export function valuateChecklist(checklistRow, master, rawMaterials) {
++export function valuateChecklist(checklistRow, master, rawMaterials, corrections = []) {
++  const dateStr = checklistRow.date_str;
+   const values = parseJsonbField(checklistRow.values, {});
+   const rawByName = new Map(
+     (rawMaterials || []).map(rm => [normalizeName(rm.name), rm])
+   );
++  const rawById = new Map((rawMaterials || []).map(rm => [rm.id, rm]));
++
++  const correctionsForDate = (corrections || []).filter(c => !c.deletedAt && c.dateStr === dateStr);
++  const correctionByMaterialId = new Map(correctionsForDate.map(c => [c.rawMaterialId, c]));
++  const appliedCorrectionIds = new Set();
+ 
+   const items = [];
+   const unmatchedItems = [];
++  const unitMismatchItems = [];
+ 
+   for (const category of master.categories) {
+     for (const it of category.items) {
++      const match = rawByName.get(normalizeName(it.name));
++      const correction = match ? correctionByMaterialId.get(match.id) : null;
++
++      // Koreksi manual owner SELALU menang, apa pun isi checklist aslinya
++      // (termasuk kalau checklist-nya kosong/skipped/qty aneh).
++      if (correction) {
++        appliedCorrectionIds.add(correction.id);
++        items.push({
++          rawMaterialId: match.id,
++          name: it.name,
++          qty: correction.qty,
++          unit: formatBaseUnit(match.baseUnit),
++          priceSnapshot: match.basePrice || 0,
++          subtotal: (Number(correction.qty) || 0) * (match.basePrice || 0),
++          isCorrected: true,
++          correctionId: correction.id,
++        });
++        continue;
++      }
++
+       const v = values[it.id];
+       if (!v || v.skipped) continue;
+       if (v.qty === null || v.qty === '' || Number.isNaN(Number(v.qty))) continue;
+ 
+       const qty = Number(v.qty);
+-      const match = rawByName.get(normalizeName(it.name));
+ 
+       if (!match) {
+         unmatchedItems.push({ name: it.name, qty, unit: it.unit || '' });
+         continue;
+       }
+ 
+-      const priceSnapshot = Number(match.price) || 0;
++      if (!hasBaseUnit(match)) {
++        unitMismatchItems.push({
++          name: it.name, qty, unit: it.unit || '', rawMaterialId: match.id,
++          reason: 'material_no_base_unit',
++        });
++        continue;
++      }
++
++      const qtyInBaseUnit = convertQtyToBaseUnit(qty, it.unit, match.baseUnit, match.checklistUnitOverride);
++      if (qtyInBaseUnit === null) {
++        unitMismatchItems.push({
++          name: it.name, qty, unit: it.unit || '', rawMaterialId: match.id,
++          materialBaseUnit: match.baseUnit, reason: 'unit_not_convertible',
++        });
++        continue;
++      }
++
+       items.push({
+         rawMaterialId: match.id,
+         name: it.name,
+         qty,
+         unit: it.unit || '',
+-        priceSnapshot,
+-        subtotal: qty * priceSnapshot,
++        priceSnapshot: match.basePrice,
++        subtotal: qtyInBaseUnit * (match.basePrice || 0),
++        isCorrected: false,
+       });
+     }
+   }
+ 
++  // Koreksi yang rawMaterialId-nya gak "ketemu" lewat item checklist manapun
++  // di atas (mis. owner nambahin koreksi buat bahan yang gak ada sama
++  // sekali di daftar stockMaster hari itu) tetep dihitung di sini.
++  for (const correction of correctionsForDate) {
++    if (appliedCorrectionIds.has(correction.id)) continue;
++    const material = rawById.get(correction.rawMaterialId);
++    if (!material) continue; // rawMaterial-nya udah kehapus, koreksi gak relevan lagi
++    items.push({
++      rawMaterialId: material.id,
++      name: material.name,
++      qty: correction.qty,
++      unit: formatBaseUnit(material.baseUnit),
++      priceSnapshot: material.basePrice || 0,
++      subtotal: (Number(correction.qty) || 0) * (material.basePrice || 0),
++      isCorrected: true,
++      correctionId: correction.id,
++    });
++  }
++
+   const totalValue = items.reduce((sum, it) => sum + it.subtotal, 0);
+ 
+   return {
+     totalValue,
+     itemCount: items.length,
+     unmatchedCount: unmatchedItems.length,
++    unitMismatchCount: unitMismatchItems.length,
+     items,
+     unmatchedItems,
++    unitMismatchItems,
+   };
+ }
+ 
+diff --git a/src/storage/syncKeys.js b/src/storage/syncKeys.js
+index 4627e4f..beb8ef3 100644
+--- a/src/storage/syncKeys.js
++++ b/src/storage/syncKeys.js
+@@ -10,7 +10,7 @@ export const ALL_KEYS = [
+   'variantGroups', 'variantCategories', 'menus', 'salesHistory', 'hppLibrary', 'savedBills',
+   'expenseCategories', 'expenses', 'incomeCategories', 'incomes',
+   'currentShift', 'shiftHistory', 'customers', 'vouchers', 'claimsHistory',
+-  'storeSettings', 'rawMaterials', 'semiFinished', 'categories',
++  'storeSettings', 'rawMaterials', 'semiFinished', 'categories', 'stockOpnameCorrections',
+   'employees', 'employeeDailyRecords', 'additionCategories', 'deductionCategories',
+   'attendanceLog', 'cashTransfers', 'openingBalances',
+ ];
+@@ -33,7 +33,7 @@ export const CONFIG_KEYS = [
+   'menus', 'variantGroups', 'variantCategories', 'categories', 'hppLibrary',
+   'vouchers', 'employees',
+   'expenseCategories', 'incomeCategories', 'additionCategories', 'deductionCategories',
+-  'rawMaterials', 'semiFinished', 'storeSettings',
++  'rawMaterials', 'semiFinished', 'storeSettings', 'stockOpnameCorrections',
+ ];
+ 
+ // Key "live state": object TUNGGAL (bukan array-of-record kayak TRANSACTION_KEYS)
+diff --git a/src/utils/hppUtils.js b/src/utils/hppUtils.js
+index 1bf17bd..afbd0d7 100644
+--- a/src/utils/hppUtils.js
++++ b/src/utils/hppUtils.js
+@@ -1,3 +1,79 @@
++import { BASE_UNITS } from './unitConversion';
++
++/**
++ * Hitung total biaya LIVE dari array ingredients sebuah resep/prep, nyari
++ * harga TERKINI dari `materials` (availableMaterials / rawMaterials) per
++ * rawMaterialId. Handle 2 bentuk ingredient sekaligus (peninggalan Patch 2 —
++ * resep lama vs baru belum tentu semua udah di-resave pakai Satuan Dasar):
++ *   - lama (pre-Patch 2): { rawMaterialId, qtyUsed, snapshotPrice }
++ *                         -> pakai material.price (satuan lama, bebas)
++ *   - baru (Patch 2+):    { rawMaterialId, qty, snapshotBasePrice }
++ *                         -> pakai material.basePrice (per Satuan Dasar)
++ * Fallback ke snapshot kalau rawMaterial-nya udah kehapus/gak ketemu.
++ *
++ * Sengaja gak nyoba convert lama<->baru dalam satu baris ingredient — satu
++ * resep isinya SELALU salah satu bentuk aja (ditentukan pas resep itu
++ * TERAKHIR kali disimpan lewat form), gak akan campur dalam array yang sama.
++ * Ini dipakai di LibraryHppView & availableMaterials (App.jsx) biar logic
++ * "cara baca 1 baris ingredient" cuma ada di SATU tempat.
++ */
++export const computeLiveIngredientsCost = (ingredients, materials) => {
++  return (ingredients || []).reduce((sum, ing) => {
++    const material = (materials || []).find(m => m.id === ing.rawMaterialId);
++
++    if (ing.qty !== undefined) {
++      const price = (material && material.basePrice !== null && material.basePrice !== undefined)
++        ? material.basePrice
++        : (ing.snapshotBasePrice || 0);
++      return sum + ((Number(price) || 0) * (Number(ing.qty) || 0));
++    }
++
++    // Bentuk lama: hppLibrary pakai field `qtyUsed`, semiFinished pakai
++    // `qtyUsedFraction` — dua nama beda buat konsep yang sama (qty dalam
++    // satuan LAMA si rawMaterial), jadi dicek dua-duanya di sini biar 1
++    // fungsi ini aman dipakai buat resep MAUPUN prep.
++    const legacyQty = ing.qtyUsed !== undefined ? ing.qtyUsed : ing.qtyUsedFraction;
++    const price = material ? material.price : ing.snapshotPrice;
++    return sum + ((Number(price) || 0) * (Number(legacyQty) || 0));
++  }, 0);
++};
++
++/**
++ * Gabungin rawMaterials + semiFinished (Bahan Prep) jadi satu pool
++ * "availableMaterials" yang dipakai sebagai daftar pilihan ingredient di
++ * KalkulatorHppView & BahanSetengahJadiView. Prep dianggap punya Satuan
++ * Dasar sendiri (baseUnit/basePrice terisi, bisa dipilih jadi ingredient v2
++ * di resep lain) HANYA kalau resultUnit-nya udah salah satu dari BASE_UNITS.
++ *
++ * DULU logic ini ke-duplikat persis di App.jsx & HppView.jsx (dua provider
++ * terpisah yang masing-masing manggil usePersistState('rawMaterials', ...)
++ * sendiri — cuma salah satu yang aktif tergantung tab yang lagi dibuka).
++ * Diekstrak ke sini biar cuma ada SATU tempat yang perlu diubah kalau
++ * definisi "material yang tersedia" berubah lagi nanti.
++ */
++export const computeAvailableMaterials = (rawMaterials, semiFinished) => {
++  const prepsAsMaterials = (semiFinished || []).map(prep => {
++    const totalIngCost = computeLiveIngredientsCost(prep.ingredients, rawMaterials);
++    const totalBatchCost = totalIngCost + (Number(prep.laborCost) || 0) + (Number(prep.overheadCost) || 0);
++    const costPerUnit = totalBatchCost / Math.max(1, Number(prep.yieldQty) || 1);
++    const isBaseUnitReady = BASE_UNITS.includes(prep.resultUnit);
++
++    return {
++      id: prep.id,
++      name: `${prep.name} [Prep]`,
++      unit: prep.resultUnit,
++      price: costPerUnit,
++      baseUnit: isBaseUnitReady ? prep.resultUnit : null,
++      basePrice: isBaseUnitReady ? costPerUnit : null,
++      isPrep: true,
++      lastUpdated: prep.lastUpdated || new Date(),
++      deletedAt: prep.deletedAt,
++    };
++  });
++
++  return [...(rawMaterials || []), ...prepsAsMaterials];
++};
++
+ export const getIngredientCost = (ing) => {
+   const price = Number(ing.price) || 0;
+   const qty = Number(ing.qtyUsed) || 1;
+diff --git a/src/utils/unitConversion.js b/src/utils/unitConversion.js
+new file mode 100644
+index 0000000..24969c9
+--- /dev/null
++++ b/src/utils/unitConversion.js
+@@ -0,0 +1,157 @@
++// utils/unitConversion.js
++//
++// Fondasi "Satuan Dasar" — pengganti sistem lama yang biarin rawMaterials.unit
++// jadi teks bebas ("Kg", "Liter", "Ekor", dst) tanpa faktor konversi yang
++// konsisten. Sebelumnya ada 2 titik yang sama-sama nebak/nggak convert:
++//   - hppUtils.js getIngredientCost() -> cuma hardcode 3 pasangan satuan,
++//     di luar itu fallback price*qty apa adanya.
++//   - stockChecklistApi.js valuateChecklist() -> ZERO konversi sama sekali.
++// Ini akar kenapa input gram vs harga per-Kg bisa beda 1000x.
++//
++// Aturan baru: SEMUA rawMaterial akhirnya punya `baseUnit` (salah satu dari
++// BASE_UNITS) dan `basePrice` = harga per 1 baseUnit itu. Gak ada lagi
++// "harga per Kg" vs "input per Gram" ketemu di tempat berbeda — semua
++// dihitung dari titik yang sama. `unit`/`price` lama TETAP ada apa adanya
++// (dipakai kalkulasi lama sampai Patch 2/3 pindah sepenuhnya), field baru
++// ini murni ditambahkan di sampingnya.
++//
++// File ini murni pure functions (gak nyimpen/fetch apa-apa) — dipakai oleh
++// UnitMigrationModal.jsx (saran otomatis + validasi override) dan nanti oleh
++// HPP Kalkulator/Bahan Setengah Jadi/Stok Opname versi baru (Patch 2 & 3).
++
++export const BASE_UNITS = ['gram', 'ml', 'pcs'];
++
++export const BASE_UNIT_LABELS = {
++  gram: 'Gram',
++  ml: 'ml',
++  pcs: 'Pcs',
++};
++
++// Alias satuan yang UMUM dikenal sistem, dikelompokkan per kategori fisik.
++// `factor` = berapa baseUnit setara 1 unit alias ini (mis. 1 kg = 1000 gram).
++// Kategori menentukan baseUnit yang cocok: weight->gram, volume->ml, count->pcs.
++//
++// sdm/sdt sengaja disamakan ke ml (bukan gram) — mengikuti asumsi dapur biasa
++// yang SUDAH dipakai sistem lama (KalkulatorHppView totalWeight lama: 1
++// sdm=15, 1 sdt=5) supaya resep yang pernah dihitung pakai asumsi itu gak
++// tiba-tiba lompat angkanya. ini approksimasi dapur, bukan aturan fisika baru.
++const UNIT_ALIASES = {
++  // ── Berat (base: gram) ────────────────────────────────────────────────
++  kg: { category: 'weight', factor: 1000 },
++  kilo: { category: 'weight', factor: 1000 },
++  kilogram: { category: 'weight', factor: 1000 },
++  ons: { category: 'weight', factor: 100 },
++  gram: { category: 'weight', factor: 1 },
++  gr: { category: 'weight', factor: 1 },
++  g: { category: 'weight', factor: 1 },
++
++  // ── Volume (base: ml) ─────────────────────────────────────────────────
++  liter: { category: 'volume', factor: 1000 },
++  ltr: { category: 'volume', factor: 1000 },
++  l: { category: 'volume', factor: 1000 },
++  ml: { category: 'volume', factor: 1 },
++  mililiter: { category: 'volume', factor: 1 },
++  mil: { category: 'volume', factor: 1 },
++  sdm: { category: 'volume', factor: 15 },
++  'sendok makan': { category: 'volume', factor: 15 },
++  tbsp: { category: 'volume', factor: 15 },
++  sdt: { category: 'volume', factor: 5 },
++  'sendok teh': { category: 'volume', factor: 5 },
++  tsp: { category: 'volume', factor: 5 },
++
++  // ── Hitungan (base: pcs) ──────────────────────────────────────────────
++  pcs: { category: 'count', factor: 1 },
++  pc: { category: 'count', factor: 1 },
++  buah: { category: 'count', factor: 1 },
++  butir: { category: 'count', factor: 1 },
++  ekor: { category: 'count', factor: 1 },
++  lembar: { category: 'count', factor: 1 },
++  biji: { category: 'count', factor: 1 },
++  potong: { category: 'count', factor: 1 },
++  porsi: { category: 'count', factor: 1 },
++  unit: { category: 'count', factor: 1 },
++};
++
++const CATEGORY_BASE_UNIT = { weight: 'gram', volume: 'ml', count: 'pcs' };
++
++export function normalizeUnitString(unit) {
++  return String(unit || '').trim().toLowerCase();
++}
++
++/** Cari alias { category, factor } dari sebuah string satuan, atau null kalau gak dikenal. */
++export function lookupUnitAlias(unit) {
++  return UNIT_ALIASES[normalizeUnitString(unit)] || null;
++}
++
++/**
++ * Tebak baseUnit + basePrice dari `unit`/`price` LAMA sebuah rawMaterial —
++ * dipakai UnitMigrationModal buat ngisi saran otomatis pas migrasi.
++ *
++ * confidence:
++ *   'auto'   -> satuan lama dikenali, baseUnit & basePrice bisa dihitung pasti.
++ *   'manual' -> satuan lama gak dikenal (kosong, atau custom kayak "Pouch"/
++ *               "Dus") — owner WAJIB pilih baseUnit & isi basePrice sendiri,
++ *               karena sistem gak tau berapa gram/ml isi 1 pouch/dus itu.
++ */
++export function suggestBaseUnitAndPrice(oldUnit, oldPrice) {
++  const alias = lookupUnitAlias(oldUnit);
++  const price = Number(oldPrice) || 0;
++
++  if (!alias) {
++    return { baseUnit: null, basePrice: null, confidence: 'manual' };
++  }
++
++  return {
++    baseUnit: CATEGORY_BASE_UNIT[alias.category],
++    basePrice: alias.factor > 0 ? price / alias.factor : 0,
++    confidence: 'auto',
++  };
++}
++
++/**
++ * Konversi qty dari satuan apapun (`fromUnit`) ke `targetBaseUnit`.
++ * Urutan pencarian: (1) alias override kustom milik bahan itu sendiri
++ * (`overrides`, diisi manual per bahan utk satuan non-standar kayak "Pouch"),
++ * (2) alias satuan umum di atas. Kalau keduanya gak ketemu, ATAU ketemu tapi
++ * kategorinya beda dari targetBaseUnit (mis. satuan "ml" mau dikonversi ke
++ * baseUnit "gram") -> return null. SENGAJA gak pernah nebak/maksa angka —
++ * caller (valuateChecklist versi baru di Patch 3) yang mutuskan gimana
++ * nampilin "gak bisa dihitung" ke user, bukan diam-diam salah hitung.
++ *
++ * @param {number} qty
++ * @param {string} fromUnit
++ * @param {'gram'|'ml'|'pcs'} targetBaseUnit
++ * @param {{label:string, factor:number}[]} [overrides]
++ * @returns {number|null}
++ */
++export function convertQtyToBaseUnit(qty, fromUnit, targetBaseUnit, overrides = []) {
++  const n = Number(qty);
++  if (Number.isNaN(n)) return null;
++
++  const normalized = normalizeUnitString(fromUnit);
++  if (!normalized || !targetBaseUnit) return null;
++
++  if (normalized === targetBaseUnit) return n;
++
++  const override = (overrides || []).find(o => normalizeUnitString(o.label) === normalized);
++  if (override && Number(override.factor) > 0) {
++    return n * Number(override.factor);
++  }
++
++  const alias = lookupUnitAlias(fromUnit);
++  if (alias && CATEGORY_BASE_UNIT[alias.category] === targetBaseUnit) {
++    return n * alias.factor;
++  }
++
++  return null;
++}
++
++/** Label tampilan buat sebuah baseUnit, mis. "Rp12 / Gram". Fallback '-' kalau kosong. */
++export function formatBaseUnit(baseUnit) {
++  return BASE_UNIT_LABELS[baseUnit] || baseUnit || '-';
++}
++
++/** Sebuah rawMaterial dianggap "lengkap" satuan dasarnya kalau baseUnit & basePrice keduanya keisi. */
++export function hasBaseUnit(rawMaterial) {
++  return !!rawMaterial?.baseUnit && rawMaterial?.basePrice !== null && rawMaterial?.basePrice !== undefined;
++}
+diff --git a/src/version.json b/src/version.json
+index 813af08..58e022b 100644
+--- a/src/version.json
++++ b/src/version.json
+@@ -1,5 +1,5 @@
+ {
+-  "version": "3.9.9",
+-  "updatedAt": "2026-07-26",
+-  "note": "fix fullscreen"
++  "version": "3.12.0",
++  "updatedAt": "2026-08-05",
++  "note": "Stok Opname: valuasi baseUnit-aware + layer koreksi manual owner"
+ }
+\ No newline at end of file

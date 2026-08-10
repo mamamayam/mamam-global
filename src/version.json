@@ -1,5 +1,5 @@
 {
-  "version": "3.9.9",
-  "updatedAt": "2026-07-26",
-  "note": "fix fullscreen"
+  "version": "3.12.0",
+  "updatedAt": "2026-08-05",
+  "note": "Stok Opname: valuasi baseUnit-aware + layer koreksi manual owner"
 }

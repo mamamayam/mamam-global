@@ -82,6 +82,12 @@ const StokDateCard = ({ label, dateStr, setDateStr, result, error, isGenerating,
             {result.unmatchedCount} item belum ter-link ke Database Bahan Baku, tidak ikut terhitung
           </div>
         )}
+        {result.unitMismatchCount > 0 && (
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2.5 py-1.5 mt-2">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            {result.unitMismatchCount} item satuannya gak bisa dipastikan, tidak ikut terhitung — cek di tab Stok Opname
+          </div>
+        )}
       </>
     )}
   </Card>
@@ -90,7 +96,7 @@ const StokDateCard = ({ label, dateStr, setDateStr, result, error, isGenerating,
 // `period` ("YYYY-MM") diteruskan dari BalanceTab.jsx (shell) supaya
 // filter periode tetap sinkron antara tab Ringkasan dan tab Rincian.
 const BalanceSummaryTab = ({ period }) => {
-  const { salesHistory, expenses, employeeDailyRecords, employees, rawMaterials } = useAppContext();
+  const { salesHistory, expenses, employeeDailyRecords, employees, rawMaterials, stockOpnameCorrections } = useAppContext();
 
   const [stokAwalDate, setStokAwalDate] = useState('');
   const [stokAkhirDate, setStokAkhirDate] = useState('');
@@ -159,7 +165,7 @@ const BalanceSummaryTab = ({ period }) => {
     setIsGeneratingAwal(true);
     setAwalError(null);
     try {
-      const result = await computeStockSnapshot(stokAwalDate, rawMaterials);
+      const result = await computeStockSnapshot(stokAwalDate, rawMaterials, stockOpnameCorrections);
       if (periodEpochRef.current !== epoch) return; // periode udah ganti selagi nunggu, buang hasil ini
       setStokAwal(result);
     } catch (err) {
@@ -177,7 +183,7 @@ const BalanceSummaryTab = ({ period }) => {
     setIsGeneratingAkhir(true);
     setAkhirError(null);
     try {
-      const result = await computeStockSnapshot(stokAkhirDate, rawMaterials);
+      const result = await computeStockSnapshot(stokAkhirDate, rawMaterials, stockOpnameCorrections);
       if (periodEpochRef.current !== epoch) return;
       setStokAkhir(result);
     } catch (err) {

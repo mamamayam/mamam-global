@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../../context/AppContext';
-import { getIngredientCost } from '../../../utils/hppUtils';
+import { computeLiveIngredientsCost } from '../../../utils/hppUtils';
 import { formatRupiah } from '../../../utils/formatters';
 import { Card, Button, IconButton, EmptyState, Badge, SortModal } from '../../../components/ui';
 import { applySort } from '../../../utils/sortUtils';
@@ -45,11 +45,7 @@ const LibraryHppView = () => {
         if (!editingRecipeLocal) return;
         
         // Hitung ulang berdasarkan input di Modal
-        const liveIngredientCost = editingRecipeLocal.ingredients.reduce((sum, ing) => {
-            const liveMaterial = availableMaterials.find(rm => rm.id === ing.rawMaterialId);
-            const currentPrice = liveMaterial ? liveMaterial.price : ing.snapshotPrice;
-            return sum + (currentPrice * ing.qtyUsed);
-        }, 0);
+        const liveIngredientCost = computeLiveIngredientsCost(editingRecipeLocal.ingredients, availableMaterials);
 
         const materialCostPerUnit = editingRecipeLocal.yieldQty > 0 ? (liveIngredientCost / editingRecipeLocal.yieldQty) : 0;
         const totalHpp = materialCostPerUnit + (editingRecipeLocal.laborCost || 0) + (editingRecipeLocal.overheadCost || 0);
@@ -75,11 +71,7 @@ const LibraryHppView = () => {
 
     const libraryWithLiveCalc = useMemo(() => {
         const enriched = activeLibrary.map(recipe => {
-            const liveIngredientCost = recipe.ingredients.reduce((sum, ing) => {
-                const liveMaterial = availableMaterials.find(rm => rm.id === ing.rawMaterialId);
-                const currentPrice = liveMaterial ? liveMaterial.price : ing.snapshotPrice;
-                return sum + (currentPrice * ing.qtyUsed);
-            }, 0);
+            const liveIngredientCost = computeLiveIngredientsCost(recipe.ingredients, availableMaterials);
 
             const liveMaterialPerUnit = recipe.yieldQty > 0 ? (liveIngredientCost / recipe.yieldQty) : 0;
             const liveHpp = liveMaterialPerUnit + (recipe.laborCost || 0) + (recipe.overheadCost || 0);
@@ -110,11 +102,7 @@ const LibraryHppView = () => {
     let modalActualProfitPercent = 0;
 
     if (editingRecipeLocal) {
-        const liveIngredientCost = editingRecipeLocal.ingredients.reduce((sum, ing) => {
-            const liveMaterial = availableMaterials.find(rm => rm.id === ing.rawMaterialId);
-            const currentPrice = liveMaterial ? liveMaterial.price : ing.snapshotPrice;
-            return sum + (currentPrice * ing.qtyUsed);
-        }, 0);
+        const liveIngredientCost = computeLiveIngredientsCost(editingRecipeLocal.ingredients, availableMaterials);
         const materialCostPerUnit = editingRecipeLocal.yieldQty > 0 ? (liveIngredientCost / editingRecipeLocal.yieldQty) : 0;
         modalLiveHpp = materialCostPerUnit + (editingRecipeLocal.laborCost || 0) + (editingRecipeLocal.overheadCost || 0);
         

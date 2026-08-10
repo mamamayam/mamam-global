@@ -4,7 +4,9 @@ import { formatRupiah } from '../../../utils/formatters';
 import { Card, Button, IconButton, EmptyState, Input, SortModal } from '../../../components/ui';
 import { applySort } from '../../../utils/sortUtils';
 import { markDeleted, activeOnly } from '../../../utils/softDelete';
-import { Plus, X, Search, Clock, Edit3, Trash2, Save, ArrowUpDown } from 'lucide-react';
+import { hasBaseUnit, formatBaseUnit } from '../../../utils/unitConversion';
+import UnitMigrationModal from './UnitMigrationModal';
+import { Plus, X, Search, Clock, Edit3, Trash2, Save, ArrowUpDown, Ruler } from 'lucide-react';
 
 const BahanBakuView = () => {
     const { rawMaterials, setRawMaterials, triggerAlert, triggerConfirm } = useAppContext();
@@ -13,6 +15,7 @@ const BahanBakuView = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [sortKey, setSortKey] = useState('name-asc');
     const [isSortOpen, setIsSortOpen] = useState(false);
+    const [isMigrationOpen, setIsMigrationOpen] = useState(false);
 
     const sortOptions = [
         { key: 'name-asc', label: 'Nama (A-Z)' },
@@ -59,6 +62,7 @@ const BahanBakuView = () => {
     };
 
     const activeMaterials = activeOnly(rawMaterials);
+    const incompleteUnitCount = activeMaterials.filter(rm => !hasBaseUnit(rm)).length;
     const filteredMaterials = activeMaterials.filter(rm => rm.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const sortedMaterials = applySort(filteredMaterials, sortKey, {
@@ -69,6 +73,24 @@ const BahanBakuView = () => {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out relative">
+            {activeMaterials.length > 0 && (
+                <Card
+                    variant={incompleteUnitCount > 0 ? 'muted' : 'default'}
+                    padding="md"
+                    className={`flex items-center justify-between gap-3 flex-wrap ${incompleteUnitCount > 0 ? 'border border-amber-200 dark:border-amber-500/30' : ''}`}
+                >
+                    <div className="flex items-center gap-2 min-w-0">
+                        <Ruler className={`w-4 h-4 shrink-0 ${incompleteUnitCount > 0 ? 'text-amber-500' : 'text-emerald-500'}`} />
+                        <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 truncate">
+                            {incompleteUnitCount > 0
+                                ? `${incompleteUnitCount} dari ${activeMaterials.length} bahan belum punya Satuan Dasar (Gram/ml/Pcs)`
+                                : 'Semua bahan sudah punya Satuan Dasar'}
+                        </p>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={() => setIsMigrationOpen(true)}>Atur Satuan Dasar</Button>
+                </Card>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative w-full sm:w-72">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
@@ -108,13 +130,14 @@ const BahanBakuView = () => {
                                 <th className="p-4 font-bold">Nama Bahan</th>
                                 <th className="p-4 font-bold">Satuan</th>
                                 <th className="p-4 font-bold">Harga Pasar Saat Ini</th>
+                                <th className="p-4 font-bold">Satuan Dasar</th>
                                 <th className="p-4 font-bold">Log Update</th>
                                 <th className="p-4 font-bold text-center">Aksi</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                             {sortedMaterials.length === 0 ? (
-                                <tr><td colSpan="5"><EmptyState size="sm" title="Belum ada data bahan baku" /></td></tr>
+                                <tr><td colSpan="6"><EmptyState size="sm" title="Belum ada data bahan baku" /></td></tr>
                             ) : (
                                 sortedMaterials.map((rm) => {
                                     const isUpdatedToday = rm.lastUpdated && new Date(rm.lastUpdated).toDateString() === new Date().toDateString();
@@ -123,6 +146,15 @@ const BahanBakuView = () => {
                                             <td className="p-4 font-bold text-slate-800 dark:text-slate-100 group-hover:text-accent-600 transition-colors">{rm.name}</td>
                                             <td className="p-4 font-semibold text-slate-600 dark:text-slate-300">{rm.unit}</td>
                                             <td className="p-4 font-black text-accent-600 dark:text-accent-400">{formatRupiah(rm.price)}</td>
+                                            <td className="p-4">
+                                                {hasBaseUnit(rm) ? (
+                                                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                                                        {formatRupiah(rm.basePrice)} / {formatBaseUnit(rm.baseUnit)}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Belum diset</span>
+                                                )}
+                                            </td>
                                             <td className="p-4">
                                                 <div className="flex items-center gap-1.5">
                                                     <Clock className={`w-3.5 h-3.5 ${isUpdatedToday ? 'text-emerald-500' : 'text-slate-400'}`} />
@@ -189,6 +221,7 @@ const BahanBakuView = () => {
             )}
 
             <SortModal isOpen={isSortOpen} onClose={() => setIsSortOpen(false)} value={sortKey} onChange={setSortKey} options={sortOptions} />
+            <UnitMigrationModal isOpen={isMigrationOpen} onClose={() => setIsMigrationOpen(false)} />
         </div>
     );
 };

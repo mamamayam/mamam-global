@@ -2,8 +2,10 @@
 //
 // Akses data mentah ke tabel `stock_checklists` (punya app mamam-absensi,
 // backend Supabase yang sama) + valuasinya terhadap rawMaterials
-// (punya mamam-global). Dipakai bareng oleh:
-//   - features/stock/StockView.jsx      (Stok Opname: browse bulanan + rincian per hari)
+// (punya mamam-global), dioverride opsional oleh stockOpnameCorrections
+// (juga punya mamam-global, lihat App.jsx & valuateChecklist di bawah).
+// Dipakai bareng oleh:
+//   - features/stock/StockView.jsx      (Stok Opname: browse bulanan + rincian per hari + koreksi)
 //   - features/balance/stockOpnameLogic.js (Laba Rugi: Stok Awal & Stok Akhir bulan)
 //
 // Sebelumnya logic ini cuma ada di stockOpnameLogic.js. Dipindah ke sini
@@ -11,6 +13,7 @@
 // dibangun.
 
 import { getSupabaseClient } from '../../storage/syncClient';
+import { hasBaseUnit, convertQtyToBaseUnit, formatBaseUnit } from '../../utils/unitConversion';
 
 export const CHECKLIST_TABLE = 'stock_checklists';
 const STOCK_MASTER_CONFIG_KEY = 'stockMaster';
@@ -35,6 +38,11 @@ export function normalizeName(name) {
   return String(name || '').trim().toLowerCase();
 }
 
+/** Cari koreksi AKTIF (belum di-soft-delete) buat kombinasi (dateStr, rawMaterialId) tertentu, atau null kalau belum ada. */
+export function findActiveCorrection(corrections, dateStr, rawMaterialId) {
+  return (corrections || []).find(c => !c.deletedAt && c.dateStr === dateStr && c.rawMaterialId === rawMaterialId) || null;
+}
+
 /**
  * Ambil master kategori & item stock checklist (punya mamam-absensi,
  * tabel app_config row key='stockMaster') — dibutuhkan untuk tahu nama &
@@ -57,50 +65,122 @@ export async function fetchStockMaster(supabase) {
 
 /**
  * Valuasi 1 checklist mentah jadi bentuk snapshot { totalValue, itemCount,
- * unmatchedCount, items, unmatchedItems } — match ke rawMaterials BY NAMA
- * (case-insensitive, trim), karena item stock checklist (punya
- * mamam-absensi) dan rawMaterials (punya mamam-global) adalah 2 sumber
- * data terpisah tanpa foreign key bersama, cuma nama yang bisa disamakan.
+ * unmatchedCount, unitMismatchCount, items, unmatchedItems, unitMismatchItems }.
+ * Match ke rawMaterials BY NAMA (case-insensitive, trim), karena item stock
+ * checklist (punya mamam-absensi) dan rawMaterials (punya mamam-global)
+ * adalah 2 sumber data terpisah tanpa foreign key bersama.
  *
- * Item dengan qty kosong/null atau skipped=true TIDAK ikut dihitung (belum
- * benar-benar diketahui sisa stoknya). Item dengan qty terisi tapi
- * namanya tidak ketemu di rawMaterials masuk ke unmatchedItems (tidak ikut
- * totalValue, supaya tidak diam-diam anggap harga 0 padahal sebenarnya
- * belum ter-link — owner perlu tahu & rapikan Database Bahan Baku).
+ * Setelah Patch 3, sebuah item bisa gagal dihitung karena 2 alasan berbeda
+ * (dipisah biar owner tau persis harus benerin apa & di mana):
+ *   - unmatchedItems: NAMA item gak ketemu di rawMaterials sama sekali.
+ *   - unitMismatchItems: NAMA ketemu, tapi satuan checklist item itu gak
+ *     bisa dipastikan konversinya ke baseUnit rawMaterial itu (rawMaterial
+ *     belum diisi Satuan Dasar-nya di Migrasi Satuan, ATAU satuannya gak
+ *     dikenal & gak ada alias di checklistUnitOverride bahan itu).
+ * Keduanya SENGAJA tidak ikut totalValue (dianggap 0), bukan ditebak.
+ *
+ * `corrections` (opsional, array stockOpnameCorrections milik mamam-global
+ * sendiri — lihat App.jsx): override manual owner per (dateStr,
+ * rawMaterialId), SELALU menang di atas apa pun hasil checklist asli untuk
+ * kombinasi itu. Ini jalan keluarnya biar Stok Opname "bisa diedit" tanpa
+ * mamam-global perlu nulis ke tabel stock_checklists (punya mamam-absensi)
+ * sama sekali — data karyawan asli tetap utuh sebagai audit trail.
  */
-export function valuateChecklist(checklistRow, master, rawMaterials) {
+export function valuateChecklist(checklistRow, master, rawMaterials, corrections = []) {
+  const dateStr = checklistRow.date_str;
   const values = parseJsonbField(checklistRow.values, {});
   const rawByName = new Map(
     (rawMaterials || []).map(rm => [normalizeName(rm.name), rm])
   );
+  const rawById = new Map((rawMaterials || []).map(rm => [rm.id, rm]));
+
+  const correctionsForDate = (corrections || []).filter(c => !c.deletedAt && c.dateStr === dateStr);
+  const correctionByMaterialId = new Map(correctionsForDate.map(c => [c.rawMaterialId, c]));
+  const appliedCorrectionIds = new Set();
 
   const items = [];
   const unmatchedItems = [];
+  const unitMismatchItems = [];
 
   for (const category of master.categories) {
     for (const it of category.items) {
+      const match = rawByName.get(normalizeName(it.name));
+      const correction = match ? correctionByMaterialId.get(match.id) : null;
+
+      // Koreksi manual owner SELALU menang, apa pun isi checklist aslinya
+      // (termasuk kalau checklist-nya kosong/skipped/qty aneh).
+      if (correction) {
+        appliedCorrectionIds.add(correction.id);
+        items.push({
+          rawMaterialId: match.id,
+          name: it.name,
+          qty: correction.qty,
+          unit: formatBaseUnit(match.baseUnit),
+          priceSnapshot: match.basePrice || 0,
+          subtotal: (Number(correction.qty) || 0) * (match.basePrice || 0),
+          isCorrected: true,
+          correctionId: correction.id,
+        });
+        continue;
+      }
+
       const v = values[it.id];
       if (!v || v.skipped) continue;
       if (v.qty === null || v.qty === '' || Number.isNaN(Number(v.qty))) continue;
 
       const qty = Number(v.qty);
-      const match = rawByName.get(normalizeName(it.name));
 
       if (!match) {
         unmatchedItems.push({ name: it.name, qty, unit: it.unit || '' });
         continue;
       }
 
-      const priceSnapshot = Number(match.price) || 0;
+      if (!hasBaseUnit(match)) {
+        unitMismatchItems.push({
+          name: it.name, qty, unit: it.unit || '', rawMaterialId: match.id,
+          reason: 'material_no_base_unit',
+        });
+        continue;
+      }
+
+      const qtyInBaseUnit = convertQtyToBaseUnit(qty, it.unit, match.baseUnit, match.checklistUnitOverride);
+      if (qtyInBaseUnit === null) {
+        unitMismatchItems.push({
+          name: it.name, qty, unit: it.unit || '', rawMaterialId: match.id,
+          materialBaseUnit: match.baseUnit, reason: 'unit_not_convertible',
+        });
+        continue;
+      }
+
       items.push({
         rawMaterialId: match.id,
         name: it.name,
         qty,
         unit: it.unit || '',
-        priceSnapshot,
-        subtotal: qty * priceSnapshot,
+        priceSnapshot: match.basePrice,
+        subtotal: qtyInBaseUnit * (match.basePrice || 0),
+        isCorrected: false,
       });
     }
+  }
+
+  // Koreksi yang rawMaterialId-nya gak "ketemu" lewat item checklist manapun
+  // di atas (mis. owner nambahin koreksi buat bahan yang gak ada sama
+  // sekali di daftar stockMaster hari itu) tetep dihitung di sini.
+  for (const correction of correctionsForDate) {
+    if (appliedCorrectionIds.has(correction.id)) continue;
+    const material = rawById.get(correction.rawMaterialId);
+    if (!material) continue; // rawMaterial-nya udah kehapus, koreksi gak relevan lagi
+    items.push({
+      rawMaterialId: material.id,
+      name: material.name,
+      qty: correction.qty,
+      unit: formatBaseUnit(material.baseUnit),
+      priceSnapshot: material.basePrice || 0,
+      subtotal: (Number(correction.qty) || 0) * (material.basePrice || 0),
+      isCorrected: true,
+      correctionId: correction.id,
+    });
   }
 
   const totalValue = items.reduce((sum, it) => sum + it.subtotal, 0);
@@ -109,8 +189,10 @@ export function valuateChecklist(checklistRow, master, rawMaterials) {
     totalValue,
     itemCount: items.length,
     unmatchedCount: unmatchedItems.length,
+    unitMismatchCount: unitMismatchItems.length,
     items,
     unmatchedItems,
+    unitMismatchItems,
   };
 }
 

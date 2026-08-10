@@ -55,7 +55,7 @@ export async function suggestStokAwalDate(period) {
  *   tanggal itu — supaya UI bisa kasih tahu user dengan jelas, alih-alih
  *   diam-diam menganggap stoknya 0.
  */
-export async function computeStockSnapshot(dateStr, rawMaterials) {
+export async function computeStockSnapshot(dateStr, rawMaterials, corrections = []) {
   if (!dateStr) {
     throw new Error('Pilih tanggal checklist terlebih dahulu.');
   }
@@ -74,6 +74,6 @@ export async function computeStockSnapshot(dateStr, rawMaterials) {
     throw new Error(`Tidak ada checklist stok pada tanggal ${dateStr}. Pilih tanggal lain yang ada datanya.`);
   }
 
-  const valuation = valuateChecklist(row, master, rawMaterials || []);
+  const valuation = valuateChecklist(row, master, rawMaterials || [], corrections);
   return { dateStr, ...valuation };
 }

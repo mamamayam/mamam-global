@@ -15,6 +15,7 @@ import BottomNav from '../app/layout/BottomNav';
 import ReceiptModal from '../features/pos/ReceiptModal';
 import { toLocalDateString } from '../utils/formatters';
 import { activeOnly } from '../utils/softDelete';
+import { computeAvailableMaterials } from '../utils/hppUtils';
 import { registerPushNotifications } from '../storage/pushNotifications';
 import {
   getEmployeeStatus, computeAttendanceFromLogs,
@@ -172,6 +173,11 @@ export default function App() {
   const [semiFinished, setSemiFinished, l7, setSemiFinishedRemote] = usePersistState('semiFinished', [], { syncMode: 'config', syncReadyPromise });
   const [categories, setCategories, l8, setCategoriesRemote] = usePersistState('categories', INITIAL_CATEGORIES, { syncMode: 'config', syncReadyPromise });
   const [editingRecipe, setEditingRecipe] = useState(null);
+  // Koreksi Stok Opname (Patch 3) — layer TERPISAH dari stock_checklists
+  // (yang datanya punya mamam-absensi & dibaca read-only). Owner override
+  // qty per (tanggal, rawMaterialId) di sini tanpa nyentuh data checklist
+  // asli karyawan sama sekali — lihat stockChecklistApi.js: valuateChecklist.
+  const [stockOpnameCorrections, setStockOpnameCorrections] = usePersistState('stockOpnameCorrections', [], { syncMode: 'config', syncReadyPromise });
 
   // --- KEUANGAN ---
   const [expenseCategories, setExpenseCategories, l9, setExpenseCategoriesRemote] = usePersistState('expenseCategories', ['Belanja', 'Biaya', 'Kasbon Karyawan', 'Lain-lain'], { syncMode: 'config', syncReadyPromise });
@@ -969,34 +975,13 @@ export default function App() {
 
   const printReceipt = () => window.print();
 
-  // LIVE MATERIALS POOL (RAW + PREP)
-  const availableMaterials = useMemo(() => {
-    const prepsAsMaterials = semiFinished.map(prep => {
-      // 1. Hitung total biaya bahan mentah yang masuk ke Prep berdasarkan harga pasar live
-      const totalIngCost = prep.ingredients.reduce((sum, ing) => {
-        const rm = rawMaterials.find(r => r.id === ing.rawMaterialId);
-        const currentPrice = rm ? rm.price : (ing.snapshotPrice || 0);
-        return sum + (currentPrice * ing.qtyUsedFraction);
-      }, 0);
-
-      // 2. Tambahkan cost labor & overhead dari Prep
-      const totalBatchCost = totalIngCost + (Number(prep.laborCost) || 0) + (Number(prep.overheadCost) || 0);
-
-      // 3. Bagi dengan yield untuk dapat Harga per Satuan
-      const costPerUnit = totalBatchCost / Math.max(1, Number(prep.yieldQty) || 1);
-
-      return {
-        id: prep.id,
-        name: `${prep.name} [Prep]`, // Kasih penanda
-        unit: prep.resultUnit,
-        price: costPerUnit,
-        isPrep: true,
-        lastUpdated: prep.lastUpdated || new Date()
-      };
-    });
-
-    return [...rawMaterials, ...prepsAsMaterials];
-  }, [rawMaterials, semiFinished]);
+  // LIVE MATERIALS POOL (RAW + PREP) — logic sebenarnya ada di
+  // computeAvailableMaterials (hppUtils.js), dipakai bareng oleh HppView.jsx
+  // (provider terpisah yang sebelumnya punya salinan logic ini sendiri).
+  const availableMaterials = useMemo(
+    () => computeAvailableMaterials(rawMaterials, semiFinished),
+    [rawMaterials, semiFinished]
+  );
 
   // Membungkus semua props di Context Value
   const contextValue = {
@@ -1066,6 +1051,7 @@ export default function App() {
     hppLibrary, setHppLibrary,
     rawMaterials, setRawMaterials,
     semiFinished, setSemiFinished,
+    stockOpnameCorrections, setStockOpnameCorrections,
 
     // Categories
     categories, setCategories,

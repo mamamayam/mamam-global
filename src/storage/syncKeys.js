@@ -10,7 +10,7 @@ export const ALL_KEYS = [
   'variantGroups', 'variantCategories', 'menus', 'salesHistory', 'hppLibrary', 'savedBills',
   'expenseCategories', 'expenses', 'incomeCategories', 'incomes',
   'currentShift', 'shiftHistory', 'customers', 'vouchers', 'claimsHistory',
-  'storeSettings', 'rawMaterials', 'semiFinished', 'categories',
+  'storeSettings', 'rawMaterials', 'semiFinished', 'categories', 'stockOpnameCorrections',
   'employees', 'employeeDailyRecords', 'additionCategories', 'deductionCategories',
   'attendanceLog', 'cashTransfers', 'openingBalances',
 ];
@@ -33,7 +33,7 @@ export const CONFIG_KEYS = [
   'menus', 'variantGroups', 'variantCategories', 'categories', 'hppLibrary',
   'vouchers', 'employees',
   'expenseCategories', 'incomeCategories', 'additionCategories', 'deductionCategories',
-  'rawMaterials', 'semiFinished', 'storeSettings',
+  'rawMaterials', 'semiFinished', 'storeSettings', 'stockOpnameCorrections',
 ];
 
 // Key "live state": object TUNGGAL (bukan array-of-record kayak TRANSACTION_KEYS)

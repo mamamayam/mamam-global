@@ -1,31 +1,40 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Warehouse, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
-import { Card, Badge, EmptyState, Button, PageHeader } from '../../components/ui';
+import { Warehouse, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, Calendar, PencilLine, Plus, Trash2 } from 'lucide-react';
+import { Card, Badge, EmptyState, Button, PageHeader, IconButton } from '../../components/ui';
 import { useAppContext } from '../../context/AppContext';
 import { formatRupiah, toLocalMonthString, toLocalDateString } from '../../utils/formatters';
 import { formatPeriodLabel } from '../balance/periodUtils';
 import { getSupabaseClient } from '../../storage/syncClient';
+import { markDeleted } from '../../utils/softDelete';
 import { fetchStockMaster, fetchChecklistsInMonth, valuateChecklist } from './stockChecklistApi';
+import StockCorrectionModal from './StockCorrectionModal';
 
 // Stok Opname — browse hasil checklist stok bulanan (punya mamam-absensi,
-// tabel stock_checklists) dengan rincian per hari. Beda dari tab Ringkasan
-// di Laba Rugi (yang cuma ambil 1 titik valuasi buat Stok Awal/Akhir),
-// di sini SEMUA hari yang ada checklist-nya ditampilkan sekaligus untuk
-// dilihat historinya — tidak menyimpan/mengunci apa pun, murni baca &
-// valuasi live pakai harga rawMaterials saat ini.
+// tabel stock_checklists) dengan rincian per hari + koreksi manual (punya
+// mamam-global sendiri, tabel app_config key='stockOpnameCorrections').
+// Beda dari tab Ringkasan di Laba Rugi (yang cuma ambil 1 titik valuasi
+// buat Stok Awal/Akhir), di sini SEMUA hari yang ada checklist-nya
+// ditampilkan sekaligus untuk dilihat historinya.
+//
+// Data mentah (`rawChecklists`/`master`) dipisah dari hasil valuasi
+// (`dailyRows`) SENGAJA: fetch jaringan cuma perlu diulang kalau `period`
+// ganti, sementara valuasi (yang gampang & murah dihitung ulang di client)
+// otomatis refresh tiap `rawMaterials` ATAU `stockOpnameCorrections`
+// berubah — tanpa perlu fetch ulang ke server tiap kali user nyimpen 1
+// koreksi.
 const StockView = () => {
-  const { rawMaterials } = useAppContext();
+  const { rawMaterials, stockOpnameCorrections, setStockOpnameCorrections, triggerAlert, triggerConfirm } = useAppContext();
   const [period, setPeriod] = useState(toLocalMonthString());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [dailyRows, setDailyRows] = useState([]); // [{ dateStr, valuation: {...}|null }], terbaru duluan
+  const [rawChecklists, setRawChecklists] = useState([]);
+  const [master, setMaster] = useState({ categories: [] });
   const [expandedDate, setExpandedDate] = useState(null);
+  const [correctionTarget, setCorrectionTarget] = useState(null); // { dateStr, prefill } | null -> modal terbuka kalau diisi
 
-  // Race guard: `load` bisa ke-trigger ulang bukan cuma karena `period`
-  // ganti, tapi juga kalau `rawMaterials` berubah (mis. device lain
-  // update harga bahan baku lewat realtime sync selagi view ini kebuka).
-  // Kalau request lama belum selesai pas trigger baru datang, hasil lama
-  // yang telat resolve HARUS dibuang, bukan menimpa data yang lebih baru.
+  // Race guard: `load` bisa ke-trigger ulang kalau `period` ganti sebelum
+  // request sebelumnya selesai. Request lama yang telat resolve HARUS
+  // dibuang, bukan menimpa data yang lebih baru.
   const loadEpochRef = useRef(0);
 
   const load = useCallback(async () => {
@@ -37,31 +46,14 @@ const StockView = () => {
       const supabase = await getSupabaseClient();
       if (!supabase) throw new Error('Koneksi Supabase belum siap, coba lagi sebentar.');
 
-      const [checklists, master] = await Promise.all([
+      const [checklists, fetchedMaster] = await Promise.all([
         fetchChecklistsInMonth(supabase, period),
         fetchStockMaster(supabase),
       ]);
       if (loadEpochRef.current !== epoch) return; // ada trigger baru selagi nunggu, buang hasil basi ini
 
-      const byDate = new Map(checklists.map(row => [row.date_str, row]));
-
-      const [y, m] = period.split('-').map(Number);
-      const daysInMonth = new Date(y, m, 0).getDate();
-      const isCurrentMonth = period === toLocalMonthString();
-      // Untuk bulan berjalan, jangan tampilkan hari-hari yang belum
-      // kejadian (tanggal setelah hari ini) — pasti belum ada checklist.
-      const lastDay = isCurrentMonth ? Number(toLocalDateString().slice(8, 10)) : daysInMonth;
-
-      const rows = [];
-      for (let d = 1; d <= lastDay; d++) {
-        const dateStr = `${period}-${String(d).padStart(2, '0')}`;
-        const row = byDate.get(dateStr);
-        rows.push({
-          dateStr,
-          valuation: row ? valuateChecklist(row, master, rawMaterials || []) : null,
-        });
-      }
-      setDailyRows(rows.reverse()); // terbaru di atas, lebih enak di-scroll dari HP
+      setRawChecklists(checklists);
+      setMaster(fetchedMaster);
     } catch (err) {
       if (loadEpochRef.current !== epoch) return;
       console.error('[StockView] gagal memuat data stok opname bulanan:', err);
@@ -69,16 +61,44 @@ const StockView = () => {
     } finally {
       if (loadEpochRef.current === epoch) setIsLoading(false);
     }
-  }, [period, rawMaterials]);
+  }, [period]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  // Valuasi murni client-side dari data yang udah di-fetch -> refresh
+  // otomatis & instan tiap rawMaterials (harga/Satuan Dasar berubah) atau
+  // stockOpnameCorrections (koreksi baru disimpan/dihapus) berubah, tanpa
+  // fetch ulang ke server.
+  const dailyRows = useMemo(() => {
+    if (rawChecklists.length === 0 && !master.categories?.length) return [];
+
+    const byDate = new Map(rawChecklists.map(row => [row.date_str, row]));
+    const [y, m] = period.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const isCurrentMonth = period === toLocalMonthString();
+    const lastDay = isCurrentMonth ? Number(toLocalDateString().slice(8, 10)) : daysInMonth;
+
+    const rows = [];
+    for (let d = 1; d <= lastDay; d++) {
+      const dateStr = `${period}-${String(d).padStart(2, '0')}`;
+      const row = byDate.get(dateStr);
+      rows.push({
+        dateStr,
+        valuation: row ? valuateChecklist(row, master, rawMaterials || [], stockOpnameCorrections) : null,
+      });
+    }
+    return rows.reverse(); // terbaru di atas, lebih enak di-scroll dari HP
+  }, [rawChecklists, master, period, rawMaterials, stockOpnameCorrections]);
+
   const summary = useMemo(() => {
     const filled = dailyRows.filter(r => r.valuation).length;
     return { totalDays: dailyRows.length, filledDays: filled };
   }, [dailyRows]);
+
+  const openCorrectionModal = (dateStr, prefill = null) => setCorrectionTarget({ dateStr, prefill });
+  const closeCorrectionModal = () => setCorrectionTarget(null);
 
   return (
     <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col h-full overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out custom-scrollbar">
@@ -131,6 +151,9 @@ const StockView = () => {
                     {valuation?.unmatchedCount > 0 && (
                       <Badge variant="warning">{valuation.unmatchedCount} belum ter-link</Badge>
                     )}
+                    {valuation?.unitMismatchCount > 0 && (
+                      <Badge variant="warning">{valuation.unitMismatchCount} satuan gak cocok</Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {valuation && <span className="font-bold text-sm text-slate-800 dark:text-slate-100">{formatRupiah(valuation.totalValue)}</span>}
@@ -139,32 +162,66 @@ const StockView = () => {
                 </button>
 
                 {isExpanded && valuation && (
-                  <div className="border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
-                          <th className="p-3 font-bold">Bahan</th>
-                          <th className="p-3 font-bold">Qty</th>
-                          <th className="p-3 font-bold text-right">Subtotal</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                        {valuation.items.map(it => (
-                          <tr key={it.rawMaterialId}>
-                            <td className="p-3 font-bold text-slate-800 dark:text-slate-100">{it.name}</td>
-                            <td className="p-3 text-slate-600 dark:text-slate-300">{it.qty} {it.unit}</td>
-                            <td className="p-3 text-right font-bold text-slate-800 dark:text-slate-100">{formatRupiah(it.subtotal)}</td>
+                  <div className="border-t border-slate-100 dark:border-slate-800">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
+                            <th className="p-3 font-bold">Bahan</th>
+                            <th className="p-3 font-bold">Qty</th>
+                            <th className="p-3 font-bold text-right">Subtotal</th>
+                            <th className="p-3 font-bold text-center">Koreksi</th>
                           </tr>
-                        ))}
-                        {valuation.unmatchedItems.map((it, idx) => (
-                          <tr key={`u${idx}`} className="bg-amber-50/50 dark:bg-amber-500/5">
-                            <td className="p-3 font-bold text-amber-700 dark:text-amber-400">{it.name} <span className="font-normal text-[10px]">(belum ter-link)</span></td>
-                            <td className="p-3 text-amber-700 dark:text-amber-400">{it.qty} {it.unit}</td>
-                            <td className="p-3 text-right text-amber-700 dark:text-amber-400">&mdash;</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+                          {valuation.items.map(it => (
+                            <tr key={it.rawMaterialId} className={it.isCorrected ? 'bg-accent-50/40 dark:bg-accent-500/5' : ''}>
+                              <td className="p-3 font-bold text-slate-800 dark:text-slate-100">
+                                {it.name} {it.isCorrected && <Badge variant="orange" size="sm" className="ml-1.5">Terkoreksi</Badge>}
+                              </td>
+                              <td className="p-3 text-slate-600 dark:text-slate-300">{it.qty} {it.unit}</td>
+                              <td className="p-3 text-right font-bold text-slate-800 dark:text-slate-100">{formatRupiah(it.subtotal)}</td>
+                              <td className="p-3 text-center">
+                                <IconButton variant="edit" ghost onClick={() => openCorrectionModal(dateStr, { rawMaterialId: it.rawMaterialId, name: it.name })}>
+                                  <PencilLine className="w-3.5 h-3.5" />
+                                </IconButton>
+                              </td>
+                            </tr>
+                          ))}
+                          {valuation.unmatchedItems.map((it, idx) => (
+                            <tr key={`u${idx}`} className="bg-amber-50/50 dark:bg-amber-500/5">
+                              <td className="p-3 font-bold text-amber-700 dark:text-amber-400">{it.name} <span className="font-normal text-[10px]">(belum ter-link)</span></td>
+                              <td className="p-3 text-amber-700 dark:text-amber-400">{it.qty} {it.unit}</td>
+                              <td className="p-3 text-right text-amber-700 dark:text-amber-400">&mdash;</td>
+                              <td className="p-3 text-center">
+                                <IconButton variant="edit" ghost onClick={() => openCorrectionModal(dateStr, null)}>
+                                  <PencilLine className="w-3.5 h-3.5" />
+                                </IconButton>
+                              </td>
+                            </tr>
+                          ))}
+                          {valuation.unitMismatchItems.map((it, idx) => (
+                            <tr key={`m${idx}`} className="bg-amber-50/50 dark:bg-amber-500/5">
+                              <td className="p-3 font-bold text-amber-700 dark:text-amber-400">
+                                {it.name} <span className="font-normal text-[10px]">(satuan "{it.unit || '-'}" gak cocok{it.materialBaseUnit ? ` dgn Satuan Dasar (${it.materialBaseUnit})` : ', bahan belum ada Satuan Dasar'})</span>
+                              </td>
+                              <td className="p-3 text-amber-700 dark:text-amber-400">{it.qty} {it.unit}</td>
+                              <td className="p-3 text-right text-amber-700 dark:text-amber-400">&mdash;</td>
+                              <td className="p-3 text-center">
+                                <IconButton variant="edit" ghost onClick={() => openCorrectionModal(dateStr, { rawMaterialId: it.rawMaterialId, name: it.name })}>
+                                  <PencilLine className="w-3.5 h-3.5" />
+                                </IconButton>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="p-3 border-t border-slate-100 dark:border-slate-800">
+                      <Button size="xs" variant="ghost" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => openCorrectionModal(dateStr, null)}>
+                        Tambah Koreksi
+                      </Button>
+                    </div>
                   </div>
                 )}
               </Card>
@@ -172,6 +229,18 @@ const StockView = () => {
           })}
         </div>
       )}
+
+      <StockCorrectionModal
+        isOpen={!!correctionTarget}
+        onClose={closeCorrectionModal}
+        dateStr={correctionTarget?.dateStr}
+        prefill={correctionTarget?.prefill}
+        rawMaterials={rawMaterials}
+        corrections={stockOpnameCorrections}
+        setCorrections={setStockOpnameCorrections}
+        triggerAlert={triggerAlert}
+        triggerConfirm={triggerConfirm}
+      />
     </div>
   );
 };

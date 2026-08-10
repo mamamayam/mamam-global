@@ -4,6 +4,7 @@ import { usePersistState } from '../../hook/usePersistState';
 import CategoryModal from '../../components/CategoryModal';
 import { Button } from '../../components/ui';
 import { INITIAL_RAW_MATERIALS } from '../../data/initialData';
+import { computeAvailableMaterials } from '../../utils/hppUtils';
 
 // Import Tabs
 import BahanBakuView from './tabs/BahanBakuView';
@@ -37,30 +38,12 @@ export default function HppView() {
     // Modals
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
-    // LIVE MATERIALS POOL (RAW + PREP)
-    const availableMaterials = useMemo(() => {
-        const prepsAsMaterials = semiFinished.map(prep => {
-            const totalIngCost = prep.ingredients.reduce((sum, ing) => {
-                const rm = rawMaterials.find(r => r.id === ing.rawMaterialId);
-                const currentPrice = rm ? rm.price : (ing.snapshotPrice || 0);
-                return sum + (currentPrice * ing.qtyUsedFraction);
-            }, 0);
-
-            const totalBatchCost = totalIngCost + (Number(prep.laborCost) || 0) + (Number(prep.overheadCost) || 0);
-            const costPerUnit = totalBatchCost / Math.max(1, Number(prep.yieldQty) || 1);
-
-            return {
-                id: prep.id,
-                name: `${prep.name} [Prep]`,
-                unit: prep.resultUnit,
-                price: costPerUnit,
-                isPrep: true,
-                lastUpdated: prep.lastUpdated || new Date()
-            };
-        });
-
-        return [...rawMaterials, ...prepsAsMaterials];
-    }, [rawMaterials, semiFinished]);
+    // LIVE MATERIALS POOL (RAW + PREP) — sumber tunggalnya di
+    // computeAvailableMaterials (hppUtils.js), dipakai bareng App.jsx.
+    const availableMaterials = useMemo(
+        () => computeAvailableMaterials(rawMaterials, semiFinished),
+        [rawMaterials, semiFinished]
+    );
 
     const contextValue = {
         rawMaterials, setRawMaterials,

@@ -1,10 +1,22 @@
 import React, { useState, useMemo } from 'react';
-import { getIngredientCost } from '../../../utils/hppUtils';
 import { useAppContext } from '../../../context/AppContext';
 import { formatRupiah } from '../../../utils/formatters';
 import { Card, Button, Input, Select, EmptyState } from '../../../components/ui';
 import { activeOnly } from '../../../utils/softDelete';
-import { Calculator, Plus, Trash2, Save, HelpCircle, Edit3 } from 'lucide-react';
+import { hasBaseUnit, formatBaseUnit, convertQtyToBaseUnit } from '../../../utils/unitConversion';
+import { Calculator, Plus, Trash2, Save, HelpCircle, Edit3, Sparkles } from 'lucide-react';
+
+const emptyIngredient = () => ({ id: Date.now() + Math.random(), rawMaterialId: '', name: '', baseUnit: '', qty: '1', needsAttention: false });
+
+// Biaya 1 baris ingredient versi baru — tinggal qty * basePrice, gak ada lagi
+// tabel konversi (lihat unitConversion.js untuk kenapa). qty SELALU dalam
+// baseUnit bahan itu sendiri (gram/ml/pcs), gak ada satuan lain yang bisa
+// dipilih di baris resep -> gak ada lagi ruang buat salah convert.
+const ingredientCost = (ing, materials) => {
+    const material = materials.find(m => m.id === ing.rawMaterialId);
+    const price = material ? (material.basePrice || 0) : 0;
+    return price * (Number(ing.qty) || 0);
+};
 
 const KalkulatorHppView = () => {
     const {
@@ -17,52 +29,99 @@ const KalkulatorHppView = () => {
     const [productName, setProductName] = useState('');
     const [category, setCategory] = useState(categories[0] || 'Uncategorized');
     const [yieldQty, setYieldQty] = useState('');
-    const [ingredients, setIngredients] = useState([
-        { id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }
-    ]);
+    const [ingredients, setIngredients] = useState([emptyIngredient()]);
     const [laborCost, setLaborCost] = useState('');
     const [overheadCost, setOverheadCost] = useState('');
     const [marginPercent, setMarginPercent] = useState(35);
     const [manualPrice, setManualPrice] = useState('');
     const [showResult, setShowResult] = useState(false);
 
-    const handleAddIngredient = () => setIngredients([...ingredients, { id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
-    const handleRemoveIngredient = (id) => setIngredients(ingredients.length > 1 ? ingredients.filter(ing => ing.id !== id) : [{ id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
+    const activeAvailableMaterials = useMemo(() => activeOnly(availableMaterials), [availableMaterials]);
+    const usableMaterials = activeAvailableMaterials.filter(hasBaseUnit);
+    const pendingMaterialsCount = activeAvailableMaterials.length - usableMaterials.length;
 
-    const handleIngredientChange = (id, field, value) => {
-        setIngredients(ingredients.map(ing => ing.id === id ? { ...ing, [field]: value } : ing));
+    const handleAddIngredient = () => setIngredients([...ingredients, emptyIngredient()]);
+    const handleRemoveIngredient = (id) => setIngredients(ingredients.length > 1 ? ingredients.filter(ing => ing.id !== id) : [emptyIngredient()]);
+
+    const handleSelectMaterial = (id, materialName) => {
+        const matched = usableMaterials.find(m => m.name === materialName);
+        setIngredients(ingredients.map(ing => ing.id === id ? {
+            ...ing,
+            name: materialName,
+            rawMaterialId: matched ? matched.id : '',
+            baseUnit: matched ? matched.baseUnit : '',
+            qty: '1',
+            needsAttention: false,
+        } : ing));
+    };
+
+    const handleQtyChange = (id, value) => {
+        setIngredients(ingredients.map(ing => ing.id === id ? { ...ing, qty: value } : ing));
     };
 
     const handleReset = () => {
         setProductName('');
         setCategory(categories[0] || 'Uncategorized');
-        setIngredients([{ id: Date.now(), name: '', unit: '', price: '', qtyUsed: '1', recipeUnit: '' }]);
+        setIngredients([emptyIngredient()]);
         setLaborCost(''); setOverheadCost(''); setYieldQty(''); setMarginPercent(35); setManualPrice('');
         setShowResult(false);
     };
 
+    // Resep dengan nama yang sama persis udah ada di Library -> tawarin muat
+    // & konversi otomatis komposisinya, biar gak perlu ngetik ulang dari nol
+    // pas migrasi ke sistem Satuan Dasar. Angka HASIL konversi tetep harus
+    // dicek user sebelum Simpan (bukan langsung dipercaya buta).
+    const existingMatch = useMemo(
+        () => hppLibrary.find(item => item.name.trim().toLowerCase() === productName.trim().toLowerCase() && productName.trim()),
+        [hppLibrary, productName]
+    );
+
+    const handleLoadFromExisting = () => {
+        if (!existingMatch) return;
+        const converted = existingMatch.ingredients.map(oldIng => {
+            const material = usableMaterials.find(m => m.id === oldIng.rawMaterialId)
+                || usableMaterials.find(m => m.name.toLowerCase() === (oldIng.name || '').toLowerCase());
+
+            if (!material) {
+                return { id: Date.now() + Math.random(), rawMaterialId: '', name: oldIng.name || '', baseUnit: '', qty: '', needsAttention: true };
+            }
+
+            // Ingredient yang sebelumnya udah v2 (punya `qty` langsung) -> tinggal pakai lagi.
+            // Yang masih bentuk lama -> convert dari recipeQtyUsed+recipeUnit yang kesimpen.
+            let qty = null;
+            if (oldIng.qty !== undefined) {
+                qty = Number(oldIng.qty);
+            } else if (oldIng.recipeUnit) {
+                qty = convertQtyToBaseUnit(oldIng.recipeQtyUsed, oldIng.recipeUnit, material.baseUnit, material.checklistUnitOverride);
+            }
+
+            return {
+                id: Date.now() + Math.random(),
+                rawMaterialId: material.id,
+                name: material.name,
+                baseUnit: material.baseUnit,
+                qty: qty !== null && qty !== undefined && !Number.isNaN(qty) ? String(Math.round(qty * 100) / 100) : '',
+                needsAttention: qty === null || qty === undefined || Number.isNaN(qty),
+            };
+        });
+        setIngredients(converted.length > 0 ? converted : [emptyIngredient()]);
+        triggerAlert('Komposisi lama dimuat & dikonversi ke Satuan Dasar. Cek lagi angkanya sebelum simpan, terutama baris yang ditandai.');
+    };
+
     const handleCalculate = () => {
         if (!productName.trim()) return triggerAlert('Nama Produk wajib diisi!');
-        const hasEmptyIngredient = ingredients.some(ing => !ing.name.trim() || !ing.price || Number(ing.price) < 0);
-        if (hasEmptyIngredient) return triggerAlert('Lengkapi data seluruh Bahan!');
+        const hasEmptyIngredient = ingredients.some(ing => !ing.rawMaterialId || ing.qty === '' || Number(ing.qty) < 0);
+        if (hasEmptyIngredient) return triggerAlert('Lengkapi seluruh Bahan (pilih bahan & isi jumlahnya)!');
         if (!yieldQty || Number(yieldQty) <= 0) return triggerAlert('Jumlah Produk (Unit) harus lebih dari 0!');
         setShowResult(true);
     };
 
-    const totalWeight = useMemo(() => {
-        return ingredients.reduce((sum, item) => {
-            let qty = Number(item.qtyUsed) || 0;
-            let unit = (item.recipeUnit || item.unit || '').toLowerCase().trim();
-            const isWeightOrVolume = ['kg', 'gram', 'g', 'liter', 'l', 'ml', 'mili', 'sdm', 'sdt'].includes(unit);
-            if (!isWeightOrVolume) return sum;
-            if (unit === 'kg' || unit === 'liter' || unit === 'l') qty *= 1000;
-            if (unit === 'sdm') qty *= 15;
-            if (unit === 'sdt') qty *= 5;
-            return sum + qty;
-        }, 0);
-    }, [ingredients]);
+    // Total berat & volume dipisah tegas (bukan digabung kayak sistem lama)
+    // karena gram & ml emang 2 dimensi fisik yang beda -> lebih jujur/akurat.
+    const totalGram = useMemo(() => ingredients.filter(i => i.baseUnit === 'gram').reduce((s, i) => s + (Number(i.qty) || 0), 0), [ingredients]);
+    const totalMl = useMemo(() => ingredients.filter(i => i.baseUnit === 'ml').reduce((s, i) => s + (Number(i.qty) || 0), 0), [ingredients]);
 
-    const totalIngredientCost = useMemo(() => ingredients.reduce((sum, item) => sum + getIngredientCost(item), 0), [ingredients]);
+    const totalIngredientCost = useMemo(() => ingredients.reduce((sum, item) => sum + ingredientCost(item, activeAvailableMaterials), 0), [ingredients, activeAvailableMaterials]);
     const yld = Math.max(1, Number(yieldQty) || 1);
     const materialCostPerUnit = totalIngredientCost / yld;
     const lbrCost = Number(laborCost) || 0;
@@ -81,16 +140,13 @@ const KalkulatorHppView = () => {
             name: productName,
             category,
             ingredients: ingredients.map(ing => {
-                const match = availableMaterials.find(r => r.name.toLowerCase() === ing.name.toLowerCase());
-                const cost = getIngredientCost(ing);
-                const basePrice = Number(ing.price) || 0;
+                const material = activeAvailableMaterials.find(m => m.id === ing.rawMaterialId);
                 return {
-                    rawMaterialId: match ? match.id : `rm-custom-${Date.now()}`,
-                    qtyUsed: basePrice > 0 ? (cost / basePrice) : 0,
-                    snapshotPrice: basePrice,
-                    recipeQtyUsed: Number(ing.qtyUsed) || 1,
-                    recipeUnit: ing.recipeUnit || ing.unit,
-                    unit: ing.unit
+                    rawMaterialId: ing.rawMaterialId,
+                    name: material ? material.name : ing.name,
+                    baseUnit: material ? material.baseUnit : ing.baseUnit,
+                    qty: Number(ing.qty) || 0,
+                    snapshotBasePrice: material ? (material.basePrice || 0) : 0,
                 };
             }),
             laborCost: lbrCost,
@@ -118,8 +174,6 @@ const KalkulatorHppView = () => {
         }
     };
 
-    const activeAvailableMaterials = activeOnly(availableMaterials);
-
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -128,6 +182,12 @@ const KalkulatorHppView = () => {
                         <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg">Informasi Produk</h4>
                         <div className="space-y-5">
                             <Input label="Nama Produk Final" type="text" value={productName} onChange={e => setProductName(e.target.value)} placeholder="Contoh: Es Teh" />
+                            {existingMatch && (
+                                <div className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-2xl border border-accent-200 dark:border-accent-500/30 bg-accent-50 dark:bg-accent-500/10">
+                                    <p className="text-xs font-semibold text-accent-700 dark:text-accent-300">Resep "{existingMatch.name}" udah ada di Library.</p>
+                                    <Button size="xs" variant="ghost" icon={<Sparkles className="w-3.5 h-3.5" />} onClick={handleLoadFromExisting}>Muat &amp; Konversi Otomatis</Button>
+                                </div>
+                            )}
                             <div>
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="block text-sm font-bold text-slate-600 dark:text-slate-300">Kategori</label>
@@ -142,47 +202,41 @@ const KalkulatorHppView = () => {
                     </Card>
 
                     <Card padding="lg" className="space-y-5">
-                        <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg flex items-center gap-2"><span>🛒</span> Komposisi Bahan & Satuan Pakai</h4>
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                            <h4 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-lg flex items-center gap-2"><span>🛒</span> Komposisi Bahan</h4>
+                            {pendingMaterialsCount > 0 && (
+                                <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">{pendingMaterialsCount} bahan belum bisa dipilih (belum ada Satuan Dasar di Bahan Baku)</span>
+                            )}
+                        </div>
                         <div className="space-y-4">
                             {ingredients.map((ing, index) => (
-                                <div key={ing.id} className="grid grid-cols-12 gap-3 items-center border-b border-slate-100 dark:border-slate-800 pb-4 md:pb-0 md:border-none">
-                                    <div className="col-span-12 md:col-span-3">
+                                <div key={ing.id} className={`grid grid-cols-12 gap-3 items-center border-b border-slate-100 dark:border-slate-800 pb-4 md:pb-0 md:border-none ${ing.needsAttention ? 'rounded-xl bg-amber-50 dark:bg-amber-500/10 p-2 -mx-2' : ''}`}>
+                                    <div className="col-span-12 md:col-span-5">
                                         {index === 0 && <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nama Bahan</label>}
                                         <select
                                             className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 text-sm transition-all duration-200"
                                             value={ing.name}
-                                            onChange={e => {
-                                                const val = e.target.value;
-                                                const matched = activeAvailableMaterials.find(r => r.name === val);
-                                                if (matched) setIngredients(ingredients.map(i => i.id === ing.id ? { ...i, name: val, unit: matched.unit, price: String(matched.price), recipeUnit: matched.unit, qtyUsed: '1' } : i));
-                                                else handleIngredientChange(ing.id, 'name', val);
-                                            }}
+                                            onChange={e => handleSelectMaterial(ing.id, e.target.value)}
                                         >
                                             <option value="" disabled>-- Pilih Bahan --</option>
-                                            <optgroup label="Bahan Baku Pasar">{activeAvailableMaterials.filter(m => !m.isPrep).map(rm => <option key={rm.id} value={rm.name}>{rm.name}</option>)}</optgroup>
-                                            <optgroup label="Bahan Prep">{activeAvailableMaterials.filter(m => m.isPrep).map(prep => <option key={prep.id} value={prep.name}>{prep.name}</option>)}</optgroup>
+                                            <optgroup label="Bahan Baku Pasar">{usableMaterials.filter(m => !m.isPrep).map(rm => <option key={rm.id} value={rm.name}>{rm.name}</option>)}</optgroup>
+                                            <optgroup label="Bahan Prep">{usableMaterials.filter(m => m.isPrep).map(prep => <option key={prep.id} value={prep.name}>{prep.name}</option>)}</optgroup>
                                         </select>
+                                        {ing.needsAttention && <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-1">Perlu dicek / pilih ulang bahannya</p>}
                                     </div>
-                                    <div className="col-span-12 sm:col-span-4 md:col-span-3">
-                                        {index === 0 && <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Harga</label>}
-                                        <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold border border-slate-200 dark:border-slate-700 truncate">{formatRupiah(ing.price)} / {ing.unit || '-'}</div>
+                                    <div className="col-span-6 md:col-span-3">
+                                        {index === 0 && <label className="block text-xs font-bold text-slate-500 text-center uppercase mb-2">Jumlah</label>}
+                                        <input type="number" step="any" className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-center" value={ing.qty} onChange={e => handleQtyChange(ing.id, e.target.value)} placeholder="0" />
                                     </div>
-                                    <div className="col-span-6 sm:col-span-2 md:col-span-1">
-                                        {index === 0 && <label className="block text-xs font-bold text-slate-500 text-center uppercase mb-2">Jml</label>}
-                                        <input type="number" step="any" className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-center" value={ing.qtyUsed} onChange={e => handleIngredientChange(ing.id, 'qtyUsed', e.target.value)} />
-                                    </div>
-                                    <div className="col-span-6 sm:col-span-2 md:col-span-2">
+                                    <div className="col-span-6 md:col-span-1 text-center">
                                         {index === 0 && <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Satuan</label>}
-                                        <select className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm" value={ing.recipeUnit || ing.unit} onChange={e => handleIngredientChange(ing.id, 'recipeUnit', e.target.value)}>
-                                            <option value={ing.unit}>{ing.unit || 'Satuan'}</option>
-                                            <option value="Gram">Gram</option><option value="ml">ml</option><option value="Pcs">Pcs</option><option value="Sdm">Sdm</option><option value="Sdt">Sdt</option>
-                                        </select>
+                                        <span className="inline-block px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300">{formatBaseUnit(ing.baseUnit)}</span>
                                     </div>
-                                    <div className="col-span-10 sm:col-span-3 md:col-span-2">
+                                    <div className="col-span-8 md:col-span-2">
                                         {index === 0 && <label className="block text-xs font-bold text-slate-500 text-center uppercase mb-2">Biaya</label>}
-                                        <div className="p-3 bg-accent-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/30 rounded-xl text-sm text-accent-700 dark:text-accent-300 font-bold text-center truncate">{formatRupiah(getIngredientCost(ing))}</div>
+                                        <div className="p-3 bg-accent-50 dark:bg-accent-500/10 border border-accent-200 dark:border-accent-500/30 rounded-xl text-sm text-accent-700 dark:text-accent-300 font-bold text-center truncate">{formatRupiah(ingredientCost(ing, activeAvailableMaterials))}</div>
                                     </div>
-                                    <div className={`col-span-2 sm:col-span-1 md:col-span-1 flex justify-center ${index === 0 ? 'md:pt-8' : ''}`}>
+                                    <div className="col-span-4 md:col-span-1 flex justify-center">
                                         <button onClick={() => handleRemoveIngredient(ing.id)} className="p-2.5 text-slate-400 hover:text-accent-500 hover:bg-accent-50 rounded-xl"><Trash2 className="w-5 h-5" /></button>
                                     </div>
                                 </div>
@@ -190,9 +244,9 @@ const KalkulatorHppView = () => {
                         </div>
                         <Button variant="ghost" icon={<Plus className="w-4 h-4" />} onClick={handleAddIngredient}>Tambah Komposisi</Button>
                         <div className="bg-accent-50 dark:bg-accent-500/10 p-5 rounded-2xl border border-accent-200 dark:border-accent-500/30 flex flex-col gap-3 text-sm mt-5">
-                            <div className="flex justify-between items-center border-b border-accent-200/60 dark:border-accent-500/20 pb-3"><span className="font-bold">Total Berat/Vol:</span><span className="font-black text-accent-900 dark:text-accent-200">{totalWeight} Gram/ml</span></div>
-                            <div className="flex justify-between items-center border-b border-accent-200/60 dark:border-accent-500/20 pb-3"><span className="font-bold">Total Biaya Komposisi:</span><span className="font-black text-accent-900 dark:text-accent-200">{formatRupiah(totalIngredientCost)}</span></div>
-                            <div className="flex justify-between items-center"><span className="font-black">HPP Bahan per Gram/ml:</span><span className="font-black text-accent-600 dark:text-accent-400">{formatRupiah(totalWeight > 0 ? totalIngredientCost / totalWeight : 0)}</span></div>
+                            {totalGram > 0 && <div className="flex justify-between items-center border-b border-accent-200/60 dark:border-accent-500/20 pb-3"><span className="font-bold">Total Berat:</span><span className="font-black text-accent-900 dark:text-accent-200">{totalGram} Gram</span></div>}
+                            {totalMl > 0 && <div className="flex justify-between items-center border-b border-accent-200/60 dark:border-accent-500/20 pb-3"><span className="font-bold">Total Volume:</span><span className="font-black text-accent-900 dark:text-accent-200">{totalMl} ml</span></div>}
+                            <div className="flex justify-between items-center"><span className="font-black">Total Biaya Komposisi:</span><span className="font-black text-accent-600 dark:text-accent-400">{formatRupiah(totalIngredientCost)}</span></div>
                         </div>
                     </Card>
 
@@ -233,10 +287,16 @@ const KalkulatorHppView = () => {
                                 <div className="flex justify-between items-center text-sm text-slate-400">
                                     <span>Total HPP (Satu Resep Penuh):</span><span className="font-bold text-white">{formatRupiah(totalHppPerUnit * yld)}</span>
                                 </div>
-                                {totalWeight > 0 && (
+                                {totalGram > 0 && (
                                     <div className="flex justify-between items-center text-sm text-slate-300 pt-2 border-t border-slate-700">
-                                        <span className="font-bold">Total HPP per Gram/ml:</span>
-                                        <span className="font-black text-accent-400 bg-accent-950/50 px-2 py-1 rounded-lg border border-accent-500/50">{formatRupiah((totalHppPerUnit * yld) / totalWeight)}</span>
+                                        <span className="font-bold">Total HPP per Gram:</span>
+                                        <span className="font-black text-accent-400 bg-accent-950/50 px-2 py-1 rounded-lg border border-accent-500/50">{formatRupiah((totalHppPerUnit * yld) / totalGram)}</span>
+                                    </div>
+                                )}
+                                {totalMl > 0 && (
+                                    <div className="flex justify-between items-center text-sm text-slate-300 pt-2 border-t border-slate-700">
+                                        <span className="font-bold">Total HPP per ml:</span>
+                                        <span className="font-black text-accent-400 bg-accent-950/50 px-2 py-1 rounded-lg border border-accent-500/50">{formatRupiah((totalHppPerUnit * yld) / totalMl)}</span>
                                     </div>
                                 )}
                             </Card>
