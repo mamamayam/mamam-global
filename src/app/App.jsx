@@ -488,17 +488,30 @@ export default function App() {
     const todayStr = toLocalDateString();
 
     setEmployeeDailyRecords(prev => {
-      // [FIX] Hanya record HASIL KOREKSI MANUAL (id bukan berawalan
-      // "AUTO-LIBUR") yang dianggap final dan di-skip dari pengecekan
-      // ulang. Record auto-generated TETAP dimasukkan ke pairsToBackfill
-      // supaya bisa direcompute & dikoreksi kalau ternyata salah (mis.
-      // salah declare Libur akibat race loading data) — lihat blok
-      // self-heal di bawah untuk detail kenapa ini aman bagi koreksi
-      // manual admin.
-      const existingRecordKeys = new Set(
+      // [FIX] ROOT CAUSE dari "Libur nimpa data absen yang udah ada dan gak
+      // pernah kekoreksi": eligibility "boleh direcompute otomatis atau
+      // tidak" SEBELUMNYA dicek dari pola id ("bukan AUTO-LIBUR" = dianggap
+      // final). Itu keliru — record hasil hitung OTOMATIS dari
+      // InputDailyTab.jsx (id prefix "REC-", lihat efek "Generator record
+      // harian otomatis" di sana) JUGA bisa salah dari awal, misalnya kalau
+      // efek itu sempat jalan SAAT attendanceLog di device itu belum
+      // lengkap (log 'masuk' asli belum sempat ke-sync dari device lain,
+      // tapi record 'libur' hasil watchdog checkAutoClose di
+      // AttendanceView.jsx sudah kebaca duluan). Karena id-nya "REC-"
+      // (bukan "AUTO-LIBUR..."), record salah ini lolos dari pengecekan
+      // lama SELAMANYA — gak pernah direcompute ulang walau log 'masuk'
+      // aslinya akhirnya nyampe, jadi karyawan yang beneran hadir tetap
+      // ke-declare Libur di rekap/gajian. Sumber kebenaran yang benar buat
+      // "boleh disentuh otomatis" adalah flag `isManualOverride` (cuma
+      // diset true lewat form koreksi manual admin — lihat handleSaveEdit
+      // di InputDailyTab.jsx) — bukan pola id-nya.
+      const manualOverrideKeys = new Set(
         activeOnly(prev)
-          .filter(r => !r.id?.startsWith('AUTO-LIBUR'))
+          .filter(r => r.isManualOverride)
           .map(r => `${r.employeeId}|${r.dateStr}`)
+      );
+      const recordByKey = new Map(
+        activeOnly(prev).map(r => [`${r.employeeId}|${r.dateStr}`, r])
       );
       const earliestBackfillDate = new Date();
       earliestBackfillDate.setDate(earliestBackfillDate.getDate() - AUTO_LIBUR_BACKFILL_DAYS);
@@ -513,14 +526,48 @@ export default function App() {
 
         const cursor = new Date(scanStart);
         cursor.setHours(0, 0, 0, 0);
-        const cutoff = new Date(); // hari ini gak ikut — biar computeAttendanceFromLogs yang nentuin (masih bisa "Belum Absen" sebelum jam 19:00)
+        // [FIX] HARI INI sekarang IKUT ter-scan (dulu cutoff = hari ini dan
+        // loop berhenti SEBELUM mencapainya, jadi employeeDailyRecords hari
+        // berjalan gak PERNAH disentuh watchdog root ini — self-heal-nya
+        // 100% bergantung InputDailyTab.jsx kebetulan kebuka, padahal itu
+        // gak dijamin, apalagi kalau device lagi standby di tab Kasir
+        // seharian). Ini TIDAK mengubah kapan Libur BARU pertama kali boleh
+        // di-declare untuk hari ini — itu tetap sepenuhnya kewenangan
+        // checkAutoClose (AttendanceView.jsx) / computeAttendanceFromLogs
+        // (lihat cabang `dateStr === todayStr` di bawah) — cuma menambah
+        // kemampuan MENGOREKSI record hari ini yang SUDAH TERLANJUR salah
+        // declare Libur, secepat log 'masuk' yang bener nyampe, bukan
+        // nunggu sampai besok (atau nunggu InputDailyTab dibuka).
+        const cutoff = new Date();
         cutoff.setHours(0, 0, 0, 0);
 
-        while (cursor < cutoff) {
+        while (cursor <= cutoff) {
           const dateStr = toLocalDateString(cursor);
           const key = `${emp.id}|${dateStr}`;
-          if (dateStr !== todayStr && !existingRecordKeys.has(key)) {
-            pairsToBackfill.push({ employeeId: emp.id, dateStr });
+          const existing = recordByKey.get(key);
+
+          if (!manualOverrideKeys.has(key)) {
+            if (dateStr === todayStr) {
+              // Hari ini: JANGAN declare record baru dari sini kalau belum
+              // ada record sama sekali — biarkan checkAutoClose &
+              // computeAttendanceFromLogs yang nentuin kapan waktunya
+              // (masih bisa "Belum Absen" sebelum jam tutup). Tapi kalau
+              // SUDAH ada record auto yang bilang isDayOff:true, verifikasi
+              // ulang tiap kali attendanceLog berubah — supaya begitu log
+              // 'masuk' yang telat sync akhirnya nyampe, record ini ikut
+              // kekoreksi HARI ITU JUGA.
+              if (existing?.isDayOff) pairsToBackfill.push({ employeeId: emp.id, dateStr });
+            } else if (!existing || existing.isDayOff) {
+              // Hari lampau: backfill kalau belum ada record sama sekali
+              // (celah lama, biasa kejadian kalau gak ada device yang buka
+              // Absensi/Input Harian hari itu), ATAU verifikasi ulang kalau
+              // record yang ada bilang Libur (kandidat paling rawan salah).
+              // Record yang sudah "Hadir" gak perlu diverifikasi ulang di
+              // sini — kalau InputDailyTab.jsx kebuka, itu tetap menjaganya
+              // tetap sinkron; ini cuma nutup celah spesifik "kadung
+              // ke-declare Libur & gak pernah kekoreksi".
+              pairsToBackfill.push({ employeeId: emp.id, dateStr });
+            }
           }
           cursor.setDate(cursor.getDate() + 1);
         }
@@ -530,16 +577,14 @@ export default function App() {
 
       let next = [...prev]; let changed = false;
       pairsToBackfill.forEach(({ employeeId: empId, dateStr }) => {
-        // [UPDATE] computeAttendanceFromLogs dipanggil dengan attendanceLog
-        // TERKINI (bukan otomatis kosong lagi) — sejak fix self-heal di
-        // bawah, pasangan (karyawan, tanggal) yang record-nya AUTO-LIBUR*
-        // ikut masuk sini walau attendanceLog untuk pasangan itu sudah ada
-        // isinya, justru supaya bisa dicek ulang: kalau ternyata ada log
-        // 'masuk' asli (mis. baru sampai lewat sync device lain), hasMasuk
-        // menang dan status jadi "Hadir" — bukan lagi selalu "Libur".
-        // Untuk pasangan yang BENERAN belum py log apa pun, cabang
-        // isPastCloseHour tetap aktif seperti semula (dateStr < todayStr
-        // selalu true untuk tanggal lampau) → hasilnya "Libur", benar.
+        // computeAttendanceFromLogs dipanggil dengan attendanceLog TERKINI
+        // — pasangan (karyawan, tanggal) yang record-nya masih auto (bukan
+        // isManualOverride) ikut masuk sini walau attendanceLog buat
+        // pasangan itu sudah ada isinya, justru supaya bisa dicek ulang:
+        // kalau ternyata ada log 'masuk' asli (mis. baru sampai lewat sync
+        // device lain), hasMasuk menang dan status jadi "Hadir" — bukan
+        // lagi selalu "Libur". Untuk pasangan yang BENERAN belum py log
+        // apa pun, cabang isPastCloseHour tetap aktif seperti semula.
         const result = computeAttendanceFromLogs(empId, dateStr, attendanceLog);
         if (result.status === 'Belum Absen' && !result.isDayOff) return;
 
@@ -547,35 +592,27 @@ export default function App() {
         const prevIndex = next.findIndex(r => !r.deletedAt && r.employeeId === empId && r.dateStr === dateStr);
         const prevExisting = prevIndex >= 0 ? next[prevIndex] : null;
 
-        // [FIX] Self-heal record auto-generated yang ternyata SALAH.
-        //
-        // Sebelumnya baris ini langsung `return` begitu ADA record apa pun
-        // untuk pasangan (karyawan, tanggal) itu — dengan asumsi "kalau
-        // sudah ada berarti sudah benar / race dengan effect lain". Asumsi
-        // itu keliru: record auto-libur BISA salah dari awal, contohnya
-        // kalau watchdog toAutoLibur di AttendanceView.jsx sempat jalan
-        // saat attendanceLog belum selesai dimuat (lihat fix allDataLoaded
-        // di AttendanceView.jsx) — hasilnya record "Libur" ke-declare untuk
-        // karyawan yang SEBENARNYA masuk, dan record salah itu nempel
-        // selamanya karena tidak pernah dicoba dikoreksi ulang.
-        //
-        // Fix: kalau record yang sudah ada adalah hasil AUTO-GENERATED
-        // (ditandai dari prefix id-nya, BUKAN hasil koreksi manual admin)
-        // DAN hasil recompute dari log terbaru (`result`) ternyata berbeda
-        // (mis. sekarang ada bukti hasMasuk padahal dulu di-declare Libur),
-        // timpa dengan hasil yang benar. Koreksi manual admin (id lain,
-        // biasanya prefix employee/tanggal tanpa "AUTO-") TIDAK PERNAH
-        // disentuh oleh cabang ini — supaya keputusan admin (mis. tetap
-        // menandai Libur walau ada absen nyasar) tidak pernah ketiban
-        // logic otomatis.
-        const isAutoGenerated = prevExisting?.id?.startsWith('AUTO-LIBUR');
+        // [FIX] isManualOverride sudah difilter di TAHAP PEMBENTUKAN
+        // pairsToBackfill di atas (manualOverrideKeys) — jadi prevExisting
+        // di sini, kalau ada, DIJAMIN bukan hasil koreksi manual admin,
+        // aman buat ditimpa kalau hasil hitung terbaru berbeda. Koreksi
+        // manual admin TIDAK PERNAH sampai sini sama sekali (sudah
+        // di-exclude dari pairsToBackfill), jadi keputusan admin (mis.
+        // tetap menandai Libur walau ada absen nyasar) tidak pernah
+        // ketiban logic otomatis. Bandingkan SEMUA field hasil hitung
+        // (bukan cuma isDayOff/clockIn/clockOut) supaya perubahan
+        // bolongMinutes/hoursWorked/overtimeMinutes akibat log bolong yang
+        // berubah ikut ke-capture juga, bukan cuma kasus Libur↔Hadir.
         const resultChanged = prevExisting && (
           prevExisting.isDayOff !== result.isDayOff ||
           prevExisting.clockIn !== result.clockIn ||
-          prevExisting.clockOut !== result.clockOut
+          prevExisting.clockOut !== result.clockOut ||
+          (prevExisting.hoursWorked || 0) !== result.hoursWorked ||
+          (prevExisting.bolongMinutes || 0) !== result.bolongMinutes ||
+          (prevExisting.overtimeMinutes || 0) !== result.overtimeMinutes
         );
 
-        if (prevExisting && !(isAutoGenerated && resultChanged)) return; // sudah ada & valid (atau koreksi manual) — jangan timpa
+        if (prevExisting && !resultChanged) return; // sudah ada & sudah sesuai — jangan timpa
 
         const employeeSnapshot = snapshotEmployeeForPayroll(emp);
         const baseFields = {

@@ -1,5 +1,5 @@
 {
-  "version": "3.12.0",
-  "updatedAt": "2026-08-05",
-  "note": "Stok Opname: valuasi baseUnit-aware + layer koreksi manual owner"
+  "version": "3.13.0",
+  "updatedAt": "2026-08-14",
+  "note": "HRD: fix Libur nimpa data Masuk (badge/teks status + self-heal employeeDailyRecords), skip resign dari watchdog auto-libur"
 }

@@ -14,7 +14,7 @@ import {
 import { applySort } from '../../utils/sortUtils';
 import { useBulkSelect } from '../../hook/useBulkSelect';
 import { useRecycleBin } from '../../hook/useRecycleBin';
-import { OVERTIME_THRESHOLD_MINUTES, WORK_END_MINUTES, calculateBolongMinutes } from './utils/payrollLogic';
+import { OVERTIME_THRESHOLD_MINUTES, WORK_END_MINUTES, calculateBolongMinutes, getEmployeeStatus } from './utils/payrollLogic';
 
 const AUTO_CLOSE_HOUR = 21; // Sistem mendeteksi kelalaian jika sudah lewat jam 21:00
 // Jam pulang otomatis yang akan dicatat — diturunkan dari WORK_END_MINUTES
@@ -198,7 +198,14 @@ export default function Attendance() {
       const toAutoCloseBolong = employeesRef.current.filter(emp => getLastRecord(emp.id)?.type === 'bolong');
 
       // [+] 1. Tambahkan kode ini untuk mencari karyawan yang tidak ada rekam absensi sama sekali hari ini
+      // [FIX] Karyawan status "resign" HARUS dikecualikan — sebelumnya watchdog
+      // ini gak punya pengecualian ini sama sekali (beda dari backfill watchdog
+      // di App.jsx yang sudah skip resign duluan), jadi karyawan yang udah
+      // resign tetap ke-declare "Libur" tiap hari selama-lamanya tiap kali ada
+      // device yang buka tab Absensi lewat AUTO_CLOSE_HOUR — numpuk record
+      // sampah yang gak perlu di attendanceLog.
       const toAutoLibur = employeesRef.current.filter(emp => {
+        if (getEmployeeStatus(emp) === 'resign') return false;
         const recs = todayActiveAll.filter(r => r.employeeId === emp.id);
         return recs.length === 0;
       });
@@ -622,7 +629,19 @@ export default function Attendance() {
                       {employee.name}
                     </p>
                     <p className="text-xs text-slate-400 dark:text-slate-500">
-                      {libur ? `Tercatat Libur pada ${fmtTime(libur.date)}` : (
+                      {/* [FIX] "Tercatat Libur" HANYA boleh tampil kalau BENERAN
+                          gak ada aktivitas absen apa pun hari itu. Sebelumnya
+                          `libur` dicek PALING DULU tanpa syarat — begitu ada
+                          record 'libur' (misal watchdog auto-declare yang salah
+                          nembak gara-gara data attendanceLog di device ini masih
+                          telat sync pas jam checkAutoClose jalan), baris ini
+                          nutupin/nimpa tampilan masuk/bolong/pulang yang
+                          sebenarnya udah tercatat — walau data aslinya di
+                          attendanceLog masih utuh, admin/kasir yang lihat layar
+                          ini ngira karyawan itu beneran libur. Urutan prioritas
+                          disamain dengan computeAttendanceFromLogs (payrollLogic.js):
+                          masuk/bolong/masukLagi/keluar SELALU menang dari libur. */}
+                      {libur && !masuk && !bolong && !masukLagi && !keluar ? `Tercatat Libur pada ${fmtTime(libur.date)}` : (
                         <>
                           {masuk ? `Masuk ${fmtTime(masuk.date)}` : 'Belum absen masuk'}
                           {bolong && ` · Bolong ${fmtTime(bolong.date)}`}
@@ -656,24 +675,32 @@ export default function Attendance() {
                         <AlertTriangle className="w-4 h-4 text-amber-500" />
                       </span>
                     )}
-                    {lastRecord?.type === 'keluar' ? (
+                    {/* [FIX] Badge sebelumnya 100% ngikutin lastRecord?.type —
+                        record CHRONOLOGICALLY TERAKHIR hari itu, termasuk kalau
+                        yang terakhir itu record 'libur' hasil auto-declare yang
+                        salah nembak (attendanceLog di device ini masih telat
+                        sync pas checkAutoClose jalan jam AUTO_CLOSE_HOUR, yang
+                        jam-nya diset outletCloseDate — bisa aja "lebih baru"
+                        dari jam masuk asli pagi/siang itu). Sekarang urutannya:
+                        keluar & "lagi bolong" dicek dari keberadaan record-nya
+                        sendiri (bukan lastRecord), masuk/masukLagi ditaruh
+                        SEBELUM libur, dan libur cuma tampil kalau BENERAN gak
+                        ada satu pun aktivitas absen hari itu — konsisten sama
+                        computeAttendanceFromLogs yang jadi acuan payroll. */}
+                    {keluar ? (
                       <Badge variant="neutral" dot>Pulang</Badge>
-                    ) : lastRecord?.type === 'libur' ? ( // [+] Tambahan baru
-                      <Badge variant="neutral" dot>Libur</Badge>
-                    ) : lastRecord?.type === 'bolong' ? (
+                    ) : bolong && (!masukLagi || new Date(bolong.date) > new Date(masukLagi.date)) ? (
+                      // Lagi bolong = ada sesi bolong yang belum ditutup masukLagi
+                      // (dicek dari jamnya sendiri, bukan lastRecord, supaya gak
+                      // ketuker sama record libur nyasar yang jam-nya kebetulan
+                      // lebih baru).
                       <Badge variant="warning" dot>Jam Bolong</Badge>
-                    ) : lastRecord?.type === 'masuk' || lastRecord?.type === 'masuk_lagi' ? (
-                      // [FIX] 'masuk_lagi' sebelumnya gak ke-cover cabang manapun
-                      // di switch ini, jadi jatuh ke fallback "Belum Absen" +
-                      // tombol quick-confirm Libur — padahal karyawan ini justru
-                      // SEDANG KERJA (baru balik dari bolong). Kalau admin gak
-                      // sadar dan klik "Libur" karena percaya badge-nya, seluruh
-                      // hari itu tertimpa jadi Libur (hasLibur dicek duluan di
-                      // computeAttendanceFromLogs), menghapus semua jam kerja &
-                      // lembur yang sudah tercatat. Badge "Masuk" dipakai lagi di
-                      // sini (bukan badge baru) karena secara status kehadiran
-                      // keduanya sama: karyawan aktif, belum pulang.
+                    ) : masuk || masukLagi ? (
+                      // 'masuk_lagi' dianggap sama kayak 'masuk' (karyawan aktif,
+                      // belum pulang) — badge yang sama dipakai buat keduanya.
                       <Badge variant="success" dot>Masuk</Badge>
+                    ) : libur ? (
+                      <Badge variant="neutral" dot>Libur</Badge>
                     ) : (
                       <>
                         <Badge variant="warning" dot>Belum Absen</Badge>
