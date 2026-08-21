@@ -153,6 +153,57 @@ export default function App() {
 
   const cleanupRef = useRef(null);
   const reconnectRef = useRef(null);
+  const pullNowRef = useRef(null);
+
+  // ── Status sync buat UI (indikator "terakhir sync" + tombol manual) ────
+  // mamam_last_supabase_sync & event mamam_sync_updated SUDAH ada dari dulu
+  // di realtimeSync.js (di-set tiap push instan sukses & tiap runAutoSync
+  // selesai) — sebelumnya cuma disimpan ke localStorage tanpa ada yang
+  // dengerin buat nampilin ke user. Effect ini yang baru: dengerin event-nya
+  // dan taruh ke state biar bisa dipakai re-render (HistoryView, dkk).
+  const [lastSyncedAt, setLastSyncedAt] = useState(() => {
+    try { return localStorage.getItem('mamam_last_supabase_sync'); } catch (err) { console.warn('[App] localStorage gak bisa diakses:', err.message); return null; }
+  });
+  // BARU (anti-error): sebelumnya push yang gagal cuma console.warn — invisible
+  // buat user, gak ada cara tau ada data yang nyangkut kecuali buka console.
+  // Sekarang jumlah item gagal disimpan di state, biar bisa ditampilin di UI
+  // (misal "⚠ 2 gagal sync"). Di-reset ke 0 begitu ada siklus yang 100% sukses.
+  const [lastSyncFailedCount, setLastSyncFailedCount] = useState(0);
+  useEffect(() => {
+    const handleSyncUpdated = () => {
+      try { setLastSyncedAt(localStorage.getItem('mamam_last_supabase_sync')); } catch (err) { console.warn('[App] localStorage gak bisa diakses:', err.message); }
+    };
+    window.addEventListener('mamam_sync_updated', handleSyncUpdated);
+    return () => window.removeEventListener('mamam_sync_updated', handleSyncUpdated);
+  }, []);
+
+  // Sync manual "push + pull" dalam satu tombol — dipakai HistoryView (dan
+  // layar lain kalau perlu) buat maksa re-check ke database, bukan cuma
+  // ngirim perubahan lokal doang kayak "Sync Manual Sekarang" yang lama di
+  // BackupView (itu cuma runAutoSync push-only, sengaja gak diubah biar
+  // behaviour lama gak berubah — ini tambahan jalur baru).
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const triggerManualSync = useCallback(async () => {
+    if (isManualSyncing) return { sent: 0, failed: 0 };
+    setIsManualSyncing(true);
+    try {
+      const { runAutoSync } = await import('../storage/realtimeSync');
+      const { sent, failed, failedItems } = await runAutoSync({ force: true });
+      setLastSyncFailedCount(failed);
+      if (failed > 0) console.warn('[App] Detail item gagal (sync manual):', failedItems);
+      // pullNow return-nya status ({ok, reason}), bukan data — biar caller
+      // (tombol UI) bisa ngasih tau user kalau kena cooldown/lagi jalan,
+      // bukan diem-diem dianggap "sukses tapi gak ngapa-ngapain".
+      const pullResult = await pullNowRef.current?.();
+      try { setLastSyncedAt(localStorage.getItem('mamam_last_supabase_sync')); } catch (err) { console.warn('[App] localStorage gak bisa diakses:', err.message); }
+      return { sent, failed, pullSkippedReason: pullResult?.ok === false ? pullResult.reason : null };
+    } catch (e) {
+      console.warn('[App] triggerManualSync error:', e?.message);
+      return { sent: 0, failed: 0, error: e?.message };
+    } finally {
+      setIsManualSyncing(false);
+    }
+  }, [isManualSyncing]);
 
   const syncGateRef = useRef(null);
   if (!syncGateRef.current) {
@@ -312,7 +363,7 @@ export default function App() {
       // syncStatus sudah 'syncing' dari initial state — tidak perlu set ulang
       setSyncStep('Mengambil data dari server...');
 
-      const { unsubscribe, reconnect, syncReadyPromise: enginePromise } = initRealtimeSync({
+      const { unsubscribe, reconnect, pullNow, syncReadyPromise: enginePromise } = initRealtimeSync({
         // Dipanggil saat initial pull SELESAI untuk satu tableKey (transaksi)
         // atau saat realtime event datang dari device lain.
         // `fullArray` = array penuh hasil merge (initial pull); `item` = satu record (realtime)
@@ -378,6 +429,7 @@ export default function App() {
       // effect ini (cleanup & listener resume di effect terpisah di bawah).
       cleanupRef.current = unsubscribe;
       reconnectRef.current = reconnect;
+      pullNowRef.current = pullNow;
     })();
     return () => {
       cancelled = true;
@@ -669,8 +721,22 @@ export default function App() {
         const { isAutoSyncEnabled, runAutoSync } = await import('../storage/realtimeSync');
         if (!isAutoSyncEnabled()) return;
         const { sent, failed } = await runAutoSync({ force: false });
+        setLastSyncFailedCount(failed);
         if (sent > 0) console.log(`[App] Auto-sync berkala: ${sent} terkirim`);
         if (failed > 0) console.warn(`[App] Auto-sync berkala: ${failed} gagal, dicoba lagi nanti`);
+
+        // FIX "ANGKA BEDA-BEDA DI KEMARIN": runAutoSync di atas cuma PUSH
+        // (diff local vs snapshot local -> upsert). Sebelum ini, satu-satunya
+        // jalur PULL cuma initial-pull sekali pas app mount + reconnect()
+        // pas visibilitychange/resume. Kalau tab/app kebuka terus tanpa
+        // pernah background, gak ada mekanisme apapun yang narik ulang data
+        // dari device lain -> laporan closed-period (Kemarin, dll) bisa
+        // nyangkut stale walau app-nya udah berjam-jam kebuka. Tambahin
+        // pull tiap siklus yang sama biar interval ini beneran dua arah.
+        // pullNow udah punya guard in-flight/cooldown sendiri (realtimeSync.js)
+        // jadi aman dipanggil dari sini meski tombol manual/reconnect lagi
+        // jalan bersamaan — gak perlu guard tambahan di sini.
+        await pullNowRef.current?.();
       } catch (e) {
         console.warn('[App] Auto-sync berkala error:', e?.message);
       }
@@ -1137,6 +1203,10 @@ export default function App() {
 
     // Sync
     syncStatus, // 'idle' | 'syncing' | 'ready' | 'error'
+    lastSyncedAt, // ISO string terakhir kali push/pull ke Supabase sukses, atau null
+    lastSyncFailedCount, // jumlah item gagal push di siklus terakhir (0 = bersih)
+    isManualSyncing,
+    triggerManualSync, // () => Promise<{sent, failed}> — push + pull manual on-demand
   };
 
   const menuItems = [

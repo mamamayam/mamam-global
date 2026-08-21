@@ -1,5 +1,5 @@
 {
-  "version": "3.13.0",
-  "updatedAt": "2026-08-14",
+  "version": "3.13.1",
+  "updatedAt": "2026-08-21",
   "note": "HRD: fix Libur nimpa data Masuk (badge/teks status + self-heal employeeDailyRecords), skip resign dari watchdog auto-libur"
 }

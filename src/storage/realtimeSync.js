@@ -394,6 +394,28 @@ export function isSyncInFlight() {
   return autoSyncInFlight;
 }
 
+// ── Guard buat pullNow (BARU) ───────────────────────────────────────────
+// Dipakai bareng sama guard push (autoSyncInFlight) di atas, tapi state-nya
+// dipisah sengaja: push & pull itu 2 operasi beda (diff-local-lalu-upsert
+// vs select-lalu-merge), gak saling gantiin, jadi salah satu lagi jalan
+// gak boleh nge-block yang lain nunggu.
+// pullInFlight  → cegah 2 pull jalan bebarengan (misal interval 10-menitan
+//                 nembak bareng sama tombol "Sync Sekarang" atau reconnect
+//                 dari resume — ketiganya sekarang manggil pullNow/
+//                 catchUpAfterReconnect, jadi overlap beneran mungkin
+//                 kejadian begitu pullNow dipanggil dari banyak tempat).
+// PULL_COOLDOWN_MS → kalau pull barusan aja selesai (<5 detik lalu), skip
+//                 request baru. Murni buat jaga-jaga kalau beberapa trigger
+//                 nembak nyaris bersamaan (resume + interval, dst) — bukan
+//                 buat gantiin guard in-flight di atas.
+let pullInFlight = false;
+let lastPullCompletedAt = 0;
+const PULL_COOLDOWN_MS = 5000;
+
+export function isPullInFlight() {
+  return pullInFlight;
+}
+
 /**
  * Sync diff-based: hanya kirim yang berubah sejak snapshot terakhir.
  * Transaksi: per-record upsert/delete. Config: per-key (push manual only).
@@ -614,7 +636,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
 
   if (!isSupabaseConfigured()) {
     _resolveReady();
-    return { unsubscribe: () => { }, syncReadyPromise, reconnect: () => {} };
+    return { unsubscribe: () => { }, syncReadyPromise, reconnect: () => {}, pullNow: async () => ({ ok: false, reason: 'not_configured' }) };
   }
 
   let channel = null;
@@ -753,9 +775,13 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
   // putus (gak ke-broadcast karena emang gak ada yang dengerin saat itu)
   // tetap ketangkep, bukan cuma perubahan setelah reconnect doang.
   async function catchUpAfterReconnect(supabase) {
-    try {
-      for (const tableKey of TRANSACTION_KEYS) {
-        if (cancelled) return;
+    for (const tableKey of TRANSACTION_KEYS) {
+      if (cancelled) return;
+      // FIX (anti-error): sebelumnya try/catch cuma di LUAR loop — kalau satu
+      // tableKey error (misal payload korup bikin reviveDates/mergeValue
+      // throw), SEMUA tableKey sesudahnya di siklus itu ikut gak keproses.
+      // Sekarang tiap tableKey diisolasi sendiri, sama kayak runAutoSync.
+      try {
         const { data: rows, error } = await withTimeout(
           supabase.from(tableKey).select('id, payload, updated_at, updated_by'),
           PUSH_TIMEOUT_MS, `catchup pull ${tableKey}`
@@ -770,9 +796,9 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
           await saveData(tableKey, merged);
           onTransactionUpsert?.(tableKey, null, merged);
         }
+      } catch (err) {
+        console.warn(`[sync] catchup pull ${tableKey} error:`, err.message);
       }
-    } catch (err) {
-      console.warn('[sync] catchup after reconnect error:', err.message);
     }
   }
 
@@ -867,6 +893,44 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
         if (supabase && !cancelled) subscribeChannel(supabase);
       } catch (err) {
         console.warn('[sync] manual reconnect gagal:', err.message);
+      }
+    },
+    // BARU — PULL manual on-demand. Dipanggil App.jsx dari 2 tempat:
+    //  1. Siklus interval berkala (AUTO_SYNC_INTERVAL_MS) — SEBELUM fix ini,
+    //     interval itu cuma runAutoSync() yang PUSH-ONLY (diff local vs
+    //     snapshot local -> upsert, gak pernah SELECT apapun dari Supabase).
+    //     Kalau sebuah tab/app kebuka terus-menerus TANPA pernah background/
+    //     foreground (jadi gak pernah trigger reconnect()/catchUpAfterReconnect
+    //     lewat visibilitychange atau Capacitor resume), dia gak akan pernah
+    //     tau ada data baru dari device lain kecuali kebetulan lagi nyala pas
+    //     event realtime live lewat. Ini akar salah satu penyebab laporan
+    //     "Kemarin" beda-beda angkanya di device/tab berbeda.
+    //  2. Tombol "Sync Sekarang" manual (HistoryView, dkk) lewat
+    //     triggerManualSync di App.jsx.
+    // Sengaja REUSE catchUpAfterReconnect apa adanya (bukan tulis ulang logic
+    // pull terpisah) supaya hasil pull manual selalu konsisten sama pull
+    // otomatis pas reconnect — satu sumber kebenaran buat "cara narik data".
+    //
+    // Guard (anti-error): dipanggil dari banyak tempat (interval, tombol
+    // manual, reconnect) yang bisa kejadian nyaris bersamaan → di-lindungin
+    // in-flight lock + cooldown 5 detik, BUKAN dilempar sebagai promise yang
+    // nunggu — pemanggil kedua langsung dapet status 'skipped', gak nge-hang
+    // nunggu pull pertama kelar (biar UI kayak tombol manual tetep responsif).
+    pullNow: async () => {
+      if (cancelled) return { ok: false, reason: 'cancelled' };
+      if (pullInFlight) return { ok: false, reason: 'already_in_flight' };
+      if (Date.now() - lastPullCompletedAt < PULL_COOLDOWN_MS) return { ok: false, reason: 'cooldown' };
+      pullInFlight = true;
+      try {
+        const supabase = await getSupabaseClient();
+        if (supabase && !cancelled) await catchUpAfterReconnect(supabase);
+        lastPullCompletedAt = Date.now();
+        return { ok: true };
+      } catch (err) {
+        console.warn('[sync] pullNow gagal:', err.message);
+        return { ok: false, reason: 'error', message: err.message };
+      } finally {
+        pullInFlight = false;
       }
     },
     syncReadyPromise,
