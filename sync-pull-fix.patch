@@ -1,0 +1,347 @@
+diff --git a/src/app/App.jsx b/src/app/App.jsx
+index d99ae6d..b478d1c 100644
+--- a/src/app/App.jsx
++++ b/src/app/App.jsx
+@@ -153,6 +153,57 @@ export default function App() {
+ 
+   const cleanupRef = useRef(null);
+   const reconnectRef = useRef(null);
++  const pullNowRef = useRef(null);
++
++  // ── Status sync buat UI (indikator "terakhir sync" + tombol manual) ────
++  // mamam_last_supabase_sync & event mamam_sync_updated SUDAH ada dari dulu
++  // di realtimeSync.js (di-set tiap push instan sukses & tiap runAutoSync
++  // selesai) — sebelumnya cuma disimpan ke localStorage tanpa ada yang
++  // dengerin buat nampilin ke user. Effect ini yang baru: dengerin event-nya
++  // dan taruh ke state biar bisa dipakai re-render (HistoryView, dkk).
++  const [lastSyncedAt, setLastSyncedAt] = useState(() => {
++    try { return localStorage.getItem('mamam_last_supabase_sync'); } catch (err) { console.warn('[App] localStorage gak bisa diakses:', err.message); return null; }
++  });
++  // BARU (anti-error): sebelumnya push yang gagal cuma console.warn — invisible
++  // buat user, gak ada cara tau ada data yang nyangkut kecuali buka console.
++  // Sekarang jumlah item gagal disimpan di state, biar bisa ditampilin di UI
++  // (misal "⚠ 2 gagal sync"). Di-reset ke 0 begitu ada siklus yang 100% sukses.
++  const [lastSyncFailedCount, setLastSyncFailedCount] = useState(0);
++  useEffect(() => {
++    const handleSyncUpdated = () => {
++      try { setLastSyncedAt(localStorage.getItem('mamam_last_supabase_sync')); } catch (err) { console.warn('[App] localStorage gak bisa diakses:', err.message); }
++    };
++    window.addEventListener('mamam_sync_updated', handleSyncUpdated);
++    return () => window.removeEventListener('mamam_sync_updated', handleSyncUpdated);
++  }, []);
++
++  // Sync manual "push + pull" dalam satu tombol — dipakai HistoryView (dan
++  // layar lain kalau perlu) buat maksa re-check ke database, bukan cuma
++  // ngirim perubahan lokal doang kayak "Sync Manual Sekarang" yang lama di
++  // BackupView (itu cuma runAutoSync push-only, sengaja gak diubah biar
++  // behaviour lama gak berubah — ini tambahan jalur baru).
++  const [isManualSyncing, setIsManualSyncing] = useState(false);
++  const triggerManualSync = useCallback(async () => {
++    if (isManualSyncing) return { sent: 0, failed: 0 };
++    setIsManualSyncing(true);
++    try {
++      const { runAutoSync } = await import('../storage/realtimeSync');
++      const { sent, failed, failedItems } = await runAutoSync({ force: true });
++      setLastSyncFailedCount(failed);
++      if (failed > 0) console.warn('[App] Detail item gagal (sync manual):', failedItems);
++      // pullNow return-nya status ({ok, reason}), bukan data — biar caller
++      // (tombol UI) bisa ngasih tau user kalau kena cooldown/lagi jalan,
++      // bukan diem-diem dianggap "sukses tapi gak ngapa-ngapain".
++      const pullResult = await pullNowRef.current?.();
++      try { setLastSyncedAt(localStorage.getItem('mamam_last_supabase_sync')); } catch (err) { console.warn('[App] localStorage gak bisa diakses:', err.message); }
++      return { sent, failed, pullSkippedReason: pullResult?.ok === false ? pullResult.reason : null };
++    } catch (e) {
++      console.warn('[App] triggerManualSync error:', e?.message);
++      return { sent: 0, failed: 0, error: e?.message };
++    } finally {
++      setIsManualSyncing(false);
++    }
++  }, [isManualSyncing]);
+ 
+   const syncGateRef = useRef(null);
+   if (!syncGateRef.current) {
+@@ -312,7 +363,7 @@ export default function App() {
+       // syncStatus sudah 'syncing' dari initial state — tidak perlu set ulang
+       setSyncStep('Mengambil data dari server...');
+ 
+-      const { unsubscribe, reconnect, syncReadyPromise: enginePromise } = initRealtimeSync({
++      const { unsubscribe, reconnect, pullNow, syncReadyPromise: enginePromise } = initRealtimeSync({
+         // Dipanggil saat initial pull SELESAI untuk satu tableKey (transaksi)
+         // atau saat realtime event datang dari device lain.
+         // `fullArray` = array penuh hasil merge (initial pull); `item` = satu record (realtime)
+@@ -378,6 +429,7 @@ export default function App() {
+       // effect ini (cleanup & listener resume di effect terpisah di bawah).
+       cleanupRef.current = unsubscribe;
+       reconnectRef.current = reconnect;
++      pullNowRef.current = pullNow;
+     })();
+     return () => {
+       cancelled = true;
+@@ -669,8 +721,22 @@ export default function App() {
+         const { isAutoSyncEnabled, runAutoSync } = await import('../storage/realtimeSync');
+         if (!isAutoSyncEnabled()) return;
+         const { sent, failed } = await runAutoSync({ force: false });
++        setLastSyncFailedCount(failed);
+         if (sent > 0) console.log(`[App] Auto-sync berkala: ${sent} terkirim`);
+         if (failed > 0) console.warn(`[App] Auto-sync berkala: ${failed} gagal, dicoba lagi nanti`);
++
++        // FIX "ANGKA BEDA-BEDA DI KEMARIN": runAutoSync di atas cuma PUSH
++        // (diff local vs snapshot local -> upsert). Sebelum ini, satu-satunya
++        // jalur PULL cuma initial-pull sekali pas app mount + reconnect()
++        // pas visibilitychange/resume. Kalau tab/app kebuka terus tanpa
++        // pernah background, gak ada mekanisme apapun yang narik ulang data
++        // dari device lain -> laporan closed-period (Kemarin, dll) bisa
++        // nyangkut stale walau app-nya udah berjam-jam kebuka. Tambahin
++        // pull tiap siklus yang sama biar interval ini beneran dua arah.
++        // pullNow udah punya guard in-flight/cooldown sendiri (realtimeSync.js)
++        // jadi aman dipanggil dari sini meski tombol manual/reconnect lagi
++        // jalan bersamaan — gak perlu guard tambahan di sini.
++        await pullNowRef.current?.();
+       } catch (e) {
+         console.warn('[App] Auto-sync berkala error:', e?.message);
+       }
+@@ -1137,6 +1203,10 @@ export default function App() {
+ 
+     // Sync
+     syncStatus, // 'idle' | 'syncing' | 'ready' | 'error'
++    lastSyncedAt, // ISO string terakhir kali push/pull ke Supabase sukses, atau null
++    lastSyncFailedCount, // jumlah item gagal push di siklus terakhir (0 = bersih)
++    isManualSyncing,
++    triggerManualSync, // () => Promise<{sent, failed}> — push + pull manual on-demand
+   };
+ 
+   const menuItems = [
+diff --git a/src/features/reports/HistoryView.jsx b/src/features/reports/HistoryView.jsx
+index 64210fc..5fa681e 100644
+--- a/src/features/reports/HistoryView.jsx
++++ b/src/features/reports/HistoryView.jsx
+@@ -1,6 +1,6 @@
+-import React, { useState, useMemo } from 'react';
++import { useState, useMemo, useEffect } from 'react';
+ import { useAppContext } from '../../context/AppContext';
+-import { X, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, ArrowUpDown, Eye, CreditCard } from 'lucide-react';
++import { X, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, ArrowUpDown, Eye, CreditCard, RefreshCw, AlertTriangle } from 'lucide-react';
+ import { formatRupiah } from '../../utils/formatters';
+ import { useBulkSelect } from '../../hook/useBulkSelect';
+ import { BulkSelectBar, Card, Button, DetailModal, SortModal } from '../../components/ui';
+@@ -8,7 +8,54 @@ import { applySort } from '../../utils/sortUtils';
+ import { useRecycleBin } from '../../hook/useRecycleBin';
+ 
+ const HistoryView = () => {
+-    const { salesHistory, setSalesHistory, isAdminMode, setReceiptModal, triggerConfirm } = useAppContext();
++    const {
++        salesHistory, setSalesHistory, isAdminMode, setReceiptModal, triggerConfirm,
++        lastSyncedAt, isManualSyncing, triggerManualSync, lastSyncFailedCount,
++    } = useAppContext();
++
++    // Hasil tombol "Sync Sekarang" — dipasang beberapa detik terus ilang lagi,
++    // sekadar konfirmasi visual ringan (bukan toast beneran) kalau user
++    // manggil re-check ke database dan apa hasilnya (kekirim/gagal/skip).
++    const [manualSyncResult, setManualSyncResult] = useState(null);
++    const handleManualSyncClick = async () => {
++        setManualSyncResult(null);
++        const { sent, failed, error, pullSkippedReason } = await triggerManualSync();
++        if (error) {
++            setManualSyncResult('Gagal sync — cek koneksi');
++        } else if (failed > 0) {
++            setManualSyncResult(`${sent} terkirim, ${failed} gagal`);
++        } else if (pullSkippedReason === 'cooldown') {
++            setManualSyncResult('Baru aja sync, coba lagi sebentar');
++        } else if (sent > 0) {
++            setManualSyncResult(`${sent} data tersinkron`);
++        } else {
++            setManualSyncResult('Sudah paling baru');
++        }
++        setTimeout(() => setManualSyncResult(null), 4000);
++    };
++
++    // "Jam sekarang" buat hitung "X menit lalu" — SENGAJA disimpan sebagai
++    // state yang di-update dari dalam effect/lazy-initializer (bukan manggil
++    // Date.now() langsung pas render), biar formatLastSynced tetap pure
++    // function murni dari input-nya. Di-refresh tiap 30 detik biar labelnya
++    // jalan otomatis tanpa perlu interaksi apapun dari user.
++    const [syncClockNow, setSyncClockNow] = useState(() => Date.now());
++    useEffect(() => {
++        const id = setInterval(() => setSyncClockNow(Date.now()), 30000);
++        return () => clearInterval(id);
++    }, []);
++
++    const formatLastSynced = (iso, now) => {
++        if (!iso) return 'Belum pernah sync';
++        if (!now) return '...';
++        const diffMs = now - new Date(iso).getTime();
++        const diffMin = Math.floor(diffMs / 60000);
++        if (diffMin < 1) return 'Baru saja sync';
++        if (diffMin < 60) return `Sync ${diffMin} menit lalu`;
++        const diffHour = Math.floor(diffMin / 60);
++        if (diffHour < 24) return `Sync ${diffHour} jam lalu`;
++        return `Sync: ${new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
++    };
+ 
+     // State Filter
+     const [searchTerm, setSearchTerm] = useState('');
+@@ -255,11 +302,42 @@ const HistoryView = () => {
+             {/* RINGKASAN OMSET PER METODE PEMBAYARAN */}
+             {paymentBreakdown.length > 0 && (
+                 <Card className="flex flex-col gap-3 p-4 mb-6">
+-                    <div className="flex items-center gap-2">
+-                        <CreditCard className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+-                        <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
+-                            Omset per Metode Pembayaran
+-                        </h3>
++                    <div className="flex items-center justify-between gap-2 flex-wrap">
++                        <div className="flex items-center gap-2">
++                            <CreditCard className="w-4 h-4 text-slate-400 dark:text-slate-500" />
++                            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
++                                Omset per Metode Pembayaran
++                            </h3>
++                        </div>
++                        <div className="flex items-center gap-2">
++                            {manualSyncResult && (
++                                <span className="text-[11px] text-slate-500 dark:text-slate-400 animate-in fade-in duration-200">
++                                    {manualSyncResult}
++                                </span>
++                            )}
++                            {lastSyncFailedCount > 0 && (
++                                <span
++                                    className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"
++                                    title="Ada data lokal yang belum berhasil terkirim ke server — akan dicoba lagi otomatis"
++                                >
++                                    <AlertTriangle className="w-3 h-3" />
++                                    {lastSyncFailedCount} gagal
++                                </span>
++                            )}
++                            <span className="text-[11px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
++                                {formatLastSynced(lastSyncedAt, syncClockNow)}
++                            </span>
++                            <button
++                                type="button"
++                                onClick={handleManualSyncClick}
++                                disabled={isManualSyncing}
++                                title="Tarik ulang data terbaru dari database"
++                                aria-label="Sync sekarang"
++                                className="p-1.5 rounded-full text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-[0.92] transition-all duration-200 disabled:opacity-50"
++                            >
++                                <RefreshCw className={`w-3.5 h-3.5 ${isManualSyncing ? 'animate-spin' : ''}`} />
++                            </button>
++                        </div>
+                     </div>
+                     <div className="flex flex-wrap gap-2">
+                         <button
+diff --git a/src/storage/realtimeSync.js b/src/storage/realtimeSync.js
+index c15778f..90654da 100644
+--- a/src/storage/realtimeSync.js
++++ b/src/storage/realtimeSync.js
+@@ -394,6 +394,28 @@ export function isSyncInFlight() {
+   return autoSyncInFlight;
+ }
+ 
++// ── Guard buat pullNow (BARU) ───────────────────────────────────────────
++// Dipakai bareng sama guard push (autoSyncInFlight) di atas, tapi state-nya
++// dipisah sengaja: push & pull itu 2 operasi beda (diff-local-lalu-upsert
++// vs select-lalu-merge), gak saling gantiin, jadi salah satu lagi jalan
++// gak boleh nge-block yang lain nunggu.
++// pullInFlight  → cegah 2 pull jalan bebarengan (misal interval 10-menitan
++//                 nembak bareng sama tombol "Sync Sekarang" atau reconnect
++//                 dari resume — ketiganya sekarang manggil pullNow/
++//                 catchUpAfterReconnect, jadi overlap beneran mungkin
++//                 kejadian begitu pullNow dipanggil dari banyak tempat).
++// PULL_COOLDOWN_MS → kalau pull barusan aja selesai (<5 detik lalu), skip
++//                 request baru. Murni buat jaga-jaga kalau beberapa trigger
++//                 nembak nyaris bersamaan (resume + interval, dst) — bukan
++//                 buat gantiin guard in-flight di atas.
++let pullInFlight = false;
++let lastPullCompletedAt = 0;
++const PULL_COOLDOWN_MS = 5000;
++
++export function isPullInFlight() {
++  return pullInFlight;
++}
++
+ /**
+  * Sync diff-based: hanya kirim yang berubah sejak snapshot terakhir.
+  * Transaksi: per-record upsert/delete. Config: per-key (push manual only).
+@@ -614,7 +636,7 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
+ 
+   if (!isSupabaseConfigured()) {
+     _resolveReady();
+-    return { unsubscribe: () => { }, syncReadyPromise, reconnect: () => {} };
++    return { unsubscribe: () => { }, syncReadyPromise, reconnect: () => {}, pullNow: async () => ({ ok: false, reason: 'not_configured' }) };
+   }
+ 
+   let channel = null;
+@@ -753,9 +775,13 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
+   // putus (gak ke-broadcast karena emang gak ada yang dengerin saat itu)
+   // tetap ketangkep, bukan cuma perubahan setelah reconnect doang.
+   async function catchUpAfterReconnect(supabase) {
+-    try {
+-      for (const tableKey of TRANSACTION_KEYS) {
+-        if (cancelled) return;
++    for (const tableKey of TRANSACTION_KEYS) {
++      if (cancelled) return;
++      // FIX (anti-error): sebelumnya try/catch cuma di LUAR loop — kalau satu
++      // tableKey error (misal payload korup bikin reviveDates/mergeValue
++      // throw), SEMUA tableKey sesudahnya di siklus itu ikut gak keproses.
++      // Sekarang tiap tableKey diisolasi sendiri, sama kayak runAutoSync.
++      try {
+         const { data: rows, error } = await withTimeout(
+           supabase.from(tableKey).select('id, payload, updated_at, updated_by'),
+           PUSH_TIMEOUT_MS, `catchup pull ${tableKey}`
+@@ -770,9 +796,9 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
+           await saveData(tableKey, merged);
+           onTransactionUpsert?.(tableKey, null, merged);
+         }
++      } catch (err) {
++        console.warn(`[sync] catchup pull ${tableKey} error:`, err.message);
+       }
+-    } catch (err) {
+-      console.warn('[sync] catchup after reconnect error:', err.message);
+     }
+   }
+ 
+@@ -869,6 +895,44 @@ export function initRealtimeSync({ onTransactionUpsert, onTransactionDelete, onC
+         console.warn('[sync] manual reconnect gagal:', err.message);
+       }
+     },
++    // BARU — PULL manual on-demand. Dipanggil App.jsx dari 2 tempat:
++    //  1. Siklus interval berkala (AUTO_SYNC_INTERVAL_MS) — SEBELUM fix ini,
++    //     interval itu cuma runAutoSync() yang PUSH-ONLY (diff local vs
++    //     snapshot local -> upsert, gak pernah SELECT apapun dari Supabase).
++    //     Kalau sebuah tab/app kebuka terus-menerus TANPA pernah background/
++    //     foreground (jadi gak pernah trigger reconnect()/catchUpAfterReconnect
++    //     lewat visibilitychange atau Capacitor resume), dia gak akan pernah
++    //     tau ada data baru dari device lain kecuali kebetulan lagi nyala pas
++    //     event realtime live lewat. Ini akar salah satu penyebab laporan
++    //     "Kemarin" beda-beda angkanya di device/tab berbeda.
++    //  2. Tombol "Sync Sekarang" manual (HistoryView, dkk) lewat
++    //     triggerManualSync di App.jsx.
++    // Sengaja REUSE catchUpAfterReconnect apa adanya (bukan tulis ulang logic
++    // pull terpisah) supaya hasil pull manual selalu konsisten sama pull
++    // otomatis pas reconnect — satu sumber kebenaran buat "cara narik data".
++    //
++    // Guard (anti-error): dipanggil dari banyak tempat (interval, tombol
++    // manual, reconnect) yang bisa kejadian nyaris bersamaan → di-lindungin
++    // in-flight lock + cooldown 5 detik, BUKAN dilempar sebagai promise yang
++    // nunggu — pemanggil kedua langsung dapet status 'skipped', gak nge-hang
++    // nunggu pull pertama kelar (biar UI kayak tombol manual tetep responsif).
++    pullNow: async () => {
++      if (cancelled) return { ok: false, reason: 'cancelled' };
++      if (pullInFlight) return { ok: false, reason: 'already_in_flight' };
++      if (Date.now() - lastPullCompletedAt < PULL_COOLDOWN_MS) return { ok: false, reason: 'cooldown' };
++      pullInFlight = true;
++      try {
++        const supabase = await getSupabaseClient();
++        if (supabase && !cancelled) await catchUpAfterReconnect(supabase);
++        lastPullCompletedAt = Date.now();
++        return { ok: true };
++      } catch (err) {
++        console.warn('[sync] pullNow gagal:', err.message);
++        return { ok: false, reason: 'error', message: err.message };
++      } finally {
++        pullInFlight = false;
++      }
++    },
+     syncReadyPromise,
+   };
+ }
+\ No newline at end of file
