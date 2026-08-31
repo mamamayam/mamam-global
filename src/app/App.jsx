@@ -7,6 +7,8 @@ import { AppContext } from '../context/AppContext';
 import { usePosStore } from '../store/usePosStore';
 import { Modal, Button } from '../components/ui';
 import PinModal from '../auth/PinModal';
+import LoginView from '../auth/LoginView';
+import UpdatePrompt from '../components/UpdatePrompt';
 import AppRoutes from '../app/AppRoutes';
 import AppLayout from '../app/AppLayout';
 import Sidebar from '../app/layout/Sidebar';
@@ -80,6 +82,75 @@ export default function App() {
 
 
   const [isAdminMode, setIsAdminMode] = useState(false);
+
+  // ── Sesi employee ASLI (login PIN), terpisah dari sesi anonim otomatis ──
+  // getSupabaseClient()/ensureAuthSession di syncClient.js SELALU nyoba
+  // signInAnonymously() kalau belum ada sesi apapun -- itu buat keperluan
+  // sync/echo-suppression doang (lihat komentar di syncClient.js), BUKAN
+  // berarti "sudah login". Makanya yang dicek bukan "ada sesi atau nggak",
+  // tapi user.is_anonymous === false.
+  // undefined = lagi dicek, null = belum ada employee asli yang login,
+  // {id,name,role,is_active} = login sebagai employee itu.
+  const [currentEmployee, setCurrentEmployee] = useState(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unsubscribeAuth = null;
+
+    (async () => {
+      const { getSupabaseClient } = await import('../storage/syncClient');
+      const supabase = await getSupabaseClient();
+      if (!supabase) { if (!cancelled) setCurrentEmployee(null); return; }
+
+      const resolveEmployeeFromSession = async (session) => {
+        if (!session?.user || session.user.is_anonymous) {
+          if (!cancelled) { setCurrentEmployee(null); setIsAdminMode(false); }
+          return;
+        }
+        try {
+          const { data, error } = await supabase
+            .from('employees')
+            .select('id, name, role, is_active')
+            .eq('id', session.user.id)
+            .single();
+          if (error || !data || !data.is_active) {
+            // Baris employees-nya kehapus/dinonaktifkan tapi sesi masih
+            // nyangkut di device ini -- paksa logout, jangan biarin akses.
+            await supabase.auth.signOut();
+            if (!cancelled) { setCurrentEmployee(null); setIsAdminMode(false); }
+            return;
+          }
+          if (!cancelled) {
+            setCurrentEmployee(data);
+            setIsAdminMode(data.role === 'admin');
+          }
+        } catch (err) {
+          console.warn('[App] gagal resolve employee dari sesi:', err.message);
+          if (!cancelled) setCurrentEmployee(null);
+        }
+      };
+
+      const { data: { session } } = await supabase.auth.getSession();
+      await resolveEmployeeFromSession(session);
+
+      const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+        resolveEmployeeFromSession(newSession);
+      });
+      unsubscribeAuth = () => sub.subscription.unsubscribe();
+    })();
+
+    return () => { cancelled = true; unsubscribeAuth?.(); };
+  }, []);
+
+  const signOutEmployee = useCallback(async () => {
+    try {
+      const { getSupabaseClient } = await import('../storage/syncClient');
+      const supabase = await getSupabaseClient();
+      await supabase?.auth.signOut();
+    } catch (err) {
+      console.warn('[App] signOut error:', err.message);
+    }
+  }, []);
   const [showPinModal, setShowPinModal] = useState(false);
 
   const [currentView, setCurrentView] = useState('kasir');
@@ -153,6 +224,57 @@ export default function App() {
 
   const cleanupRef = useRef(null);
   const reconnectRef = useRef(null);
+  const pullNowRef = useRef(null);
+
+  // ── Status sync buat UI (indikator "terakhir sync" + tombol manual) ────
+  // mamam_last_supabase_sync & event mamam_sync_updated SUDAH ada dari dulu
+  // di realtimeSync.js (di-set tiap push instan sukses & tiap runAutoSync
+  // selesai) — sebelumnya cuma disimpan ke localStorage tanpa ada yang
+  // dengerin buat nampilin ke user. Effect ini yang baru: dengerin event-nya
+  // dan taruh ke state biar bisa dipakai re-render (HistoryView, dkk).
+  const [lastSyncedAt, setLastSyncedAt] = useState(() => {
+    try { return localStorage.getItem('mamam_last_supabase_sync'); } catch (err) { console.warn('[App] localStorage gak bisa diakses:', err.message); return null; }
+  });
+  // BARU (anti-error): sebelumnya push yang gagal cuma console.warn — invisible
+  // buat user, gak ada cara tau ada data yang nyangkut kecuali buka console.
+  // Sekarang jumlah item gagal disimpan di state, biar bisa ditampilin di UI
+  // (misal "⚠ 2 gagal sync"). Di-reset ke 0 begitu ada siklus yang 100% sukses.
+  const [lastSyncFailedCount, setLastSyncFailedCount] = useState(0);
+  useEffect(() => {
+    const handleSyncUpdated = () => {
+      try { setLastSyncedAt(localStorage.getItem('mamam_last_supabase_sync')); } catch (err) { console.warn('[App] localStorage gak bisa diakses:', err.message); }
+    };
+    window.addEventListener('mamam_sync_updated', handleSyncUpdated);
+    return () => window.removeEventListener('mamam_sync_updated', handleSyncUpdated);
+  }, []);
+
+  // Sync manual "push + pull" dalam satu tombol — dipakai HistoryView (dan
+  // layar lain kalau perlu) buat maksa re-check ke database, bukan cuma
+  // ngirim perubahan lokal doang kayak "Sync Manual Sekarang" yang lama di
+  // BackupView (itu cuma runAutoSync push-only, sengaja gak diubah biar
+  // behaviour lama gak berubah — ini tambahan jalur baru).
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const triggerManualSync = useCallback(async () => {
+    if (isManualSyncing) return { sent: 0, failed: 0 };
+    setIsManualSyncing(true);
+    try {
+      const { runAutoSync } = await import('../storage/realtimeSync');
+      const { sent, failed, failedItems } = await runAutoSync({ force: true });
+      setLastSyncFailedCount(failed);
+      if (failed > 0) console.warn('[App] Detail item gagal (sync manual):', failedItems);
+      // pullNow return-nya status ({ok, reason}), bukan data — biar caller
+      // (tombol UI) bisa ngasih tau user kalau kena cooldown/lagi jalan,
+      // bukan diem-diem dianggap "sukses tapi gak ngapa-ngapain".
+      const pullResult = await pullNowRef.current?.();
+      try { setLastSyncedAt(localStorage.getItem('mamam_last_supabase_sync')); } catch (err) { console.warn('[App] localStorage gak bisa diakses:', err.message); }
+      return { sent, failed, pullSkippedReason: pullResult?.ok === false ? pullResult.reason : null };
+    } catch (e) {
+      console.warn('[App] triggerManualSync error:', e?.message);
+      return { sent: 0, failed: 0, error: e?.message };
+    } finally {
+      setIsManualSyncing(false);
+    }
+  }, [isManualSyncing]);
 
   const syncGateRef = useRef(null);
   if (!syncGateRef.current) {
@@ -312,7 +434,7 @@ export default function App() {
       // syncStatus sudah 'syncing' dari initial state — tidak perlu set ulang
       setSyncStep('Mengambil data dari server...');
 
-      const { unsubscribe, reconnect, syncReadyPromise: enginePromise } = initRealtimeSync({
+      const { unsubscribe, reconnect, pullNow, syncReadyPromise: enginePromise } = initRealtimeSync({
         // Dipanggil saat initial pull SELESAI untuk satu tableKey (transaksi)
         // atau saat realtime event datang dari device lain.
         // `fullArray` = array penuh hasil merge (initial pull); `item` = satu record (realtime)
@@ -378,6 +500,7 @@ export default function App() {
       // effect ini (cleanup & listener resume di effect terpisah di bawah).
       cleanupRef.current = unsubscribe;
       reconnectRef.current = reconnect;
+      pullNowRef.current = pullNow;
     })();
     return () => {
       cancelled = true;
@@ -488,17 +611,30 @@ export default function App() {
     const todayStr = toLocalDateString();
 
     setEmployeeDailyRecords(prev => {
-      // [FIX] Hanya record HASIL KOREKSI MANUAL (id bukan berawalan
-      // "AUTO-LIBUR") yang dianggap final dan di-skip dari pengecekan
-      // ulang. Record auto-generated TETAP dimasukkan ke pairsToBackfill
-      // supaya bisa direcompute & dikoreksi kalau ternyata salah (mis.
-      // salah declare Libur akibat race loading data) — lihat blok
-      // self-heal di bawah untuk detail kenapa ini aman bagi koreksi
-      // manual admin.
-      const existingRecordKeys = new Set(
+      // [FIX] ROOT CAUSE dari "Libur nimpa data absen yang udah ada dan gak
+      // pernah kekoreksi": eligibility "boleh direcompute otomatis atau
+      // tidak" SEBELUMNYA dicek dari pola id ("bukan AUTO-LIBUR" = dianggap
+      // final). Itu keliru — record hasil hitung OTOMATIS dari
+      // InputDailyTab.jsx (id prefix "REC-", lihat efek "Generator record
+      // harian otomatis" di sana) JUGA bisa salah dari awal, misalnya kalau
+      // efek itu sempat jalan SAAT attendanceLog di device itu belum
+      // lengkap (log 'masuk' asli belum sempat ke-sync dari device lain,
+      // tapi record 'libur' hasil watchdog checkAutoClose di
+      // AttendanceView.jsx sudah kebaca duluan). Karena id-nya "REC-"
+      // (bukan "AUTO-LIBUR..."), record salah ini lolos dari pengecekan
+      // lama SELAMANYA — gak pernah direcompute ulang walau log 'masuk'
+      // aslinya akhirnya nyampe, jadi karyawan yang beneran hadir tetap
+      // ke-declare Libur di rekap/gajian. Sumber kebenaran yang benar buat
+      // "boleh disentuh otomatis" adalah flag `isManualOverride` (cuma
+      // diset true lewat form koreksi manual admin — lihat handleSaveEdit
+      // di InputDailyTab.jsx) — bukan pola id-nya.
+      const manualOverrideKeys = new Set(
         activeOnly(prev)
-          .filter(r => !r.id?.startsWith('AUTO-LIBUR'))
+          .filter(r => r.isManualOverride)
           .map(r => `${r.employeeId}|${r.dateStr}`)
+      );
+      const recordByKey = new Map(
+        activeOnly(prev).map(r => [`${r.employeeId}|${r.dateStr}`, r])
       );
       const earliestBackfillDate = new Date();
       earliestBackfillDate.setDate(earliestBackfillDate.getDate() - AUTO_LIBUR_BACKFILL_DAYS);
@@ -513,14 +649,48 @@ export default function App() {
 
         const cursor = new Date(scanStart);
         cursor.setHours(0, 0, 0, 0);
-        const cutoff = new Date(); // hari ini gak ikut — biar computeAttendanceFromLogs yang nentuin (masih bisa "Belum Absen" sebelum jam 19:00)
+        // [FIX] HARI INI sekarang IKUT ter-scan (dulu cutoff = hari ini dan
+        // loop berhenti SEBELUM mencapainya, jadi employeeDailyRecords hari
+        // berjalan gak PERNAH disentuh watchdog root ini — self-heal-nya
+        // 100% bergantung InputDailyTab.jsx kebetulan kebuka, padahal itu
+        // gak dijamin, apalagi kalau device lagi standby di tab Kasir
+        // seharian). Ini TIDAK mengubah kapan Libur BARU pertama kali boleh
+        // di-declare untuk hari ini — itu tetap sepenuhnya kewenangan
+        // checkAutoClose (AttendanceView.jsx) / computeAttendanceFromLogs
+        // (lihat cabang `dateStr === todayStr` di bawah) — cuma menambah
+        // kemampuan MENGOREKSI record hari ini yang SUDAH TERLANJUR salah
+        // declare Libur, secepat log 'masuk' yang bener nyampe, bukan
+        // nunggu sampai besok (atau nunggu InputDailyTab dibuka).
+        const cutoff = new Date();
         cutoff.setHours(0, 0, 0, 0);
 
-        while (cursor < cutoff) {
+        while (cursor <= cutoff) {
           const dateStr = toLocalDateString(cursor);
           const key = `${emp.id}|${dateStr}`;
-          if (dateStr !== todayStr && !existingRecordKeys.has(key)) {
-            pairsToBackfill.push({ employeeId: emp.id, dateStr });
+          const existing = recordByKey.get(key);
+
+          if (!manualOverrideKeys.has(key)) {
+            if (dateStr === todayStr) {
+              // Hari ini: JANGAN declare record baru dari sini kalau belum
+              // ada record sama sekali — biarkan checkAutoClose &
+              // computeAttendanceFromLogs yang nentuin kapan waktunya
+              // (masih bisa "Belum Absen" sebelum jam tutup). Tapi kalau
+              // SUDAH ada record auto yang bilang isDayOff:true, verifikasi
+              // ulang tiap kali attendanceLog berubah — supaya begitu log
+              // 'masuk' yang telat sync akhirnya nyampe, record ini ikut
+              // kekoreksi HARI ITU JUGA.
+              if (existing?.isDayOff) pairsToBackfill.push({ employeeId: emp.id, dateStr });
+            } else if (!existing || existing.isDayOff) {
+              // Hari lampau: backfill kalau belum ada record sama sekali
+              // (celah lama, biasa kejadian kalau gak ada device yang buka
+              // Absensi/Input Harian hari itu), ATAU verifikasi ulang kalau
+              // record yang ada bilang Libur (kandidat paling rawan salah).
+              // Record yang sudah "Hadir" gak perlu diverifikasi ulang di
+              // sini — kalau InputDailyTab.jsx kebuka, itu tetap menjaganya
+              // tetap sinkron; ini cuma nutup celah spesifik "kadung
+              // ke-declare Libur & gak pernah kekoreksi".
+              pairsToBackfill.push({ employeeId: emp.id, dateStr });
+            }
           }
           cursor.setDate(cursor.getDate() + 1);
         }
@@ -530,16 +700,14 @@ export default function App() {
 
       let next = [...prev]; let changed = false;
       pairsToBackfill.forEach(({ employeeId: empId, dateStr }) => {
-        // [UPDATE] computeAttendanceFromLogs dipanggil dengan attendanceLog
-        // TERKINI (bukan otomatis kosong lagi) — sejak fix self-heal di
-        // bawah, pasangan (karyawan, tanggal) yang record-nya AUTO-LIBUR*
-        // ikut masuk sini walau attendanceLog untuk pasangan itu sudah ada
-        // isinya, justru supaya bisa dicek ulang: kalau ternyata ada log
-        // 'masuk' asli (mis. baru sampai lewat sync device lain), hasMasuk
-        // menang dan status jadi "Hadir" — bukan lagi selalu "Libur".
-        // Untuk pasangan yang BENERAN belum py log apa pun, cabang
-        // isPastCloseHour tetap aktif seperti semula (dateStr < todayStr
-        // selalu true untuk tanggal lampau) → hasilnya "Libur", benar.
+        // computeAttendanceFromLogs dipanggil dengan attendanceLog TERKINI
+        // — pasangan (karyawan, tanggal) yang record-nya masih auto (bukan
+        // isManualOverride) ikut masuk sini walau attendanceLog buat
+        // pasangan itu sudah ada isinya, justru supaya bisa dicek ulang:
+        // kalau ternyata ada log 'masuk' asli (mis. baru sampai lewat sync
+        // device lain), hasMasuk menang dan status jadi "Hadir" — bukan
+        // lagi selalu "Libur". Untuk pasangan yang BENERAN belum py log
+        // apa pun, cabang isPastCloseHour tetap aktif seperti semula.
         const result = computeAttendanceFromLogs(empId, dateStr, attendanceLog);
         if (result.status === 'Belum Absen' && !result.isDayOff) return;
 
@@ -547,35 +715,27 @@ export default function App() {
         const prevIndex = next.findIndex(r => !r.deletedAt && r.employeeId === empId && r.dateStr === dateStr);
         const prevExisting = prevIndex >= 0 ? next[prevIndex] : null;
 
-        // [FIX] Self-heal record auto-generated yang ternyata SALAH.
-        //
-        // Sebelumnya baris ini langsung `return` begitu ADA record apa pun
-        // untuk pasangan (karyawan, tanggal) itu — dengan asumsi "kalau
-        // sudah ada berarti sudah benar / race dengan effect lain". Asumsi
-        // itu keliru: record auto-libur BISA salah dari awal, contohnya
-        // kalau watchdog toAutoLibur di AttendanceView.jsx sempat jalan
-        // saat attendanceLog belum selesai dimuat (lihat fix allDataLoaded
-        // di AttendanceView.jsx) — hasilnya record "Libur" ke-declare untuk
-        // karyawan yang SEBENARNYA masuk, dan record salah itu nempel
-        // selamanya karena tidak pernah dicoba dikoreksi ulang.
-        //
-        // Fix: kalau record yang sudah ada adalah hasil AUTO-GENERATED
-        // (ditandai dari prefix id-nya, BUKAN hasil koreksi manual admin)
-        // DAN hasil recompute dari log terbaru (`result`) ternyata berbeda
-        // (mis. sekarang ada bukti hasMasuk padahal dulu di-declare Libur),
-        // timpa dengan hasil yang benar. Koreksi manual admin (id lain,
-        // biasanya prefix employee/tanggal tanpa "AUTO-") TIDAK PERNAH
-        // disentuh oleh cabang ini — supaya keputusan admin (mis. tetap
-        // menandai Libur walau ada absen nyasar) tidak pernah ketiban
-        // logic otomatis.
-        const isAutoGenerated = prevExisting?.id?.startsWith('AUTO-LIBUR');
+        // [FIX] isManualOverride sudah difilter di TAHAP PEMBENTUKAN
+        // pairsToBackfill di atas (manualOverrideKeys) — jadi prevExisting
+        // di sini, kalau ada, DIJAMIN bukan hasil koreksi manual admin,
+        // aman buat ditimpa kalau hasil hitung terbaru berbeda. Koreksi
+        // manual admin TIDAK PERNAH sampai sini sama sekali (sudah
+        // di-exclude dari pairsToBackfill), jadi keputusan admin (mis.
+        // tetap menandai Libur walau ada absen nyasar) tidak pernah
+        // ketiban logic otomatis. Bandingkan SEMUA field hasil hitung
+        // (bukan cuma isDayOff/clockIn/clockOut) supaya perubahan
+        // bolongMinutes/hoursWorked/overtimeMinutes akibat log bolong yang
+        // berubah ikut ke-capture juga, bukan cuma kasus Libur↔Hadir.
         const resultChanged = prevExisting && (
           prevExisting.isDayOff !== result.isDayOff ||
           prevExisting.clockIn !== result.clockIn ||
-          prevExisting.clockOut !== result.clockOut
+          prevExisting.clockOut !== result.clockOut ||
+          (prevExisting.hoursWorked || 0) !== result.hoursWorked ||
+          (prevExisting.bolongMinutes || 0) !== result.bolongMinutes ||
+          (prevExisting.overtimeMinutes || 0) !== result.overtimeMinutes
         );
 
-        if (prevExisting && !(isAutoGenerated && resultChanged)) return; // sudah ada & valid (atau koreksi manual) — jangan timpa
+        if (prevExisting && !resultChanged) return; // sudah ada & sudah sesuai — jangan timpa
 
         const employeeSnapshot = snapshotEmployeeForPayroll(emp);
         const baseFields = {
@@ -632,8 +792,22 @@ export default function App() {
         const { isAutoSyncEnabled, runAutoSync } = await import('../storage/realtimeSync');
         if (!isAutoSyncEnabled()) return;
         const { sent, failed } = await runAutoSync({ force: false });
+        setLastSyncFailedCount(failed);
         if (sent > 0) console.log(`[App] Auto-sync berkala: ${sent} terkirim`);
         if (failed > 0) console.warn(`[App] Auto-sync berkala: ${failed} gagal, dicoba lagi nanti`);
+
+        // FIX "ANGKA BEDA-BEDA DI KEMARIN": runAutoSync di atas cuma PUSH
+        // (diff local vs snapshot local -> upsert). Sebelum ini, satu-satunya
+        // jalur PULL cuma initial-pull sekali pas app mount + reconnect()
+        // pas visibilitychange/resume. Kalau tab/app kebuka terus tanpa
+        // pernah background, gak ada mekanisme apapun yang narik ulang data
+        // dari device lain -> laporan closed-period (Kemarin, dll) bisa
+        // nyangkut stale walau app-nya udah berjam-jam kebuka. Tambahin
+        // pull tiap siklus yang sama biar interval ini beneran dua arah.
+        // pullNow udah punya guard in-flight/cooldown sendiri (realtimeSync.js)
+        // jadi aman dipanggil dari sini meski tombol manual/reconnect lagi
+        // jalan bersamaan — gak perlu guard tambahan di sini.
+        await pullNowRef.current?.();
       } catch (e) {
         console.warn('[App] Auto-sync berkala error:', e?.message);
       }
@@ -990,6 +1164,8 @@ export default function App() {
     getRoundedTotal,
     getRoundingAdjustment,
     isAdminMode,
+    currentEmployee, // {id, name, role, is_active} employee yang lagi login, atau null
+    signOutEmployee,
     cart, setCart,
     updateCartQty,
     updateCartItemNote,
@@ -1100,6 +1276,10 @@ export default function App() {
 
     // Sync
     syncStatus, // 'idle' | 'syncing' | 'ready' | 'error'
+    lastSyncedAt, // ISO string terakhir kali push/pull ke Supabase sukses, atau null
+    lastSyncFailedCount, // jumlah item gagal push di siklus terakhir (0 = bersih)
+    isManualSyncing,
+    triggerManualSync, // () => Promise<{sent, failed}> — push + pull manual on-demand
   };
 
   const menuItems = [
@@ -1260,8 +1440,25 @@ export default function App() {
     );
   }
 
+  // ── Gerbang login PIN (employee asli) ───────────────────────────────
+  // Ditaruh SETELAH gate sync di atas (bukan sebelum) -- data lokal & sesi
+  // anonim buat sync tetap boleh siap-siap di background, cuma render UI
+  // aplikasinya yang ditahan sampai ada employee asli yang login.
+  if (currentEmployee === undefined) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="w-8 h-8 border-2 border-accent-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (currentEmployee === null) {
+    return <LoginView />;
+  }
+
   return (
     <AppContext.Provider value={contextValue}>
+
+      <UpdatePrompt />
 
       <style dangerouslySetInnerHTML={{
         __html: `

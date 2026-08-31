@@ -1,108 +1,160 @@
-import React, { useState } from 'react';
-import { Lock, Mail, Eye, EyeOff, ShieldCheck } from 'lucide-react';
-import { useAuth } from './AuthContext';
-import { Input, Button, Alert } from '../components/ui';
+import { useState, useEffect } from 'react';
+import { UserRound, ChevronLeft, Store } from 'lucide-react';
+import { Card } from '../components/ui';
+import PinPad from './PinPad';
 
-export default function LoginView() {
-  const { signIn, signingIn, authError, setAuthError } = useAuth();
+// SENGAJA dynamic import (bukan `import { getSupabaseClient } from
+// '../storage/syncClient'` di atas) -- syncClient.js sudah di-import
+// dynamic di banyak tempat lain (App.jsx, dst) supaya @supabase/supabase-js
+// tetap kepisah ke chunk-nya sendiri, bukan numpuk ke chunk view manapun.
+// Kalau di sini pakai static import, Rollup kebingungan nge-split-nya dan
+// bisa nge-gembungin chunk view yang gak nyambung sama sekali (kejadian:
+// bikin chunk EmployeesView.jsx melonjak ke >1.5MB).
+const loadSupabase = () => import('../storage/syncClient').then(m => m.getSupabaseClient());
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+/**
+ * LoginView — gerbang masuk aplikasi. Ditampilkan App.jsx kalau belum ada
+ * sesi employee ASLI yang login (lihat effect auth di App.jsx: device
+ * SELALU punya sesi anonim otomatis dari getSupabaseClient()/ensureAuthSession
+ * di syncClient.js buat keperluan sync -- itu SENGAJA tidak dianggap
+ * "sudah login" di sini, yang dicek App.jsx adalah user.is_anonymous === false).
+ *
+ * Alurnya 2 langkah (pilih nama -> baru PIN), bukan 1 form nama+PIN
+ * sekaligus: di kasir yang dipegang gantian, milih dari daftar jauh lebih
+ * cepat daripada ngetik nama tiap kali.
+ */
+const LoginView = () => {
+    const [employees, setEmployees] = useState([]);
+    const [loadingList, setLoadingList] = useState(true);
+    const [listError, setListError] = useState('');
+    const [selected, setSelected] = useState(null); // { id, name }
+    const [signingIn, setSigningIn] = useState(false);
+    const [pinError, setPinError] = useState('');
+    const [pinAttempt, setPinAttempt] = useState(0); // ganti key PinPad biar remount bersih tiap percobaan
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!email || !password) return;
-    await signIn(email, password);
-  };
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const supabase = await loadSupabase();
+                if (!supabase) {
+                    if (!cancelled) setListError('Supabase belum dikonfigurasi.');
+                    return;
+                }
+                const { data, error } = await supabase
+                    .from('employees')
+                    .select('id, name')
+                    .eq('is_active', true)
+                    .order('name');
+                if (error) throw error;
+                if (!cancelled) setEmployees(data || []);
+            } catch (err) {
+                console.warn('[LoginView] gagal ambil daftar karyawan:', err.message);
+                if (!cancelled) setListError('Gagal memuat daftar akun. Cek koneksi internet.');
+            } finally {
+                if (!cancelled) setLoadingList(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
-  return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
-      <div className="w-full max-w-sm">
+    const handlePinComplete = async (pin) => {
+        if (!selected) return;
+        setSigningIn(true);
+        setPinError('');
+        try {
+            const supabase = await loadSupabase();
+            const { error } = await supabase.auth.signInWithPassword({
+                email: `${selected.id}@mamam.internal`,
+                password: pin,
+            });
+            if (error) {
+                setPinError('PIN salah, coba lagi');
+                setPinAttempt(a => a + 1);
+                return;
+            }
+            // Sukses -> App.jsx nangkep perubahan sesi lewat onAuthStateChange,
+            // gak perlu callback manual di sini.
+        } catch (err) {
+            console.warn('[LoginView] signInWithPassword error:', err.message);
+            setPinError('Gagal terhubung ke server, coba lagi');
+            setPinAttempt(a => a + 1);
+        } finally {
+            setSigningIn(false);
+        }
+    };
 
-        {/* Brand */}
-        <div className="mb-8 flex flex-col items-center text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-500 to-accent-600 dark:from-accent-400 dark:to-accent-600 flex items-center justify-center mb-4 shadow-[0_8px_24px_rgba(var(--color-accent-500),0.35)]">
-            <ShieldCheck className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="font-heading font-black text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-accent-600 to-accent-400 dark:from-accent-400 dark:to-accent-500">
-            MAMAM AYAM
-          </h1>
-          <p className="font-body text-sm text-slate-400 dark:text-slate-500 mt-1">
-            Masuk untuk melanjutkan ke panel kasir
-          </p>
-        </div>
-
-        {/* Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-[0_8px_40px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_40px_rgb(0,0,0,0.4)] border border-slate-100 dark:border-slate-800 p-6">
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            <Input
-              label="Email"
-              type="email"
-              icon={<Mail className="w-4 h-4" />}
-              placeholder="nama@mamamayam.com"
-              value={email}
-              autoComplete="username"
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (authError) setAuthError(null);
-              }}
-              required
-            />
-
-            <div className="relative">
-              <Input
-                label="Kata Sandi"
-                type={showPassword ? 'text' : 'password'}
-                icon={<Lock className="w-4 h-4" />}
-                placeholder="Masukkan kata sandi"
-                value={password}
-                autoComplete="current-password"
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (authError) setAuthError(null);
-                }}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-[34px] text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 active:scale-90 transition-all duration-300"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+    return (
+        <div className="min-h-screen w-full flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-slate-950">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center mb-6 shadow-lg shadow-accent-500/20">
+                <Store className="w-8 h-8 text-white" />
             </div>
 
-            {authError && <Alert>{authError}</Alert>}
+            <Card variant="elevated" padding="lg" className="w-full max-w-sm">
+                {!selected ? (
+                    <>
+                        <h1 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100 text-center mb-1">
+                            Siapa yang masuk?
+                        </h1>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 text-center mb-6">
+                            Pilih nama akun kamu
+                        </p>
 
-            <Button
-              type="submit"
-              size="full"
-              loading={signingIn}
-              disabled={!email || !password}
-            >
-              {signingIn ? 'Memeriksa...' : 'Masuk'}
-            </Button>
-          </form>
+                        {loadingList && (
+                            <p className="text-sm text-slate-400 text-center py-6">Memuat daftar akun...</p>
+                        )}
+                        {!loadingList && listError && (
+                            <p className="text-sm text-accent-500 text-center py-6">{listError}</p>
+                        )}
+                        {!loadingList && !listError && employees.length === 0 && (
+                            <p className="text-sm text-slate-400 text-center py-6">
+                                Belum ada akun terdaftar. Minta admin untuk membuatkan akun di menu Manajemen Akun.
+                            </p>
+                        )}
+
+                        <div className="flex flex-col gap-2">
+                            {employees.map(emp => (
+                                <button
+                                    key={emp.id}
+                                    type="button"
+                                    onClick={() => { setSelected(emp); setPinError(''); }}
+                                    className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-[0.98] transition-all duration-200 text-left"
+                                >
+                                    <span className="w-9 h-9 rounded-full bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
+                                        <UserRound className="w-4.5 h-4.5" />
+                                    </span>
+                                    <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{emp.name}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => { setSelected(null); setPinError(''); }}
+                            className="flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mb-4 transition-colors"
+                        >
+                            <ChevronLeft className="w-4 h-4" /> Ganti akun
+                        </button>
+                        <h1 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100 text-center mb-1">
+                            Halo, {selected.name}
+                        </h1>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 text-center mb-6">
+                            Masukkan PIN 6 digit kamu
+                        </p>
+                        <PinPad
+                            key={pinAttempt}
+                            length={6}
+                            onComplete={handlePinComplete}
+                            error={pinError}
+                            disabled={signingIn}
+                        />
+                    </>
+                )}
+            </Card>
         </div>
+    );
+};
 
-        <p className="text-center font-body text-xs text-slate-300 dark:text-slate-600 mt-6">
-          Akses terbatas — 1 akun hanya aktif di 1 perangkat
-        </p>
-
-        {/* Dummy account hints — HAPUS blok ini saat Tahap 3 (Supabase asli) */}
-        <div className="mt-6 bg-slate-100 dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-4">
-          <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
-            Akun uji coba (Tahap 1 — data dummy)
-          </p>
-          <ul className="space-y-1 font-body text-xs text-slate-500 dark:text-slate-400">
-            <li><span className="font-semibold">Owner</span> — owner@mamamayam.com / owner123</li>
-            <li><span className="font-semibold">Admin</span> — admin.cikarang@mamamayam.com / admin123</li>
-            <li><span className="font-semibold">Kasir</span> — kasir.cikarang@mamamayam.com / kasir123</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
+export default LoginView;

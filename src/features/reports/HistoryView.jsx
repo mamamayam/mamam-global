@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { X, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, ArrowUpDown, Eye, CreditCard } from 'lucide-react';
+import { X, Trash2, Receipt, Search, Calendar, ChevronRight, Filter, ArrowUpDown, Eye, CreditCard, RefreshCw, AlertTriangle } from 'lucide-react';
 import { formatRupiah } from '../../utils/formatters';
 import { useBulkSelect } from '../../hook/useBulkSelect';
 import { BulkSelectBar, Card, Button, DetailModal, SortModal } from '../../components/ui';
@@ -8,7 +8,54 @@ import { applySort } from '../../utils/sortUtils';
 import { useRecycleBin } from '../../hook/useRecycleBin';
 
 const HistoryView = () => {
-    const { salesHistory, setSalesHistory, isAdminMode, setReceiptModal, triggerConfirm } = useAppContext();
+    const {
+        salesHistory, setSalesHistory, isAdminMode, setReceiptModal, triggerConfirm,
+        lastSyncedAt, isManualSyncing, triggerManualSync, lastSyncFailedCount,
+    } = useAppContext();
+
+    // Hasil tombol "Sync Sekarang" — dipasang beberapa detik terus ilang lagi,
+    // sekadar konfirmasi visual ringan (bukan toast beneran) kalau user
+    // manggil re-check ke database dan apa hasilnya (kekirim/gagal/skip).
+    const [manualSyncResult, setManualSyncResult] = useState(null);
+    const handleManualSyncClick = async () => {
+        setManualSyncResult(null);
+        const { sent, failed, error, pullSkippedReason } = await triggerManualSync();
+        if (error) {
+            setManualSyncResult('Gagal sync — cek koneksi');
+        } else if (failed > 0) {
+            setManualSyncResult(`${sent} terkirim, ${failed} gagal`);
+        } else if (pullSkippedReason === 'cooldown') {
+            setManualSyncResult('Baru aja sync, coba lagi sebentar');
+        } else if (sent > 0) {
+            setManualSyncResult(`${sent} data tersinkron`);
+        } else {
+            setManualSyncResult('Sudah paling baru');
+        }
+        setTimeout(() => setManualSyncResult(null), 4000);
+    };
+
+    // "Jam sekarang" buat hitung "X menit lalu" — SENGAJA disimpan sebagai
+    // state yang di-update dari dalam effect/lazy-initializer (bukan manggil
+    // Date.now() langsung pas render), biar formatLastSynced tetap pure
+    // function murni dari input-nya. Di-refresh tiap 30 detik biar labelnya
+    // jalan otomatis tanpa perlu interaksi apapun dari user.
+    const [syncClockNow, setSyncClockNow] = useState(() => Date.now());
+    useEffect(() => {
+        const id = setInterval(() => setSyncClockNow(Date.now()), 30000);
+        return () => clearInterval(id);
+    }, []);
+
+    const formatLastSynced = (iso, now) => {
+        if (!iso) return 'Belum pernah sync';
+        if (!now) return '...';
+        const diffMs = now - new Date(iso).getTime();
+        const diffMin = Math.floor(diffMs / 60000);
+        if (diffMin < 1) return 'Baru saja sync';
+        if (diffMin < 60) return `Sync ${diffMin} menit lalu`;
+        const diffHour = Math.floor(diffMin / 60);
+        if (diffHour < 24) return `Sync ${diffHour} jam lalu`;
+        return `Sync: ${new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+    };
 
     // State Filter
     const [searchTerm, setSearchTerm] = useState('');
@@ -255,11 +302,42 @@ const HistoryView = () => {
             {/* RINGKASAN OMSET PER METODE PEMBAYARAN */}
             {paymentBreakdown.length > 0 && (
                 <Card className="flex flex-col gap-3 p-4 mb-6">
-                    <div className="flex items-center gap-2">
-                        <CreditCard className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                        <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
-                            Omset per Metode Pembayaran
-                        </h3>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                            <CreditCard className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                            <h3 className="font-heading font-bold text-slate-800 dark:text-slate-100 text-sm">
+                                Omset per Metode Pembayaran
+                            </h3>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {manualSyncResult && (
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400 animate-in fade-in duration-200">
+                                    {manualSyncResult}
+                                </span>
+                            )}
+                            {lastSyncFailedCount > 0 && (
+                                <span
+                                    className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"
+                                    title="Ada data lokal yang belum berhasil terkirim ke server — akan dicoba lagi otomatis"
+                                >
+                                    <AlertTriangle className="w-3 h-3" />
+                                    {lastSyncFailedCount} gagal
+                                </span>
+                            )}
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                                {formatLastSynced(lastSyncedAt, syncClockNow)}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={handleManualSyncClick}
+                                disabled={isManualSyncing}
+                                title="Tarik ulang data terbaru dari database"
+                                aria-label="Sync sekarang"
+                                className="p-1.5 rounded-full text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-[0.92] transition-all duration-200 disabled:opacity-50"
+                            >
+                                <RefreshCw className={`w-3.5 h-3.5 ${isManualSyncing ? 'animate-spin' : ''}`} />
+                            </button>
+                        </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <button

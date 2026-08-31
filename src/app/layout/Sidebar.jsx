@@ -11,11 +11,9 @@ export default function Sidebar({
     setIsSidebarOpen,
     visibleMenus,
     isAdminMode,
-    setShowPinModal,
     triggerConfirm,
-    setIsAdminMode,
 }) {
-    const { storeSettings } = useAppContext();
+    const { storeSettings, currentEmployee, signOutEmployee } = useAppContext();
     const appName = storeSettings?.appName || 'MAMAM AYAM';
     const appTagline = storeSettings?.appTagline || 'Ecosystem';
     const initial = appName.trim().charAt(0).toUpperCase() || 'M';
@@ -121,27 +119,28 @@ export default function Sidebar({
 
             {/* Footer: Modern Button & Subtle Versioning */}
             <div className="p-4 pb-6 shrink-0">
-                {!isAdminMode ? (
-                    <button
-                        onClick={() => setShowPinModal(true)}
-                        className="w-full flex items-center justify-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-3 rounded-2xl font-semibold text-sm shadow-[0_4px_14px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300"
-                    >
-                        <ShieldUser className="w-4 h-4" />
-                        Login Admin
-                    </button>
-                ) : (
-                    <button
-                        onClick={() =>
-                            triggerConfirm(
-                                'Yakin ingin keluar dari mode admin?',
-                                () => setIsAdminMode(false)
-                            )
-                        }
-                        className="w-full flex items-center justify-center gap-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 py-3 rounded-2xl font-semibold text-sm hover:bg-red-100 dark:hover:bg-red-500/20 active:scale-[0.98] transition-all duration-300"
-                    >
-                        Keluar Admin
-                    </button>
+                {currentEmployee && (
+                    <div className="flex items-center gap-2 mb-3 px-1">
+                        <span className="w-8 h-8 rounded-full bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
+                            <ShieldUser className="w-4 h-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{currentEmployee.name}</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500">{currentEmployee.role === 'admin' ? 'Admin' : 'Kasir'}</p>
+                        </div>
+                    </div>
                 )}
+                <button
+                    onClick={() =>
+                        triggerConfirm(
+                            'Yakin ingin keluar?',
+                            () => signOutEmployee()
+                        )
+                    }
+                    className="w-full flex items-center justify-center gap-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 py-3 rounded-2xl font-semibold text-sm hover:bg-red-100 dark:hover:bg-red-500/20 active:scale-[0.98] transition-all duration-300"
+                >
+                    Keluar
+                </button>
 
                 <div className="mt-4 flex items-center justify-center gap-2">
                     <div className="h-px flex-1 bg-gradient-to-r from-transparent to-slate-200 dark:to-slate-800" />

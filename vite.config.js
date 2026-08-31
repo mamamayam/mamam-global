@@ -9,7 +9,18 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // FIX "PILIH TANGGAL MALAH RELOAD": 'autoUpdate' bikin SW langsung
+      // aktifin versi baru + reload halaman TANPA nanya, begitu terdeteksi
+      // ada deploy baru. Deteksinya sering ke-trigger justru pas ada
+      // perubahan visibility/focus -- termasuk saat native date-picker
+      // (<input type="month">, dll) dibuka lalu ditutup di HP, yang bikin
+      // WebView sempat kehilangan & balik fokus. Jadinya reload otomatis
+      // itu keliatan seperti "gara-gara milih tanggal", padahal sebenernya
+      // "kebetulan ada versi baru nunggu pas visibility berubah".
+      // 'prompt' bikin SW nunggu -- UpdatePrompt.jsx (lihat App.jsx) yang
+      // nampilin notifikasi kecil, reload cuma jalan kalau user pencet
+      // sendiri, gak pernah motong interaksi yang lagi jalan.
+      registerType: 'prompt',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         // PENTING: JANGAN tambahin runtimeCaching buat *.supabase.co lagi.

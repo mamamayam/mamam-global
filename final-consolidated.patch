@@ -1,0 +1,1075 @@
+diff --git a/src/app/App.jsx b/src/app/App.jsx
+index b478d1c..2ff3d88 100644
+--- a/src/app/App.jsx
++++ b/src/app/App.jsx
+@@ -7,6 +7,8 @@ import { AppContext } from '../context/AppContext';
+ import { usePosStore } from '../store/usePosStore';
+ import { Modal, Button } from '../components/ui';
+ import PinModal from '../auth/PinModal';
++import LoginView from '../auth/LoginView';
++import UpdatePrompt from '../components/UpdatePrompt';
+ import AppRoutes from '../app/AppRoutes';
+ import AppLayout from '../app/AppLayout';
+ import Sidebar from '../app/layout/Sidebar';
+@@ -80,6 +82,75 @@ export default function App() {
+ 
+ 
+   const [isAdminMode, setIsAdminMode] = useState(false);
++
++  // ── Sesi employee ASLI (login PIN), terpisah dari sesi anonim otomatis ──
++  // getSupabaseClient()/ensureAuthSession di syncClient.js SELALU nyoba
++  // signInAnonymously() kalau belum ada sesi apapun -- itu buat keperluan
++  // sync/echo-suppression doang (lihat komentar di syncClient.js), BUKAN
++  // berarti "sudah login". Makanya yang dicek bukan "ada sesi atau nggak",
++  // tapi user.is_anonymous === false.
++  // undefined = lagi dicek, null = belum ada employee asli yang login,
++  // {id,name,role,is_active} = login sebagai employee itu.
++  const [currentEmployee, setCurrentEmployee] = useState(undefined);
++
++  useEffect(() => {
++    let cancelled = false;
++    let unsubscribeAuth = null;
++
++    (async () => {
++      const { getSupabaseClient } = await import('../storage/syncClient');
++      const supabase = await getSupabaseClient();
++      if (!supabase) { if (!cancelled) setCurrentEmployee(null); return; }
++
++      const resolveEmployeeFromSession = async (session) => {
++        if (!session?.user || session.user.is_anonymous) {
++          if (!cancelled) { setCurrentEmployee(null); setIsAdminMode(false); }
++          return;
++        }
++        try {
++          const { data, error } = await supabase
++            .from('employees')
++            .select('id, name, role, is_active')
++            .eq('id', session.user.id)
++            .single();
++          if (error || !data || !data.is_active) {
++            // Baris employees-nya kehapus/dinonaktifkan tapi sesi masih
++            // nyangkut di device ini -- paksa logout, jangan biarin akses.
++            await supabase.auth.signOut();
++            if (!cancelled) { setCurrentEmployee(null); setIsAdminMode(false); }
++            return;
++          }
++          if (!cancelled) {
++            setCurrentEmployee(data);
++            setIsAdminMode(data.role === 'admin');
++          }
++        } catch (err) {
++          console.warn('[App] gagal resolve employee dari sesi:', err.message);
++          if (!cancelled) setCurrentEmployee(null);
++        }
++      };
++
++      const { data: { session } } = await supabase.auth.getSession();
++      await resolveEmployeeFromSession(session);
++
++      const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
++        resolveEmployeeFromSession(newSession);
++      });
++      unsubscribeAuth = () => sub.subscription.unsubscribe();
++    })();
++
++    return () => { cancelled = true; unsubscribeAuth?.(); };
++  }, []);
++
++  const signOutEmployee = useCallback(async () => {
++    try {
++      const { getSupabaseClient } = await import('../storage/syncClient');
++      const supabase = await getSupabaseClient();
++      await supabase?.auth.signOut();
++    } catch (err) {
++      console.warn('[App] signOut error:', err.message);
++    }
++  }, []);
+   const [showPinModal, setShowPinModal] = useState(false);
+ 
+   const [currentView, setCurrentView] = useState('kasir');
+@@ -183,12 +254,12 @@ export default function App() {
+   // BackupView (itu cuma runAutoSync push-only, sengaja gak diubah biar
+   // behaviour lama gak berubah — ini tambahan jalur baru).
+   const [isManualSyncing, setIsManualSyncing] = useState(false);
+-  const triggerManualSync = useCallback(async () => {
++  const triggerManualSync = useCallback(async (onProgress) => {
+     if (isManualSyncing) return { sent: 0, failed: 0 };
+     setIsManualSyncing(true);
+     try {
+       const { runAutoSync } = await import('../storage/realtimeSync');
+-      const { sent, failed, failedItems } = await runAutoSync({ force: true });
++      const { sent, failed, failedItems } = await runAutoSync({ force: true, onProgress });
+       setLastSyncFailedCount(failed);
+       if (failed > 0) console.warn('[App] Detail item gagal (sync manual):', failedItems);
+       // pullNow return-nya status ({ok, reason}), bukan data — biar caller
+@@ -196,7 +267,7 @@ export default function App() {
+       // bukan diem-diem dianggap "sukses tapi gak ngapa-ngapain".
+       const pullResult = await pullNowRef.current?.();
+       try { setLastSyncedAt(localStorage.getItem('mamam_last_supabase_sync')); } catch (err) { console.warn('[App] localStorage gak bisa diakses:', err.message); }
+-      return { sent, failed, pullSkippedReason: pullResult?.ok === false ? pullResult.reason : null };
++      return { sent, failed, failedItems, pullSkippedReason: pullResult?.ok === false ? pullResult.reason : null };
+     } catch (e) {
+       console.warn('[App] triggerManualSync error:', e?.message);
+       return { sent: 0, failed: 0, error: e?.message };
+@@ -1093,6 +1164,8 @@ export default function App() {
+     getRoundedTotal,
+     getRoundingAdjustment,
+     isAdminMode,
++    currentEmployee, // {id, name, role, is_active} employee yang lagi login, atau null
++    signOutEmployee,
+     cart, setCart,
+     updateCartQty,
+     updateCartItemNote,
+@@ -1367,9 +1440,26 @@ export default function App() {
+     );
+   }
+ 
++  // ── Gerbang login PIN (employee asli) ───────────────────────────────
++  // Ditaruh SETELAH gate sync di atas (bukan sebelum) -- data lokal & sesi
++  // anonim buat sync tetap boleh siap-siap di background, cuma render UI
++  // aplikasinya yang ditahan sampai ada employee asli yang login.
++  if (currentEmployee === undefined) {
++    return (
++      <div className="fixed inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-950">
++        <div className="w-8 h-8 border-2 border-accent-500 border-t-transparent rounded-full animate-spin" />
++      </div>
++    );
++  }
++  if (currentEmployee === null) {
++    return <LoginView />;
++  }
++
+   return (
+     <AppContext.Provider value={contextValue}>
+ 
++      <UpdatePrompt />
++
+       <style dangerouslySetInnerHTML={{
+         __html: `
+         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+diff --git a/src/app/layout/Sidebar.jsx b/src/app/layout/Sidebar.jsx
+index f18c199..83f4348 100644
+--- a/src/app/layout/Sidebar.jsx
++++ b/src/app/layout/Sidebar.jsx
+@@ -11,11 +11,9 @@ export default function Sidebar({
+     setIsSidebarOpen,
+     visibleMenus,
+     isAdminMode,
+-    setShowPinModal,
+     triggerConfirm,
+-    setIsAdminMode,
+ }) {
+-    const { storeSettings } = useAppContext();
++    const { storeSettings, currentEmployee, signOutEmployee } = useAppContext();
+     const appName = storeSettings?.appName || 'MAMAM AYAM';
+     const appTagline = storeSettings?.appTagline || 'Ecosystem';
+     const initial = appName.trim().charAt(0).toUpperCase() || 'M';
+@@ -121,27 +119,28 @@ export default function Sidebar({
+ 
+             {/* Footer: Modern Button & Subtle Versioning */}
+             <div className="p-4 pb-6 shrink-0">
+-                {!isAdminMode ? (
+-                    <button
+-                        onClick={() => setShowPinModal(true)}
+-                        className="w-full flex items-center justify-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-3 rounded-2xl font-semibold text-sm shadow-[0_4px_14px_rgba(0,0,0,0.1)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300"
+-                    >
+-                        <ShieldUser className="w-4 h-4" />
+-                        Login Admin
+-                    </button>
+-                ) : (
+-                    <button
+-                        onClick={() =>
+-                            triggerConfirm(
+-                                'Yakin ingin keluar dari mode admin?',
+-                                () => setIsAdminMode(false)
+-                            )
+-                        }
+-                        className="w-full flex items-center justify-center gap-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 py-3 rounded-2xl font-semibold text-sm hover:bg-red-100 dark:hover:bg-red-500/20 active:scale-[0.98] transition-all duration-300"
+-                    >
+-                        Keluar Admin
+-                    </button>
++                {currentEmployee && (
++                    <div className="flex items-center gap-2 mb-3 px-1">
++                        <span className="w-8 h-8 rounded-full bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
++                            <ShieldUser className="w-4 h-4" />
++                        </span>
++                        <div className="min-w-0 flex-1">
++                            <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{currentEmployee.name}</p>
++                            <p className="text-[10px] text-slate-400 dark:text-slate-500">{currentEmployee.role === 'admin' ? 'Admin' : 'Kasir'}</p>
++                        </div>
++                    </div>
+                 )}
++                <button
++                    onClick={() =>
++                        triggerConfirm(
++                            'Yakin ingin keluar?',
++                            () => signOutEmployee()
++                        )
++                    }
++                    className="w-full flex items-center justify-center gap-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 py-3 rounded-2xl font-semibold text-sm hover:bg-red-100 dark:hover:bg-red-500/20 active:scale-[0.98] transition-all duration-300"
++                >
++                    Keluar
++                </button>
+ 
+                 <div className="mt-4 flex items-center justify-center gap-2">
+                     <div className="h-px flex-1 bg-gradient-to-r from-transparent to-slate-200 dark:to-slate-800" />
+diff --git a/src/auth/AccountView.jsx b/src/auth/AccountView.jsx
+index 7457df7..ee97e0c 100644
+--- a/src/auth/AccountView.jsx
++++ b/src/auth/AccountView.jsx
+@@ -1,25 +1,281 @@
+-import React from 'react'
+-import { UserCog } from 'lucide-react'
++import { useState, useEffect, useCallback } from 'react';
++import { Plus, ShieldCheck, UserRound, Power, KeyRound } from 'lucide-react';
++import { useAppContext } from '../context/AppContext';
++import { Card, Button, Modal, Input, Select, Badge, EmptyState } from '../components/ui';
++import PinPad from './PinPad';
+ 
++// Lihat komentar sejenis di LoginView.jsx -- dynamic import sengaja, biar
++// konsisten sama cara syncClient.js di-load di tempat lain (App.jsx, dst)
++// dan gak numpuk @supabase/supabase-js ke chunk view yang salah.
++const loadSupabase = () => import('../storage/syncClient').then(m => m.getSupabaseClient());
++
++/**
++ * AccountView — "Manajemen Akun" di sidebar. Admin-only (sudah digate lewat
++ * visibleMenus di App.jsx berdasar isAdminMode, tapi dicek ulang di sini
++ * juga sebagai lapis kedua kalau-kalau ke-akses langsung).
++ *
++ * Bikin akun baru LEWAT Edge Function `create-employee` (bukan insert
++ * langsung ke tabel employees) -- karena bikin akun = harus bikin baris
++ * auth.users juga (auth.admin.createUser, butuh service role key yang gak
++ * boleh nempel di client). Ubah status aktif/nonaktif aman langsung lewat
++ * client biasa (RLS: admin_update_employees).
++ */
+ const AccountView = () => {
++    const { currentEmployee, isAdminMode } = useAppContext();
++
++    const [employees, setEmployees] = useState([]);
++    const [loading, setLoading] = useState(true);
++    const [loadError, setLoadError] = useState('');
++
++    const [showAddModal, setShowAddModal] = useState(false);
++    const [newName, setNewName] = useState('');
++    const [newRole, setNewRole] = useState('staff');
++    const [pinAttempt, setPinAttempt] = useState(0);
++    const [creating, setCreating] = useState(false);
++    const [createError, setCreateError] = useState('');
++
++    const [togglingId, setTogglingId] = useState(null);
++
++    const [pinResetTarget, setPinResetTarget] = useState(null); // employee row yang lagi diubah PIN-nya
++    const [pinResetAttempt, setPinResetAttempt] = useState(0);
++    const [resettingPin, setResettingPin] = useState(false);
++    const [pinResetError, setPinResetError] = useState('');
++
++    // SENGAJA gak setLoading(true)/setLoadError('') di awal function ini --
++    // itu bikin setState jalan SINKRON pas dipanggil langsung dari body
++    // effect (useEffect(() => { loadEmployees(); }, ...) di bawah). State
++    // awalnya (loading=true, loadError='') udah nutup kasus pertama kali
++    // dipanggil (mount); setState yang beneran jalan cuma yang di
++    // try/catch/finally, yaitu SETELAH await -- itu aman, gak sinkron lagi
++    // relatif ke effect-nya.
++    const loadEmployees = useCallback(async () => {
++        try {
++            const supabase = await loadSupabase();
++            if (!supabase) { setLoadError('Supabase belum dikonfigurasi.'); return; }
++            const { data, error } = await supabase
++                .from('employees')
++                .select('id, name, role, is_active, created_at')
++                .order('created_at');
++            if (error) throw error;
++            setEmployees(data || []);
++        } catch (err) {
++            console.warn('[AccountView] gagal ambil daftar karyawan:', err.message);
++            setLoadError('Gagal memuat daftar akun.');
++        } finally {
++            setLoading(false);
++        }
++    }, []);
++
++    useEffect(() => {
++        let cancelled = false;
++        (async () => {
++            if (!cancelled) await loadEmployees();
++        })();
++        return () => { cancelled = true; };
++    }, [loadEmployees]);
++
++    const resetAddForm = () => {
++        setNewName('');
++        setNewRole('staff');
++        setCreateError('');
++        setPinAttempt(a => a + 1); // remount PinPad, kosongin digit
++    };
++
++    const handleCreate = async (pin) => {
++        if (!newName.trim()) {
++            setCreateError('Nama wajib diisi dulu sebelum masukin PIN');
++            return;
++        }
++        setCreating(true);
++        setCreateError('');
++        try {
++            const supabase = await loadSupabase();
++            const { data, error } = await supabase.functions.invoke('create-employee', {
++                body: { name: newName.trim(), pin, role: newRole },
++            });
++            // supabase-js gak selalu ngelempar `error` buat non-2xx response
++            // dari Edge Function -- body-nya sendiri yang bawa pesan errornya.
++            if (error || data?.error) {
++                setCreateError(data?.error || error.message || 'Gagal membuat akun');
++                setPinAttempt(a => a + 1);
++                return;
++            }
++            setShowAddModal(false);
++            resetAddForm();
++            await loadEmployees();
++        } catch (err) {
++            console.warn('[AccountView] create-employee error:', err.message);
++            setCreateError('Gagal terhubung ke server, coba lagi');
++            setPinAttempt(a => a + 1);
++        } finally {
++            setCreating(false);
++        }
++    };
++
++    const handleResetPin = async (newPin) => {
++        if (!pinResetTarget) return;
++        setResettingPin(true);
++        setPinResetError('');
++        try {
++            const supabase = await loadSupabase();
++            const { data, error } = await supabase.functions.invoke('reset-employee-pin', {
++                body: { employeeId: pinResetTarget.id, newPin },
++            });
++            if (error || data?.error) {
++                setPinResetError(data?.error || error.message || 'Gagal ubah PIN');
++                setPinResetAttempt(a => a + 1);
++                return;
++            }
++            setPinResetTarget(null);
++        } catch (err) {
++            console.warn('[AccountView] reset-employee-pin error:', err.message);
++            setPinResetError('Gagal terhubung ke server, coba lagi');
++            setPinResetAttempt(a => a + 1);
++        } finally {
++            setResettingPin(false);
++        }
++    };
++
++    const toggleActive = async (emp) => {
++        setTogglingId(emp.id);
++        try {
++            const supabase = await loadSupabase();
++            const { error } = await supabase
++                .from('employees')
++                .update({ is_active: !emp.is_active })
++                .eq('id', emp.id);
++            if (error) throw error;
++            setEmployees(prev => prev.map(e => e.id === emp.id ? { ...e, is_active: !e.is_active } : e));
++        } catch (err) {
++            console.warn('[AccountView] toggle active gagal:', err.message);
++        } finally {
++            setTogglingId(null);
++        }
++    };
++
++    if (!isAdminMode) {
++        return (
++            <div className="p-4">
++                <EmptyState
++                    icon={<ShieldCheck className="w-10 h-10" />}
++                    title="Khusus Admin"
++                    description="Menu ini cuma bisa diakses akun dengan role Admin."
++                />
++            </div>
++        );
++    }
++
+     return (
+-        <div className="p-4 md:p-6 bg-slate-50 dark:bg-slate-950 flex-1 flex flex-col items-center justify-center h-full animate-in fade-in zoom-in-95 duration-300">
+-            <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-[0_8px_40px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_40px_rgb(0,0,0,0.4)] border border-slate-100 dark:border-slate-800 text-center max-w-md w-full">
+-                <div className="w-20 h-20 bg-gradient-to-br from-accent-50 to-accent-100 dark:from-accent-500/10 dark:to-accent-500/15 text-accent-500 dark:text-accent-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+-                    <UserCog className="w-10 h-10" />
++        <div className="p-4 space-y-4">
++            <div className="flex items-center justify-between">
++                <div>
++                    <h2 className="font-heading font-black text-lg text-slate-800 dark:text-slate-100">Manajemen Akun</h2>
++                    <p className="text-xs text-slate-400 dark:text-slate-500">Kelola siapa aja yang bisa masuk ke aplikasi ini</p>
+                 </div>
+-                <h2 className="font-heading text-2xl font-black bg-clip-text text-transparent bg-gradient-to-br from-slate-900 to-slate-600 dark:from-white dark:to-slate-400 mb-3">Manajemen Akun</h2>
+-                <div className="bg-accent-50 dark:bg-accent-500/10 border border-accent-100 dark:border-accent-500/20 rounded-2xl p-4 mb-6">
+-                    <p className="text-accent-800 dark:text-accent-300 text-sm font-medium leading-relaxed">
+-                        Fitur Manajemen Akun (Admin & Kasir) belum tersedia pada versi ini.
++                <Button variant="dark" size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => setShowAddModal(true)}>
++                    Tambah
++                </Button>
++            </div>
++
++            {loading && <p className="text-sm text-slate-400 text-center py-8">Memuat...</p>}
++            {!loading && loadError && <p className="text-sm text-accent-500 text-center py-8">{loadError}</p>}
++
++            {!loading && !loadError && (
++                <div className="flex flex-col gap-2">
++                    {employees.map(emp => (
++                        <Card key={emp.id} padding="sm" className="flex items-center gap-3">
++                            <span className="w-10 h-10 rounded-full bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
++                                <UserRound className="w-5 h-5" />
++                            </span>
++                            <div className="flex-1 min-w-0">
++                                <p className="font-bold text-sm text-slate-700 dark:text-slate-200 truncate">
++                                    {emp.name}
++                                    {emp.id === currentEmployee?.id && (
++                                        <span className="text-slate-400 dark:text-slate-500 font-medium"> (kamu)</span>
++                                    )}
++                                </p>
++                                <Badge variant={emp.role === 'admin' ? 'orange' : 'neutral'} size="sm">
++                                    {emp.role === 'admin' ? 'Admin' : 'Kasir'}
++                                </Badge>
++                            </div>
++                            <button
++                                type="button"
++                                onClick={() => { setPinResetTarget(emp); setPinResetError(''); }}
++                                title="Ubah PIN"
++                                className="p-2 rounded-xl text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-200"
++                            >
++                                <KeyRound className="w-4 h-4" />
++                            </button>
++                            <button
++                                type="button"
++                                onClick={() => toggleActive(emp)}
++                                disabled={togglingId === emp.id || emp.id === currentEmployee?.id}
++                                title={emp.is_active ? 'Nonaktifkan akun' : 'Aktifkan akun'}
++                                className={`p-2 rounded-xl transition-all duration-200 disabled:opacity-30
++                                    ${emp.is_active
++                                        ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'
++                                        : 'text-slate-300 dark:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
++                            >
++                                <Power className="w-4 h-4" />
++                            </button>
++                        </Card>
++                    ))}
++                </div>
++            )}
++
++            <Modal
++                isOpen={showAddModal}
++                onClose={() => { setShowAddModal(false); resetAddForm(); }}
++                title="Tambah Akun Baru"
++                size="sm"
++            >
++                <div className="space-y-4">
++                    <Input
++                        label="Nama"
++                        placeholder="mis. Budi"
++                        value={newName}
++                        onChange={e => { setNewName(e.target.value); setCreateError(''); }}
++                    />
++                    <Select label="Role" value={newRole} onChange={e => setNewRole(e.target.value)}>
++                        <option value="staff">Kasir</option>
++                        <option value="admin">Admin</option>
++                    </Select>
++                    <div className="pt-2">
++                        <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 text-center">
++                            PIN 6 digit buat akun ini
++                        </p>
++                        <PinPad
++                            key={pinAttempt}
++                            length={6}
++                            onComplete={handleCreate}
++                            error={createError}
++                            disabled={creating}
++                        />
++                    </div>
++                </div>
++            </Modal>
++
++            <Modal
++                isOpen={!!pinResetTarget}
++                onClose={() => setPinResetTarget(null)}
++                title={`Ubah PIN — ${pinResetTarget?.name ?? ''}`}
++                size="sm"
++            >
++                <div className="pt-2">
++                    <p className="text-xs text-slate-400 dark:text-slate-500 text-center mb-4">
++                        Masukkan PIN baru 6 digit buat akun ini
+                     </p>
++                    <PinPad
++                        key={pinResetAttempt}
++                        length={6}
++                        onComplete={handleResetPin}
++                        error={pinResetError}
++                        disabled={resettingPin}
++                    />
+                 </div>
+-                <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">
+-                    Fitur ini sedang dalam tahap persiapan dan akan segera hadir secara penuh ketika aplikasi terhubung dengan sistem Database (Supabase).
+-                </p>
+-            </div>
++            </Modal>
+         </div>
+     );
+ };
+ 
+-export default AccountView;
+\ No newline at end of file
++export default AccountView;
+diff --git a/src/auth/LoginView.jsx b/src/auth/LoginView.jsx
+index 69ce0cc..14f173d 100644
+--- a/src/auth/LoginView.jsx
++++ b/src/auth/LoginView.jsx
+@@ -1,108 +1,160 @@
+-import React, { useState } from 'react';
+-import { Lock, Mail, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+-import { useAuth } from './AuthContext';
+-import { Input, Button, Alert } from '../components/ui';
++import { useState, useEffect } from 'react';
++import { UserRound, ChevronLeft, Store } from 'lucide-react';
++import { Card } from '../components/ui';
++import PinPad from './PinPad';
+ 
+-export default function LoginView() {
+-  const { signIn, signingIn, authError, setAuthError } = useAuth();
++// SENGAJA dynamic import (bukan `import { getSupabaseClient } from
++// '../storage/syncClient'` di atas) -- syncClient.js sudah di-import
++// dynamic di banyak tempat lain (App.jsx, dst) supaya @supabase/supabase-js
++// tetap kepisah ke chunk-nya sendiri, bukan numpuk ke chunk view manapun.
++// Kalau di sini pakai static import, Rollup kebingungan nge-split-nya dan
++// bisa nge-gembungin chunk view yang gak nyambung sama sekali (kejadian:
++// bikin chunk EmployeesView.jsx melonjak ke >1.5MB).
++const loadSupabase = () => import('../storage/syncClient').then(m => m.getSupabaseClient());
+ 
+-  const [email, setEmail] = useState('');
+-  const [password, setPassword] = useState('');
+-  const [showPassword, setShowPassword] = useState(false);
++/**
++ * LoginView — gerbang masuk aplikasi. Ditampilkan App.jsx kalau belum ada
++ * sesi employee ASLI yang login (lihat effect auth di App.jsx: device
++ * SELALU punya sesi anonim otomatis dari getSupabaseClient()/ensureAuthSession
++ * di syncClient.js buat keperluan sync -- itu SENGAJA tidak dianggap
++ * "sudah login" di sini, yang dicek App.jsx adalah user.is_anonymous === false).
++ *
++ * Alurnya 2 langkah (pilih nama -> baru PIN), bukan 1 form nama+PIN
++ * sekaligus: di kasir yang dipegang gantian, milih dari daftar jauh lebih
++ * cepat daripada ngetik nama tiap kali.
++ */
++const LoginView = () => {
++    const [employees, setEmployees] = useState([]);
++    const [loadingList, setLoadingList] = useState(true);
++    const [listError, setListError] = useState('');
++    const [selected, setSelected] = useState(null); // { id, name }
++    const [signingIn, setSigningIn] = useState(false);
++    const [pinError, setPinError] = useState('');
++    const [pinAttempt, setPinAttempt] = useState(0); // ganti key PinPad biar remount bersih tiap percobaan
+ 
+-  const handleSubmit = async (e) => {
+-    e.preventDefault();
+-    if (!email || !password) return;
+-    await signIn(email, password);
+-  };
++    useEffect(() => {
++        let cancelled = false;
++        (async () => {
++            try {
++                const supabase = await loadSupabase();
++                if (!supabase) {
++                    if (!cancelled) setListError('Supabase belum dikonfigurasi.');
++                    return;
++                }
++                const { data, error } = await supabase
++                    .from('employees')
++                    .select('id, name')
++                    .eq('is_active', true)
++                    .order('name');
++                if (error) throw error;
++                if (!cancelled) setEmployees(data || []);
++            } catch (err) {
++                console.warn('[LoginView] gagal ambil daftar karyawan:', err.message);
++                if (!cancelled) setListError('Gagal memuat daftar akun. Cek koneksi internet.');
++            } finally {
++                if (!cancelled) setLoadingList(false);
++            }
++        })();
++        return () => { cancelled = true; };
++    }, []);
+ 
+-  return (
+-    <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+-      <div className="w-full max-w-sm">
++    const handlePinComplete = async (pin) => {
++        if (!selected) return;
++        setSigningIn(true);
++        setPinError('');
++        try {
++            const supabase = await loadSupabase();
++            const { error } = await supabase.auth.signInWithPassword({
++                email: `${selected.id}@mamam.internal`,
++                password: pin,
++            });
++            if (error) {
++                setPinError('PIN salah, coba lagi');
++                setPinAttempt(a => a + 1);
++                return;
++            }
++            // Sukses -> App.jsx nangkep perubahan sesi lewat onAuthStateChange,
++            // gak perlu callback manual di sini.
++        } catch (err) {
++            console.warn('[LoginView] signInWithPassword error:', err.message);
++            setPinError('Gagal terhubung ke server, coba lagi');
++            setPinAttempt(a => a + 1);
++        } finally {
++            setSigningIn(false);
++        }
++    };
+ 
+-        {/* Brand */}
+-        <div className="mb-8 flex flex-col items-center text-center">
+-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-500 to-accent-600 dark:from-accent-400 dark:to-accent-600 flex items-center justify-center mb-4 shadow-[0_8px_24px_rgba(var(--color-accent-500),0.35)]">
+-            <ShieldCheck className="w-8 h-8 text-white" />
+-          </div>
+-          <h1 className="font-heading font-black text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-accent-600 to-accent-400 dark:from-accent-400 dark:to-accent-500">
+-            MAMAM AYAM
+-          </h1>
+-          <p className="font-body text-sm text-slate-400 dark:text-slate-500 mt-1">
+-            Masuk untuk melanjutkan ke panel kasir
+-          </p>
+-        </div>
+-
+-        {/* Card */}
+-        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-[0_8px_40px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_40px_rgb(0,0,0,0.4)] border border-slate-100 dark:border-slate-800 p-6">
+-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+-            <Input
+-              label="Email"
+-              type="email"
+-              icon={<Mail className="w-4 h-4" />}
+-              placeholder="nama@mamamayam.com"
+-              value={email}
+-              autoComplete="username"
+-              onChange={(e) => {
+-                setEmail(e.target.value);
+-                if (authError) setAuthError(null);
+-              }}
+-              required
+-            />
+-
+-            <div className="relative">
+-              <Input
+-                label="Kata Sandi"
+-                type={showPassword ? 'text' : 'password'}
+-                icon={<Lock className="w-4 h-4" />}
+-                placeholder="Masukkan kata sandi"
+-                value={password}
+-                autoComplete="current-password"
+-                onChange={(e) => {
+-                  setPassword(e.target.value);
+-                  if (authError) setAuthError(null);
+-                }}
+-                required
+-              />
+-              <button
+-                type="button"
+-                onClick={() => setShowPassword((v) => !v)}
+-                className="absolute right-3 top-[34px] text-slate-400 dark:text-slate-500 hover:text-accent-600 dark:hover:text-accent-400 active:scale-90 transition-all duration-300"
+-                tabIndex={-1}
+-              >
+-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+-              </button>
++    return (
++        <div className="min-h-screen w-full flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-slate-950">
++            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center mb-6 shadow-lg shadow-accent-500/20">
++                <Store className="w-8 h-8 text-white" />
+             </div>
+ 
+-            {authError && <Alert>{authError}</Alert>}
++            <Card variant="elevated" padding="lg" className="w-full max-w-sm">
++                {!selected ? (
++                    <>
++                        <h1 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100 text-center mb-1">
++                            Siapa yang masuk?
++                        </h1>
++                        <p className="text-xs text-slate-400 dark:text-slate-500 text-center mb-6">
++                            Pilih nama akun kamu
++                        </p>
+ 
+-            <Button
+-              type="submit"
+-              size="full"
+-              loading={signingIn}
+-              disabled={!email || !password}
+-            >
+-              {signingIn ? 'Memeriksa...' : 'Masuk'}
+-            </Button>
+-          </form>
+-        </div>
+-
+-        <p className="text-center font-body text-xs text-slate-300 dark:text-slate-600 mt-6">
+-          Akses terbatas — 1 akun hanya aktif di 1 perangkat
+-        </p>
++                        {loadingList && (
++                            <p className="text-sm text-slate-400 text-center py-6">Memuat daftar akun...</p>
++                        )}
++                        {!loadingList && listError && (
++                            <p className="text-sm text-accent-500 text-center py-6">{listError}</p>
++                        )}
++                        {!loadingList && !listError && employees.length === 0 && (
++                            <p className="text-sm text-slate-400 text-center py-6">
++                                Belum ada akun terdaftar. Minta admin untuk membuatkan akun di menu Manajemen Akun.
++                            </p>
++                        )}
+ 
+-        {/* Dummy account hints — HAPUS blok ini saat Tahap 3 (Supabase asli) */}
+-        <div className="mt-6 bg-slate-100 dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-4">
+-          <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+-            Akun uji coba (Tahap 1 — data dummy)
+-          </p>
+-          <ul className="space-y-1 font-body text-xs text-slate-500 dark:text-slate-400">
+-            <li><span className="font-semibold">Owner</span> — owner@mamamayam.com / owner123</li>
+-            <li><span className="font-semibold">Admin</span> — admin.cikarang@mamamayam.com / admin123</li>
+-            <li><span className="font-semibold">Kasir</span> — kasir.cikarang@mamamayam.com / kasir123</li>
+-          </ul>
++                        <div className="flex flex-col gap-2">
++                            {employees.map(emp => (
++                                <button
++                                    key={emp.id}
++                                    type="button"
++                                    onClick={() => { setSelected(emp); setPinError(''); }}
++                                    className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-[0.98] transition-all duration-200 text-left"
++                                >
++                                    <span className="w-9 h-9 rounded-full bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
++                                        <UserRound className="w-4.5 h-4.5" />
++                                    </span>
++                                    <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{emp.name}</span>
++                                </button>
++                            ))}
++                        </div>
++                    </>
++                ) : (
++                    <>
++                        <button
++                            type="button"
++                            onClick={() => { setSelected(null); setPinError(''); }}
++                            className="flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mb-4 transition-colors"
++                        >
++                            <ChevronLeft className="w-4 h-4" /> Ganti akun
++                        </button>
++                        <h1 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100 text-center mb-1">
++                            Halo, {selected.name}
++                        </h1>
++                        <p className="text-xs text-slate-400 dark:text-slate-500 text-center mb-6">
++                            Masukkan PIN 6 digit kamu
++                        </p>
++                        <PinPad
++                            key={pinAttempt}
++                            length={6}
++                            onComplete={handlePinComplete}
++                            error={pinError}
++                            disabled={signingIn}
++                        />
++                    </>
++                )}
++            </Card>
+         </div>
+-      </div>
+-    </div>
+-  );
+-}
+\ No newline at end of file
++    );
++};
++
++export default LoginView;
+diff --git a/src/auth/PinPad.jsx b/src/auth/PinPad.jsx
+new file mode 100644
+index 0000000..4aae8d2
+--- /dev/null
++++ b/src/auth/PinPad.jsx
+@@ -0,0 +1,96 @@
++import { useState, useCallback } from 'react';
++import { Delete } from 'lucide-react';
++
++/**
++ * PinPad — keypad numerik buat input PIN 6 digit.
++ *
++ * Props:
++ *   length      number    — jumlah digit (default: 6)
++ *   onComplete  (pin: string) => void  — dipanggil sekali begitu digit ke-N kepencet
++ *   error       string    — kalau diisi, dot-dot digemetarin merah + pesan di bawah
++ *   disabled    boolean   — dikunci sementara (mis. lagi nunggu response server)
++ *
++ * PinPad SENGAJA gak nyimpen state "value" ke parent tiap keystroke — cuma
++ * manggil onComplete() SEKALI pas udah lengkap. Parent yang mau reset (mis.
++ * abis salah) tinggal ganti `key` di elemen ini biar PinPad remount bersih.
++ *
++ * Animasi "shake" pas error SENGAJA cuma className biasa (bukan state+effect
++ * kayak versi awal) -- manfaatin remount dari parent (key={pinAttempt}):
++ * tiap kali parent ganti key karena PIN salah, PinPad ini lahir baru dan
++ * animasi CSS-nya otomatis muter ulang dari awal, gak perlu state terpisah.
++ */
++const PinPad = ({ length = 6, onComplete, error, disabled = false }) => {
++    const [digits, setDigits] = useState('');
++
++    const press = useCallback((d) => {
++        if (disabled) return;
++        setDigits(prev => {
++            if (prev.length >= length) return prev;
++            const next = prev + d;
++            if (next.length === length) {
++                // Kasih 1 tick biar dot terakhir sempet ke-render terisi
++                // sebelum onComplete (yang biasanya langsung trigger request
++                // async ke server) jalan.
++                setTimeout(() => onComplete?.(next), 80);
++            }
++            return next;
++        });
++    }, [disabled, length, onComplete]);
++
++    const backspace = useCallback(() => {
++        if (disabled) return;
++        setDigits(prev => prev.slice(0, -1));
++    }, [disabled]);
++
++    return (
++        <div className="flex flex-col items-center gap-6 w-full max-w-xs mx-auto">
++            <div className={`flex gap-3 ${error ? 'animate-[shake_0.4s]' : ''}`}>
++                {Array.from({ length }).map((_, i) => (
++                    <div
++                        key={i}
++                        className={`w-3.5 h-3.5 rounded-full border-2 transition-all duration-150
++                            ${i < digits.length
++                                ? (error ? 'bg-accent-500 border-accent-500' : 'bg-slate-800 dark:bg-white border-slate-800 dark:border-white')
++                                : 'border-slate-300 dark:border-slate-600'}`}
++                    />
++                ))}
++            </div>
++
++            {error && <p className="text-xs text-accent-500 dark:text-accent-400 font-semibold -mt-3">{error}</p>}
++
++            <div className="grid grid-cols-3 gap-3 w-full">
++                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => (
++                    <button
++                        key={d}
++                        type="button"
++                        disabled={disabled}
++                        onClick={() => press(d)}
++                        className="aspect-square rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xl font-bold active:scale-95 transition-all duration-150 disabled:opacity-40"
++                    >
++                        {d}
++                    </button>
++                ))}
++                <div />
++                <button
++                    type="button"
++                    disabled={disabled}
++                    onClick={() => press('0')}
++                    className="aspect-square rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xl font-bold active:scale-95 transition-all duration-150 disabled:opacity-40"
++                >
++                    0
++                </button>
++                <button
++                    type="button"
++                    disabled={disabled}
++                    onClick={backspace}
++                    className="aspect-square rounded-2xl flex items-center justify-center text-slate-400 dark:text-slate-500 active:scale-95 transition-all duration-150 disabled:opacity-40"
++                    aria-label="Hapus"
++                >
++                    <Delete className="w-5 h-5" />
++                </button>
++            </div>
++        </div>
++    );
++};
++
++export default PinPad;
+diff --git a/src/components/UpdatePrompt.jsx b/src/components/UpdatePrompt.jsx
+new file mode 100644
+index 0000000..3402771
+--- /dev/null
++++ b/src/components/UpdatePrompt.jsx
+@@ -0,0 +1,58 @@
++import { RefreshCw } from 'lucide-react';
++import { useRegisterSW } from 'virtual:pwa-register/react';
++
++/**
++ * UpdatePrompt — notifikasi kecil "ada versi baru" pas service worker
++ * (registerType: 'prompt' di vite.config.js) berhasil download build baru.
++ * SENGAJA gak reload otomatis (beda dari registerType lama 'autoUpdate')
++ * -- reload cuma kejadian kalau user sendiri yang pencet tombolnya, biar
++ * gak motong interaksi yang lagi jalan (lihat komentar panjang di
++ * vite.config.js soal kasus "pilih tanggal malah reload").
++ */
++const UpdatePrompt = () => {
++    const {
++        needRefresh: [needRefresh, setNeedRefresh],
++        updateServiceWorker,
++    } = useRegisterSW({
++        onRegisteredSW(_url, registration) {
++            // Jaring pengaman tambahan: cek update tiap 60 menit selama app
++            // kebuka -- 'prompt' gak lagi auto-check se-agresif 'autoUpdate',
++            // ini biar device yang dipake lama (kasir sepi, gak pernah
++            // switch app) tetap ketawarin update dalam waktu wajar, bukan
++            // nunggu sampai app ditutup-buka lagi.
++            if (!registration) return;
++            setInterval(() => registration.update(), 60 * 60 * 1000);
++        },
++    });
++
++    if (!needRefresh) return null;
++
++    return (
++        <div
++            className="fixed left-1/2 -translate-x-1/2 z-[250] animate-in fade-in slide-in-from-bottom-4 duration-300"
++            style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}
++        >
++            <div className="flex items-center gap-3 text-white text-sm font-semibold pl-5 pr-2 py-2 rounded-full shadow-2xl backdrop-blur-sm border border-white/20 bg-slate-900/95 dark:bg-slate-800/95 whitespace-nowrap">
++                <span>Versi baru tersedia</span>
++                <button
++                    type="button"
++                    onClick={() => updateServiceWorker(true)}
++                    className="flex items-center gap-1.5 bg-white text-slate-900 text-xs font-bold px-3 py-1.5 rounded-full hover:bg-slate-100 active:scale-95 transition-all duration-200"
++                >
++                    <RefreshCw className="w-3 h-3" />
++                    Muat Ulang
++                </button>
++                <button
++                    type="button"
++                    onClick={() => setNeedRefresh(false)}
++                    className="text-white/60 hover:text-white text-xs px-1"
++                    aria-label="Tutup, nanti aja"
++                >
++                    Nanti
++                </button>
++            </div>
++        </div>
++    );
++};
++
++export default UpdatePrompt;
+diff --git a/src/storage/BackupView.jsx b/src/storage/BackupView.jsx
+index 889e773..91fecec 100644
+--- a/src/storage/BackupView.jsx
++++ b/src/storage/BackupView.jsx
+@@ -11,7 +11,8 @@ import { Share } from '@capacitor/share';
+ import { exportAllData, loadData, saveData } from '../storage/db';
+ import { ALL_KEYS, TRANSACTION_KEYS, APP_CONFIG_KEYS, DATE_FILTERABLE_KEYS } from '../storage/syncKeys';
+ import { getSupabaseClient, isSupabaseConfigured } from '../storage/syncClient';
+-import { runAutoSync, isSyncInFlight, isAutoSyncEnabled, setAutoSyncEnabled } from '../storage/realtimeSync';
++import { isSyncInFlight, isAutoSyncEnabled, setAutoSyncEnabled } from '../storage/realtimeSync';
++import { useAppContext } from '../context/AppContext';
+ import appVersion from '../version.json';
+ 
+ // ── Helpers ────────────────────────────────────────────────────────────────
+@@ -482,6 +483,7 @@ function FailedSyncList({ items }) {
+ // ── BackupView ─────────────────────────────────────────────────────────────
+ 
+ const BackupView = ({ onBack }) => {
++  const { triggerManualSync } = useAppContext();
+   const [loadingState, setLoadingState] = useState({});
+   const [doneState, setDoneState] = useState({});
+   const [toast, setToast] = useState(null);
+@@ -647,17 +649,20 @@ const BackupView = ({ onBack }) => {
+     setLastFailedItems([]); // reset daftar gagal dari run sebelumnya
+     setSyncProgress({ keyIndex: 0, totalKeys: 1, key: '', phase: '', doneInKey: 0, totalInKey: 0, sentCount: 0, failedCount: 0, failedItems: [] });
+     try {
+-      // Tiap item sekarang punya timeout 15 detik (lihat PUSH_TIMEOUT_MS di
+-      // realtimeSync.js), dan dikirim per-batch paralel (lihat AUTO_SYNC_BATCH_SIZE),
+-      // jadi proses ini jauh lebih cepat dan gak akan pernah "muter" tanpa
+-      // batas kayak sebelumnya.
+-      const { sent, failed, failedItems } = await runAutoSync({ force: true, onProgress: setSyncProgress });
++      // FIX "2 TOMBOL SYNC BEDA HASIL": sebelum ini, tombol di sini manggil
++      // runAutoSync() langsung -- PUSH doang, gak pernah narik ulang data
++      // dari device lain. Sementara tombol "Sync Sekarang" di Riwayat
++      // manggil triggerManualSync() dari App.jsx -- push DAN pull. Dua
++      // tombol, dua hasil beda, gak ada yang "salah" tapi bikin bingung.
++      // Sekarang keduanya manggil fungsi yang SAMA -- satu-satunya definisi
++      // "apa artinya sync manual" di seluruh app.
++      const { sent, failed, failedItems } = await triggerManualSync(setSyncProgress);
+       refreshSyncTime.current();
+       setLastFailedItems(failedItems || []);
+       if (failed > 0) {
+         showToast(`${sent} terkirim, ${failed} gagal (timeout/koneksi) — otomatis dicoba lagi nanti`, 'error');
+       } else {
+-        showToast(sent > 0 ? `Sync selesai — ${sent} perubahan dikirim` : 'Semua data sudah tersinkron ✓');
++        showToast(sent > 0 ? `Sync selesai — ${sent} perubahan dikirim & ditarik` : 'Semua data sudah tersinkron ✓');
+       }
+     } catch (err) {
+       showToast('Gagal: ' + err.message, 'error');
+@@ -781,10 +786,13 @@ const BackupView = ({ onBack }) => {
+                   <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${dailySyncOn ? 'bg-blue-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>{dailySyncOn ? 'ON' : 'OFF'}</div>
+                 </button>
+ 
+-                {/* 2. Sync Manual Sekarang */}
++                {/* 2. Sync Sekarang — nama & fungsinya SENGAJA disamain persis
++                    sama tombol di Riwayat (lewat triggerManualSync di
++                    App.jsx): kirim perubahan lokal + tarik data terbaru dari
++                    device lain. Ini yang dipencet buat pemakaian sehari-hari. */}
+                 <button onClick={handleManualSync} disabled={isSyncing || isRestoring || !supabaseReady} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${isSyncing ? 'border-accent-500 bg-accent-50 dark:bg-accent-500/10 text-accent-700 dark:text-accent-300' : 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'}`}>
+                   {isSyncing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CloudUpload className="w-5 h-5" />}
+-                  <p className="text-[10px] font-bold leading-tight">Manual<br />Sekarang</p>
++                  <p className="text-[10px] font-bold leading-tight">Sync<br />Sekarang</p>
+                   <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${isSyncing ? 'bg-accent-500 text-white' : 'bg-indigo-500 text-white'}`}>{isSyncing ? 'SYNC' : 'TAP'}</div>
+                 </button>
+               </div>
+@@ -811,22 +819,30 @@ const BackupView = ({ onBack }) => {
+               </div>
+             )}
+ 
+-            {/* Restore dari server (belum butuh) */}
+-            {/* <div className="border-t border-slate-100 pt-3">
+-              <p className="text-xs text-slate-400 mb-2">
+-                Pindah HP atau install ulang? Tarik semua data dari cloud. Server adalah <strong>source of truth</strong>.
++            {/* Sinkronisasi Penuh — dulu ada di sini tapi dikomen ("belum
++                butuh"), padahal handler-nya (handleRestoreFromSupabase) udah
++                lengkap & jalan. Sengaja dipisah gaya visualnya dari "Sync
++                Sekarang" di atas (lebih pudar/kalem) karena ini operasi yang
++                beda kelas: bukan kirim+tarik PERUBAHAN, tapi BUANG total data
++                lokal dan tarik ULANG semuanya dari server sebagai satu-satunya
++                sumber kebenaran. Dipakai kalau ada riwayat yang "nyangkut" gak
++                sesuai database walau udah dipencet Sync Sekarang berkali-kali —
++                bukan tombol harian. */}
++            <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
++              <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">
++                Ada riwayat yang gak sesuai database walau udah Sync Sekarang? Pakai ini — buang data lokal, tarik ulang semua dari server.
+               </p>
+               <button onClick={handleRestoreFromSupabase} disabled={isSyncing || isRestoring || !supabaseReady}
+                 className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border-2
+                   ${isRestoring || !supabaseReady
+                     ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+-                    : 'border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700'}`}
++                    : 'border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 text-blue-700 dark:text-blue-300'}`}
+               >
+                 {isRestoring
+-                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Memulihkan...</>
+-                  : <><Upload className="w-4 h-4" /> Restore dari Server</>}
++                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Menarik ulang semua data...</>
++                  : <><Upload className="w-4 h-4" /> Sinkronisasi Penuh</>}
+               </button>
+-            </div> */}
++            </div>
+           </div>
+         </div>
+ 
+diff --git a/vite.config.js b/vite.config.js
+index 60fd55e..c8d3c3e 100644
+--- a/vite.config.js
++++ b/vite.config.js
+@@ -9,7 +9,18 @@ export default defineConfig({
+     react(),
+     tailwindcss(),
+     VitePWA({
+-      registerType: 'autoUpdate',
++      // FIX "PILIH TANGGAL MALAH RELOAD": 'autoUpdate' bikin SW langsung
++      // aktifin versi baru + reload halaman TANPA nanya, begitu terdeteksi
++      // ada deploy baru. Deteksinya sering ke-trigger justru pas ada
++      // perubahan visibility/focus -- termasuk saat native date-picker
++      // (<input type="month">, dll) dibuka lalu ditutup di HP, yang bikin
++      // WebView sempat kehilangan & balik fokus. Jadinya reload otomatis
++      // itu keliatan seperti "gara-gara milih tanggal", padahal sebenernya
++      // "kebetulan ada versi baru nunggu pas visibility berubah".
++      // 'prompt' bikin SW nunggu -- UpdatePrompt.jsx (lihat App.jsx) yang
++      // nampilin notifikasi kecil, reload cuma jalan kalau user pencet
++      // sendiri, gak pernah motong interaksi yang lagi jalan.
++      registerType: 'prompt',
+       workbox: {
+         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+         // PENTING: JANGAN tambahin runtimeCaching buat *.supabase.co lagi.
