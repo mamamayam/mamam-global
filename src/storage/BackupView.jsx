@@ -11,7 +11,8 @@ import { Share } from '@capacitor/share';
 import { exportAllData, loadData, saveData } from '../storage/db';
 import { ALL_KEYS, TRANSACTION_KEYS, APP_CONFIG_KEYS, DATE_FILTERABLE_KEYS } from '../storage/syncKeys';
 import { getSupabaseClient, isSupabaseConfigured } from '../storage/syncClient';
-import { runAutoSync, isSyncInFlight, isAutoSyncEnabled, setAutoSyncEnabled } from '../storage/realtimeSync';
+import { isSyncInFlight, isAutoSyncEnabled, setAutoSyncEnabled } from '../storage/realtimeSync';
+import { useAppContext } from '../context/AppContext';
 import appVersion from '../version.json';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -482,6 +483,7 @@ function FailedSyncList({ items }) {
 // ── BackupView ─────────────────────────────────────────────────────────────
 
 const BackupView = ({ onBack }) => {
+  const { triggerManualSync } = useAppContext();
   const [loadingState, setLoadingState] = useState({});
   const [doneState, setDoneState] = useState({});
   const [toast, setToast] = useState(null);
@@ -647,17 +649,20 @@ const BackupView = ({ onBack }) => {
     setLastFailedItems([]); // reset daftar gagal dari run sebelumnya
     setSyncProgress({ keyIndex: 0, totalKeys: 1, key: '', phase: '', doneInKey: 0, totalInKey: 0, sentCount: 0, failedCount: 0, failedItems: [] });
     try {
-      // Tiap item sekarang punya timeout 15 detik (lihat PUSH_TIMEOUT_MS di
-      // realtimeSync.js), dan dikirim per-batch paralel (lihat AUTO_SYNC_BATCH_SIZE),
-      // jadi proses ini jauh lebih cepat dan gak akan pernah "muter" tanpa
-      // batas kayak sebelumnya.
-      const { sent, failed, failedItems } = await runAutoSync({ force: true, onProgress: setSyncProgress });
+      // FIX "2 TOMBOL SYNC BEDA HASIL": sebelum ini, tombol di sini manggil
+      // runAutoSync() langsung -- PUSH doang, gak pernah narik ulang data
+      // dari device lain. Sementara tombol "Sync Sekarang" di Riwayat
+      // manggil triggerManualSync() dari App.jsx -- push DAN pull. Dua
+      // tombol, dua hasil beda, gak ada yang "salah" tapi bikin bingung.
+      // Sekarang keduanya manggil fungsi yang SAMA -- satu-satunya definisi
+      // "apa artinya sync manual" di seluruh app.
+      const { sent, failed, failedItems } = await triggerManualSync(setSyncProgress);
       refreshSyncTime.current();
       setLastFailedItems(failedItems || []);
       if (failed > 0) {
         showToast(`${sent} terkirim, ${failed} gagal (timeout/koneksi) — otomatis dicoba lagi nanti`, 'error');
       } else {
-        showToast(sent > 0 ? `Sync selesai — ${sent} perubahan dikirim` : 'Semua data sudah tersinkron ✓');
+        showToast(sent > 0 ? `Sync selesai — ${sent} perubahan dikirim & ditarik` : 'Semua data sudah tersinkron ✓');
       }
     } catch (err) {
       showToast('Gagal: ' + err.message, 'error');
@@ -781,10 +786,13 @@ const BackupView = ({ onBack }) => {
                   <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${dailySyncOn ? 'bg-blue-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>{dailySyncOn ? 'ON' : 'OFF'}</div>
                 </button>
 
-                {/* 2. Sync Manual Sekarang */}
+                {/* 2. Sync Sekarang — nama & fungsinya SENGAJA disamain persis
+                    sama tombol di Riwayat (lewat triggerManualSync di
+                    App.jsx): kirim perubahan lokal + tarik data terbaru dari
+                    device lain. Ini yang dipencet buat pemakaian sehari-hari. */}
                 <button onClick={handleManualSync} disabled={isSyncing || isRestoring || !supabaseReady} className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center gap-1.5 transition-all ${isSyncing ? 'border-accent-500 bg-accent-50 dark:bg-accent-500/10 text-accent-700 dark:text-accent-300' : 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'}`}>
                   {isSyncing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CloudUpload className="w-5 h-5" />}
-                  <p className="text-[10px] font-bold leading-tight">Manual<br />Sekarang</p>
+                  <p className="text-[10px] font-bold leading-tight">Sync<br />Sekarang</p>
                   <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${isSyncing ? 'bg-accent-500 text-white' : 'bg-indigo-500 text-white'}`}>{isSyncing ? 'SYNC' : 'TAP'}</div>
                 </button>
               </div>
@@ -811,22 +819,30 @@ const BackupView = ({ onBack }) => {
               </div>
             )}
 
-            {/* Restore dari server (belum butuh) */}
-            {/* <div className="border-t border-slate-100 pt-3">
-              <p className="text-xs text-slate-400 mb-2">
-                Pindah HP atau install ulang? Tarik semua data dari cloud. Server adalah <strong>source of truth</strong>.
+            {/* Sinkronisasi Penuh — dulu ada di sini tapi dikomen ("belum
+                butuh"), padahal handler-nya (handleRestoreFromSupabase) udah
+                lengkap & jalan. Sengaja dipisah gaya visualnya dari "Sync
+                Sekarang" di atas (lebih pudar/kalem) karena ini operasi yang
+                beda kelas: bukan kirim+tarik PERUBAHAN, tapi BUANG total data
+                lokal dan tarik ULANG semuanya dari server sebagai satu-satunya
+                sumber kebenaran. Dipakai kalau ada riwayat yang "nyangkut" gak
+                sesuai database walau udah dipencet Sync Sekarang berkali-kali —
+                bukan tombol harian. */}
+            <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
+              <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">
+                Ada riwayat yang gak sesuai database walau udah Sync Sekarang? Pakai ini — buang data lokal, tarik ulang semua dari server.
               </p>
               <button onClick={handleRestoreFromSupabase} disabled={isSyncing || isRestoring || !supabaseReady}
                 className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border-2
                   ${isRestoring || !supabaseReady
                     ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                    : 'border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700'}`}
+                    : 'border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 text-blue-700 dark:text-blue-300'}`}
               >
                 {isRestoring
-                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Memulihkan...</>
-                  : <><Upload className="w-4 h-4" /> Restore dari Server</>}
+                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Menarik ulang semua data...</>
+                  : <><Upload className="w-4 h-4" /> Sinkronisasi Penuh</>}
               </button>
-            </div> */}
+            </div>
           </div>
         </div>
 

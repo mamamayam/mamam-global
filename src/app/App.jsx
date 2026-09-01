@@ -83,13 +83,21 @@ export default function App() {
 
   const [isAdminMode, setIsAdminMode] = useState(false);
 
-  // ── Sesi employee ASLI (login PIN), terpisah dari sesi anonim otomatis ──
+  // ── Employee yang lagi "login", terpisah dari sesi anonim otomatis ──────
   // getSupabaseClient()/ensureAuthSession di syncClient.js SELALU nyoba
   // signInAnonymously() kalau belum ada sesi apapun -- itu buat keperluan
   // sync/echo-suppression doang (lihat komentar di syncClient.js), BUKAN
-  // berarti "sudah login". Makanya yang dicek bukan "ada sesi atau nggak",
-  // tapi user.is_anonymous === false.
-  // undefined = lagi dicek, null = belum ada employee asli yang login,
+  // berarti "sudah login". Kalau ada sesi employee ASLI (is_anonymous ===
+  // false, dari alur PIN lama), itu tetap dipakai buat resolve di bawah.
+  //
+  // SEMENTARA (atas permintaan Agung, 1 Sep 2026): LoginView.jsx udah gak
+  // manggil signInWithPassword lagi (PIN dicabut dulu), jadi jalur utama
+  // ngisi currentEmployee sekarang lewat handleManualEmployeeLogin di bawah,
+  // bukan dari resolveEmployeeFromSession. Effect di bawah ini dibiarkan
+  // apa adanya (gak ngefek kalau gak ada sesi employee asli), biar gampang
+  // diaktifin lagi kalau PIN dipasang balik nanti.
+  //
+  // undefined = lagi dicek, null = belum ada employee yang login,
   // {id,name,role,is_active} = login sebagai employee itu.
   const [currentEmployee, setCurrentEmployee] = useState(undefined);
 
@@ -142,7 +150,23 @@ export default function App() {
     return () => { cancelled = true; unsubscribeAuth?.(); };
   }, []);
 
+  // Login manual TANPA PIN (atas permintaan Agung, 1 Sep 2026) -- dipanggil
+  // dari LoginView.jsx pas tap nama / abis bootstrap admin pertama. SENGAJA
+  // gak lewat Supabase Auth sama sekali (gak ada signInWithPassword lagi di
+  // LoginView), jadi currentEmployee di-set langsung di sini, gak nunggu
+  // onAuthStateChange kayak alur lama. Sesi anonim buat sync tetap jalan
+  // apa adanya di background, gak kesentuh sama sekali oleh ini.
+  const handleManualEmployeeLogin = useCallback((emp) => {
+    setCurrentEmployee(emp);
+    setIsAdminMode(emp.role === 'admin');
+  }, []);
+
   const signOutEmployee = useCallback(async () => {
+    // Selama login manual (tanpa PIN) yang dipakai, gak ada sesi auth
+    // per-employee yang beneran berubah pas "logout" -- reset manual di
+    // sini juga, jangan cuma andelin signOut() + onAuthStateChange.
+    setCurrentEmployee(null);
+    setIsAdminMode(false);
     try {
       const { getSupabaseClient } = await import('../storage/syncClient');
       const supabase = await getSupabaseClient();
@@ -1452,7 +1476,7 @@ export default function App() {
     );
   }
   if (currentEmployee === null) {
-    return <LoginView />;
+    return <LoginView onLogin={handleManualEmployeeLogin} />;
   }
 
   return (

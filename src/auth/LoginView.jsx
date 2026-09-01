@@ -1,86 +1,106 @@
-import { useState, useEffect } from 'react';
-import { UserRound, ChevronLeft, Store } from 'lucide-react';
-import { Card } from '../components/ui';
-import PinPad from './PinPad';
+import { useState, useEffect, useCallback } from 'react';
+import { UserRound, ChevronLeft, Store, ShieldCheck } from 'lucide-react';
+import { Card, Input, Button } from '../components/ui';
 
 // SENGAJA dynamic import (bukan `import { getSupabaseClient } from
 // '../storage/syncClient'` di atas) -- syncClient.js sudah di-import
 // dynamic di banyak tempat lain (App.jsx, dst) supaya @supabase/supabase-js
 // tetap kepisah ke chunk-nya sendiri, bukan numpuk ke chunk view manapun.
-// Kalau di sini pakai static import, Rollup kebingungan nge-split-nya dan
-// bisa nge-gembungin chunk view yang gak nyambung sama sekali (kejadian:
-// bikin chunk EmployeesView.jsx melonjak ke >1.5MB).
 const loadSupabase = () => import('../storage/syncClient').then(m => m.getSupabaseClient());
 
 /**
  * LoginView — gerbang masuk aplikasi. Ditampilkan App.jsx kalau belum ada
- * sesi employee ASLI yang login (lihat effect auth di App.jsx: device
- * SELALU punya sesi anonim otomatis dari getSupabaseClient()/ensureAuthSession
- * di syncClient.js buat keperluan sync -- itu SENGAJA tidak dianggap
- * "sudah login" di sini, yang dicek App.jsx adalah user.is_anonymous === false).
+ * employee yang dipilih (App.jsx: currentEmployee === null).
  *
- * Alurnya 2 langkah (pilih nama -> baru PIN), bukan 1 form nama+PIN
- * sekaligus: di kasir yang dipegang gantian, milih dari daftar jauh lebih
- * cepat daripada ngetik nama tiap kali.
+ * SEMENTARA TANPA VERIFIKASI PIN (atas permintaan Agung, 1 Sep 2026) -- tap
+ * nama langsung masuk lewat prop onLogin(employee), gak ada pengecekan PIN
+ * sama sekali di sini. Ini stub sengaja disederhanain biar gampang
+ * dicustomisasi ulang nanti. Yang perlu tau:
+ *   - PinPad.jsx, dan Edge Function create-employee / reset-employee-pin
+ *     TETEP ada & tetep jalan (dipanggil AccountView.jsx buat bikin/reset
+ *     akun) -- yang dicabut cuma pengecekan PIN pas LOGIN, di file ini.
+ *   - Bikin akun baru MASIH lewat create-employee (masih insert baris
+ *     auth.users beneran, karena employees.id di-FK ke auth.users di
+ *     migration SQL-nya) -- form bootstrap admin pertama di bawah masih
+ *     manggil Edge Function itu, cuma PIN-nya di-generate random & gak
+ *     ditampilin/ditanya ke user (toh gak dicek lagi pas login).
+ *   - Buat pasang lagi verifikasi PIN pas login: render <PinPad> dulu
+ *     sebelum manggil onLogin() di tombol nama, baru panggil onLogin()
+ *     setelah PIN dicocokin (lihat git history file ini buat versi lama
+ *     yang pakai supabase.auth.signInWithPassword).
+ *
+ * props:
+ *   onLogin(employee) — dipanggil begitu ada employee yang "masuk".
+ *     employee: {id, name, role, is_active}
  */
-const LoginView = () => {
+const LoginView = ({ onLogin }) => {
     const [employees, setEmployees] = useState([]);
     const [loadingList, setLoadingList] = useState(true);
     const [listError, setListError] = useState('');
-    const [selected, setSelected] = useState(null); // { id, name }
-    const [signingIn, setSigningIn] = useState(false);
-    const [pinError, setPinError] = useState('');
-    const [pinAttempt, setPinAttempt] = useState(0); // ganti key PinPad biar remount bersih tiap percobaan
+
+    // ── Bootstrap admin pertama (cuma muncul kalau employees kosong) ─────
+    const [showBootstrap, setShowBootstrap] = useState(false);
+    const [bootstrapName, setBootstrapName] = useState('');
+    const [creatingBootstrap, setCreatingBootstrap] = useState(false);
+    const [bootstrapError, setBootstrapError] = useState('');
+
+    const fetchEmployees = useCallback(async () => {
+        setLoadingList(true);
+        setListError('');
+        try {
+            const supabase = await loadSupabase();
+            if (!supabase) {
+                setListError('Supabase belum dikonfigurasi.');
+                return;
+            }
+            const { data, error } = await supabase
+                .from('employees')
+                .select('id, name, role, is_active')
+                .eq('is_active', true)
+                .order('name');
+            if (error) throw error;
+            setEmployees(data || []);
+        } catch (err) {
+            console.warn('[LoginView] gagal ambil daftar karyawan:', err.message);
+            setListError('Gagal memuat daftar akun. Cek koneksi internet.');
+        } finally {
+            setLoadingList(false);
+        }
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
         (async () => {
-            try {
-                const supabase = await loadSupabase();
-                if (!supabase) {
-                    if (!cancelled) setListError('Supabase belum dikonfigurasi.');
-                    return;
-                }
-                const { data, error } = await supabase
-                    .from('employees')
-                    .select('id, name')
-                    .eq('is_active', true)
-                    .order('name');
-                if (error) throw error;
-                if (!cancelled) setEmployees(data || []);
-            } catch (err) {
-                console.warn('[LoginView] gagal ambil daftar karyawan:', err.message);
-                if (!cancelled) setListError('Gagal memuat daftar akun. Cek koneksi internet.');
-            } finally {
-                if (!cancelled) setLoadingList(false);
-            }
+            if (!cancelled) await fetchEmployees();
         })();
         return () => { cancelled = true; };
-    }, []);
+    }, [fetchEmployees]);
 
-    const handlePinComplete = async (pin) => {
-        if (!selected) return;
-        setSigningIn(true);
-        setPinError('');
+    const handleCreateBootstrapAdmin = async () => {
+        if (!bootstrapName.trim()) {
+            setBootstrapError('Nama wajib diisi.');
+            return;
+        }
+        setCreatingBootstrap(true);
+        setBootstrapError('');
         try {
             const supabase = await loadSupabase();
-            const { error } = await supabase.auth.signInWithPassword({
-                email: `${selected.id}@mamam.internal`,
-                password: pin,
+            // PIN throwaway -- cuma buat isi password auth.users, gak pernah
+            // ditampilin/dicek lagi selama versi tanpa-PIN ini masih dipakai.
+            const throwawayPin = String(Math.floor(100000 + Math.random() * 900000));
+            const { data, error } = await supabase.functions.invoke('create-employee', {
+                body: { name: bootstrapName.trim(), pin: throwawayPin, role: 'admin' },
             });
-            if (error) {
-                setPinError('PIN salah, coba lagi');
-                setPinAttempt(a => a + 1);
+            if (error || data?.error) {
+                setBootstrapError(data?.error || error.message || 'Gagal membuat akun admin');
                 return;
             }
-            // Sukses -> App.jsx nangkep perubahan sesi lewat onAuthStateChange,
-            // gak perlu callback manual di sini.
+            onLogin({ id: data.id, name: bootstrapName.trim(), role: 'admin', is_active: true });
         } catch (err) {
-            console.warn('[LoginView] signInWithPassword error:', err.message);
-            setPinError('Gagal terhubung ke server, coba lagi');
-            setPinAttempt(a => a + 1);
+            console.warn('[LoginView] create-employee (bootstrap) error:', err.message);
+            setBootstrapError('Gagal terhubung ke server, coba lagi');
         } finally {
-            setSigningIn(false);
+            setCreatingBootstrap(false);
         }
     };
 
@@ -91,7 +111,7 @@ const LoginView = () => {
             </div>
 
             <Card variant="elevated" padding="lg" className="w-full max-w-sm">
-                {!selected ? (
+                {!showBootstrap ? (
                     <>
                         <h1 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100 text-center mb-1">
                             Siapa yang masuk?
@@ -107,9 +127,19 @@ const LoginView = () => {
                             <p className="text-sm text-accent-500 text-center py-6">{listError}</p>
                         )}
                         {!loadingList && !listError && employees.length === 0 && (
-                            <p className="text-sm text-slate-400 text-center py-6">
-                                Belum ada akun terdaftar. Minta admin untuk membuatkan akun di menu Manajemen Akun.
-                            </p>
+                            <div className="text-center py-2">
+                                <p className="text-sm text-slate-400 mb-4">
+                                    Belum ada akun terdaftar sama sekali.
+                                </p>
+                                <Button
+                                    variant="dark"
+                                    size="sm"
+                                    icon={<ShieldCheck className="w-4 h-4" />}
+                                    onClick={() => { setShowBootstrap(true); setBootstrapError(''); }}
+                                >
+                                    Buat akun admin pertama
+                                </Button>
+                            </div>
                         )}
 
                         <div className="flex flex-col gap-2">
@@ -117,7 +147,7 @@ const LoginView = () => {
                                 <button
                                     key={emp.id}
                                     type="button"
-                                    onClick={() => { setSelected(emp); setPinError(''); }}
+                                    onClick={() => onLogin(emp)}
                                     className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-[0.98] transition-all duration-200 text-left"
                                 >
                                     <span className="w-9 h-9 rounded-full bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
@@ -132,24 +162,34 @@ const LoginView = () => {
                     <>
                         <button
                             type="button"
-                            onClick={() => { setSelected(null); setPinError(''); }}
+                            onClick={() => { setShowBootstrap(false); setBootstrapError(''); }}
                             className="flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mb-4 transition-colors"
                         >
-                            <ChevronLeft className="w-4 h-4" /> Ganti akun
+                            <ChevronLeft className="w-4 h-4" /> Kembali
                         </button>
                         <h1 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100 text-center mb-1">
-                            Halo, {selected.name}
+                            Bikin akun admin pertama
                         </h1>
                         <p className="text-xs text-slate-400 dark:text-slate-500 text-center mb-6">
-                            Masukkan PIN 6 digit kamu
+                            Ini cuma bisa dilakukan sekali, sebelum ada admin lain
                         </p>
-                        <PinPad
-                            key={pinAttempt}
-                            length={6}
-                            onComplete={handlePinComplete}
-                            error={pinError}
-                            disabled={signingIn}
-                        />
+                        <div className="mb-5">
+                            <Input
+                                label="Nama"
+                                placeholder="mis. Budi"
+                                value={bootstrapName}
+                                onChange={e => { setBootstrapName(e.target.value); setBootstrapError(''); }}
+                                error={bootstrapError}
+                            />
+                        </div>
+                        <Button
+                            variant="dark"
+                            size="full"
+                            loading={creatingBootstrap}
+                            onClick={handleCreateBootstrapAdmin}
+                        >
+                            Buat & Masuk
+                        </Button>
                     </>
                 )}
             </Card>

@@ -1,0 +1,501 @@
+diff --git a/src/auth/LoginView.jsx b/src/auth/LoginView.jsx
+index 14f173d..a8d9ad1 100644
+--- a/src/auth/LoginView.jsx
++++ b/src/auth/LoginView.jsx
+@@ -1,6 +1,6 @@
+-import { useState, useEffect } from 'react';
+-import { UserRound, ChevronLeft, Store } from 'lucide-react';
+-import { Card } from '../components/ui';
++import { useState, useEffect, useCallback } from 'react';
++import { UserRound, ChevronLeft, Store, ShieldCheck } from 'lucide-react';
++import { Card, Input, Button } from '../components/ui';
+ import PinPad from './PinPad';
+ 
+ // SENGAJA dynamic import (bukan `import { getSupabaseClient } from
+@@ -22,6 +22,13 @@ const loadSupabase = () => import('../storage/syncClient').then(m => m.getSupaba
+  * Alurnya 2 langkah (pilih nama -> baru PIN), bukan 1 form nama+PIN
+  * sekaligus: di kasir yang dipegang gantian, milih dari daftar jauh lebih
+  * cepat daripada ngetik nama tiap kali.
++ *
++ * Kalau daftar employees KOSONG (belum ada satupun akun aktif -- termasuk
++ * kasus paling awal, fresh install), layar ini juga nawarin bikin akun admin
++ * pertama langsung di sini. Ini SATU-SATUNYA jalan bikin admin pertama,
++ * karena menu "Manajemen Akun" yang normal cuma bisa dibuka SETELAH login
++ * (ayam-telur) -- Edge Function create-employee sengaja izinin request tanpa
++ * login SELAMA belum ada admin aktif sama sekali (lihat komentar di sana).
+  */
+ const LoginView = () => {
+     const [employees, setEmployees] = useState([]);
+@@ -32,31 +39,77 @@ const LoginView = () => {
+     const [pinError, setPinError] = useState('');
+     const [pinAttempt, setPinAttempt] = useState(0); // ganti key PinPad biar remount bersih tiap percobaan
+ 
++    // ── Bootstrap admin pertama (cuma muncul kalau employees kosong) ─────
++    const [showBootstrap, setShowBootstrap] = useState(false);
++    const [bootstrapName, setBootstrapName] = useState('');
++    const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
++    const [creatingBootstrap, setCreatingBootstrap] = useState(false);
++    const [bootstrapError, setBootstrapError] = useState('');
++
++    const fetchEmployees = useCallback(async () => {
++        setLoadingList(true);
++        setListError('');
++        try {
++            const supabase = await loadSupabase();
++            if (!supabase) {
++                setListError('Supabase belum dikonfigurasi.');
++                return;
++            }
++            const { data, error } = await supabase
++                .from('employees')
++                .select('id, name')
++                .eq('is_active', true)
++                .order('name');
++            if (error) throw error;
++            setEmployees(data || []);
++        } catch (err) {
++            console.warn('[LoginView] gagal ambil daftar karyawan:', err.message);
++            setListError('Gagal memuat daftar akun. Cek koneksi internet.');
++        } finally {
++            setLoadingList(false);
++        }
++    }, []);
++
+     useEffect(() => {
+         let cancelled = false;
+         (async () => {
+-            try {
+-                const supabase = await loadSupabase();
+-                if (!supabase) {
+-                    if (!cancelled) setListError('Supabase belum dikonfigurasi.');
+-                    return;
+-                }
+-                const { data, error } = await supabase
+-                    .from('employees')
+-                    .select('id, name')
+-                    .eq('is_active', true)
+-                    .order('name');
+-                if (error) throw error;
+-                if (!cancelled) setEmployees(data || []);
+-            } catch (err) {
+-                console.warn('[LoginView] gagal ambil daftar karyawan:', err.message);
+-                if (!cancelled) setListError('Gagal memuat daftar akun. Cek koneksi internet.');
+-            } finally {
+-                if (!cancelled) setLoadingList(false);
+-            }
++            if (!cancelled) await fetchEmployees();
+         })();
+         return () => { cancelled = true; };
+-    }, []);
++    }, [fetchEmployees]);
++
++    const handleCreateBootstrapAdmin = async (pin) => {
++        if (!bootstrapName.trim()) {
++            setBootstrapError('Nama wajib diisi dulu sebelum masukin PIN');
++            return;
++        }
++        setCreatingBootstrap(true);
++        setBootstrapError('');
++        try {
++            const supabase = await loadSupabase();
++            const { data, error } = await supabase.functions.invoke('create-employee', {
++                body: { name: bootstrapName.trim(), pin, role: 'admin' },
++            });
++            if (error || data?.error) {
++                setBootstrapError(data?.error || error.message || 'Gagal membuat akun admin');
++                setBootstrapAttempt(a => a + 1);
++                return;
++            }
++            // Jangan auto-login di sini -- balikin ke layar "pilih nama" biasa
++            // dan refresh daftar, biar admin baru login lewat jalur PIN normal
++            // yang sama persis dipakai employee lain (satu jalur aja, gak ada
++            // cabang login khusus buat bootstrap).
++            setShowBootstrap(false);
++            setBootstrapName('');
++            await fetchEmployees();
++        } catch (err) {
++            console.warn('[LoginView] create-employee (bootstrap) error:', err.message);
++            setBootstrapError('Gagal terhubung ke server, coba lagi');
++            setBootstrapAttempt(a => a + 1);
++        } finally {
++            setCreatingBootstrap(false);
++        }
++    };
+ 
+     const handlePinComplete = async (pin) => {
+         if (!selected) return;
+@@ -92,6 +145,7 @@ const LoginView = () => {
+ 
+             <Card variant="elevated" padding="lg" className="w-full max-w-sm">
+                 {!selected ? (
++                    !showBootstrap ? (
+                     <>
+                         <h1 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100 text-center mb-1">
+                             Siapa yang masuk?
+@@ -107,9 +161,19 @@ const LoginView = () => {
+                             <p className="text-sm text-accent-500 text-center py-6">{listError}</p>
+                         )}
+                         {!loadingList && !listError && employees.length === 0 && (
+-                            <p className="text-sm text-slate-400 text-center py-6">
+-                                Belum ada akun terdaftar. Minta admin untuk membuatkan akun di menu Manajemen Akun.
+-                            </p>
++                            <div className="text-center py-2">
++                                <p className="text-sm text-slate-400 mb-4">
++                                    Belum ada akun terdaftar sama sekali.
++                                </p>
++                                <Button
++                                    variant="dark"
++                                    size="sm"
++                                    icon={<ShieldCheck className="w-4 h-4" />}
++                                    onClick={() => { setShowBootstrap(true); setBootstrapError(''); }}
++                                >
++                                    Buat akun admin pertama
++                                </Button>
++                            </div>
+                         )}
+ 
+                         <div className="flex flex-col gap-2">
+@@ -128,6 +192,41 @@ const LoginView = () => {
+                             ))}
+                         </div>
+                     </>
++                    ) : (
++                    <>
++                        <button
++                            type="button"
++                            onClick={() => { setShowBootstrap(false); setBootstrapError(''); }}
++                            className="flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mb-4 transition-colors"
++                        >
++                            <ChevronLeft className="w-4 h-4" /> Kembali
++                        </button>
++                        <h1 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100 text-center mb-1">
++                            Bikin akun admin pertama
++                        </h1>
++                        <p className="text-xs text-slate-400 dark:text-slate-500 text-center mb-6">
++                            Ini cuma bisa dilakukan sekali, sebelum ada admin lain
++                        </p>
++                        <div className="mb-5">
++                            <Input
++                                label="Nama"
++                                placeholder="mis. Budi"
++                                value={bootstrapName}
++                                onChange={e => { setBootstrapName(e.target.value); setBootstrapError(''); }}
++                            />
++                        </div>
++                        <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 text-center">
++                            PIN 6 digit buat akun ini
++                        </p>
++                        <PinPad
++                            key={bootstrapAttempt}
++                            length={6}
++                            onComplete={handleCreateBootstrapAdmin}
++                            error={bootstrapError}
++                            disabled={creatingBootstrap}
++                        />
++                    </>
++                    )
+                 ) : (
+                     <>
+                         <button
+diff --git a/src/storage/employees_pin_login_migration.sql b/src/storage/employees_pin_login_migration.sql
+new file mode 100644
+index 0000000..0c1a41f
+--- /dev/null
++++ b/src/storage/employees_pin_login_migration.sql
+@@ -0,0 +1,48 @@
++-- employees_pin_login_migration.sql
++--
++-- Tabel `employees` dipakai LoginView.jsx, AccountView.jsx, App.jsx, dan
++-- kedua Edge Function baru (create-employee, reset-employee-pin) -- tapi
++-- belum pernah didefinisikan di mana pun di repo (gak ada di
++-- supabase_schema.sql). Jalankan ini di Supabase Dashboard -> SQL Editor.
++--
++-- Aman dijalankan ulang (idempotent): kalau tabel/policy udah ada duluan,
++-- `create table if not exists` dilewatin, dan policy di-drop+create ulang
++-- tanpa nyentuh data yang udah ada.
++
++create table if not exists public.employees (
++  id uuid primary key references auth.users(id) on delete cascade,
++  name text not null,
++  role text not null default 'staff' check (role in ('admin', 'staff')),
++  is_active boolean not null default true,
++  created_at timestamptz not null default now()
++);
++
++alter table public.employees enable row level security;
++
++-- Daftar nama di LoginView ("Siapa yang masuk?") harus kebaca SEBELUM
++-- employee login -- device saat itu cuma pegang sesi anonim
++-- (signInAnonymously(), lihat syncClient.js). Sesi anonim tetap dianggap
++-- role `authenticated` di Supabase, jadi policy `to authenticated` ini
++-- otomatis nutup kasus itu juga -- gak perlu policy terpisah buat role `anon`.
++drop policy if exists "employees_select_active" on public.employees;
++create policy "employees_select_active"
++  on public.employees for select
++  to authenticated
++  using (is_active = true);
++
++-- Toggle aktif/nonaktif di AccountView.jsx jalan langsung dari client
++-- (bukan lewat Edge Function) -- dibatasi cuma admin aktif yang lagi login.
++drop policy if exists "employees_update_admin_only" on public.employees;
++create policy "employees_update_admin_only"
++  on public.employees for update
++  to authenticated
++  using (
++    exists (
++      select 1 from public.employees me
++      where me.id = auth.uid() and me.role = 'admin' and me.is_active = true
++    )
++  );
++
++-- INSERT/DELETE SENGAJA tidak dikasih policy buat role authenticated biasa
++-- -- bikin akun baru cuma boleh lewat Edge Function create-employee (pakai
++-- service role key, otomatis bypass RLS), bukan insert langsung dari client.
+diff --git a/supabase/functions/create-employee/index.ts b/supabase/functions/create-employee/index.ts
+new file mode 100644
+index 0000000..de3d838
+--- /dev/null
++++ b/supabase/functions/create-employee/index.ts
+@@ -0,0 +1,143 @@
++// supabase/functions/create-employee/index.ts
++//
++// ═══════════════════════════════════════════════════════════════════════
++//  EDGE FUNCTION — bikin akun employee baru (auth.users + tabel employees)
++// ═══════════════════════════════════════════════════════════════════════
++// Dipanggil dari AccountView.jsx (menu "Manajemen Akun") lewat
++// supabase.functions.invoke('create-employee', { body: { name, pin, role } }).
++//
++// Kenapa harus lewat Edge Function (bukan insert langsung dari client):
++//   - Bikin akun employee = harus bikin baris auth.users JUGA (biar bisa
++//     login lewat signInWithPassword di LoginView.jsx), dan itu cuma bisa
++//     lewat auth.admin.createUser() yang butuh SERVICE_ROLE_KEY. Key itu
++//     TIDAK BOLEH nempel di client, makanya harus lewat sini.
++//
++// Alur:
++//   1. Cek: ada admin AKTIF di tabel employees atau belum?
++//      - BELUM ADA SAMA SEKALI (fresh install / abis migrasi) -> izinkan
++//        bikin akun TANPA perlu login dulu, dan paksa role='admin' apapun
++//        yang dikirim client (bootstrap admin pertama, biar gak ayam-telur:
++//        gak bisa login -> gak bisa buka Manajemen Akun -> gak bisa bikin
++//        akun -> gak bisa login...). Begitu ada 1 admin aktif, celah ini
++//        otomatis nutup sendiri di request berikutnya.
++//      - SUDAH ADA admin aktif -> WAJIB request datang dari employee yang
++//        sudah login DAN role-nya admin (dicek dari JWT di header
++//        Authorization, BUKAN cuma percaya body request / isAdminMode client).
++//   2. Validasi input (name wajib diisi, pin harus 6 digit angka).
++//   3. auth.admin.createUser() -> dapat user.id baru dari Supabase Auth.
++//   4. Insert ke tabel employees pakai id YANG SAMA dari langkah 3 (App.jsx
++//      nyocokin currentEmployee lewat .eq('id', session.user.id), jadi
++//      employees.id HARUS sama persis dengan auth.users.id).
++//   5. Kalau insert employees gagal, HAPUS LAGI auth user yang baru dibikin
++//      di langkah 3 -- biar gak nyisain akun auth "hantu" tanpa pasangan
++//      employees row tiap kali ada request yang gagal di tengah jalan.
++//
++// ENV VARS (otomatis tersedia di semua Edge Function, gak perlu di-set manual):
++//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
++
++import { createClient } from "npm:@supabase/supabase-js@2";
++
++const corsHeaders = {
++  "Access-Control-Allow-Origin": "*",
++  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
++};
++
++function json(body: Record<string, unknown>, status = 200) {
++  return new Response(JSON.stringify(body), {
++    status,
++    headers: { ...corsHeaders, "Content-Type": "application/json" },
++  });
++}
++
++Deno.serve(async (req) => {
++  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
++
++  try {
++    const { name, pin, role } = await req.json();
++
++    if (!name || typeof name !== "string" || !name.trim()) {
++      return json({ error: "Nama wajib diisi." }, 400);
++    }
++    if (!pin || typeof pin !== "string" || !/^\d{6}$/.test(pin)) {
++      return json({ error: "PIN harus 6 digit angka." }, 400);
++    }
++    const requestedRole = role === "admin" ? "admin" : "staff";
++
++    const supabaseAdmin = createClient(
++      Deno.env.get("SUPABASE_URL")!,
++      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
++    );
++
++    // ── Cek apakah ini bootstrap admin pertama ──────────────────────────
++    const { count: adminCount, error: countError } = await supabaseAdmin
++      .from("employees")
++      .select("id", { count: "exact", head: true })
++      .eq("role", "admin")
++      .eq("is_active", true);
++    if (countError) throw countError;
++
++    const isBootstrap = (adminCount ?? 0) === 0;
++    let finalRole = requestedRole;
++
++    if (isBootstrap) {
++      // Belum ada admin aktif sama sekali -> ini akun pertama, paksa admin
++      // supaya gak kejebak gak bisa akses Manajemen Akun sama sekali.
++      finalRole = "admin";
++    } else {
++      // Sudah ada admin -> request ini WAJIB datang dari admin yang sudah
++      // login. Cek dari JWT di header, JANGAN percaya isAdminMode di client.
++      const authHeader = req.headers.get("Authorization") ?? "";
++      const jwt = authHeader.replace(/^Bearer\s+/i, "");
++      if (!jwt) return json({ error: "Belum login." }, 401);
++
++      const { data: callerData, error: callerError } = await supabaseAdmin.auth.getUser(jwt);
++      if (callerError || !callerData?.user) {
++        return json({ error: "Sesi tidak valid, coba login ulang." }, 401);
++      }
++
++      const { data: callerEmployee, error: callerEmpError } = await supabaseAdmin
++        .from("employees")
++        .select("role, is_active")
++        .eq("id", callerData.user.id)
++        .single();
++      if (
++        callerEmpError ||
++        !callerEmployee ||
++        !callerEmployee.is_active ||
++        callerEmployee.role !== "admin"
++      ) {
++        return json({ error: "Cuma admin yang boleh membuat akun baru." }, 403);
++      }
++    }
++
++    // ── Bikin auth user dulu ────────────────────────────────────────────
++    const fakeEmail = `emp-${crypto.randomUUID()}@mamam.internal`;
++    const { data: created, error: createAuthError } = await supabaseAdmin.auth.admin.createUser({
++      email: fakeEmail,
++      password: pin,
++      email_confirm: true,
++    });
++    if (createAuthError || !created?.user) {
++      return json({ error: createAuthError?.message || "Gagal membuat akun auth." }, 400);
++    }
++
++    // ── Baru insert ke employees, pakai id yang SAMA ────────────────────
++    const { error: insertError } = await supabaseAdmin.from("employees").insert({
++      id: created.user.id,
++      name: name.trim(),
++      role: finalRole,
++      is_active: true,
++    });
++
++    if (insertError) {
++      // Rollback -- jangan nyisain auth user tanpa pasangan employees row.
++      await supabaseAdmin.auth.admin.deleteUser(created.user.id);
++      return json({ error: insertError.message || "Gagal menyimpan data karyawan." }, 400);
++    }
++
++    return json({ success: true, id: created.user.id, bootstrap: isBootstrap });
++  } catch (err) {
++    console.error("create-employee error:", err);
++    return json({ error: String(err) }, 500);
++  }
++});
+diff --git a/supabase/functions/reset-employee-pin/index.ts b/supabase/functions/reset-employee-pin/index.ts
+new file mode 100644
+index 0000000..d9ecc0b
+--- /dev/null
++++ b/supabase/functions/reset-employee-pin/index.ts
+@@ -0,0 +1,93 @@
++// supabase/functions/reset-employee-pin/index.ts
++//
++// ═══════════════════════════════════════════════════════════════════════
++//  EDGE FUNCTION — ganti PIN employee (update password di auth.users)
++// ═══════════════════════════════════════════════════════════════════════
++// Dipanggil dari AccountView.jsx lewat
++// supabase.functions.invoke('reset-employee-pin', { body: { employeeId, newPin } }).
++// Sama alasannya kayak create-employee -- ganti password auth.users cuma
++// bisa lewat auth.admin.updateUserById() yang butuh SERVICE_ROLE_KEY.
++//
++// WAJIB request dari employee yang sudah login DAN role admin (dicek dari
++// JWT di header Authorization, BUKAN cuma percaya body request). Gak ada
++// jalur bootstrap di sini kayak create-employee, karena reset PIN cuma
++// masuk akal kalau udah ada akun admin yang mau dipakai buat reset.
++//
++// ENV VARS (otomatis tersedia di semua Edge Function, gak perlu di-set manual):
++//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
++
++import { createClient } from "npm:@supabase/supabase-js@2";
++
++const corsHeaders = {
++  "Access-Control-Allow-Origin": "*",
++  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
++};
++
++function json(body: Record<string, unknown>, status = 200) {
++  return new Response(JSON.stringify(body), {
++    status,
++    headers: { ...corsHeaders, "Content-Type": "application/json" },
++  });
++}
++
++Deno.serve(async (req) => {
++  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
++
++  try {
++    const { employeeId, newPin } = await req.json();
++
++    if (!employeeId || typeof employeeId !== "string") {
++      return json({ error: "employeeId wajib diisi." }, 400);
++    }
++    if (!newPin || typeof newPin !== "string" || !/^\d{6}$/.test(newPin)) {
++      return json({ error: "PIN baru harus 6 digit angka." }, 400);
++    }
++
++    const supabaseAdmin = createClient(
++      Deno.env.get("SUPABASE_URL")!,
++      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
++    );
++
++    // ── Wajib admin yang sudah login ─────────────────────────────────────
++    const authHeader = req.headers.get("Authorization") ?? "";
++    const jwt = authHeader.replace(/^Bearer\s+/i, "");
++    if (!jwt) return json({ error: "Belum login." }, 401);
++
++    const { data: callerData, error: callerError } = await supabaseAdmin.auth.getUser(jwt);
++    if (callerError || !callerData?.user) {
++      return json({ error: "Sesi tidak valid, coba login ulang." }, 401);
++    }
++
++    const { data: callerEmployee, error: callerEmpError } = await supabaseAdmin
++      .from("employees")
++      .select("role, is_active")
++      .eq("id", callerData.user.id)
++      .single();
++    if (
++      callerEmpError ||
++      !callerEmployee ||
++      !callerEmployee.is_active ||
++      callerEmployee.role !== "admin"
++    ) {
++      return json({ error: "Cuma admin yang boleh mengubah PIN." }, 403);
++    }
++
++    // ── Pastikan target beneran ada di tabel employees ──────────────────
++    const { data: targetEmployee, error: targetError } = await supabaseAdmin
++      .from("employees")
++      .select("id")
++      .eq("id", employeeId)
++      .single();
++    if (targetError || !targetEmployee) return json({ error: "Akun tidak ditemukan." }, 404);
++
++    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(employeeId, {
++      password: newPin,
++    });
++    if (updateError) return json({ error: updateError.message || "Gagal mengubah PIN." }, 400);
++
++    return json({ success: true });
++  } catch (err) {
++    console.error("reset-employee-pin error:", err);
++    return json({ error: String(err) }, 500);
++  }
++});

@@ -1,0 +1,298 @@
+diff --git a/src/app/App.jsx b/src/app/App.jsx
+index 4cd922d..df08c0c 100644
+--- a/src/app/App.jsx
++++ b/src/app/App.jsx
+@@ -83,13 +83,21 @@ export default function App() {
+ 
+   const [isAdminMode, setIsAdminMode] = useState(false);
+ 
+-  // ── Sesi employee ASLI (login PIN), terpisah dari sesi anonim otomatis ──
++  // ── Employee yang lagi "login", terpisah dari sesi anonim otomatis ──────
+   // getSupabaseClient()/ensureAuthSession di syncClient.js SELALU nyoba
+   // signInAnonymously() kalau belum ada sesi apapun -- itu buat keperluan
+   // sync/echo-suppression doang (lihat komentar di syncClient.js), BUKAN
+-  // berarti "sudah login". Makanya yang dicek bukan "ada sesi atau nggak",
+-  // tapi user.is_anonymous === false.
+-  // undefined = lagi dicek, null = belum ada employee asli yang login,
++  // berarti "sudah login". Kalau ada sesi employee ASLI (is_anonymous ===
++  // false, dari alur PIN lama), itu tetap dipakai buat resolve di bawah.
++  //
++  // SEMENTARA (atas permintaan Agung, 1 Sep 2026): LoginView.jsx udah gak
++  // manggil signInWithPassword lagi (PIN dicabut dulu), jadi jalur utama
++  // ngisi currentEmployee sekarang lewat handleManualEmployeeLogin di bawah,
++  // bukan dari resolveEmployeeFromSession. Effect di bawah ini dibiarkan
++  // apa adanya (gak ngefek kalau gak ada sesi employee asli), biar gampang
++  // diaktifin lagi kalau PIN dipasang balik nanti.
++  //
++  // undefined = lagi dicek, null = belum ada employee yang login,
+   // {id,name,role,is_active} = login sebagai employee itu.
+   const [currentEmployee, setCurrentEmployee] = useState(undefined);
+ 
+@@ -142,7 +150,23 @@ export default function App() {
+     return () => { cancelled = true; unsubscribeAuth?.(); };
+   }, []);
+ 
++  // Login manual TANPA PIN (atas permintaan Agung, 1 Sep 2026) -- dipanggil
++  // dari LoginView.jsx pas tap nama / abis bootstrap admin pertama. SENGAJA
++  // gak lewat Supabase Auth sama sekali (gak ada signInWithPassword lagi di
++  // LoginView), jadi currentEmployee di-set langsung di sini, gak nunggu
++  // onAuthStateChange kayak alur lama. Sesi anonim buat sync tetap jalan
++  // apa adanya di background, gak kesentuh sama sekali oleh ini.
++  const handleManualEmployeeLogin = useCallback((emp) => {
++    setCurrentEmployee(emp);
++    setIsAdminMode(emp.role === 'admin');
++  }, []);
++
+   const signOutEmployee = useCallback(async () => {
++    // Selama login manual (tanpa PIN) yang dipakai, gak ada sesi auth
++    // per-employee yang beneran berubah pas "logout" -- reset manual di
++    // sini juga, jangan cuma andelin signOut() + onAuthStateChange.
++    setCurrentEmployee(null);
++    setIsAdminMode(false);
+     try {
+       const { getSupabaseClient } = await import('../storage/syncClient');
+       const supabase = await getSupabaseClient();
+@@ -1452,7 +1476,7 @@ export default function App() {
+     );
+   }
+   if (currentEmployee === null) {
+-    return <LoginView />;
++    return <LoginView onLogin={handleManualEmployeeLogin} />;
+   }
+ 
+   return (
+diff --git a/src/auth/LoginView.jsx b/src/auth/LoginView.jsx
+index a8d9ad1..0683997 100644
+--- a/src/auth/LoginView.jsx
++++ b/src/auth/LoginView.jsx
+@@ -1,48 +1,46 @@
+ import { useState, useEffect, useCallback } from 'react';
+ import { UserRound, ChevronLeft, Store, ShieldCheck } from 'lucide-react';
+ import { Card, Input, Button } from '../components/ui';
+-import PinPad from './PinPad';
+ 
+ // SENGAJA dynamic import (bukan `import { getSupabaseClient } from
+ // '../storage/syncClient'` di atas) -- syncClient.js sudah di-import
+ // dynamic di banyak tempat lain (App.jsx, dst) supaya @supabase/supabase-js
+ // tetap kepisah ke chunk-nya sendiri, bukan numpuk ke chunk view manapun.
+-// Kalau di sini pakai static import, Rollup kebingungan nge-split-nya dan
+-// bisa nge-gembungin chunk view yang gak nyambung sama sekali (kejadian:
+-// bikin chunk EmployeesView.jsx melonjak ke >1.5MB).
+ const loadSupabase = () => import('../storage/syncClient').then(m => m.getSupabaseClient());
+ 
+ /**
+  * LoginView — gerbang masuk aplikasi. Ditampilkan App.jsx kalau belum ada
+- * sesi employee ASLI yang login (lihat effect auth di App.jsx: device
+- * SELALU punya sesi anonim otomatis dari getSupabaseClient()/ensureAuthSession
+- * di syncClient.js buat keperluan sync -- itu SENGAJA tidak dianggap
+- * "sudah login" di sini, yang dicek App.jsx adalah user.is_anonymous === false).
++ * employee yang dipilih (App.jsx: currentEmployee === null).
+  *
+- * Alurnya 2 langkah (pilih nama -> baru PIN), bukan 1 form nama+PIN
+- * sekaligus: di kasir yang dipegang gantian, milih dari daftar jauh lebih
+- * cepat daripada ngetik nama tiap kali.
++ * SEMENTARA TANPA VERIFIKASI PIN (atas permintaan Agung, 1 Sep 2026) -- tap
++ * nama langsung masuk lewat prop onLogin(employee), gak ada pengecekan PIN
++ * sama sekali di sini. Ini stub sengaja disederhanain biar gampang
++ * dicustomisasi ulang nanti. Yang perlu tau:
++ *   - PinPad.jsx, dan Edge Function create-employee / reset-employee-pin
++ *     TETEP ada & tetep jalan (dipanggil AccountView.jsx buat bikin/reset
++ *     akun) -- yang dicabut cuma pengecekan PIN pas LOGIN, di file ini.
++ *   - Bikin akun baru MASIH lewat create-employee (masih insert baris
++ *     auth.users beneran, karena employees.id di-FK ke auth.users di
++ *     migration SQL-nya) -- form bootstrap admin pertama di bawah masih
++ *     manggil Edge Function itu, cuma PIN-nya di-generate random & gak
++ *     ditampilin/ditanya ke user (toh gak dicek lagi pas login).
++ *   - Buat pasang lagi verifikasi PIN pas login: render <PinPad> dulu
++ *     sebelum manggil onLogin() di tombol nama, baru panggil onLogin()
++ *     setelah PIN dicocokin (lihat git history file ini buat versi lama
++ *     yang pakai supabase.auth.signInWithPassword).
+  *
+- * Kalau daftar employees KOSONG (belum ada satupun akun aktif -- termasuk
+- * kasus paling awal, fresh install), layar ini juga nawarin bikin akun admin
+- * pertama langsung di sini. Ini SATU-SATUNYA jalan bikin admin pertama,
+- * karena menu "Manajemen Akun" yang normal cuma bisa dibuka SETELAH login
+- * (ayam-telur) -- Edge Function create-employee sengaja izinin request tanpa
+- * login SELAMA belum ada admin aktif sama sekali (lihat komentar di sana).
++ * props:
++ *   onLogin(employee) — dipanggil begitu ada employee yang "masuk".
++ *     employee: {id, name, role, is_active}
+  */
+-const LoginView = () => {
++const LoginView = ({ onLogin }) => {
+     const [employees, setEmployees] = useState([]);
+     const [loadingList, setLoadingList] = useState(true);
+     const [listError, setListError] = useState('');
+-    const [selected, setSelected] = useState(null); // { id, name }
+-    const [signingIn, setSigningIn] = useState(false);
+-    const [pinError, setPinError] = useState('');
+-    const [pinAttempt, setPinAttempt] = useState(0); // ganti key PinPad biar remount bersih tiap percobaan
+ 
+     // ── Bootstrap admin pertama (cuma muncul kalau employees kosong) ─────
+     const [showBootstrap, setShowBootstrap] = useState(false);
+     const [bootstrapName, setBootstrapName] = useState('');
+-    const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+     const [creatingBootstrap, setCreatingBootstrap] = useState(false);
+     const [bootstrapError, setBootstrapError] = useState('');
+ 
+@@ -57,7 +55,7 @@ const LoginView = () => {
+             }
+             const { data, error } = await supabase
+                 .from('employees')
+-                .select('id, name')
++                .select('id, name, role, is_active')
+                 .eq('is_active', true)
+                 .order('name');
+             if (error) throw error;
+@@ -78,65 +76,34 @@ const LoginView = () => {
+         return () => { cancelled = true; };
+     }, [fetchEmployees]);
+ 
+-    const handleCreateBootstrapAdmin = async (pin) => {
++    const handleCreateBootstrapAdmin = async () => {
+         if (!bootstrapName.trim()) {
+-            setBootstrapError('Nama wajib diisi dulu sebelum masukin PIN');
++            setBootstrapError('Nama wajib diisi.');
+             return;
+         }
+         setCreatingBootstrap(true);
+         setBootstrapError('');
+         try {
+             const supabase = await loadSupabase();
++            // PIN throwaway -- cuma buat isi password auth.users, gak pernah
++            // ditampilin/dicek lagi selama versi tanpa-PIN ini masih dipakai.
++            const throwawayPin = String(Math.floor(100000 + Math.random() * 900000));
+             const { data, error } = await supabase.functions.invoke('create-employee', {
+-                body: { name: bootstrapName.trim(), pin, role: 'admin' },
++                body: { name: bootstrapName.trim(), pin: throwawayPin, role: 'admin' },
+             });
+             if (error || data?.error) {
+                 setBootstrapError(data?.error || error.message || 'Gagal membuat akun admin');
+-                setBootstrapAttempt(a => a + 1);
+                 return;
+             }
+-            // Jangan auto-login di sini -- balikin ke layar "pilih nama" biasa
+-            // dan refresh daftar, biar admin baru login lewat jalur PIN normal
+-            // yang sama persis dipakai employee lain (satu jalur aja, gak ada
+-            // cabang login khusus buat bootstrap).
+-            setShowBootstrap(false);
+-            setBootstrapName('');
+-            await fetchEmployees();
++            onLogin({ id: data.id, name: bootstrapName.trim(), role: 'admin', is_active: true });
+         } catch (err) {
+             console.warn('[LoginView] create-employee (bootstrap) error:', err.message);
+             setBootstrapError('Gagal terhubung ke server, coba lagi');
+-            setBootstrapAttempt(a => a + 1);
+         } finally {
+             setCreatingBootstrap(false);
+         }
+     };
+ 
+-    const handlePinComplete = async (pin) => {
+-        if (!selected) return;
+-        setSigningIn(true);
+-        setPinError('');
+-        try {
+-            const supabase = await loadSupabase();
+-            const { error } = await supabase.auth.signInWithPassword({
+-                email: `${selected.id}@mamam.internal`,
+-                password: pin,
+-            });
+-            if (error) {
+-                setPinError('PIN salah, coba lagi');
+-                setPinAttempt(a => a + 1);
+-                return;
+-            }
+-            // Sukses -> App.jsx nangkep perubahan sesi lewat onAuthStateChange,
+-            // gak perlu callback manual di sini.
+-        } catch (err) {
+-            console.warn('[LoginView] signInWithPassword error:', err.message);
+-            setPinError('Gagal terhubung ke server, coba lagi');
+-            setPinAttempt(a => a + 1);
+-        } finally {
+-            setSigningIn(false);
+-        }
+-    };
+-
+     return (
+         <div className="min-h-screen w-full flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-slate-950">
+             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center mb-6 shadow-lg shadow-accent-500/20">
+@@ -144,8 +111,7 @@ const LoginView = () => {
+             </div>
+ 
+             <Card variant="elevated" padding="lg" className="w-full max-w-sm">
+-                {!selected ? (
+-                    !showBootstrap ? (
++                {!showBootstrap ? (
+                     <>
+                         <h1 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100 text-center mb-1">
+                             Siapa yang masuk?
+@@ -181,7 +147,7 @@ const LoginView = () => {
+                                 <button
+                                     key={emp.id}
+                                     type="button"
+-                                    onClick={() => { setSelected(emp); setPinError(''); }}
++                                    onClick={() => onLogin(emp)}
+                                     className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-[0.98] transition-all duration-200 text-left"
+                                 >
+                                     <span className="w-9 h-9 rounded-full bg-accent-100 dark:bg-accent-500/15 text-accent-600 dark:text-accent-400 flex items-center justify-center shrink-0">
+@@ -192,7 +158,7 @@ const LoginView = () => {
+                             ))}
+                         </div>
+                     </>
+-                    ) : (
++                ) : (
+                     <>
+                         <button
+                             type="button"
+@@ -213,42 +179,17 @@ const LoginView = () => {
+                                 placeholder="mis. Budi"
+                                 value={bootstrapName}
+                                 onChange={e => { setBootstrapName(e.target.value); setBootstrapError(''); }}
++                                error={bootstrapError}
+                             />
+                         </div>
+-                        <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 text-center">
+-                            PIN 6 digit buat akun ini
+-                        </p>
+-                        <PinPad
+-                            key={bootstrapAttempt}
+-                            length={6}
+-                            onComplete={handleCreateBootstrapAdmin}
+-                            error={bootstrapError}
+-                            disabled={creatingBootstrap}
+-                        />
+-                    </>
+-                    )
+-                ) : (
+-                    <>
+-                        <button
+-                            type="button"
+-                            onClick={() => { setSelected(null); setPinError(''); }}
+-                            className="flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mb-4 transition-colors"
++                        <Button
++                            variant="dark"
++                            size="full"
++                            loading={creatingBootstrap}
++                            onClick={handleCreateBootstrapAdmin}
+                         >
+-                            <ChevronLeft className="w-4 h-4" /> Ganti akun
+-                        </button>
+-                        <h1 className="font-heading text-xl font-black text-slate-800 dark:text-slate-100 text-center mb-1">
+-                            Halo, {selected.name}
+-                        </h1>
+-                        <p className="text-xs text-slate-400 dark:text-slate-500 text-center mb-6">
+-                            Masukkan PIN 6 digit kamu
+-                        </p>
+-                        <PinPad
+-                            key={pinAttempt}
+-                            length={6}
+-                            onComplete={handlePinComplete}
+-                            error={pinError}
+-                            disabled={signingIn}
+-                        />
++                            Buat & Masuk
++                        </Button>
+                     </>
+                 )}
+             </Card>
